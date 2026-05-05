@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "esp_task_wdt.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -135,6 +136,8 @@ static uint8_t compute_fan(float t_aletas, uint8_t t_min, uint8_t t_max,
 static void frigo_task(void *arg)
 {
     while (1) {
+
+       
         if (s_state.n_sensors == 0) {
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;

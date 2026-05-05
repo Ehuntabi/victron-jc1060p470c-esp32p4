@@ -43,6 +43,7 @@ static void screensaver_wake(ui_state_t *ui);
 
 // Victron devices configuration functions
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
+static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
 static void victron_config_create_row(ui_state_t *ui, size_t index);
@@ -705,6 +706,7 @@ void ui_settings_panel_init(ui_state_t *ui,
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "Display");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "Victron Keys");
+    lv_obj_t *page_about = lv_menu_page_create(menu, "About");
     
     lv_obj_t *cont;
     lv_obj_t *label;
@@ -725,8 +727,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_add_style(label, &ui->styles.small, 0);
     lv_menu_set_load_page_event(menu, cont, page_display);
 
-    cont = lv_menu_cont_create(main_page);
-
+    
     // Victron Keys
     cont = lv_menu_cont_create(main_page);
     label = lv_label_create(cont);
@@ -734,12 +735,20 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_add_style(cont, &ui->styles.small, 0);
     lv_obj_add_style(label, &ui->styles.small, 0);
     lv_menu_set_load_page_event(menu, cont, page_victron);
+    // About
+    cont = lv_menu_cont_create(main_page);
+    label = lv_label_create(cont);
+    lv_label_set_text(label, "About");
+    lv_obj_add_style(cont, &ui->styles.small, 0);
+    lv_obj_add_style(label, &ui->styles.small, 0);
+    lv_menu_set_load_page_event(menu, cont, page_about);
 
   
     lv_menu_set_page(menu, main_page);
     create_wifi_settings_page(ui, page_wifi, default_ssid, default_pass, ap_enabled);
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
+    create_about_settings_page(ui, page_about);
 
     lv_obj_t *tab = ui->tab_settings;
 
@@ -1265,4 +1274,63 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui)
     
     ESP_LOGI(TAG_SETTINGS, "Public function called to refresh Victron device list");
     victron_config_refresh(ui);
+}
+
+static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
+{
+    lv_obj_t *cont = lv_obj_create(page);
+    lv_obj_set_width(cont, lv_pct(100));
+    lv_obj_set_height(cont, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(cont, 12, 0);
+    lv_obj_set_style_pad_all(cont, 16, 0);
+
+    lv_obj_t *lbl_title = lv_label_create(cont);
+    lv_obj_add_style(lbl_title, &ui->styles.medium, 0);
+    lv_obj_set_style_text_color(lbl_title, lv_color_hex(0x00BFFF), 0);
+    lv_label_set_text(lbl_title, "VictronSolarDisplay");
+
+    lv_obj_t *lbl_ver = lv_label_create(cont);
+    lv_obj_add_style(lbl_ver, &ui->styles.small, 0);
+    lv_label_set_text_fmt(lbl_ver, "Version: %s  |  ESP32-P4  |  ESP-IDF v5.4.4", APP_VERSION);
+
+    lv_obj_t *sep = lv_obj_create(cont);
+    lv_obj_remove_style_all(sep);
+    lv_obj_set_width(sep, lv_pct(100));
+    lv_obj_set_height(sep, 2);
+    lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+
+    lv_obj_t *lbl_port = lv_label_create(cont);
+    lv_obj_add_style(lbl_port, &ui->styles.small, 0);
+    lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
+
+    lv_obj_t *lbl_gh = lv_label_create(cont);
+    lv_obj_add_style(lbl_gh, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x00BFFF), 0);
+    lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
+
+    lv_obj_t *sep2 = lv_obj_create(cont);
+    lv_obj_remove_style_all(sep2);
+    lv_obj_set_width(sep2, lv_pct(100));
+    lv_obj_set_height(sep2, 2);
+    lv_obj_set_style_bg_color(sep2, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep2, LV_OPA_COVER, 0);
+
+    lv_obj_t *lbl_cred = lv_label_create(cont);
+    lv_obj_add_style(lbl_cred, &ui->styles.small, 0);
+    lv_label_set_text(lbl_cred, "Basado en:");
+
+    lv_obj_t *lbl_orig1 = lv_label_create(cont);
+    lv_obj_add_style(lbl_orig1, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(lbl_orig1, lv_color_hex(0xAAAAAA), 0);
+    lv_label_set_text(lbl_orig1, "CamdenSutherland / victronsolardisplayesp");
+
+    lv_obj_t *lbl_orig2 = lv_label_create(cont);
+    lv_obj_add_style(lbl_orig2, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(lbl_orig2, lv_color_hex(0xAAAAAA), 0);
+    lv_label_set_text(lbl_orig2, "wytr / VictronSolarDisplayEsp");
 }

@@ -182,14 +182,7 @@ void app_main(void)
     esp_timer_create(&reboot_timer_args, &reboot_timer);
     esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
 
-    /* Registrar app_main en el TWDT */
-    esp_task_wdt_config_t wdt_cfg = {
-        .timeout_ms     = APP_WDT_TIMEOUT_S * 1000,
-        .idle_core_mask = 0,
-        .trigger_panic  = true,
-    };
-    esp_task_wdt_reconfigure(&wdt_cfg);
-    esp_task_wdt_add(NULL);  /* añadir tarea actual */
+
     
 
     logSection("Setup complete");
