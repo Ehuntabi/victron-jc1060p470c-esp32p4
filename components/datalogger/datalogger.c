@@ -2,8 +2,7 @@
 #include "rtc_rx8025t.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
-#include "driver/sdspi_host.h"
-#include "driver/spi_master.h"
+#include "driver/sdmmc_host.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -16,38 +15,41 @@ static const char *TAG = "DATALOGGER";
 
 #define MOUNT_POINT   "/sdcard"
 #define SD_CLK        GPIO_NUM_36
-#define SD_MOSI       GPIO_NUM_35
-#define SD_MISO       GPIO_NUM_37
-#define SD_CS         GPIO_NUM_40
-#define SPI_HOST      SPI2_HOST
+#define SD_CMD        GPIO_NUM_35
+#define SD_D0         GPIO_NUM_37
+#define SD_D1         GPIO_NUM_38
+#define SD_D2         GPIO_NUM_39
+#define SD_D3         GPIO_NUM_40
 
 static bool           s_ready = false;
 static sdmmc_card_t  *s_card  = NULL;
 
 esp_err_t datalogger_init(void)
 {
-    vTaskDelay(pdMS_TO_TICKS(100));  /* esperar alimentación SD */
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num     = SD_MOSI,
-        .miso_io_num     = SD_MISO,
-        .sclk_io_num     = SD_CLK,
-        .quadwp_io_num   = -1,
-        .quadhd_io_num   = -1,
-        .max_transfer_sz = 4096,
-    };
-    esp_err_t ret = spi_bus_initialize(SPI_HOST, &bus_cfg, SDSPI_DEFAULT_DMA);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "spi_bus_initialize failed: %s", esp_err_to_name(ret));
+    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot.clk   = SD_CLK;
+    slot.cmd   = SD_CMD;
+    slot.d0    = SD_D0;
+    slot.d1    = SD_D1;
+    slot.d2    = SD_D2;
+    slot.d3    = SD_D3;
+    slot.width = 1;
+    slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    slot.cd = GPIO_NUM_NC;  /* sin pin card detect */
+    slot.wp = GPIO_NUM_NC;  /* sin write protect */
+
+    esp_err_t ret = sdmmc_host_init_slot(SDMMC_HOST_SLOT_0, &slot);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "slot0 init failed: %s", esp_err_to_name(ret));
         return ret;
     }
-
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SPI_HOST;
-
-    sdspi_device_config_t dev_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
-    dev_cfg.gpio_cs = SD_CS;
-    dev_cfg.host_id = SPI_HOST;
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot         = SDMMC_HOST_SLOT_0;
+    host.max_freq_khz = 400;  /* 400 KHz, mínimo absoluto */
+    host.flags        = SDMMC_HOST_FLAG_1BIT; /* 1-bit mode */
+    
 
     esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
         .format_if_mount_failed = false,
@@ -55,16 +57,15 @@ esp_err_t datalogger_init(void)
         .allocation_unit_size   = 16 * 1024,
     };
 
-    ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &dev_cfg, &mount_cfg, &s_card);
+    ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot, &mount_cfg, &s_card);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "SD mount failed: %s", esp_err_to_name(ret));
-        spi_bus_free(SPI_HOST);
         return ret;
     }
 
     sdmmc_card_print_info(stdout, s_card);
     s_ready = true;
-    ESP_LOGI(TAG, "SD montada en %s (SPI2)", MOUNT_POINT);
+    ESP_LOGI(TAG, "SD montada en %s (SDMMC slot0, 4-bit)", MOUNT_POINT);
     return ESP_OK;
 }
 
@@ -87,6 +88,7 @@ static void get_timestamp(char *ts_buf, size_t ts_len,
         snprintf(date_buf, date_len, "00000000");
     }
 }
+
 static void ensure_header(FILE *f, const char *path)
 {
     struct stat st;
