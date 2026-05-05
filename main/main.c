@@ -19,6 +19,7 @@
 #include "ui/frigo_panel.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
+#include "esp_task_wdt.h"
 
 static const char *TAG = "VICTRON_LVGL_APP";
 #define logSection(section) ESP_LOGI(TAG, "\n\n***** %s *****\n", section)
@@ -39,6 +40,8 @@ static ui_state_t *s_ui = NULL;
 /* ── Callback frigo: actualiza UI + log cada 5 min ──────────── */
 static void frigo_update_cb(const frigo_state_t *state)
 {
+    esp_task_wdt_reset();
+    
     if (!s_ui) return;
 
     /* Actualizar UI — timeout 50ms para no bloquear si LVGL está ocupado */
@@ -60,6 +63,18 @@ static void frigo_update_cb(const frigo_state_t *state)
 static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 {
     if (event == LV_EVENT_PRESSED) ui_notify_user_activity();
+}
+
+
+#define APP_WDT_TIMEOUT_S    60    /* reiniciar si LVGL no responde en 60s */
+#define BLE_TIMEOUT_S       300    /* alerta si no hay datos BLE en 5 min */
+
+static int64_t s_last_ble_data_ms = 0;
+
+/* Llamar desde frigo_update_cb y ui_on_panel_data para alimentar el WDT */
+void app_notify_activity(void)
+{
+    esp_task_wdt_reset();
 }
 
 /* ── app_main ────────────────────────────────────────────────── */
@@ -166,6 +181,16 @@ void app_main(void)
     };
     esp_timer_create(&reboot_timer_args, &reboot_timer);
     esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
+
+    /* Registrar app_main en el TWDT */
+    esp_task_wdt_config_t wdt_cfg = {
+        .timeout_ms     = APP_WDT_TIMEOUT_S * 1000,
+        .idle_core_mask = 0,
+        .trigger_panic  = true,
+    };
+    esp_task_wdt_reconfigure(&wdt_cfg);
+    esp_task_wdt_add(NULL);  /* añadir tarea actual */
+    
 
     logSection("Setup complete");
 }
