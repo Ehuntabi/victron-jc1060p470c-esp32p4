@@ -10,8 +10,8 @@ static const char *TAG = "RTC_RX8025T";
 #define RTC_I2C_PORT     I2C_NUM_0
 #define RTC_I2C_SCL      GPIO_NUM_10
 #define RTC_I2C_SDA      GPIO_NUM_12
-#define RTC_I2C_ADDR     0x64
-#define RTC_I2C_CLK_HZ   50000
+#define RTC_I2C_ADDR     0x32
+#define RTC_I2C_CLK_HZ   100000
 
 /* Registros RX8025T */
 #define REG_SEC    0x00
@@ -64,7 +64,6 @@ esp_err_t rtc_init(void)
         .flags.enable_internal_pullup = true,
     };
     ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &s_bus), TAG, "bus init");
-
 
     /* Dispositivo RX8025T */
     i2c_device_config_t dev_cfg = {

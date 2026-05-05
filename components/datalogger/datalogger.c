@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static const char *TAG = "DATALOGGER";
 
@@ -86,11 +87,10 @@ static void get_timestamp(char *ts_buf, size_t ts_len,
         snprintf(date_buf, date_len, "00000000");
     }
 }
-
-static void ensure_header(FILE *f)
+static void ensure_header(FILE *f, const char *path)
 {
-    fseek(f, 0, SEEK_END);
-    if (ftell(f) == 0)
+    struct stat st;
+    if (stat(path, &st) != 0 || st.st_size == 0)
         fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
 }
 
@@ -110,7 +110,7 @@ esp_err_t datalogger_log(const frigo_state_t *frigo)
         return ESP_FAIL;
     }
 
-    ensure_header(f);
+    ensure_header(f, path);
 
     char ta[10], tc[10], te[10];
     if (frigo->T_Aletas     < -120.0f) strcpy(ta, "---");

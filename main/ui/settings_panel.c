@@ -191,12 +191,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     ui->screensaver.slider_brightness = lv_slider_create(disp_container);
     lv_obj_set_width(ui->screensaver.slider_brightness, lv_pct(50));
-    lv_slider_set_range(ui->screensaver.slider_brightness, 0, ui->brightness);
-    /* Clampear valor SS brightness al nuevo rango */
-    if (ui->screensaver.brightness > ui->brightness) {
-        ui->screensaver.brightness = ui->brightness;
-        save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
-    }
+    lv_slider_set_range(ui->screensaver.slider_brightness, 0, 100);
     lv_slider_set_value(ui->screensaver.slider_brightness, ui->screensaver.brightness, LV_ANIM_OFF);
     lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_VALUE_CHANGED, ui);
     lv_obj_add_style(ui->screensaver.slider_brightness, &ui->styles.medium, 0);
@@ -972,7 +967,7 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
                               ui->screensaver.brightness,
                               ui->screensaver.timeout);
     if (ui->screensaver.active) {
-        bsp_display_brightness_set(ui->screensaver.brightness);
+        bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
     }
 }
 
@@ -1059,7 +1054,7 @@ static void screensaver_timer_cb(lv_timer_t *timer)
         return;
     }
     if (ui->screensaver.enabled && !ui->screensaver.active) {
-        bsp_display_brightness_set(ui->screensaver.brightness);
+        bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
         ui->screensaver.active = true;
     }
 }

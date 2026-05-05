@@ -67,7 +67,6 @@ static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
 void ui_init(void) {
     ui_state_t *ui = &g_ui;
 
-    nvs_flash_init();
     load_brightness(&ui->brightness);
 
     ui->active_view = NULL;
