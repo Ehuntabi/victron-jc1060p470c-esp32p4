@@ -1,0 +1,443 @@
+<!-- files/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Victron AES Key Config</title>
+  <link rel="icon" href="/favicon.ico"/>
+  <link rel="stylesheet" href="/style.css"/>
+  <style>
+    @media (max-width: 600px) {
+      .center-content {
+        margin-top: 2rem;
+        margin-bottom: 2rem;
+        transition: margin 0.3s;
+      }
+      body:not(.keyboard-open) .center-content {
+        margin-top: 8rem;
+        margin-bottom: 8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wobble-bg"></div>
+  <div class="top-actions">
+    <button id="openGuide" class="guide-button" type="button">Key Retrieval Guide</button>
+  </div>
+  <!-- 3D Cube + Particles -->
+  <div class="cube-container">
+    <div class="particles"></div>
+    <div class="cube">
+      <div class="face back"></div>
+      <div class="face right"></div>
+      <div class="face left"></div>
+      <div class="face top"></div>
+      <div class="face bottom"></div>
+    </div>
+  </div>
+  <div class="center-content">
+    <h1>Victron Device Configuration</h1>
+    <!-- Device Configuration Form -->
+    <form id="keyForm">
+      <label for="mac">Device MAC Address (12 hex chars):</label><br/>
+      <input type="text"
+             id="mac"
+             name="mac"
+             minlength="12"
+             maxlength="12"
+             pattern="[0-9A-Fa-f]{12}"
+             placeholder="A4C13820A6E4"
+             required
+             autocomplete="off"/><br/><br/>
+      
+      <label for="key">AES Encryption Key (32 hex chars):</label><br/>
+      <input type="text"
+             id="key"
+             name="key"
+             minlength="32"
+             maxlength="32"
+             pattern="[0-9A-Fa-f]{32}"
+             placeholder="4B7178E64C828A262CDD5161E3404B7A"
+             required
+             autocomplete="off"/><br/>
+      <button type="submit">Add Device</button>
+    </form>
+    <div id="response"></div>
+  </div>
+  <!-- jQuery -->
+  <script src="/js/jquery-3.7.1.min.js"></script>
+  <!-- Form submit + trigger animations -->
+  <script>
+    $('#keyForm').on('submit', function(e) {
+        e.preventDefault();
+        var form = this;
+        $.post('/save', $(form).serialize())
+          .done(function() { 
+              $('#response').text('Device added successfully! You can add more devices or close this page.');
+              // Clear the form fields after successful submission
+              form.reset();
+          })
+          .fail(function() { $('#response').text('Error adding device.'); });
+        triggerExplosion(form.querySelector('button'));
+        setTimeout(triggerSpiralParticleCollect, 4000);
+    });
+  </script>
+  <!-- 3D cube & particle scripts -->
+  <script>
+function triggerSpiralParticleCollect() {
+    const particleCount = 45;
+    const particlesContainer = document.querySelector('.particles');
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle', 'spiral-collect');
+        const radius = Math.random() * 200;
+        const angle = Math.random() * Math.PI * 2;
+        const startX = (Math.cos(angle) * radius) + 'px';
+        const startY = (Math.sin(angle) * radius) + 'px';
+        const startZ = (Math.random() * 200 - 100) + 'px';
+        particle.style.setProperty('--startX', startX);
+        particle.style.setProperty('--startY', startY);
+        particle.style.setProperty('--startZ', startZ);
+        particle.style.setProperty('--endX', '0px');
+        particle.style.setProperty('--endY', '0px');
+        particle.style.setProperty('--endZ', '0px');
+        const duration = (Math.random() * 3 + 1) + 's';
+        const delay = (Math.random() * 2) + 's';
+        particle.style.animationDuration = duration;
+        particle.style.animationDelay = delay;
+        particlesContainer.appendChild(particle);
+        setTimeout(() => { particle.remove(); }, parseFloat(duration) * 1000 + 2000);
+    }
+}
+
+function triggerExplosion(element) {
+    const particleCount = 25;
+    const particlesContainer = document.querySelector('.particles');
+    const rect = element.getBoundingClientRect();
+    const containerRect = particlesContainer.getBoundingClientRect();
+    const centerX = (rect.left + rect.width / 2) - containerRect.left;
+    const centerY = (rect.top + rect.height / 2) - containerRect.top;
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        const endX = (Math.random() * 400 - 200) + 'px';
+        const endY = (Math.random() * 400 - 200) + 'px';
+        const endZ = (Math.random() * 400 - 200) + 'px';
+        particle.style.setProperty('--startX', `${centerX}px`);
+        particle.style.setProperty('--startY', `${centerY}px`);
+        particle.style.setProperty('--startZ', '0px');
+        particle.style.setProperty('--endX', endX);
+        particle.style.setProperty('--endY', endY);
+        particle.style.setProperty('--endZ', endZ);
+        const duration = (Math.random() * 1 + 0.5) + 's';
+        particle.style.animationDuration = duration;
+        particle.style.animationDelay = '0s';
+        particlesContainer.appendChild(particle);
+        setTimeout(() => { particle.remove(); }, parseFloat(duration) * 1000);
+    }
+}
+
+// Initial floating particles
+document.addEventListener("DOMContentLoaded", function() {
+    const particleCount = 30;
+    const particlesContainer = document.querySelector('.particles');
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        const startX = (Math.random() * 200 - 100) + 'px';
+        const startY = (Math.random() * 200 - 100) + 'px';
+        const startZ = (Math.random() * 200 - 100) + 'px';
+        const endX = (Math.random() * 200 - 100) + 'px';
+        const endY = (Math.random() * 200 - 100) + 'px';
+        const endZ = (Math.random() * 200 - 100) + 'px';
+        particle.style.setProperty('--startX', startX);
+        particle.style.setProperty('--startY', startY);
+        particle.style.setProperty('--startZ', startZ);
+        particle.style.setProperty('--endX', endX);
+        particle.style.setProperty('--endY', endY);
+        particle.style.setProperty('--endZ', endZ);
+        const duration = (Math.random() * 5 + 5) + 's';
+        const delay = (Math.random() * 5) + 's';
+        particle.style.animationDuration = duration;
+        particle.style.animationDelay = delay;
+        particlesContainer.appendChild(particle);
+    }
+});
+
+// Trigger explosion at click position anywhere on the page
+document.addEventListener('click', function(e) {
+    const particlesContainer = document.querySelector('.particles');
+    const particleCount = 20;
+    // Get click position relative to the particles container
+    const containerRect = particlesContainer.getBoundingClientRect();
+    const centerX = e.clientX - containerRect.left;
+    const centerY = e.clientY - containerRect.top;
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        const endX = (Math.random() * 400 - 200) + 'px';
+        const endY = (Math.random() * 400 - 200) + 'px';
+        const endZ = (Math.random() * 400 - 200) + 'px';
+        particle.style.setProperty('--startX', `${centerX}px`);
+        particle.style.setProperty('--startY', `${centerY}px`);
+        particle.style.setProperty('--startZ', '0px');
+        particle.style.setProperty('--endX', endX);
+        particle.style.setProperty('--endY', endY);
+        particle.style.setProperty('--endZ', endZ);
+        const duration = (Math.random() * 1 + 0.5) + 's';
+        particle.style.animationDuration = duration;
+        particle.style.animationDelay = '0s';
+        particlesContainer.appendChild(particle);
+        setTimeout(() => { particle.remove(); }, parseFloat(duration) * 500);
+    }
+});
+  </script>
+  <script>
+(function() {
+  // Only run on mobile
+  if (window.innerWidth > 600) return;
+
+  let lastHeight = window.innerHeight;
+  window.addEventListener('resize', function() {
+    // If the height shrinks by more than 150px, assume keyboard is open
+    if (window.innerHeight < lastHeight - 150) {
+      document.body.classList.add('keyboard-open');
+    } else if (window.innerHeight >= lastHeight - 50) {
+      document.body.classList.remove('keyboard-open');
+    }
+    lastHeight = window.innerHeight;
+  });
+})();
+</script>
+<script>
+function hexCharExplosionAround(el) {
+    // Use all hex characters in order
+    const chars = "0123456789ABCDEF";
+    const rect = el.getBoundingClientRect();
+    const formCenterX = rect.left + rect.width / 2;
+    const formBottomY = rect.bottom;
+    const particleCount = chars.length;
+    const duration = 0.7; // seconds for each char's animation
+
+    for (let i = 0; i < particleCount; i++) {
+        setTimeout(() => {
+            const span = document.createElement('span');
+            span.className = 'hex-char-particle pop-up';
+            span.textContent = chars[i];
+
+            // Place at bottom center of form
+            span.style.left = (formCenterX) + "px";
+            span.style.top = (formBottomY + window.scrollY + 8) + "px";
+            span.style.setProperty('--duration', `${duration}s`);
+
+            document.body.appendChild(span);
+
+            // Remove after animation
+            span.addEventListener('animationend', () => span.remove(), {once: true});
+        }, i * duration * 1000); // Next char starts after previous finishes
+    }
+}
+
+function hexCharHint(el) {
+    // Remove any existing hint
+    document.querySelectorAll('.hex-char-hint').forEach(e => e.remove());
+
+    const chars = "0123456789ABCDEF";
+    const rect = el.getBoundingClientRect();
+    const formCenterX = rect.left + rect.width / 2;
+    const formTopY = rect.top;
+
+    const span = document.createElement('span');
+    span.className = 'hex-char-hint';
+    span.textContent = chars;
+
+    // Center above the form
+    span.style.position = 'fixed';
+    span.style.left = `${formCenterX}px`;
+    span.style.top = `${formTopY - 100}px`;
+    span.style.transform = 'translate(-50%, 0)';
+    span.style.zIndex = 10;
+
+    document.body.appendChild(span);
+
+    // Remove after animation
+    setTimeout(() => span.remove(), 5000);
+}
+
+// Hook into input validation for both fields
+const macInput = document.getElementById('mac');
+const keyInput = document.getElementById('key');
+const keyForm = document.getElementById('keyForm');
+
+function validateHexInput(input, form) {
+    let val = input.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+    if (val !== input.value.toUpperCase()) {
+        input.value = val;
+        form.classList.remove('red-glow');
+        void form.offsetWidth;
+        form.classList.add('red-glow');
+        hexCharHint(form); // <-- show hex char hint
+    }
+}
+
+macInput.addEventListener('input', function(e) {
+    validateHexInput(macInput, keyForm);
+});
+
+keyInput.addEventListener('input', function(e) {
+    validateHexInput(keyInput, keyForm);
+});
+
+keyForm.addEventListener('animationend', function() {
+    keyForm.classList.remove('red-glow');
+});
+</script>
+  <div id="guideModal" class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guideModalTitle">
+    <div class="guide-modal__content">
+      <button id="closeGuide" class="guide-modal__close" type="button" aria-label="Close guide">&times;</button>
+      <h2 id="guideModalTitle">Find Your Victron Device Details</h2>
+      <p class="guide-modal__intro">Follow these steps to get the MAC address and AES key from VictronConnect.</p>
+      <div class="guide-steps" role="presentation">
+        <section class="guide-step active" data-step="1">
+          <h3><span class="step-badge">Step 1</span> Get the app ready</h3>
+          <p>Install the VictronConnect app on your phone or tablet and make sure Bluetooth is enabled.</p>
+          <div class="guide-step__media">
+            <a href="https://play.google.com/store/apps/details?id=com.victronenergy.victronconnect" target="_blank" rel="noopener noreferrer">
+              <img src="victronconnect-logo.png" alt="VictronConnect app logo"/>
+            </a>
+          </div>
+        </section>
+        <section class="guide-step" data-step="2">
+          <h3><span class="step-badge">Step 2</span> Connect to your device</h3>
+          <p>Open VictronConnect, let it scan for nearby products, then tap the Victron device that you want to monitor. Wait for the connection to finish.</p>
+          <div class="guide-step__media">
+            <img src="vc-device-list.png" alt="VictronConnect device list showing nearby products"/>
+          </div>
+        </section>
+        <section class="guide-step" data-step="3">
+          <h3><span class="step-badge">Step 3</span> Unlock advanced options</h3>
+          <p>From the device view, tap the gear icon to open settings. Enter the PIN code if the app prompts you so the advanced menus become available.</p>
+          <div class="guide-step__media">
+            <img src="vc-gear.png" alt="VictronConnect gear icon for device settings"/>
+          </div>
+        </section>
+        <section class="guide-step" data-step="4">
+          <h3><span class="step-badge">Step 4</span> Open product info</h3>
+          <p>Tap the three dot-menu in the top right and open <strong>Product info</strong> (or <strong>Device details</strong>) and open it. Scroll down and press <strong>SHOW</strong> on the <strong>Instant readout details</strong> section to reveal the Bluetooth advertisement data.</p>
+          <div class="guide-step__media">
+            <img src="vc-settings.png" alt="VictronConnect settings screen"/>
+          </div>
+          <div class="guide-step__media">
+            <img src="vc-settings-prod-info.png" alt="VictronConnect product information details"/>
+          </div>
+        </section>
+        <section class="guide-step" data-step="5">
+          <h3><span class="step-badge">Step 5</span> Locate device details</h3>
+          <p>Find the <em>MAC address</em> (usually shown at the top) and the <em>Encryption key</em> field. Long-press each value to copy them or take screenshots so you can transcribe them safely.</p>
+          <div class="guide-step__media">
+            <img src="vc-encryption-data.png" alt="VictronConnect encryption data screen"/>
+          </div>
+        </section>
+        <section class="guide-step" data-step="6">
+          <h3><span class="step-badge">Step 6</span> Add device here</h3>
+          <p>Return to this configuration page, enter the 12-character MAC address and 32-character AES key into the form, then press <strong>Add Device</strong>. The device will be saved and you can add more devices if needed.</p>
+          <div class="guide-step__media">
+            <img src="vc-final-key.png" alt="VictronConnect screen showing the final encryption key"/>
+          </div>
+        </section>
+      </div>
+      <div class="guide-modal__footer">
+        <button type="button" class="guide-modal__nav" data-role="prev">Previous</button>
+        <button type="button" class="guide-modal__nav guide-modal__nav--primary" data-role="next">Next</button>
+      </div>
+      <p class="guide-modal__note">Menu names can differ slightly between firmware versions. Keep your AES key private and never share it publicly.</p>
+    </div>
+  </div>
+  <script>
+(function() {
+  const modal = document.getElementById('guideModal');
+  const openButton = document.getElementById('openGuide');
+  const closeButton = document.getElementById('closeGuide');
+  const prevButton = modal.querySelector('[data-role="prev"]');
+  const nextButton = modal.querySelector('[data-role="next"]');
+  const steps = Array.from(modal.querySelectorAll('.guide-step'));
+  let activeIndex = 0;
+
+  if (!openButton || !closeButton || steps.length === 0) {
+    return;
+  }
+
+  function setStep(index) {
+    activeIndex = Math.min(Math.max(index, 0), steps.length - 1);
+    steps.forEach((step, idx) => {
+      step.classList.toggle('active', idx === activeIndex);
+    });
+    prevButton.disabled = activeIndex === 0;
+    nextButton.textContent = activeIndex === steps.length - 1 ? 'Close' : 'Next';
+  }
+
+  function openModal() {
+    modal.classList.add('show');
+    document.body.classList.add('modal-open');
+    setStep(0);
+    nextButton.focus();
+  }
+
+  function closeModal() {
+    modal.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    openButton.focus();
+  }
+
+  openButton.addEventListener('click', function() {
+    openModal();
+    if (!openButton.classList.contains('guide-button--swipe-disabled')) {
+      openButton.classList.add('guide-button--swipe-disabled');
+    }
+  });
+  closeButton.addEventListener('click', closeModal);
+
+  prevButton.addEventListener('click', function() {
+    setStep(activeIndex - 1);
+  });
+
+  nextButton.addEventListener('click', function() {
+    if (activeIndex === steps.length - 1) {
+      closeModal();
+    } else {
+      setStep(activeIndex + 1);
+    }
+  });
+
+  modal.addEventListener('click', function(event) {
+    if (event.target === modal) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener('keydown', function(event) {
+    if (!modal.classList.contains('show')) {
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModal();
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      if (activeIndex < steps.length - 1) {
+        setStep(activeIndex + 1);
+      }
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      if (activeIndex > 0) {
+        setStep(activeIndex - 1);
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

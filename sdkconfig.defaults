@@ -1,0 +1,73 @@
+#
+# sdkconfig.defaults — Guition JC1060P470C_I (ESP32-P4)
+#
+# Aplica con:  idf.py set-target esp32p4 && idf.py reconfigure
+#
+# Estos valores sobreescriben los defaults de IDF para este hardware.
+# Las opciones de WiFi, BLE, SPIFFS y NVS del proyecto original
+# se mantienen tal cual en el sdkconfig generado.
+#
+
+# ── Target ────────────────────────────────────────────────────────────────────
+CONFIG_IDF_TARGET="esp32p4"
+
+# ── CPU ───────────────────────────────────────────────────────────────────────
+# El módulo ESP32-P4 soporta hasta 400 MHz
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+
+# ── Flash (16 MB) ─────────────────────────────────────────────────────────────
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# ── PSRAM (32 MB integrada en el módulo) ──────────────────────────────────────
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+# Los buffers LVGL residen en PSRAM (buff_spiram = true en bsp_display_cfg_t)
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
+
+# ── LVGL ──────────────────────────────────────────────────────────────────────
+# RGB565 — 16 bits/px (mismo que el proyecto original)
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_COLOR_16_SWAP=n
+
+# ── Stack de tareas ───────────────────────────────────────────────────────────
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# ── I2C ───────────────────────────────────────────────────────────────────────
+# El driver i2c_new_master_bus no requiere configuración en sdkconfig.
+# Asegúrate de que BSP_I2C_NUM en display.h coincide con el bus que uses.
+
+# ── MIPI-DSI ──────────────────────────────────────────────────────────────────
+# El driver esp_lcd_mipi_dsi está integrado en IDF para ESP32-P4.
+# No requiere opción Kconfig adicional; se activa como dependencia CMake.
+
+# ── DMA2D (acelerador 2D para relleno de framebuffer) ─────────────────────────
+CONFIG_SOC_DMA2D_SUPPORTED=y
+
+# ── BLE + WiFi (heredados del proyecto original) ──────────────────────────────
+CONFIG_BT_ENABLED=y
+CONFIG_BT_BLE_ENABLED=y
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+
+# BLE NimBLE
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_CONTROLLER_DISABLED=y
+
+# LVGL fonts
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_40=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+
+# Partition table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# BLE via VHCI over SDIO (ESP32-C6)
+CONFIG_ESP_ENABLE_BT=y
+CONFIG_ESP_HCI_VHCI=y
+CONFIG_BT_NIMBLE_TRANSPORT_UART=n

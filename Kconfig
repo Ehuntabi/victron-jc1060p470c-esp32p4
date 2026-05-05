@@ -1,0 +1,7 @@
+menu "Project Configuration"
+    config SLAVE_IDF_TARGET_ESP32C6
+        bool "ESP32-C6 as WiFi slave"
+        default y
+        help
+            Use ESP32-C6 as WiFi/BT co-processor via esp_hosted SDIO
+endmenu

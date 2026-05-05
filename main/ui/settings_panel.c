@@ -1,0 +1,1273 @@
+#include "settings_panel.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <lvgl.h>
+#include "config_storage.h"
+#include "config_server.h"
+#include "victron_ble.h"
+#include "display.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "nvs_flash.h"
+
+// Forward declaration for view update function
+extern void ui_force_view_update(void);
+
+#define WIFI_NAMESPACE "wifi"
+
+static const char *TAG_SETTINGS = "UI_SETTINGS";
+static const char *APP_VERSION = "1.3.0";
+
+static void ta_event_cb(lv_event_t *e);
+static void wifi_event_cb(lv_event_t *e);
+static void ap_checkbox_event_cb(lv_event_t *e);
+static void password_toggle_btn_event_cb(lv_event_t *e);
+static void reboot_btn_event_cb(lv_event_t *e);
+static void brightness_slider_event_cb(lv_event_t *e);
+static void cb_screensaver_event_cb(lv_event_t *e);
+static void victron_debug_event_cb(lv_event_t *e);
+static void slider_ss_brightness_event_cb(lv_event_t *e);
+static void spinbox_ss_time_event_cb(lv_event_t *e);
+static void spinbox_ss_time_increment_event_cb(lv_event_t *e);
+static void spinbox_ss_time_decrement_event_cb(lv_event_t *e);
+static void screensaver_timer_cb(lv_timer_t *timer);
+static void view_selection_dropdown_event_cb(lv_event_t *e);
+static void screensaver_enable(ui_state_t *ui, bool enable);
+static void screensaver_wake(ui_state_t *ui);
+
+
+// Victron devices configuration functions
+static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
+static void victron_config_add_btn_event_cb(lv_event_t *e);
+static void victron_config_remove_btn_event_cb(lv_event_t *e);
+static void victron_config_create_row(ui_state_t *ui, size_t index);
+static void victron_config_update_controls(ui_state_t *ui);
+static void victron_config_persist(ui_state_t *ui);
+static void victron_config_load(ui_state_t *ui);
+static void victron_config_refresh(ui_state_t *ui);
+static void victron_enabled_checkbox_event_cb(lv_event_t *e);
+static void victron_field_ta_event_cb(lv_event_t *e);
+static void victron_config_update_device_status(ui_state_t *ui, const char *mac_address, 
+                                                const char *device_type, const char *product_name, 
+                                                const char *error_info);
+static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_address);
+
+
+static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
+                                      const char *default_ssid,
+                                      const char *default_pass,
+                                      uint8_t ap_enabled)
+{
+    /* Root layout container */
+    lv_obj_t *wifi_container = lv_obj_create(page_wifi);
+    lv_obj_remove_style_all(wifi_container);
+    lv_obj_set_size(wifi_container, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(wifi_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(wifi_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(wifi_container, 10, 0);
+    lv_obj_set_style_pad_gap(wifi_container, 12, 0);
+    lv_obj_set_scroll_dir(wifi_container, LV_DIR_VER);
+
+    /* SSID label */
+    lv_obj_t *lbl_ssid = lv_label_create(wifi_container);
+    lv_obj_add_style(lbl_ssid, &ui->styles.small, 0);
+    lv_label_set_text(lbl_ssid, "SSID:");
+
+    /* SSID row: input + checkbox */
+    lv_obj_t *ssid_row = lv_obj_create(wifi_container);
+    lv_obj_remove_style_all(ssid_row);
+    lv_obj_set_width(ssid_row, lv_pct(100));
+    lv_obj_set_height(ssid_row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(ssid_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ssid_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(ssid_row, 10, 0);
+    lv_obj_set_flex_align(ssid_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* SSID input */
+    ui->wifi.ssid = lv_textarea_create(ssid_row);
+    lv_textarea_set_one_line(ui->wifi.ssid, true);
+    lv_obj_set_width(ui->wifi.ssid, lv_pct(40));
+    lv_textarea_set_text(ui->wifi.ssid, default_ssid);
+    lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_FOCUSED, ui);
+    lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_CANCEL, ui);
+    lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->wifi.ssid, &ui->styles.small, 0);
+
+    /* AP enable checkbox */
+    ui->wifi.ap_enable = lv_checkbox_create(ssid_row);
+    lv_checkbox_set_text(ui->wifi.ap_enable, "Enable AP");
+    lv_obj_add_style(ui->wifi.ap_enable, &ui->styles.medium, 0);
+    if (ap_enabled) {
+        lv_obj_add_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
+    }
+    lv_obj_add_event_cb(ui->wifi.ap_enable, ap_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Password label */
+    lv_obj_t *lbl_pass = lv_label_create(wifi_container);
+    lv_obj_add_style(lbl_pass, &ui->styles.small, 0);
+    lv_label_set_text(lbl_pass, "Password:");
+
+    const char *ap_password = (default_pass && default_pass[0] != '\0') ? default_pass : DEFAULT_AP_PASSWORD;
+
+    /* Row for password + toggle button */
+    lv_obj_t *pass_row = lv_obj_create(wifi_container);
+    lv_obj_remove_style_all(pass_row);
+    lv_obj_set_width(pass_row, lv_pct(100));
+    lv_obj_set_height(pass_row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(pass_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(pass_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(pass_row, 10, 0);
+    lv_obj_set_flex_align(pass_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Password textarea */
+    ui->wifi.password = lv_textarea_create(pass_row);
+    lv_textarea_set_password_mode(ui->wifi.password, true);
+    lv_textarea_set_one_line(ui->wifi.password, true);
+    lv_obj_set_width(ui->wifi.password, lv_pct(40));
+    lv_textarea_set_text(ui->wifi.password, ap_password);
+    lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_FOCUSED, ui);
+    lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_CANCEL, ui);
+    lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->wifi.password, &ui->styles.small, 0);
+
+    /* Show/Hide password toggle */
+    ui->wifi.password_toggle = lv_btn_create(pass_row);
+    lv_obj_set_width(ui->wifi.password_toggle, lv_pct(20));
+    lv_obj_add_event_cb(ui->wifi.password_toggle, password_toggle_btn_event_cb, LV_EVENT_CLICKED, ui);
+
+    lv_obj_t *lbl_toggle = lv_label_create(ui->wifi.password_toggle);
+    lv_label_set_text(lbl_toggle, "Show");
+    lv_obj_center(lbl_toggle);
+    lv_obj_add_style(lbl_toggle, &ui->styles.small, 0);
+}
+
+static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
+{
+    /* Root container for display settings */
+    lv_obj_t *disp_container = lv_obj_create(page_display);
+    lv_obj_remove_style_all(disp_container);
+    lv_obj_set_size(disp_container, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(disp_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(disp_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(disp_container, 10, 0);
+    lv_obj_set_style_pad_gap(disp_container, 14, 0);
+    lv_obj_set_scroll_dir(disp_container, LV_DIR_VER);
+
+    /* --- Brightness --- */
+    lv_obj_t *lbl_brightness = lv_label_create(disp_container);
+    lv_obj_add_style(lbl_brightness, &ui->styles.small, 0);
+    lv_label_set_text(lbl_brightness, "Brightness:");
+
+    lv_obj_t *slider_brightness = lv_slider_create(disp_container);
+    lv_obj_set_width(slider_brightness, lv_pct(50));
+    lv_slider_set_range(slider_brightness, 1, 100);
+    lv_slider_set_value(slider_brightness, ui->brightness, LV_ANIM_OFF);
+    bsp_display_brightness_set(ui->brightness);
+    lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(slider_brightness, &ui->styles.medium, 0);
+
+    /* --- Screensaver enable --- */
+    ui->screensaver.checkbox = lv_checkbox_create(disp_container);
+    lv_checkbox_set_text(ui->screensaver.checkbox, "Enable Screensaver");
+    if (ui->screensaver.enabled) {
+        lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
+    }
+    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->screensaver.checkbox, &ui->styles.medium, 0);
+
+    /* --- Screensaver brightness --- */
+    lv_obj_t *lbl_ss_brightness = lv_label_create(disp_container);
+    lv_obj_add_style(lbl_ss_brightness, &ui->styles.small, 0);
+    lv_label_set_text(lbl_ss_brightness, "Screensaver Brightness:");
+
+    ui->screensaver.slider_brightness = lv_slider_create(disp_container);
+    lv_obj_set_width(ui->screensaver.slider_brightness, lv_pct(50));
+    lv_slider_set_range(ui->screensaver.slider_brightness, 0, ui->brightness);
+    /* Clampear valor SS brightness al nuevo rango */
+    if (ui->screensaver.brightness > ui->brightness) {
+        ui->screensaver.brightness = ui->brightness;
+        save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
+    }
+    lv_slider_set_value(ui->screensaver.slider_brightness, ui->screensaver.brightness, LV_ANIM_OFF);
+    lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->screensaver.slider_brightness, &ui->styles.medium, 0);
+
+    /* --- Screensaver timeout section --- */
+    lv_obj_t *lbl_ss_time = lv_label_create(disp_container);
+    lv_obj_add_style(lbl_ss_time, &ui->styles.small, 0);
+    lv_label_set_text(lbl_ss_time, "Screen Timeout (min, 0=off):");
+
+    /* Row container for spinbox + buttons */
+    lv_obj_t *timeout_row = lv_obj_create(disp_container);
+    lv_obj_remove_style_all(timeout_row);
+    lv_obj_set_width(timeout_row, lv_pct(100));
+    lv_obj_set_height(timeout_row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(timeout_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(timeout_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(timeout_row, 10, 0);
+    lv_obj_set_flex_align(timeout_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Decrement button */
+    lv_obj_t *btn_dec = lv_btn_create(timeout_row);
+    lv_obj_set_size(btn_dec, 40, 40);
+    lv_obj_t *lbl_dec = lv_label_create(btn_dec);
+    lv_label_set_text(lbl_dec, LV_SYMBOL_MINUS);
+    lv_obj_center(lbl_dec);
+    lv_obj_add_event_cb(btn_dec, spinbox_ss_time_decrement_event_cb, LV_EVENT_ALL, ui);
+
+    /* Timeout spinbox */
+    ui->screensaver.spinbox_timeout = lv_spinbox_create(timeout_row);
+    lv_spinbox_set_range(ui->screensaver.spinbox_timeout, 0, 30);
+    lv_spinbox_set_value(ui->screensaver.spinbox_timeout, ui->screensaver.timeout / 60);
+    lv_spinbox_set_digit_format(ui->screensaver.spinbox_timeout, 2, 0);
+    lv_obj_set_width(ui->screensaver.spinbox_timeout, 80);
+    lv_obj_add_event_cb(ui->screensaver.spinbox_timeout, spinbox_ss_time_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->screensaver.spinbox_timeout, &ui->styles.small, 0);
+
+    /* Increment button */
+    lv_obj_t *btn_inc = lv_btn_create(timeout_row);
+    lv_obj_set_size(btn_inc, 40, 40);
+    lv_obj_t *lbl_inc = lv_label_create(btn_inc);
+    lv_label_set_text(lbl_inc, LV_SYMBOL_PLUS);
+    lv_obj_center(lbl_inc);
+    lv_obj_add_event_cb(btn_inc, spinbox_ss_time_increment_event_cb, LV_EVENT_ALL, ui);
+
+    /* --- UI View Selection --- */
+    lv_obj_t *lbl_view_mode = lv_label_create(disp_container);
+    lv_obj_add_style(lbl_view_mode, &ui->styles.small, 0);
+    lv_label_set_text(lbl_view_mode, "Live Display Mode:");
+
+    ui->view_selection.dropdown = lv_dropdown_create(disp_container);
+    lv_obj_set_width(ui->view_selection.dropdown, lv_pct(70));
+    lv_dropdown_set_options(ui->view_selection.dropdown, 
+        "Auto Detection\n"
+        "Default Battery View\n"
+        "Solar Charger View\n"
+        "Battery Monitor View\n"
+        "Inverter View\n"
+        "DC/DC Converter View"
+    );
+    
+    /* Load saved view mode */
+    uint8_t saved_mode = 1; // Default to UI_VIEW_MODE_DEFAULT_BATTERY
+    if (load_ui_view_mode(&saved_mode) == ESP_OK) {
+        ui->view_selection.mode = (ui_view_mode_t)saved_mode;
+    } else {
+        ui->view_selection.mode = UI_VIEW_MODE_DEFAULT_BATTERY;
+    }
+    lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
+    
+    lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_style(ui->view_selection.dropdown, &ui->styles.small, 0);
+
+    /* --- Timer setup --- */
+    ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
+                                            ui->screensaver.timeout * 1000,  /* timeout en segundos */
+                                            ui);
+    if (ui->screensaver.enabled) {
+        lv_timer_reset(ui->screensaver.timer);
+        lv_timer_resume(ui->screensaver.timer);
+    } else {
+        lv_timer_pause(ui->screensaver.timer);
+    }
+}
+
+
+static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
+{
+    /* Root container for Victron keys settings */
+    lv_obj_t *victron_container = lv_obj_create(page_victron);
+    lv_obj_remove_style_all(victron_container);
+    lv_obj_set_size(victron_container, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(victron_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(victron_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(victron_container, 10, 0);
+    lv_obj_set_style_pad_gap(victron_container, 14, 0);
+    lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
+
+    /* Header text */
+    lv_obj_t *lbl_header = lv_label_create(victron_container);
+    lv_obj_add_style(lbl_header, &ui->styles.small, 0);
+    lv_label_set_text(lbl_header, "Configure multiple Victron devices with MAC addresses and AES keys:");
+
+    /* --- Victron devices configuration section --- */
+    lv_obj_t *victron_section = lv_obj_create(victron_container);
+    lv_obj_remove_style_all(victron_section);
+    lv_obj_set_width(victron_section, lv_pct(100));
+    lv_obj_set_height(victron_section, LV_SIZE_CONTENT);
+    lv_obj_set_layout(victron_section, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(victron_section, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(victron_section, 14, 0);
+    ui->victron_config.container = victron_section;
+
+    /* --- Row for Add / Remove buttons --- */
+    lv_obj_t *controls_row = lv_obj_create(victron_section);
+    lv_obj_remove_style_all(controls_row);
+    lv_obj_set_width(controls_row, lv_pct(100));
+    lv_obj_set_height(controls_row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(controls_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(controls_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(controls_row, 10, 0);
+    lv_obj_set_flex_align(controls_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Add button */
+    ui->victron_config.add_btn = lv_btn_create(controls_row);
+    lv_obj_set_size(ui->victron_config.add_btn, 48, 48);
+    lv_obj_t *lbl_add = lv_label_create(ui->victron_config.add_btn);
+    lv_label_set_text(lbl_add, LV_SYMBOL_PLUS);
+    lv_obj_center(lbl_add);
+    lv_obj_add_event_cb(ui->victron_config.add_btn, victron_config_add_btn_event_cb, LV_EVENT_CLICKED, ui);
+
+    /* Remove button */
+    ui->victron_config.remove_btn = lv_btn_create(controls_row);
+    lv_obj_set_size(ui->victron_config.remove_btn, 48, 48);
+    lv_obj_t *lbl_remove = lv_label_create(ui->victron_config.remove_btn);
+    lv_label_set_text(lbl_remove, LV_SYMBOL_MINUS);
+    lv_obj_center(lbl_remove);
+    lv_obj_add_event_cb(ui->victron_config.remove_btn, victron_config_remove_btn_event_cb, LV_EVENT_CLICKED, ui);
+
+    /* --- Victron devices list section --- */
+    ui->victron_config.list = lv_obj_create(victron_section);
+    lv_obj_remove_style_all(ui->victron_config.list);
+    lv_obj_set_width(ui->victron_config.list, lv_pct(100));
+    lv_obj_set_height(ui->victron_config.list, LV_SIZE_CONTENT);
+    lv_obj_set_layout(ui->victron_config.list, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ui->victron_config.list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(ui->victron_config.list, 10, 0);
+    lv_obj_set_scroll_dir(ui->victron_config.list, LV_DIR_VER);
+
+    /* Initialize victron config state */
+    ui->victron_config.count = 0;
+    ui->victron_config.updating = false;
+    for (size_t i = 0; i < UI_MAX_VICTRON_DEVICES; ++i) {
+        ui->victron_config.rows[i] = NULL;
+        ui->victron_config.mac_textareas[i] = NULL;
+        ui->victron_config.key_textareas[i] = NULL;
+        ui->victron_config.name_textareas[i] = NULL;
+        ui->victron_config.enabled_checkboxes[i] = NULL;
+        ui->victron_config.device_type_labels[i] = NULL;
+        ui->victron_config.product_name_labels[i] = NULL;
+        ui->victron_config.error_labels[i] = NULL;
+        ui->victron_config.status_containers[i] = NULL;
+    }
+
+    /* Load existing configuration */
+    victron_config_load(ui);
+
+    /* Update controls state */
+    victron_config_update_controls(ui);
+}
+
+static void victron_config_load(ui_state_t *ui)
+{
+    if (ui == NULL) {
+        return;
+    }
+
+    victron_device_config_t devices[UI_MAX_VICTRON_DEVICES];
+    uint8_t count = 0;
+    
+    esp_err_t err = load_victron_devices(devices, &count, UI_MAX_VICTRON_DEVICES);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_SETTINGS, "Failed to load Victron devices: %s", esp_err_to_name(err));
+        count = 0;
+    }
+
+    ui->victron_config.count = count;
+    
+    /* Create UI rows for loaded devices */
+    for (size_t i = 0; i < count; ++i) {
+        victron_config_create_row(ui, i);
+        
+        /* Set the loaded values */
+        if (ui->victron_config.mac_textareas[i]) {
+            lv_textarea_set_text(ui->victron_config.mac_textareas[i], devices[i].mac_address);
+        }
+        
+        if (ui->victron_config.name_textareas[i]) {
+            lv_textarea_set_text(ui->victron_config.name_textareas[i], devices[i].device_name);
+        }
+        
+        if (ui->victron_config.key_textareas[i]) {
+            char hex_key[33] = {0};
+            for (int j = 0; j < 16; ++j) {
+                sprintf(hex_key + j * 2, "%02X", devices[i].aes_key[j]);
+            }
+            lv_textarea_set_text(ui->victron_config.key_textareas[i], hex_key);
+        }
+        
+        if (ui->victron_config.enabled_checkboxes[i]) {
+            if (devices[i].enabled) {
+                lv_obj_add_state(ui->victron_config.enabled_checkboxes[i], LV_STATE_CHECKED);
+            } else {
+                lv_obj_clear_state(ui->victron_config.enabled_checkboxes[i], LV_STATE_CHECKED);
+            }
+        }
+    }
+}
+
+static void victron_config_refresh(ui_state_t *ui)
+{
+    if (ui == NULL || ui->victron_config.list == NULL) {
+        return;
+    }
+
+    ESP_LOGI(TAG_SETTINGS, "Refreshing Victron device configuration, free heap: %lu PSRAM: %lu",
+             (unsigned long)esp_get_free_heap_size(),
+             (unsigned long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    // Clear existing device rows - borrar hijos del container uno a uno
+    while(lv_obj_get_child_cnt(ui->victron_config.list) > 0) {
+        lv_obj_del(lv_obj_get_child(ui->victron_config.list, 0));
+    }
+    for (size_t i = 0; i < UI_MAX_VICTRON_DEVICES; ++i) {
+        ui->victron_config.rows[i] = NULL;
+        ui->victron_config.mac_textareas[i] = NULL;
+        ui->victron_config.key_textareas[i] = NULL;
+        ui->victron_config.name_textareas[i] = NULL;
+        ui->victron_config.enabled_checkboxes[i] = NULL;
+        ui->victron_config.device_type_labels[i] = NULL;
+        ui->victron_config.product_name_labels[i] = NULL;
+        ui->victron_config.error_labels[i] = NULL;
+        ui->victron_config.status_containers[i] = NULL;
+    }
+
+    // Reset count
+    ui->victron_config.count = 0;
+
+    // Reload configuration from storage
+    victron_config_load(ui);
+
+    // Update controls state
+    victron_config_update_controls(ui);
+
+    ESP_LOGI(TAG_SETTINGS, "Victron device refresh completed, showing %d devices", ui->victron_config.count);
+}
+
+static void victron_config_create_row(ui_state_t *ui, size_t index)
+{
+    if (ui == NULL || ui->victron_config.list == NULL || index >= UI_MAX_VICTRON_DEVICES) {
+        return;
+    }
+
+    /* Main row container */
+    lv_obj_t *row = lv_obj_create(ui->victron_config.list);
+    if (row == NULL) { ESP_LOGE("UI", "row create failed idx=%d", (int)index); return; }
+    lv_obj_remove_style_all(row);
+    lv_obj_set_width(row, lv_pct(100));
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_style_pad_all(row, 8, 0);
+    lv_obj_set_style_bg_opa(row, LV_OPA_20, 0);
+    lv_obj_set_style_radius(row, 4, 0);
+
+    /* Header row with device number and enabled checkbox */
+    lv_obj_t *header_row = lv_obj_create(row);
+    lv_obj_remove_style_all(header_row);
+    lv_obj_set_width(header_row, lv_pct(100));
+    lv_obj_set_height(header_row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(header_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(header_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(header_row, 10, 0);
+    lv_obj_set_flex_align(header_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Device label */
+    lv_obj_t *device_label = lv_label_create(header_row);
+    lv_obj_add_style(device_label, &ui->styles.small, 0);
+    lv_label_set_text_fmt(device_label, "Device %d", (int)(index + 1));
+
+    /* Enabled checkbox */
+    lv_obj_t *enabled_cb = lv_checkbox_create(header_row);
+    lv_checkbox_set_text(enabled_cb, "Enabled");
+    lv_obj_add_style(enabled_cb, &ui->styles.small, 0);
+    lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Device name input */
+    lv_obj_t *name_label = lv_label_create(row);
+    lv_obj_add_style(name_label, &ui->styles.small, 0);
+    lv_label_set_text(name_label, "Device Name:");
+
+    lv_obj_t *name_ta = lv_textarea_create(row);
+    lv_textarea_set_max_length(name_ta, 31);
+    lv_obj_set_width(name_ta, lv_pct(80));
+    lv_textarea_set_one_line(name_ta, true);
+    lv_textarea_set_placeholder_text(name_ta, "e.g. Solar Charger 1");
+    lv_obj_add_style(name_ta, &ui->styles.small, 0);
+    lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
+    lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
+
+    /* MAC address input */
+    lv_obj_t *mac_label = lv_label_create(row);
+    lv_obj_add_style(mac_label, &ui->styles.small, 0);
+    lv_label_set_text(mac_label, "MAC Address:");
+
+    lv_obj_t *mac_ta = lv_textarea_create(row);
+    lv_textarea_set_max_length(mac_ta, 17);
+    lv_obj_set_width(mac_ta, lv_pct(60));
+    lv_textarea_set_one_line(mac_ta, true);
+    lv_textarea_set_placeholder_text(mac_ta, "XX:XX:XX:XX:XX:XX");
+    lv_obj_add_style(mac_ta, &ui->styles.small, 0);
+    lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
+    lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
+
+    /* AES Key input */
+    lv_obj_t *key_label = lv_label_create(row);
+    lv_obj_add_style(key_label, &ui->styles.small, 0);
+    lv_label_set_text(key_label, "AES Key (32 hex characters):");
+
+    lv_obj_t *key_ta = lv_textarea_create(row);
+    lv_textarea_set_max_length(key_ta, 32);
+    lv_obj_set_width(key_ta, lv_pct(90));
+    lv_textarea_set_one_line(key_ta, true);
+    lv_textarea_set_placeholder_text(key_ta, "00000000000000000000000000000000");
+    lv_obj_add_style(key_ta, &ui->styles.small, 0);
+    lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
+    lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(key_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
+    lv_obj_add_event_cb(key_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
+
+    /* --- Device Status Section --- */
+    lv_obj_t *status_label = lv_label_create(row);
+    lv_obj_add_style(status_label, &ui->styles.small, 0);
+    lv_label_set_text(status_label, "Live Device Status:");
+
+    lv_obj_t *status_container = lv_obj_create(row);
+    lv_obj_remove_style_all(status_container);
+    lv_obj_set_width(status_container, lv_pct(100));
+    lv_obj_set_height(status_container, LV_SIZE_CONTENT);
+    lv_obj_set_layout(status_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(status_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(status_container, 6, 0);  // Increased gap for better readability
+    lv_obj_set_style_pad_all(status_container, 10, 0);  // Increased padding
+    lv_obj_set_style_bg_opa(status_container, LV_OPA_20, 0);  // More visible background
+    lv_obj_set_style_radius(status_container, 4, 0);  // Rounded corners
+    lv_obj_set_style_border_width(status_container, 1, 0);  // Add border
+    lv_obj_set_style_border_opa(status_container, LV_OPA_30, 0);
+    lv_obj_set_style_border_color(status_container, lv_color_hex(0x444444), 0);
+
+    /* Device type label */
+    lv_obj_t *device_type_lbl = lv_label_create(status_container);
+    lv_obj_add_style(device_type_lbl, &ui->styles.small, 0);
+    lv_label_set_text(device_type_lbl, "Device: --");
+    lv_obj_set_style_text_color(device_type_lbl, lv_color_hex(0x888888), 0);
+
+    /* Product name label */
+    lv_obj_t *product_name_lbl = lv_label_create(status_container);
+    lv_obj_add_style(product_name_lbl, &ui->styles.small, 0);
+    lv_label_set_text(product_name_lbl, "Product: --");
+    lv_obj_set_style_text_color(product_name_lbl, lv_color_hex(0x888888), 0);
+
+    /* Live metrics status label - enhanced for detailed status */
+    lv_obj_t *error_lbl = lv_label_create(status_container);
+    lv_obj_add_style(error_lbl, &ui->styles.small, 0);
+    lv_label_set_text(error_lbl, "Status: Waiting for data...");
+    lv_obj_set_style_text_color(error_lbl, lv_color_hex(0x888888), 0);
+    lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);  // Enable text wrapping for longer status
+    lv_obj_set_width(error_lbl, lv_pct(100));  // Full width for better text layout
+
+    /* Store references */
+    ui->victron_config.rows[index] = row;
+    ui->victron_config.mac_textareas[index] = mac_ta;
+    ui->victron_config.key_textareas[index] = key_ta;
+    ui->victron_config.name_textareas[index] = name_ta;
+    ui->victron_config.enabled_checkboxes[index] = enabled_cb;
+    ui->victron_config.device_type_labels[index] = device_type_lbl;
+    ui->victron_config.product_name_labels[index] = product_name_lbl;
+    ui->victron_config.error_labels[index] = error_lbl;
+    ui->victron_config.status_containers[index] = status_container;
+}
+
+static void victron_config_update_controls(ui_state_t *ui)
+{
+    if (ui == NULL) {
+        return;
+    }
+
+    bool can_add = ui->victron_config.count < UI_MAX_VICTRON_DEVICES;
+    bool can_remove = ui->victron_config.count > 0;
+
+    if (ui->victron_config.add_btn != NULL) {
+        if (can_add) {
+            lv_obj_clear_state(ui->victron_config.add_btn, LV_STATE_DISABLED);
+        } else {
+            lv_obj_add_state(ui->victron_config.add_btn, LV_STATE_DISABLED);
+        }
+    }
+
+    if (ui->victron_config.remove_btn != NULL) {
+        if (can_remove) {
+            lv_obj_clear_state(ui->victron_config.remove_btn, LV_STATE_DISABLED);
+        } else {
+            lv_obj_add_state(ui->victron_config.remove_btn, LV_STATE_DISABLED);
+        }
+    }
+}
+
+static void victron_config_persist(ui_state_t *ui)
+{
+    if (ui == NULL || ui->victron_config.updating) {
+        return;
+    }
+
+    victron_device_config_t devices[UI_MAX_VICTRON_DEVICES];
+    memset(devices, 0, sizeof(devices));
+
+    /* Collect data from UI */
+    for (size_t i = 0; i < ui->victron_config.count; ++i) {
+        /* Device name */
+        if (ui->victron_config.name_textareas[i]) {
+            const char *name = lv_textarea_get_text(ui->victron_config.name_textareas[i]);
+            if (name && name[0] != '\0') {
+                strncpy(devices[i].device_name, name, sizeof(devices[i].device_name) - 1);
+            }
+        }
+
+        /* MAC address */
+        if (ui->victron_config.mac_textareas[i]) {
+            const char *mac = lv_textarea_get_text(ui->victron_config.mac_textareas[i]);
+            if (mac && strlen(mac) == 17) {
+                strncpy(devices[i].mac_address, mac, sizeof(devices[i].mac_address) - 1);
+            } else {
+                strcpy(devices[i].mac_address, "00:00:00:00:00:00");
+            }
+        }
+
+        /* AES Key */
+        if (ui->victron_config.key_textareas[i]) {
+            const char *hex = lv_textarea_get_text(ui->victron_config.key_textareas[i]);
+            if (hex && strlen(hex) == 32) {
+                for (int j = 0; j < 16; ++j) {
+                    char tmp[3] = { hex[j * 2], hex[j * 2 + 1], 0 };
+                    devices[i].aes_key[j] = (uint8_t)strtol(tmp, NULL, 16);
+                }
+            }
+        }
+
+        /* Enabled state */
+        if (ui->victron_config.enabled_checkboxes[i]) {
+            devices[i].enabled = lv_obj_has_state(ui->victron_config.enabled_checkboxes[i], LV_STATE_CHECKED);
+        }
+    }
+
+    esp_err_t err = save_victron_devices(devices, ui->victron_config.count);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_SETTINGS, "Failed to save Victron devices: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG_SETTINGS, "Saved %d Victron devices", ui->victron_config.count);
+        // Reload BLE configuration to use updated device settings
+        victron_ble_reload_device_config();
+    }
+}
+
+void ui_settings_panel_init(ui_state_t *ui,
+                            const char *default_ssid,
+                            const char *default_pass,
+                            uint8_t ap_enabled)
+{
+    if (ui == NULL || ui->tab_settings == NULL) {
+        return;
+    }
+
+    lv_obj_t *menu = lv_menu_create(ui->tab_settings);
+    lv_obj_set_size(menu, lv_pct(100), lv_pct(100));
+    lv_obj_center(menu);
+    /* Fondo coherente con el resto de pestanas */
+    lv_obj_set_style_bg_color(menu, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(lv_menu_get_main_header(menu), lv_color_black(), 0);
+    lv_obj_set_style_text_color(lv_menu_get_main_header(menu), lv_color_white(), 0);
+    ui->settings_menu = menu;
+
+    lv_obj_t *main_header = lv_menu_get_main_header(menu);
+    lv_obj_add_style(main_header, &ui->styles.small, 0);
+
+    lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
+    lv_obj_add_style(back_btn, &ui->styles.small, 0);
+
+    lv_obj_t *back_label = lv_label_create(back_btn);
+    lv_label_set_text(back_label, "Back");
+    lv_obj_add_style(back_label, &ui->styles.small, 0);
+
+    lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
+    lv_obj_t *page_wifi = lv_menu_page_create(menu, "Wi-Fi");
+
+    lv_obj_t *page_display = lv_menu_page_create(menu, "Display");
+    lv_obj_t *page_victron = lv_menu_page_create(menu, "Victron Keys");
+    
+    lv_obj_t *cont;
+    lv_obj_t *label;
+
+    // Wi-Fi
+    cont = lv_menu_cont_create(main_page);
+    label = lv_label_create(cont);
+    lv_label_set_text(label, "Wi-Fi");
+    lv_obj_add_style(cont, &ui->styles.small, 0);
+    lv_obj_add_style(label, &ui->styles.small, 0);
+    lv_menu_set_load_page_event(menu, cont, page_wifi);
+
+    // Display
+    cont = lv_menu_cont_create(main_page);
+    label = lv_label_create(cont);
+    lv_label_set_text(label, "Display");
+    lv_obj_add_style(cont, &ui->styles.small, 0);
+    lv_obj_add_style(label, &ui->styles.small, 0);
+    lv_menu_set_load_page_event(menu, cont, page_display);
+
+    cont = lv_menu_cont_create(main_page);
+
+    // Victron Keys
+    cont = lv_menu_cont_create(main_page);
+    label = lv_label_create(cont);
+    lv_label_set_text(label, "Victron Keys");
+    lv_obj_add_style(cont, &ui->styles.small, 0);
+    lv_obj_add_style(label, &ui->styles.small, 0);
+    lv_menu_set_load_page_event(menu, cont, page_victron);
+
+  
+    lv_menu_set_page(menu, main_page);
+    create_wifi_settings_page(ui, page_wifi, default_ssid, default_pass, ap_enabled);
+    create_display_settings_page(ui, page_display);
+    create_victron_keys_settings_page(ui, page_victron);
+
+    lv_obj_t *tab = ui->tab_settings;
+
+    // remove default padding and layout effects
+    lv_obj_set_style_pad_all(tab, 0, 0);
+    lv_obj_set_style_pad_row(tab, 0, 0);
+    lv_obj_set_style_pad_column(tab, 0, 0);
+    lv_obj_set_style_border_width(tab, 0, 0);
+
+    // also ensure the menu expands fully
+    lv_obj_set_size(menu, lv_pct(100), lv_pct(100));
+    lv_obj_align(menu, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(menu, LV_OBJ_FLAG_SCROLLABLE);
+
+}
+
+void ui_settings_panel_on_user_activity(ui_state_t *ui)
+{
+    screensaver_wake(ui);
+}
+
+void ui_settings_panel_set_mac(ui_state_t *ui, const char *mac_str)
+{
+    if (ui == NULL || ui->ta_mac == NULL || mac_str == NULL) {
+        return;
+    }
+    lv_textarea_set_text(ui->ta_mac, mac_str);
+}
+
+void ui_settings_panel_update_victron_device_status(ui_state_t *ui, const char *mac_address, 
+                                                     const char *device_type, const char *product_name, 
+                                                     const char *error_info)
+{
+    if (ui == NULL) {
+        return;
+    }
+    victron_config_update_device_status(ui, mac_address, device_type, product_name, error_info);
+}
+
+static void ta_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    lv_obj_t *ta = lv_event_get_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    if (ui == NULL || ui->keyboard == NULL) {
+        return;
+    }
+
+    if (code == LV_EVENT_FOCUSED) {
+        lv_keyboard_set_textarea(ui->keyboard, ta);
+        lv_obj_move_foreground(ui->keyboard);
+        lv_obj_clear_flag(ui->keyboard, LV_OBJ_FLAG_HIDDEN);
+        lv_disp_t *disp = lv_disp_get_default();
+        lv_coord_t screen_h = disp ? lv_disp_get_ver_res(disp) : LV_VER_RES;
+        lv_coord_t kb_height = lv_obj_get_height(ui->keyboard);
+        lv_coord_t available_h = screen_h - kb_height;
+        if (available_h < screen_h / 3) {
+            available_h = screen_h / 3;
+        }
+        lv_obj_update_layout(ui->tabview);
+        lv_obj_set_height(ui->tabview, available_h);
+        lv_obj_update_layout(ui->tabview);
+        lv_obj_scroll_to_view_recursive(ta, LV_ANIM_OFF);
+    } else if (code == LV_EVENT_DEFOCUSED || code == LV_EVENT_CANCEL || code == LV_EVENT_READY) {
+        if (ta == NULL) {
+            return;
+        }
+        lv_obj_clear_state(ta, LV_STATE_FOCUSED);
+        lv_keyboard_set_textarea(ui->keyboard, NULL);
+        lv_obj_add_flag(ui->keyboard, LV_OBJ_FLAG_HIDDEN);
+        lv_disp_t *disp = lv_disp_get_default();
+        lv_coord_t screen_h = disp ? lv_disp_get_ver_res(disp) : LV_VER_RES;
+        lv_obj_set_height(ui->tabview, screen_h);
+        lv_obj_update_layout(ui->tabview);
+        lv_indev_reset(NULL, ta);
+    }
+}
+
+static void wifi_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    lv_obj_t *ta = lv_event_get_target(e);
+    const char *txt = lv_textarea_get_text(ta);
+    if (ui == NULL) {
+        return;
+    }
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        if (ta == ui->wifi.ssid) {
+            nvs_set_str(h, "ssid", txt);
+        } else if (ta == ui->wifi.password) {
+            nvs_set_str(h, "password", txt);
+        }
+        nvs_commit(h);
+        nvs_close(h);
+        ESP_LOGI(TAG_SETTINGS, "Wi-Fi config saved");
+    } else {
+        ESP_LOGE(TAG_SETTINGS, "nvs_open failed: %s", esp_err_to_name(err));
+    }
+}
+
+static void password_toggle_btn_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->wifi.password == NULL) {
+        return;
+    }
+
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    bool new_mode = !lv_textarea_get_password_mode(ui->wifi.password);
+    lv_textarea_set_password_mode(ui->wifi.password, new_mode);
+
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *label = lv_obj_get_child(btn, 0);
+    if (label != NULL) {
+        lv_label_set_text(label, new_mode ? "Show" : "Hide");
+    }
+}
+
+static void ap_checkbox_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    lv_obj_t *checkbox = lv_event_get_target(e);
+    if (ui == NULL || checkbox == NULL) {
+        return;
+    }
+    bool en = lv_obj_has_state(checkbox, LV_STATE_CHECKED);
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        nvs_set_u8(h, "enabled", en);
+        nvs_commit(h);
+        nvs_close(h);
+        ESP_LOGI(TAG_SETTINGS, "AP %s", en ? "enabled" : "disabled");
+    } else {
+        ESP_LOGE(TAG_SETTINGS, "nvs_open failed: %s", esp_err_to_name(err));
+    }
+
+    if (en) {
+        wifi_ap_init();
+    } else {
+        esp_err_t stop_err = esp_wifi_stop();
+        if (stop_err == ESP_OK) {
+            ESP_LOGI(TAG_SETTINGS, "Soft-AP stopped");
+        } else {
+            ESP_LOGE(TAG_SETTINGS, "Failed to stop AP: %s", esp_err_to_name(stop_err));
+        }
+    }
+}
+
+
+
+
+
+static void reboot_btn_event_cb(lv_event_t *e)
+{
+    ESP_LOGI(TAG_SETTINGS, "Reboot requested via UI");
+    esp_restart();
+}
+
+static void brightness_slider_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL) {
+        return;
+    }
+    int val = lv_slider_get_value(lv_event_get_target(e));
+    ui->brightness = (uint8_t)val;
+    bsp_display_brightness_set(val);
+    save_brightness(ui->brightness);
+    ESP_LOGI(TAG_SETTINGS, "Brightness set to %d", val);
+    /* Ajustar máximo del slider screensaver al nuevo brightness */
+    if (ui->screensaver.slider_brightness != NULL) {
+        int ss_val = lv_slider_get_value(ui->screensaver.slider_brightness);
+        lv_slider_set_range(ui->screensaver.slider_brightness, 0, val);
+        /* Si el valor actual supera el nuevo máximo, lo recortamos */
+        if (ss_val > val) {
+            lv_slider_set_value(ui->screensaver.slider_brightness, val, LV_ANIM_OFF);
+            ui->screensaver.brightness = (uint8_t)val;
+            save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
+        }
+    }
+}
+
+static void cb_screensaver_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->screensaver.checkbox == NULL) {
+        return;
+    }
+    ui->screensaver.enabled = lv_obj_has_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
+    save_screensaver_settings(ui->screensaver.enabled,
+                              ui->screensaver.brightness,
+                              ui->screensaver.timeout);
+    screensaver_enable(ui, ui->screensaver.enabled);
+}
+
+static void victron_debug_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->victron_debug_checkbox == NULL) return;
+    bool enabled = lv_obj_has_state(ui->victron_debug_checkbox, LV_STATE_CHECKED);
+    ui->victron_debug_enabled = enabled;
+    if (save_victron_debug(enabled) == ESP_OK) {
+        ESP_LOGI(TAG_SETTINGS, "Victron BLE debug %s", enabled ? "enabled" : "disabled");
+    } else {
+        ESP_LOGE(TAG_SETTINGS, "Failed to persist Victron BLE debug setting");
+    }
+    // Apply immediately to BLE module
+    victron_ble_set_debug(enabled);
+}
+
+static void slider_ss_brightness_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->screensaver.slider_brightness == NULL) {
+        return;
+    }
+    ui->screensaver.brightness = lv_slider_get_value(ui->screensaver.slider_brightness);
+    save_screensaver_settings(ui->screensaver.enabled,
+                              ui->screensaver.brightness,
+                              ui->screensaver.timeout);
+    if (ui->screensaver.active) {
+        bsp_display_brightness_set(ui->screensaver.brightness);
+    }
+}
+
+static void spinbox_ss_time_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
+        return;
+    }
+    ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
+    save_screensaver_settings(ui->screensaver.enabled,
+                              ui->screensaver.brightness,
+                              ui->screensaver.timeout);
+    if (ui->screensaver.timer) {
+        uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
+        lv_timer_set_period(ui->screensaver.timer, ms);
+    }
+}
+
+static void spinbox_ss_time_increment_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_increment(ui->screensaver.spinbox_timeout);
+        ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
+        save_screensaver_settings(ui->screensaver.enabled,
+                                  ui->screensaver.brightness,
+                                  ui->screensaver.timeout);
+        if (ui->screensaver.timer) {
+            uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
+            lv_timer_set_period(ui->screensaver.timer, ms);
+        }
+    }
+}
+
+static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
+        return;
+    }
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
+        lv_spinbox_decrement(ui->screensaver.spinbox_timeout);
+        ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
+        save_screensaver_settings(ui->screensaver.enabled,
+                                  ui->screensaver.brightness,
+                                  ui->screensaver.timeout);
+        if (ui->screensaver.timer) {
+            uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
+            lv_timer_set_period(ui->screensaver.timer, ms);
+        }
+    }
+}
+
+static void screensaver_enable(ui_state_t *ui, bool enable)
+{
+    if (ui == NULL || ui->screensaver.timer == NULL) {
+        return;
+    }
+    if (enable) {
+        ui->screensaver.active = false;
+        bsp_display_brightness_set(ui->brightness);
+        lv_timer_set_period(ui->screensaver.timer, ui->screensaver.timeout * 1000U);
+        lv_timer_reset(ui->screensaver.timer);
+        lv_timer_resume(ui->screensaver.timer);
+    } else {
+        lv_timer_pause(ui->screensaver.timer);
+        if (ui->screensaver.active) {
+            bsp_display_brightness_set(ui->brightness);
+            ui->screensaver.active = false;
+        }
+    }
+}
+
+static void screensaver_timer_cb(lv_timer_t *timer)
+{
+    ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : NULL;
+    if (ui == NULL) {
+        return;
+    }
+    if (ui->screensaver.enabled && !ui->screensaver.active) {
+        bsp_display_brightness_set(ui->screensaver.brightness);
+        ui->screensaver.active = true;
+    }
+}
+
+static void screensaver_wake(ui_state_t *ui)
+{
+    if (ui == NULL || ui->screensaver.timer == NULL) {
+        return;
+    }
+    if (ui->screensaver.enabled) {
+        lv_timer_reset(ui->screensaver.timer);
+        if (ui->screensaver.active) {
+            bsp_display_brightness_set(ui->brightness);
+            ui->screensaver.active = false;
+        }
+    }
+}
+
+
+
+static void victron_config_add_btn_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL) {
+        return;
+    }
+
+    if (ui->victron_config.count >= UI_MAX_VICTRON_DEVICES) {
+        return;
+    }
+
+    size_t index = ui->victron_config.count;
+    ui->victron_config.count++;
+
+    victron_config_create_row(ui, index);
+    victron_config_update_controls(ui);
+    victron_config_persist(ui);
+}
+
+static void victron_config_remove_btn_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL) {
+        return;
+    }
+
+    if (ui->victron_config.count == 0) {
+        return;
+    }
+
+    size_t index = ui->victron_config.count - 1;
+    if (ui->victron_config.rows[index] != NULL) {
+        lv_obj_del(ui->victron_config.rows[index]);
+    }
+
+    ui->victron_config.rows[index] = NULL;
+    ui->victron_config.mac_textareas[index] = NULL;
+    ui->victron_config.key_textareas[index] = NULL;
+    ui->victron_config.name_textareas[index] = NULL;
+    ui->victron_config.enabled_checkboxes[index] = NULL;
+    ui->victron_config.device_type_labels[index] = NULL;
+    ui->victron_config.product_name_labels[index] = NULL;
+    ui->victron_config.error_labels[index] = NULL;
+    ui->victron_config.status_containers[index] = NULL;
+    ui->victron_config.count--;
+
+    victron_config_update_controls(ui);
+    victron_config_persist(ui);
+}
+
+static void victron_enabled_checkbox_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    victron_config_persist(ui);
+}
+
+static void victron_field_ta_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL) {
+        return;
+    }
+
+    lv_event_code_t code = lv_event_get_code(e);
+    if (!(code == LV_EVENT_DEFOCUSED || code == LV_EVENT_READY)) {
+        return;
+    }
+
+    victron_config_persist(ui);
+}
+
+static void view_selection_dropdown_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (ui == NULL || lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    lv_obj_t *dropdown = lv_event_get_target(e);
+    uint16_t selected = lv_dropdown_get_selected(dropdown);
+    
+    if (selected < UI_VIEW_MODE_COUNT) {
+        ui->view_selection.mode = (ui_view_mode_t)selected;
+        
+        /* Save the selection */
+        esp_err_t err = save_ui_view_mode((uint8_t)ui->view_selection.mode);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG_SETTINGS, "UI view mode set to %d", (int)ui->view_selection.mode);
+        } else {
+            ESP_LOGW(TAG_SETTINGS, "Failed to save UI view mode: %s", esp_err_to_name(err));
+        }
+        
+        /* Force a view update to apply the new selection */
+        ui_force_view_update();
+    }
+}
+
+static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_address)
+{
+    if (ui == NULL || mac_address == NULL) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < ui->victron_config.count; ++i) {
+        if (ui->victron_config.mac_textareas[i] != NULL) {
+            const char *configured_mac = lv_textarea_get_text(ui->victron_config.mac_textareas[i]);
+            if (configured_mac != NULL && strcmp(configured_mac, mac_address) == 0) {
+                return (int)i;
+            }
+        }
+    }
+    return -1;
+}
+
+static void victron_config_update_device_status(ui_state_t *ui, const char *mac_address, 
+                                                const char *device_type, const char *product_name, 
+                                                const char *error_info)
+{
+    if (ui == NULL) {
+        return;
+    }
+
+    int device_index = victron_config_find_device_by_mac(ui, mac_address);
+    if (device_index < 0) {
+        return;  // Device not found in configuration
+    }
+
+    size_t index = (size_t)device_index;
+
+    /* Update device type */
+    if (ui->victron_config.device_type_labels[index]) {
+        if (device_type && device_type[0] != '\0') {
+            lv_label_set_text_fmt(ui->victron_config.device_type_labels[index], "Device: %s", device_type);
+            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], lv_color_hex(0x00C851), 0); // Green for active
+        } else {
+            lv_label_set_text(ui->victron_config.device_type_labels[index], "Device: --");
+            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
+        }
+    }
+
+    /* Update product name */
+    if (ui->victron_config.product_name_labels[index]) {
+        if (product_name && product_name[0] != '\0') {
+            lv_label_set_text_fmt(ui->victron_config.product_name_labels[index], "Product: %s", product_name);
+            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], lv_color_hex(0x00C851), 0); // Green for active
+        } else {
+            lv_label_set_text(ui->victron_config.product_name_labels[index], "Product: --");
+            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
+        }
+    }
+
+    /* Update error/status info */
+    if (ui->victron_config.error_labels[index]) {
+        if (error_info && error_info[0] != '\0') {
+            lv_label_set_text_fmt(ui->victron_config.error_labels[index], "Status: %s", error_info);
+            /* Color code based on content */
+            if (strstr(error_info, "error") || strstr(error_info, "Error") || strstr(error_info, "ERROR")) {
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0xF44336), 0); // Red for errors
+            } else if (strstr(error_info, "Active") || strstr(error_info, "OK") || strstr(error_info, "Connected")) {
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0x00C851), 0); // Green for OK
+            } else {
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0xFF9800), 0); // Orange for warnings
+            }
+        } else {
+            lv_label_set_text(ui->victron_config.error_labels[index], "Status: No data");
+            lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0x888888), 0); // Gray for no data
+        }
+    }
+}
+
+void ui_settings_panel_refresh_victron_devices(ui_state_t *ui)
+{
+    if (ui == NULL) {
+        return;
+    }
+    
+    ESP_LOGI(TAG_SETTINGS, "Public function called to refresh Victron device list");
+    victron_config_refresh(ui);
+}
