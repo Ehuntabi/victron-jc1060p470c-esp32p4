@@ -1,5 +1,6 @@
 /* main.c */
 #include <stdio.h>
+#include <sys/time.h>
 #include <inttypes.h>
 #include <lvgl.h>
 #include "display.h"
@@ -156,6 +157,28 @@ void app_main(void)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
 
     esp_err_t rtc_err = rtc_init(bsp_i2c_get_handle());
+/* Restaurar hora desde NVS si el RTC da año incorrecto */
+    struct tm t_rtc;
+    if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year < 120) {
+        nvs_handle_t nh;
+        if (nvs_open("rtc_backup", NVS_READONLY, &nh) == ESP_OK) {
+            int64_t epoch = 0;
+            if (nvs_get_i64(nh, "epoch", &epoch) == ESP_OK && epoch > 1000000000L) {
+                struct timeval tv = { .tv_sec = (time_t)epoch, .tv_usec = 0 };
+                settimeofday(&tv, NULL);
+                ESP_LOGI(TAG, "Hora restaurada desde NVS backup: %lld", epoch);
+            }
+            nvs_close(nh);
+        }
+    } else if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year >= 120) {
+        /* RTC tiene hora válida — sincronizar el sistema */
+        time_t epoch = mktime(&t_rtc);
+        struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        ESP_LOGI(TAG, "Hora del RTC: %04d-%02d-%02d %02d:%02d:%02d",
+                 t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
+                 t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
+    }
     if (rtc_err != ESP_OK)
         ESP_LOGW(TAG, "rtc_init failed: %s", esp_err_to_name(rtc_err));
 

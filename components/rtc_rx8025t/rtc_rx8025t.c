@@ -2,6 +2,8 @@
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "RTC_RX8130";
 
@@ -17,6 +19,8 @@ static const char *TAG = "RTC_RX8130";
 #define REG_MONTH  0x15
 #define REG_YEAR   0x16
 #define REG_FLAG   0x1D
+#define REG_CTRL0  0x1E
+#define REG_CTRL1  0x1F
 
 static i2c_master_dev_handle_t s_dev   = NULL;
 static bool                    s_ready = false;
@@ -69,6 +73,13 @@ esp_err_t rtc_init(i2c_master_bus_handle_t bus)
 
     /* Limpiar flags de error */
     rtc_write(REG_FLAG, 0x00);
+    /* Limpiar VLF (Voltage Low Flag) — necesario con pila nueva */
+    uint8_t flag;
+    rtc_read(REG_FLAG, &flag, 1);
+    if (flag & 0x01) {
+        ESP_LOGW(TAG, "VLF activo — limpiando flag de tension baja");
+        rtc_write(REG_FLAG, flag & ~0x01);
+    }
 
     s_ready = true;
     ESP_LOGI(TAG, "RX8130 OK (addr=0x%02X, bus compartido con GT911)", RTC_I2C_ADDR);
@@ -83,6 +94,8 @@ esp_err_t rtc_get_time(struct tm *tm_out)
 
     /* Leer los 7 registros de una sola transacción I2C */
     esp_err_t ret = rtc_read(REG_SEC, regs, 7);
+    ESP_LOGI(TAG, "RAW: %02X %02X %02X %02X %02X %02X %02X",
+             regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6]);
     if (ret != ESP_OK) return ret;
 
     /* Validar que los valores BCD son razonables */
@@ -100,6 +113,8 @@ esp_err_t rtc_get_time(struct tm *tm_out)
     tm_out->tm_wday = regs[3] & 0x07;
     tm_out->tm_mday = bcd2dec(regs[4] & 0x3F);
     tm_out->tm_mon  = bcd2dec(regs[5] & 0x1F) - 1;
+    /* regs[6] = year, regs[5] bit7 = century */
+    tm_out->tm_year = bcd2dec(regs[6]) + ((regs[5] & 0x80) ? 100 : 0) + 100;
     tm_out->tm_year = bcd2dec(regs[6]) + 100;
     return ESP_OK;
 }
@@ -107,16 +122,41 @@ esp_err_t rtc_get_time(struct tm *tm_out)
 esp_err_t rtc_set_time(const struct tm *tm_in)
 {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
-    rtc_write(REG_SEC,   dec2bcd(tm_in->tm_sec));
-    rtc_write(REG_MIN,   dec2bcd(tm_in->tm_min));
-    rtc_write(REG_HOUR,  dec2bcd(tm_in->tm_hour));
-    rtc_write(REG_WDAY,  (1 << tm_in->tm_wday));
-    rtc_write(REG_MDAY,  dec2bcd(tm_in->tm_mday));
-    rtc_write(REG_MONTH, dec2bcd(tm_in->tm_mon + 1));
-    rtc_write(REG_YEAR,  dec2bcd(tm_in->tm_year - 100));
+    
+        /* Detener oscilador antes de escribir */
+    uint8_t ctrl0;
+    rtc_read(REG_CTRL0, &ctrl0, 1);
+    rtc_write(REG_CTRL0, ctrl0 | 0x01);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    uint8_t buf[8];
+    buf[0] = REG_SEC;
+    buf[1] = dec2bcd(tm_in->tm_sec);
+    buf[2] = dec2bcd(tm_in->tm_min);
+    buf[3] = dec2bcd(tm_in->tm_hour);
+    buf[4] = (1 << tm_in->tm_wday);
+    buf[5] = dec2bcd(tm_in->tm_mday);
+    buf[6] = dec2bcd(tm_in->tm_mon + 1) | 0x80;  /* bit 7 = century (21st) */
+    buf[7] = dec2bcd(tm_in->tm_year - 100);
+
+    esp_err_t ret = i2c_master_transmit(s_dev, buf, 8, 100);
+    if (ret != ESP_OK) return ret;
+
+        /* Reanudar oscilador */
+    rtc_write(REG_CTRL0, ctrl0 & ~0x01);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
     ESP_LOGI(TAG, "Hora: %04d-%02d-%02d %02d:%02d:%02d",
              tm_in->tm_year + 1900, tm_in->tm_mon + 1, tm_in->tm_mday,
              tm_in->tm_hour, tm_in->tm_min, tm_in->tm_sec);
+
+    /* Verificar escritura */
+    struct tm verify;
+    if (rtc_get_time(&verify) == ESP_OK) {
+        ESP_LOGI(TAG, "Verificacion: %04d-%02d-%02d %02d:%02d:%02d",
+                 verify.tm_year + 1900, verify.tm_mon + 1, verify.tm_mday,
+                 verify.tm_hour, verify.tm_min, verify.tm_sec);
+    }
     return ESP_OK;
 }
 

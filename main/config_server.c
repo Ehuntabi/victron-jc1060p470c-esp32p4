@@ -447,6 +447,13 @@ static esp_err_t handle_settime(httpd_req_t *req)
         /* Sincronizar también el reloj del sistema */
         struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
         settimeofday(&tv, NULL);
+       /* Backup de hora en NVS */
+        nvs_handle_t nh;
+        if (nvs_open("rtc_backup", NVS_READWRITE, &nh) == ESP_OK) {
+            nvs_set_i64(nh, "epoch", (int64_t)epoch);
+            nvs_commit(nh);
+            nvs_close(nh);
+        }
     }
 
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
