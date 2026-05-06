@@ -22,6 +22,12 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include "esp_timer.h"
+
+static int64_t s_last_ble_data_us = 0;
+static void ble_indicator_timer_cb(lv_timer_t *t);
+
+
 // Font Awesome symbols (declared in main.c)
 LV_FONT_DECLARE(font_awesome_solar_panel_40);
 LV_FONT_DECLARE(font_awesome_bolt_40);
@@ -251,6 +257,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
     lv_timer_create(clock_timer_cb, 30000, ui);
+    lv_timer_create(ble_indicator_timer_cb, 1000, ui);
     clock_timer_cb(NULL);
     lvgl_port_unlock();
 }
@@ -268,6 +275,7 @@ void ui_on_panel_data(const victron_data_t *d) {
         lv_label_set_text(ui->lbl_ble, "BLE: OK");
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x00C851), 0);
     }
+    s_last_ble_data_us = esp_timer_get_time();
 
     if (!ui->has_received_data) {
         ui->has_received_data = true;
@@ -927,3 +935,18 @@ static void clock_click_cb(lv_event_t *e)
         lvgl_port_unlock();
     }
 }
+
+
+static void ble_indicator_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_ble) return;
+    int64_t now = esp_timer_get_time();
+    int64_t age_ms = (now - s_last_ble_data_us) / 1000;
+    /* Sin datos nunca recibidos o > 5s sin actualizacion -> gris */
+    if (s_last_ble_data_us == 0 || age_ms > 5000) {
+        lv_label_set_text(ui->lbl_ble, "BLE: --");
+        lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
+    }
+}
+
