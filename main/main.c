@@ -155,7 +155,7 @@ void app_main(void)
     if (sd_err != ESP_OK)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
 
-    esp_err_t rtc_err = rtc_init();
+    esp_err_t rtc_err = rtc_init(bsp_i2c_get_handle());
     if (rtc_err != ESP_OK)
         ESP_LOGW(TAG, "rtc_init failed: %s", esp_err_to_name(rtc_err));
 

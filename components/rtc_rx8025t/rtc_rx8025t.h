@@ -1,25 +1,30 @@
 #pragma once
 #include <time.h>
+#include <stdbool.h>
 #include "esp_err.h"
+#include "driver/i2c_master.h"
 
 /**
- * @brief Inicializar el RTC RX8025T en I2C_NUM_0
- *        SCL = GPIO10, SDA = GPIO12, addr = 0x32
+ * @brief Inicializar el RTC RX8130 usando el bus I2C existente del BSP
+ *        El RX8130 comparte I2C_NUM_1 (GPIO7=SDA, GPIO8=SCL) con el touch GT911
  *
- * Si el RTC no tiene batería y pierde la hora, arranca en
- * 2000-01-01 00:00:00. Usa rtc_set_time() para ajustarla.
+ * @param bus  Handle del bus I2C obtenido con bsp_i2c_get_handle()
+ * @return ESP_OK si el chip responde, ESP_ERR_NOT_FOUND si no hay respuesta
  */
-esp_err_t rtc_init(void);
+esp_err_t rtc_init(i2c_master_bus_handle_t bus);
+
+/**
+ * @brief Devuelve true si el RTC se inicializó correctamente
+ */
+bool rtc_is_ready(void);
 
 /**
  * @brief Leer hora actual del RTC
- * @param tm  Estructura tm rellena (year desde 1900, month 0-11)
  */
 esp_err_t rtc_get_time(struct tm *tm_out);
 
 /**
  * @brief Escribir hora en el RTC
- * @param tm  Estructura tm con la hora a guardar
  */
 esp_err_t rtc_set_time(const struct tm *tm_in);
 
