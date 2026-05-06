@@ -2,11 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ui_format.h"
+#include "esp_log.h"
 #include "ui.h"
 
 static void battery_view_root_click_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_event_code_t code = lv_event_get_code(e);
+    ESP_LOGI("BMVIEW", "tap event code=%d", (int)code);
+    if (code != LV_EVENT_SHORT_CLICKED) return;
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
     if (ui) ui_show_battery_history_screen(ui);
 }
@@ -152,10 +155,37 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     view->base.hide    = battery_view_hide;
     view->base.destroy = battery_view_destroy;
 
-    /* Tap sobre la vista BM abre el historico de corriente */
+    /* Tap sobre la vista BM abre el historico de corriente.
+       Anadimos el handler tambien a los rows porque los hijos pueden
+       interceptar el touch antes de que llegue al root. */
     lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(view->base.root, battery_view_root_click_cb,
-                        LV_EVENT_CLICKED, ui);
+                        LV_EVENT_SHORT_CLICKED, ui);
+    if (view->row_primary) {
+        lv_obj_add_flag(view->row_primary, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(view->row_primary, battery_view_root_click_cb,
+                            LV_EVENT_SHORT_CLICKED, ui);
+    }
+    if (view->row_secondary) {
+        lv_obj_add_flag(view->row_secondary, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(view->row_secondary, battery_view_root_click_cb,
+                            LV_EVENT_SHORT_CLICKED, ui);
+    }
+    /* Engancha tambien a cada caja individual y a sus labels */
+    for (int i = 0; i < BATTERY_PRIMARY_COUNT; ++i) {
+        lv_obj_t *box = view->primary[i].header ? lv_obj_get_parent(view->primary[i].header) : NULL;
+        if (box) {
+            lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_event_cb(box, battery_view_root_click_cb, LV_EVENT_SHORT_CLICKED, ui);
+        }
+    }
+    for (int i = 0; i < BATTERY_SECONDARY_COUNT; ++i) {
+        lv_obj_t *box = view->secondary[i].header ? lv_obj_get_parent(view->secondary[i].header) : NULL;
+        if (box) {
+            lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_event_cb(box, battery_view_root_click_cb, LV_EVENT_SHORT_CLICKED, ui);
+        }
+    }
 
     return &view->base;
 }

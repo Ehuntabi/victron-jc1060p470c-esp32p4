@@ -183,8 +183,6 @@ void ui_init(void) {
     lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
-    lv_obj_add_flag(ui->lbl_clock, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ui->lbl_clock, clock_click_cb, LV_EVENT_CLICKED, ui);
     /* Indicador BLE - centro inferior */
     ui->lbl_ble = lv_label_create(lv_scr_act());
     lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
@@ -204,8 +202,6 @@ void ui_init(void) {
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
 
-    lv_obj_add_event_cb(ui->tabview, frigo_swipe_cb, LV_EVENT_GESTURE, ui);
-    lv_obj_add_event_cb(lv_scr_act(), frigo_swipe_cb, LV_EVENT_GESTURE, ui);
 
     ui->keyboard = lv_keyboard_create(lv_layer_top());
     lv_obj_set_size(ui->keyboard, LV_HOR_RES, LV_VER_RES/2);

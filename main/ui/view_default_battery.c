@@ -1,4 +1,6 @@
 #include "view_default_battery.h"
+#include "ui.h"
+#include "esp_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include "ui_format.h"
@@ -62,6 +64,10 @@ static void default_battery_view_hide(ui_device_view_t *view);
 static void default_battery_view_destroy(ui_device_view_t *view);
 static void update_display_elements(ui_default_battery_view_t *battery_view);
 static uint32_t get_current_time_ms(void);
+
+
+
+
 
 ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
 {
@@ -274,6 +280,8 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     view->base.show = default_battery_view_show;
     view->base.hide = default_battery_view_hide;
     view->base.destroy = default_battery_view_destroy;
+
+
 
     return &view->base;
 }

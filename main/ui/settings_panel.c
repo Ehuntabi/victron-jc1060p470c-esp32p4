@@ -56,6 +56,7 @@ static void screensaver_wake(ui_state_t *ui);
 // Victron devices configuration functions
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
+static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
 static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
@@ -750,6 +751,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
+    lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
@@ -761,6 +763,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_row(main_page, 8, 0);
 
     settings_menu_add_entry(ui, main_page, menu, page_frigo,   "Frigo");
+    settings_menu_add_entry(ui, main_page, menu, page_logs,    "Logs");
     settings_menu_add_entry(ui, main_page, menu, page_wifi,    "Wi-Fi");
     settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
     settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
@@ -771,6 +774,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     create_wifi_settings_page(ui, page_wifi, default_ssid, default_pass, ap_enabled);
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
+    create_logs_settings_page(ui, page_logs);
     create_about_settings_page(ui, page_about);
     ui_frigo_panel_init(ui);
 
@@ -1510,5 +1514,51 @@ static void reboot_btn_cb(lv_event_t *e)
         btns, false);
     lv_obj_center(mbox);
     lv_obj_add_event_cb(mbox, reboot_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+static void logs_btn_bat_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (ui) ui_show_battery_history_screen(ui);
+}
+
+static void logs_btn_frigo_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (ui) ui_show_chart_screen(ui);
+}
+
+static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
+{
+    lv_obj_t *cont = lv_obj_create(page);
+    lv_obj_set_size(cont, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
+
+    lv_obj_t *btn_frigo = lv_btn_create(cont);
+    lv_obj_set_size(btn_frigo, lv_pct(100), 80);
+    lv_obj_set_style_bg_color(btn_frigo, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_radius(btn_frigo, 10, 0);
+    lv_obj_t *lbl_frigo = lv_label_create(btn_frigo);
+    lv_label_set_text(lbl_frigo, "FRIGO");
+    lv_obj_set_style_text_font(lbl_frigo, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_color(lbl_frigo, lv_color_hex(0x000000), 0);
+    lv_obj_center(lbl_frigo);
+    lv_obj_add_event_cb(btn_frigo, logs_btn_frigo_cb, LV_EVENT_CLICKED, ui);
+
+    lv_obj_t *btn_bat = lv_btn_create(cont);
+    lv_obj_set_size(btn_bat, lv_pct(100), 80);
+    lv_obj_set_style_bg_color(btn_bat, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_radius(btn_bat, 10, 0);
+    lv_obj_t *lbl_bat = lv_label_create(btn_bat);
+    lv_label_set_text(lbl_bat, "BATERIA");
+    lv_obj_set_style_text_font(lbl_bat, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_color(lbl_bat, lv_color_hex(0x000000), 0);
+    lv_obj_center(lbl_bat);
+    lv_obj_add_event_cb(btn_bat, logs_btn_bat_cb, LV_EVENT_CLICKED, ui);
 }
 
