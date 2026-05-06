@@ -76,8 +76,9 @@ idf.py -p /dev/ttyACM1 flash monitor
 
 ### Datalogger
 
-El sistema registra cada 5 minutos: timestamp, T_Aletas, T_Congelador, T_Exterior y porcentaje ventilador. Buffer circular de 200 entradas en RAM (~16 horas). Descarga como CSV desde http://192.168.4.1/logs.
-
+El sistema registra cada 5 minutos: timestamp, T_Aletas, T_Congelador, T_Exterior y porcentaje ventilador. 
+Buffer circular de 200 entradas en RAM (~16 horas). Para descargar el CSV, cambiar la pagina inicial a "Logs" en 
+Settings → Wi-Fi y abrir http://192.168.4.1
 Cuando el bug de la SD este resuelto por Espressif, los logs se migraran a tarjeta SD.
 
 ---
@@ -184,7 +185,7 @@ idf.py -p /dev/ttyACM1 flash monitor
 
 ### Datalogger
 
-Logs every 5 minutes: timestamp, T_Fins, T_Freezer, T_Exterior and fan percentage. 200-entry circular buffer in RAM (~16 hours). Download as CSV from http://192.168.4.1/logs.
+Logs every 5 minutes: timestamp, T_Fins, T_Freezer, T_Exterior and fan percentage. 200-entry circular buffer in RAM (~16 hours). To download the CSV, change the start page to "Logs" in Settings → Wi-Fi and open http://192.168.4.1
 
 Once the SD card bug is fixed by Espressif, logs will migrate to SD card.
 
