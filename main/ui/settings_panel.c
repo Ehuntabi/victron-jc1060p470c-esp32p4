@@ -323,7 +323,7 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 
     /* Header text */
     lv_obj_t *lbl_header = lv_label_create(victron_container);
-    lv_obj_add_style(lbl_header, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20, 0);
     lv_label_set_text(lbl_header, "Configure multiple Victron devices with MAC addresses and AES keys:");
 
     /* --- Victron devices configuration section --- */
@@ -344,11 +344,11 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
     lv_obj_set_layout(controls_row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(controls_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_gap(controls_row, 10, 0);
-    lv_obj_set_flex_align(controls_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(controls_row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Add button */
     ui->victron_config.add_btn = lv_btn_create(controls_row);
-    lv_obj_set_size(ui->victron_config.add_btn, 48, 48);
+    lv_obj_set_size(ui->victron_config.add_btn, 36, 36);
     lv_obj_t *lbl_add = lv_label_create(ui->victron_config.add_btn);
     lv_label_set_text(lbl_add, LV_SYMBOL_PLUS);
     lv_obj_center(lbl_add);
@@ -356,7 +356,7 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 
     /* Remove button */
     ui->victron_config.remove_btn = lv_btn_create(controls_row);
-    lv_obj_set_size(ui->victron_config.remove_btn, 48, 48);
+    lv_obj_set_size(ui->victron_config.remove_btn, 36, 36);
     lv_obj_t *lbl_remove = lv_label_create(ui->victron_config.remove_btn);
     lv_label_set_text(lbl_remove, LV_SYMBOL_MINUS);
     lv_obj_center(lbl_remove);
@@ -511,18 +511,18 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* Device label */
     lv_obj_t *device_label = lv_label_create(header_row);
-    lv_obj_add_style(device_label, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(device_label, &lv_font_montserrat_20, 0);
     lv_label_set_text_fmt(device_label, "Device %d", (int)(index + 1));
 
     /* Enabled checkbox */
     lv_obj_t *enabled_cb = lv_checkbox_create(header_row);
     lv_checkbox_set_text(enabled_cb, "Enabled");
-    lv_obj_add_style(enabled_cb, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20, 0);
     lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     /* Device name input */
     lv_obj_t *name_label = lv_label_create(row);
-    lv_obj_add_style(name_label, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20, 0);
     lv_label_set_text(name_label, "Device Name:");
 
     lv_obj_t *name_ta = lv_textarea_create(row);
@@ -530,7 +530,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(name_ta, lv_pct(80));
     lv_textarea_set_one_line(name_ta, true);
     lv_textarea_set_placeholder_text(name_ta, "e.g. Solar Charger 1");
-    lv_obj_add_style(name_ta, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(name_ta, &lv_font_montserrat_20, 0);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -539,7 +539,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* MAC address input */
     lv_obj_t *mac_label = lv_label_create(row);
-    lv_obj_add_style(mac_label, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20, 0);
     lv_label_set_text(mac_label, "MAC Address:");
 
     lv_obj_t *mac_ta = lv_textarea_create(row);
@@ -547,7 +547,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(mac_ta, lv_pct(60));
     lv_textarea_set_one_line(mac_ta, true);
     lv_textarea_set_placeholder_text(mac_ta, "XX:XX:XX:XX:XX:XX");
-    lv_obj_add_style(mac_ta, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(mac_ta, &lv_font_montserrat_20, 0);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -556,7 +556,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* AES Key input */
     lv_obj_t *key_label = lv_label_create(row);
-    lv_obj_add_style(key_label, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20, 0);
     lv_label_set_text(key_label, "AES Key (32 hex characters):");
 
     lv_obj_t *key_ta = lv_textarea_create(row);
@@ -564,7 +564,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(key_ta, lv_pct(90));
     lv_textarea_set_one_line(key_ta, true);
     lv_textarea_set_placeholder_text(key_ta, "00000000000000000000000000000000");
-    lv_obj_add_style(key_ta, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(key_ta, &lv_font_montserrat_20, 0);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -573,7 +573,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* --- Device Status Section --- */
     lv_obj_t *status_label = lv_label_create(row);
-    lv_obj_add_style(status_label, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_20, 0);
     lv_label_set_text(status_label, "Live Device Status:");
 
     lv_obj_t *status_container = lv_obj_create(row);
@@ -592,19 +592,19 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* Device type label */
     lv_obj_t *device_type_lbl = lv_label_create(status_container);
-    lv_obj_add_style(device_type_lbl, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(device_type_lbl, &lv_font_montserrat_20, 0);
     lv_label_set_text(device_type_lbl, "Device: --");
     lv_obj_set_style_text_color(device_type_lbl, lv_color_hex(0x888888), 0);
 
     /* Product name label */
     lv_obj_t *product_name_lbl = lv_label_create(status_container);
-    lv_obj_add_style(product_name_lbl, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(product_name_lbl, &lv_font_montserrat_20, 0);
     lv_label_set_text(product_name_lbl, "Product: --");
     lv_obj_set_style_text_color(product_name_lbl, lv_color_hex(0x888888), 0);
 
     /* Live metrics status label - enhanced for detailed status */
     lv_obj_t *error_lbl = lv_label_create(status_container);
-    lv_obj_add_style(error_lbl, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(error_lbl, &lv_font_montserrat_20, 0);
     lv_label_set_text(error_lbl, "Status: Waiting for data...");
     lv_obj_set_style_text_color(error_lbl, lv_color_hex(0x888888), 0);
     lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);  // Enable text wrapping for longer status
@@ -723,23 +723,37 @@ void ui_settings_panel_init(ui_state_t *ui,
     ui->settings_menu = menu;
 
     lv_obj_t *main_header = lv_menu_get_main_header(menu);
-    lv_obj_add_style(main_header, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28, 0);
+    lv_obj_set_flex_align(main_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
-    lv_obj_add_style(back_btn, &ui->styles.small, 0);
+    lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x2A2A2A), 0);
+    lv_obj_set_style_border_color(back_btn, lv_color_hex(0x555555), 0);
+    lv_obj_set_style_border_width(back_btn, 1, 0);
+    lv_obj_set_style_radius(back_btn, 8, 0);
+    lv_obj_set_style_pad_hor(back_btn, 14, 0);
+    lv_obj_set_style_pad_ver(back_btn, 8, 0);
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x3D5A80), LV_STATE_PRESSED);
+    lv_obj_set_style_text_font(back_btn, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(back_btn, lv_color_hex(0x00BFFF), 0);
 
     lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "Back");
-    lv_obj_add_style(back_label, &ui->styles.small, 0);
+    lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back");
+    lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24, 0);
+    /* Spacer invisible para centrar el titulo via SPACE_BETWEEN */
+    lv_obj_t *header_spacer = lv_obj_create(main_header);
+    lv_obj_remove_style_all(header_spacer);
+    lv_obj_set_size(header_spacer, 110, 1);
 
     lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
-    lv_obj_t *page_frigo = lv_menu_page_create(menu, "Frigo");
+    lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
-    lv_obj_t *page_wifi = lv_menu_page_create(menu, "Wi-Fi");
+    lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
-    lv_obj_t *page_display = lv_menu_page_create(menu, "Display");
-    lv_obj_t *page_victron = lv_menu_page_create(menu, "Victron Keys");
-    lv_obj_t *page_about = lv_menu_page_create(menu, "About");
+    lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
+    lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
+    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT");
     
     /* Padding del main_page del menu */
     lv_obj_set_style_pad_all(main_page, 16, 0);
@@ -1363,14 +1377,6 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     ui->lbl_about_ip = lv_label_create(cont);
     lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20, 0);
     lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
-
-    /* MAC */
-    uint8_t mac[6] = {0};
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    lv_obj_t *lbl_mac = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_mac, &lv_font_montserrat_20, 0);
-    lv_label_set_text_fmt(lbl_mac, "MAC: %02X:%02X:%02X:%02X:%02X:%02X",
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     /* Chip + IDF */
     esp_chip_info_t chip = {0};
