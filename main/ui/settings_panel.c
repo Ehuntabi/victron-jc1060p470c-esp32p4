@@ -15,6 +15,12 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "ui/frigo_panel.h"
+#include "esp_chip_info.h"
+#include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_idf_version.h"
+#include "esp_timer.h"
+#include "esp_heap_caps.h"
 
 // Forward declaration for view update function
 extern void ui_force_view_update(void);
@@ -29,6 +35,10 @@ static void wifi_event_cb(lv_event_t *e);
 static void ap_checkbox_event_cb(lv_event_t *e);
 static void password_toggle_btn_event_cb(lv_event_t *e);
 static void reboot_btn_event_cb(lv_event_t *e);
+static void about_refresh_dynamic(ui_state_t *ui);
+static void about_timer_cb(lv_timer_t *t);
+static void reboot_msgbox_cb(lv_event_t *e);
+static void reboot_btn_cb(lv_event_t *e);
 static void brightness_slider_event_cb(lv_event_t *e);
 static void cb_screensaver_event_cb(lv_event_t *e);
 static void victron_debug_event_cb(lv_event_t *e);
@@ -1288,12 +1298,12 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_all(cont, 16, 0);
 
     lv_obj_t *lbl_title = lv_label_create(cont);
-    lv_obj_add_style(lbl_title, &ui->styles.medium, 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(lbl_title, lv_color_hex(0x00BFFF), 0);
     lv_label_set_text(lbl_title, "VictronSolarDisplay");
 
     lv_obj_t *lbl_ver = lv_label_create(cont);
-    lv_obj_add_style(lbl_ver, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_ver, &lv_font_montserrat_20, 0);
     lv_label_set_text_fmt(lbl_ver, "Version: %s  |  ESP32-P4  |  ESP-IDF v5.4.4", APP_VERSION);
 
     lv_obj_t *sep = lv_obj_create(cont);
@@ -1304,11 +1314,11 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
 
     lv_obj_t *lbl_port = lv_label_create(cont);
-    lv_obj_add_style(lbl_port, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20, 0);
     lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
 
     lv_obj_t *lbl_gh = lv_label_create(cont);
-    lv_obj_add_style(lbl_gh, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x00BFFF), 0);
     lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
 
@@ -1320,18 +1330,69 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_bg_opa(sep2, LV_OPA_COVER, 0);
 
     lv_obj_t *lbl_cred = lv_label_create(cont);
-    lv_obj_add_style(lbl_cred, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20, 0);
     lv_label_set_text(lbl_cred, "Basado en:");
 
     lv_obj_t *lbl_orig1 = lv_label_create(cont);
-    lv_obj_add_style(lbl_orig1, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_orig1, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_orig1, lv_color_hex(0xAAAAAA), 0);
     lv_label_set_text(lbl_orig1, "CamdenSutherland / victronsolardisplayesp");
 
     lv_obj_t *lbl_orig2 = lv_label_create(cont);
-    lv_obj_add_style(lbl_orig2, &ui->styles.small, 0);
+    lv_obj_set_style_text_font(lbl_orig2, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_orig2, lv_color_hex(0xAAAAAA), 0);
     lv_label_set_text(lbl_orig2, "wytr / VictronSolarDisplayEsp");
+
+    /* --- Separador --- */
+    lv_obj_t *sep3 = lv_obj_create(cont);
+    lv_obj_remove_style_all(sep3);
+    lv_obj_set_width(sep3, lv_pct(100));
+    lv_obj_set_height(sep3, 2);
+    lv_obj_set_style_bg_color(sep3, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep3, LV_OPA_COVER, 0);
+
+    /* --- Info dinamica --- */
+    ui->lbl_about_uptime = lv_label_create(cont);
+    lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20, 0);
+    lv_label_set_text(ui->lbl_about_uptime, "Uptime: --");
+
+    ui->lbl_about_heap = lv_label_create(cont);
+    lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20, 0);
+    lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
+
+    ui->lbl_about_ip = lv_label_create(cont);
+    lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20, 0);
+    lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
+
+    /* MAC */
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    lv_obj_t *lbl_mac = lv_label_create(cont);
+    lv_obj_set_style_text_font(lbl_mac, &lv_font_montserrat_20, 0);
+    lv_label_set_text_fmt(lbl_mac, "MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    /* Chip + IDF */
+    esp_chip_info_t chip = {0};
+    esp_chip_info(&chip);
+    lv_obj_t *lbl_chip = lv_label_create(cont);
+    lv_obj_set_style_text_font(lbl_chip, &lv_font_montserrat_20, 0);
+    lv_label_set_text_fmt(lbl_chip, "Chip: ESP32 model=%d cores=%d rev=%d  |  IDF: %s",
+        chip.model, chip.cores, chip.revision, esp_get_idf_version());
+
+    /* Refrescar ya y crear timer 1s */
+    about_refresh_dynamic(ui);
+    lv_timer_create(about_timer_cb, 1000, ui);
+
+    /* --- Boton Reboot --- */
+    lv_obj_t *btn_reboot = lv_btn_create(cont);
+    lv_obj_set_size(btn_reboot, lv_pct(60), 60);
+    lv_obj_set_style_bg_color(btn_reboot, lv_color_hex(0xCC3333), 0);
+    lv_obj_t *lbl_reboot = lv_label_create(btn_reboot);
+    lv_label_set_text(lbl_reboot, "Reiniciar");
+    lv_obj_set_style_text_font(lbl_reboot, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_reboot);
+    lv_obj_add_event_cb(btn_reboot, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 }
 
 static void portal_page_cb(lv_event_t *e)
@@ -1377,5 +1438,70 @@ static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
     lv_label_set_text(label, text);
     lv_obj_add_style(label, &ui->styles.medium, 0);
     lv_menu_set_load_page_event(menu, cont, target_page);
+}
+
+
+/* --- About page: info dinamica + reboot --- */
+static void about_refresh_dynamic(ui_state_t *ui)
+{
+    if (!ui) return;
+    /* Uptime */
+    if (ui->lbl_about_uptime) {
+        int64_t up_s = esp_timer_get_time() / 1000000;
+        int d = up_s / 86400;
+        int h = (up_s % 86400) / 3600;
+        int m = (up_s % 3600) / 60;
+        int s = up_s % 60;
+        if (d > 0)
+            lv_label_set_text_fmt(ui->lbl_about_uptime, "Uptime: %dd %02dh %02dm %02ds", d, h, m, s);
+        else
+            lv_label_set_text_fmt(ui->lbl_about_uptime, "Uptime: %02dh %02dm %02ds", h, m, s);
+    }
+    /* RAM libre */
+    if (ui->lbl_about_heap) {
+        size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        size_t free_spi = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        lv_label_set_text_fmt(ui->lbl_about_heap,
+            "RAM libre: int %u KB  |  PSRAM %u KB",
+            (unsigned)(free_int / 1024), (unsigned)(free_spi / 1024));
+    }
+    /* IP */
+    if (ui->lbl_about_ip) {
+        esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        esp_netif_ip_info_t ip_info = {0};
+        if (ap && esp_netif_get_ip_info(ap, &ip_info) == ESP_OK) {
+            lv_label_set_text_fmt(ui->lbl_about_ip, "IP AP: " IPSTR, IP2STR(&ip_info.ip));
+        } else {
+            lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
+        }
+    }
+}
+
+static void about_timer_cb(lv_timer_t *t)
+{
+    about_refresh_dynamic((ui_state_t *)t->user_data);
+}
+
+static void reboot_msgbox_cb(lv_event_t *e)
+{
+    lv_obj_t *mbox = lv_event_get_current_target(e);
+    uint16_t btn_id = lv_msgbox_get_active_btn(mbox);
+    if (btn_id == 0) {
+        ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
+        lv_msgbox_close(mbox);
+        esp_restart();
+    } else {
+        lv_msgbox_close(mbox);
+    }
+}
+
+static void reboot_btn_cb(lv_event_t *e)
+{
+    static const char *btns[] = {"Si", "No", ""};
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Reiniciar",
+        "Estas seguro de que quieres reiniciar el dispositivo?",
+        btns, false);
+    lv_obj_center(mbox);
+    lv_obj_add_event_cb(mbox, reboot_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 

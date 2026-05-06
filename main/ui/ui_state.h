@@ -90,6 +90,10 @@ typedef struct ui_state {
     uint16_t tab_settings_index;
     lv_obj_t *lbl_clock;       // Reloj en barra superior
     lv_obj_t *lbl_ble;         // Indicador BLE
+    /* About page dynamic info */
+    lv_obj_t *lbl_about_uptime;
+    lv_obj_t *lbl_about_heap;
+    lv_obj_t *lbl_about_ip;
     lv_obj_t *alarm_border;    // Borde rojo alarma congelador
     lv_obj_t *screen_chart;    // Pantalla grafica temperaturas
     
