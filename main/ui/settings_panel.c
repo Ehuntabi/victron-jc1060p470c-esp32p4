@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
+#include "ui/frigo_panel.h"
 
 // Forward declaration for view update function
 extern void ui_force_view_update(void);
@@ -59,6 +60,16 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
                                                 const char *error_info);
 static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_address);
 
+
+/* --- Estilo botones del menu Settings --- */
+static lv_style_t s_settings_btn_style;
+static lv_style_t s_settings_btn_pressed_style;
+static bool s_settings_styles_inited = false;
+
+static void settings_btn_styles_init(void);
+static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
+                                    lv_obj_t *menu, lv_obj_t *target_page,
+                                    const char *text);
 
 static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                       const char *default_ssid,
@@ -712,46 +723,23 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_add_style(back_label, &ui->styles.small, 0);
 
     lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
+    lv_obj_t *page_frigo = lv_menu_page_create(menu, "Frigo");
+    ui->frigo_page = page_frigo;
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "Wi-Fi");
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "Display");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "Victron Keys");
     lv_obj_t *page_about = lv_menu_page_create(menu, "About");
     
-    lv_obj_t *cont;
-    lv_obj_t *label;
+    /* Padding del main_page del menu */
+    lv_obj_set_style_pad_all(main_page, 16, 0);
+    lv_obj_set_style_pad_row(main_page, 8, 0);
 
-    // Wi-Fi
-    cont = lv_menu_cont_create(main_page);
-    label = lv_label_create(cont);
-    lv_label_set_text(label, "Wi-Fi");
-    lv_obj_add_style(cont, &ui->styles.small, 0);
-    lv_obj_add_style(label, &ui->styles.small, 0);
-    lv_menu_set_load_page_event(menu, cont, page_wifi);
-
-    // Display
-    cont = lv_menu_cont_create(main_page);
-    label = lv_label_create(cont);
-    lv_label_set_text(label, "Display");
-    lv_obj_add_style(cont, &ui->styles.small, 0);
-    lv_obj_add_style(label, &ui->styles.small, 0);
-    lv_menu_set_load_page_event(menu, cont, page_display);
-
-    
-    // Victron Keys
-    cont = lv_menu_cont_create(main_page);
-    label = lv_label_create(cont);
-    lv_label_set_text(label, "Victron Keys");
-    lv_obj_add_style(cont, &ui->styles.small, 0);
-    lv_obj_add_style(label, &ui->styles.small, 0);
-    lv_menu_set_load_page_event(menu, cont, page_victron);
-    // About
-    cont = lv_menu_cont_create(main_page);
-    label = lv_label_create(cont);
-    lv_label_set_text(label, "About");
-    lv_obj_add_style(cont, &ui->styles.small, 0);
-    lv_obj_add_style(label, &ui->styles.small, 0);
-    lv_menu_set_load_page_event(menu, cont, page_about);
+    settings_menu_add_entry(ui, main_page, menu, page_frigo,   "Frigo");
+    settings_menu_add_entry(ui, main_page, menu, page_wifi,    "Wi-Fi");
+    settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
+    settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
+    settings_menu_add_entry(ui, main_page, menu, page_about,   "About");
 
   
     lv_menu_set_page(menu, main_page);
@@ -759,6 +747,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
     create_about_settings_page(ui, page_about);
+    ui_frigo_panel_init(ui);
 
     lv_obj_t *tab = ui->tab_settings;
 
@@ -1357,3 +1346,36 @@ static void portal_page_cb(lv_event_t *e)
     }
     ESP_LOGI(TAG_SETTINGS, "Portal page: %s", sel == 0 ? "Keys" : "Logs");
 }
+
+
+static void settings_btn_styles_init(void)
+{
+    if (s_settings_styles_inited) return;
+    lv_style_init(&s_settings_btn_style);
+    lv_style_set_bg_opa(&s_settings_btn_style, LV_OPA_COVER);
+    lv_style_set_bg_color(&s_settings_btn_style, lv_color_hex(0x2A2A2A));
+    lv_style_set_border_color(&s_settings_btn_style, lv_color_hex(0x555555));
+    lv_style_set_border_width(&s_settings_btn_style, 1);
+    lv_style_set_radius(&s_settings_btn_style, 10);
+    lv_style_set_pad_all(&s_settings_btn_style, 16);
+    lv_style_set_min_height(&s_settings_btn_style, 70);
+
+    lv_style_init(&s_settings_btn_pressed_style);
+    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x3D5A80));
+    s_settings_styles_inited = true;
+}
+
+static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
+                                    lv_obj_t *menu, lv_obj_t *target_page,
+                                    const char *text)
+{
+    settings_btn_styles_init();
+    lv_obj_t *cont = lv_menu_cont_create(main_page);
+    lv_obj_add_style(cont, &s_settings_btn_style, 0);
+    lv_obj_add_style(cont, &s_settings_btn_pressed_style, LV_STATE_PRESSED);
+    lv_obj_t *label = lv_label_create(cont);
+    lv_label_set_text(label, text);
+    lv_obj_add_style(label, &ui->styles.medium, 0);
+    lv_menu_set_load_page_event(menu, cont, target_page);
+}
+

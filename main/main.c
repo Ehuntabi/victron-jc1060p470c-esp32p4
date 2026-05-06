@@ -170,10 +170,6 @@ void app_main(void)
         ui_init();
         lvgl_port_unlock();
     }
-    if (lvgl_port_lock(0)) {
-        ui_frigo_panel_init(s_ui);
-        lvgl_port_unlock();
-    }
     bsp_display_brightness_set(80);
 
     /* --- Touch callback --- */

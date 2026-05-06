@@ -163,10 +163,8 @@ void ui_init(void) {
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28, 0);
     ui->tab_live  = lv_tabview_add_tab(ui->tabview, "Live");
     ui->tab_settings = lv_tabview_add_tab(ui->tabview, "Settings");
-    ui->tab_frigo = lv_tabview_add_tab(ui->tabview, "Frigo");
 
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
-    ui->tab_frigo_index = lv_obj_get_index(ui->tab_frigo);
 
     /* Reloj en barra superior — esquina derecha */
     ui->lbl_clock = lv_label_create(lv_scr_act());
@@ -199,11 +197,8 @@ void ui_init(void) {
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
 
-    lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
-    lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tabview, frigo_swipe_cb, LV_EVENT_GESTURE, ui);
     lv_obj_add_event_cb(lv_scr_act(), frigo_swipe_cb, LV_EVENT_GESTURE, ui);
-    lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
 
     ui->keyboard = lv_keyboard_create(lv_layer_top());
     lv_obj_set_size(ui->keyboard, LV_HOR_RES, LV_VER_RES/2);
@@ -247,7 +242,6 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_flag(ui->lbl_no_data, LV_OBJ_FLAG_HIDDEN); // Hide by default
 
     ui_settings_panel_init(ui, default_ssid, default_pass, ap_enabled);
-    /* TODO: ui_frigo_panel_init(ui); */
 
     lv_obj_add_event_cb(lv_scr_act(), tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(lv_scr_act(), tabview_touch_event_cb, LV_EVENT_CLICKED, ui);

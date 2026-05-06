@@ -168,7 +168,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_ui = ui;
     const frigo_state_t *st = frigo_get_state();
 
-    lv_obj_t *tab = ui->tab_frigo;
+    lv_obj_t *tab = ui->frigo_page;
     lv_obj_set_layout(tab, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(tab, 12, 0);
