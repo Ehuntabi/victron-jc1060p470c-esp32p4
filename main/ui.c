@@ -912,7 +912,24 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     int count = datalogger_get_count();
     lv_chart_set_point_count(s_chart, count > 0 ? count : 2);
-    lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, -20, 15);
+    /* Autoescala temperatura: min/max de las 3 series con margen 10% */
+    {
+        float t_min = 9999.0f, t_max = -9999.0f;
+        for (int i = 0; i < count; i++) {
+            const datalogger_entry_t *e = datalogger_get_entry(i);
+            if (!e) continue;
+            if (e->T_Aletas     > -120.0f) { if (e->T_Aletas     < t_min) t_min = e->T_Aletas;     if (e->T_Aletas     > t_max) t_max = e->T_Aletas; }
+            if (e->T_Congelador > -120.0f) { if (e->T_Congelador < t_min) t_min = e->T_Congelador; if (e->T_Congelador > t_max) t_max = e->T_Congelador; }
+            if (e->T_Exterior   > -120.0f) { if (e->T_Exterior   < t_min) t_min = e->T_Exterior;   if (e->T_Exterior   > t_max) t_max = e->T_Exterior; }
+        }
+        if (t_min > t_max) { t_min = -20.0f; t_max = 15.0f; }
+        float span = t_max - t_min;
+        if (span < 1.0f) span = 1.0f;
+        int y_min = (int)(t_min - span * 0.10f);
+        int y_max = (int)(t_max + span * 0.10f) + 1;
+        if (y_min == y_max) { y_min--; y_max++; }
+        lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, y_min, y_max);
+    }
     lv_chart_set_range(s_chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
     lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_PRIMARY_Y,   8, 4, 5, 1, true, 50);
     lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_SECONDARY_Y, 8, 4, 5, 1, true, 50);
@@ -1090,7 +1107,30 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
     lv_chart_set_point_count(chart, BH_POINTS);
     /* Rango Y: -50A..+50A en deciamperios -> -500..+500 deci o -50000..+50000 milli */
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, -40, 40);
+    /* Autoescala bateria: min/max de todas las fuentes con margen 10% */
+    {
+        int32_t bmin = INT32_MAX, bmax = INT32_MIN;
+        bh_point_t *probe = malloc(sizeof(bh_point_t) * BH_POINTS);
+        if (probe) {
+            for (int s = 0; s < BH_SRC_COUNT; ++s) {
+                int32_t a, b;
+                size_t n = battery_history_get_series((bh_source_t)s, probe, &a, &b);
+                for (size_t k = 0; k < n; ++k) {
+                    if (!probe[k].valid) continue;
+                    int32_t a_int = probe[k].milli_amps / 1000;
+                    if (a_int < bmin) bmin = a_int;
+                    if (a_int > bmax) bmax = a_int;
+                }
+            }
+            free(probe);
+        }
+        if (bmin == INT32_MAX) { bmin = -40; bmax = 40; }
+        int32_t span = bmax - bmin;
+        if (span < 1) span = 1;
+        int y_min = bmin - span / 10 - 1;
+        int y_max = bmax + span / 10 + 1;
+        lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, y_min, y_max);
+    }
     lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 50);
     lv_obj_set_style_pad_left(chart, 50, 0);
     lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
@@ -1109,8 +1149,6 @@ void ui_show_battery_history_screen(ui_state_t *ui)
             for (size_t k = 0; k < n; ++k) {
                 if (pts[k].valid) {
                     int32_t a = pts[k].milli_amps / 1000;
-                    if (a >  40) a =  40;
-                    if (a < -40) a = -40;
                     lv_chart_set_next_value(chart, ser, (lv_coord_t)a);
                 } else {
                     lv_chart_set_next_value(chart, ser, LV_CHART_POINT_NONE);

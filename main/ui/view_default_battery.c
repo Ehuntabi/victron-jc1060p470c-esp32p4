@@ -228,7 +228,7 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
 
     // Create power consumption label below TTG
     view->power_consumption_label = lv_label_create(view->center_column);
-    lv_label_set_text(view->power_consumption_label, "Power: --W");
+    lv_label_set_text(view->power_consumption_label, "-- A");
     lv_obj_add_style(view->power_consumption_label, &ui->styles.small, 0);
     lv_obj_set_style_text_align(view->power_consumption_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_pad_top(view->power_consumption_label, 10, 0);
@@ -424,9 +424,9 @@ static void update_display_elements(ui_default_battery_view_t *battery_view)
         lv_arc_set_angles(battery_view->soc_arc, 0, arc_angle);
         
         // Update arc color based on SOC level
-        if (soc_percent >= 50) {
+        if (soc_percent >= 60) {
             lv_obj_set_style_arc_color(battery_view->soc_arc, lv_color_hex(0x00C851), LV_PART_INDICATOR); // Green
-        } else if (soc_percent >= 25) {
+        } else if (soc_percent >= 30) {
             lv_obj_set_style_arc_color(battery_view->soc_arc, lv_color_hex(0xFF9800), LV_PART_INDICATOR); // Orange
         } else {
             lv_obj_set_style_arc_color(battery_view->soc_arc, lv_color_hex(0xF44336), LV_PART_INDICATOR); // Red
@@ -463,22 +463,19 @@ static void update_display_elements(ui_default_battery_view_t *battery_view)
             lv_label_set_text(battery_view->ttg_label, "TTG: --");
         }
         
-        // Update power consumption (P = V * I)
-        if (battery_view->battery_state.battery_voltage_cv > 0 && battery_view->battery_state.battery_current_milli != 0) {
-            // Calculate power: voltage (centi-volts) * current (milli-amps) = milli-watts * 100
-            // Convert to watts: (V_cv / 100) * (I_mA / 1000) = (V_cv * I_mA) / 100000
-            int32_t power_watts = (int32_t)battery_view->battery_state.battery_voltage_cv * battery_view->battery_state.battery_current_milli / 100000;
-            
-            if (power_watts >= 0) {
-                lv_label_set_text_fmt(battery_view->power_consumption_label, "Power: %ldW", (long)power_watts);
-                lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_hex(0x00C851), 0); // Verde
+        // Update battery current (positivo = carga, negativo = descarga)
+        if (battery_view->battery_state.battery_current_milli != 0) {
+            int32_t mi = battery_view->battery_state.battery_current_milli;
+            float a = mi / 1000.0f;
+            lv_label_set_text_fmt(battery_view->power_consumption_label, "%+.2f A", a);
+            if (mi > 0) {
+                lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_hex(0x00C851), 0); // Verde - cargando
             } else {
-                lv_label_set_text_fmt(battery_view->power_consumption_label, "Power: %ldW", (long)power_watts);
-                lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_hex(0xFF9800), 0); // Naranja
+                lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_hex(0xFF9800), 0); // Naranja - descargando
             }
         } else {
-            lv_label_set_text(battery_view->power_consumption_label, "Power: --W");
-            lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_white(), 0); // Blanco sin datos
+            lv_label_set_text(battery_view->power_consumption_label, "0.00 A");
+            lv_obj_set_style_text_color(battery_view->power_consumption_label, lv_color_white(), 0);
         }
     } else {
         // Battery data expired or not available
@@ -487,7 +484,7 @@ static void update_display_elements(ui_default_battery_view_t *battery_view)
         lv_label_set_text(battery_view->soc_label, "---%");
         lv_label_set_text(battery_view->battery_voltage_label, "--.-V");
         lv_label_set_text(battery_view->ttg_label, "TTG: --");
-        lv_label_set_text(battery_view->power_consumption_label, "Power: --W");
+        lv_label_set_text(battery_view->power_consumption_label, "-- A");
     }
 
     // === Update DC/DC Input Metrics (Left Column) ===
