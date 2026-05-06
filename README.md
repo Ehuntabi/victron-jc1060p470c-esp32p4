@@ -67,9 +67,11 @@ idf.py -p /dev/ttyACM1 flash monitor
 2. Conectarse al WiFi VictronConfig desde el movil o PC
 3. Abrir http://192.168.4.1 en el navegador
 4. La hora se sincroniza automaticamente con el RTC
-5. Introducir la MAC y clave AES del dispositivo Victron
-6. Guardar y reiniciar
-
+5. En Settings → Wi-Fi, seleccionar "Pagina inicial portal web: Keys" (por defecto)
+6. Abrir de nuevo http://192.168.4.1 — aparece la pagina de configuracion de claves
+7. Introducir la MAC y clave AES del dispositivo Victron y guardar
+8. Una vez configurado, se puede cambiar la pagina inicial a "Logs" en Settings → Wi-Fi
+   para que el portal muestre directamente los datos del datalogger
 ---
 
 ### Datalogger
@@ -172,8 +174,11 @@ idf.py -p /dev/ttyACM1 flash monitor
 2. Connect to the VictronConfig WiFi from your phone or PC
 3. Open http://192.168.4.1 in your browser
 4. Device time is automatically synced to the RTC
-5. Enter your Victron device MAC address and AES encryption key
-6. Save and reboot
+5. In Settings → Wi-Fi, select "Web portal start page: Keys" (default)
+6. Open http://192.168.4.1 again — the key configuration page appears
+7. Enter your Victron device MAC address and AES encryption key and save
+8. Once configured, you can change the start page to "Logs" in Settings → Wi-Fi
+   so the portal shows the datalogger directly
 
 ---
 
