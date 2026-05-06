@@ -256,12 +256,11 @@ static void format_secondary_aux(lv_obj_t *label, const victron_data_t *data)
 
     if ((b->aux_input & 0x03u) == 0x03u) {
         /* Potencia instantánea */
-        if (header) lv_label_set_text(header, "Potencia");
-        int32_t power_mw     = (int32_t)b->battery_voltage_centi * (int32_t)b->battery_current_milli;
-        int32_t power_tenths = ui_round_div_signed(power_mw, 10000);
+        if (header) lv_label_set_text(header, "Amps");
+       int32_t current_tenths = ui_round_div_signed(b->battery_current_milli, 100);
         lv_obj_set_style_text_color(label,
-            power_tenths >= 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xFF9800), 0);
-        ui_label_set_signed_fixed(label, power_tenths, 10, 1, " W");
+            current_tenths >= 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xFF9800), 0);
+        ui_label_set_signed_fixed(label, current_tenths, 10, 1, " A");
     } else {
         if (header) lv_label_set_text(header, "Aux");
         char aux_buf[32];
