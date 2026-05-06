@@ -94,8 +94,6 @@ esp_err_t rtc_get_time(struct tm *tm_out)
 
     /* Leer los 7 registros de una sola transacción I2C */
     esp_err_t ret = rtc_read(REG_SEC, regs, 7);
-    ESP_LOGI(TAG, "RAW: %02X %02X %02X %02X %02X %02X %02X",
-             regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6]);
     if (ret != ESP_OK) return ret;
 
     /* Validar que los valores BCD son razonables */
@@ -150,13 +148,7 @@ esp_err_t rtc_set_time(const struct tm *tm_in)
              tm_in->tm_year + 1900, tm_in->tm_mon + 1, tm_in->tm_mday,
              tm_in->tm_hour, tm_in->tm_min, tm_in->tm_sec);
 
-    /* Verificar escritura */
-    struct tm verify;
-    if (rtc_get_time(&verify) == ESP_OK) {
-        ESP_LOGI(TAG, "Verificacion: %04d-%02d-%02d %02d:%02d:%02d",
-                 verify.tm_year + 1900, verify.tm_mon + 1, verify.tm_mday,
-                 verify.tm_hour, verify.tm_min, verify.tm_sec);
-    }
+
     return ESP_OK;
 }
 

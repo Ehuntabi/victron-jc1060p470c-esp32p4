@@ -70,13 +70,8 @@ static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 #define APP_WDT_TIMEOUT_S    60    /* reiniciar si LVGL no responde en 60s */
 #define BLE_TIMEOUT_S       300    /* alerta si no hay datos BLE en 5 min */
 
-static int64_t s_last_ble_data_ms = 0;
 
 /* Llamar desde frigo_update_cb y ui_on_panel_data para alimentar el WDT */
-void app_notify_activity(void)
-{
-    esp_task_wdt_reset();
-}
 
 /* ── app_main ────────────────────────────────────────────────── */
 void app_main(void)

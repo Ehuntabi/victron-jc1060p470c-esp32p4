@@ -67,18 +67,6 @@ static void dhcp_set_captiveportal_url(void)
  *     • If enabled, configures and starts Soft-AP.
  *     • If disabled, stops Soft-AP.
  */
-static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    if (id == WIFI_EVENT_AP_START) {
-        ESP_LOGI(TAG, ">>> WIFI_EVENT_AP_START <<<");
-    } else if (id == WIFI_EVENT_AP_STOP) {
-        ESP_LOGI(TAG, ">>> WIFI_EVENT_AP_STOP <<<");
-    } else if (id == WIFI_EVENT_AP_STACONNECTED) {
-        ESP_LOGI(TAG, ">>> Station connected to AP <<<");
-    } else {
-        ESP_LOGI(TAG, ">>> WiFi event: %ld <<<", id);
-    }
-}
 
 
 esp_err_t wifi_ap_init(void)
