@@ -261,7 +261,7 @@ static esp_err_t handle_root(httpd_req_t *req) {
     }
     if (portal_page == 1) {
         httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/logs");
+        httpd_resp_set_hdr(req, "Location", "/data");
         httpd_resp_send(req, NULL, 0);
         return ESP_OK;
     }
@@ -511,10 +511,10 @@ static void build_frigo_html(const char *csv,
 
     /* Recolectar puntos: x = indice, y = T_Aletas, T_Cong, T_Ext, fan */
     /* Construimos polylines de 4 series */
-    char poly_aletas[8192]   = "";
-    char poly_cong[8192]     = "";
-    char poly_ext[8192]      = "";
-    char poly_fan[8192]      = "";
+    char poly_aletas[4096]   = "";
+    char poly_cong[4096]     = "";
+    char poly_ext[4096]      = "";
+    char poly_fan[4096]      = "";
     size_t pa = 0, pc = 0, pe = 0, pf = 0;
 
     /* Primera pasada: contar lineas para escalar X */
@@ -716,7 +716,7 @@ static void build_bateria_html(const char *csv,
                                char **rows_html, char **svg_inner)
 {
     size_t rows_cap = 64 * 1024;
-    size_t svg_cap  = 32 * 1024;
+    size_t svg_cap  = 48 * 1024;
     char *rows = malloc(rows_cap);
     char *svg  = malloc(svg_cap);
     if (!rows || !svg) { free(rows); free(svg); *rows_html=NULL; *svg_inner=NULL; return; }
@@ -729,10 +729,18 @@ static void build_bateria_html(const char *csv,
     const char *nl = strchr(p, '\n');
     if (nl) p = nl + 1;
 
-    /* 4 polylines: una por fuente */
-    char poly[BH_SRC_COUNT][8192];
+    /* 4 polylines: una por fuente (en heap para no desbordar stack) */
+    char *poly_buf = calloc(BH_SRC_COUNT, 4096);
     size_t pp[BH_SRC_COUNT];
-    for (int i = 0; i < BH_SRC_COUNT; ++i) { poly[i][0]=0; pp[i]=0; }
+    for (int i = 0; i < BH_SRC_COUNT; ++i) pp[i] = 0;
+    if (!poly_buf) {
+        free(rows); free(svg);
+        *rows_html=NULL; *svg_inner=NULL;
+        return;
+    }
+    /* Indexar como poly[i] = poly_buf + i*4096 */
+    #define POLY(i) (poly_buf + (i)*4096)
+    #define POLY_CAP 4096
 
     /* Contar lineas */
     int total = 0;
@@ -788,8 +796,8 @@ static void build_bateria_html(const char *csv,
                 int x = pad_l + (total > 1 ? gw * idx / (total - 1) : 0);
                 if (a > 40)  a = 40;
                 if (a < -40) a = -40;
-                if (pp[si] < sizeof(poly[si]) - 16)
-                    pp[si] += snprintf(poly[si] + pp[si], sizeof(poly[si]) - pp[si], "%d,%d ", x, Y_BAT(a));
+                if (pp[si] < POLY_CAP - 16)
+                    pp[si] += snprintf(POLY(si) + pp[si], POLY_CAP - pp[si], "%d,%d ", x, Y_BAT(a));
             }
         }
         idx++;
@@ -820,8 +828,9 @@ static void build_bateria_html(const char *csv,
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         sp += snprintf(svg + sp, svg_cap - sp,
             "<polyline fill='none' stroke='%s' stroke-width='2' points='%s'/>",
-            colors[i], poly[i]);
+            colors[i], POLY(i));
     }
+    free(poly_buf);
     sp += snprintf(svg + sp, svg_cap - sp, "</svg>");
 
     *rows_html = rows;
@@ -1004,6 +1013,16 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_screenshot);
     httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };
     httpd_register_uri_handler(server, &uri_logs);
+    httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
+    httpd_register_uri_handler(server, &uri_data);
+    httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };
+    httpd_register_uri_handler(server, &uri_data_frigo);
+    httpd_uri_t uri_data_frigo_csv = { .uri = "/data/frigo.csv", .method = HTTP_GET, .handler = handle_data_frigo_csv };
+    httpd_register_uri_handler(server, &uri_data_frigo_csv);
+    httpd_uri_t uri_data_bat = { .uri = "/data/bateria", .method = HTTP_GET, .handler = handle_data_bateria };
+    httpd_register_uri_handler(server, &uri_data_bat);
+    httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };
+    httpd_register_uri_handler(server, &uri_data_bat_csv);
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
 
