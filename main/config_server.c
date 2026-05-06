@@ -21,6 +21,10 @@
 #include "dns_server.h" 
 #include <lwip/inet.h>
 #include "lvgl.h"
+#include "rtc_rx8025t.h"
+#include <sys/time.h>
+#include <time.h>
+
 
 static const char *TAG = "cfg_srv";
 
@@ -398,6 +402,39 @@ static esp_err_t handle_captive_redirect(httpd_req_t *req) {
 }
 
 // Screenshot handler
+
+static esp_err_t handle_settime(httpd_req_t *req)
+{
+    char buf[64];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+
+    /* Esperar formato: "timestamp=1234567890" (Unix timestamp) */
+    long ts = 0;
+    if (sscanf(buf, "timestamp=%ld", &ts) == 1 && ts > 1000000000L) {
+        struct tm t;
+        time_t epoch = (time_t)ts;
+        gmtime_r(&epoch, &t);
+        if (rtc_is_ready()) {
+            rtc_set_time(&t);
+            ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil: %04d-%02d-%02d %02d:%02d:%02d",
+                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                     t.tm_hour, t.tm_min, t.tm_sec);
+        }
+        /* Sincronizar también el reloj del sistema */
+        struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+    }
+
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_sendstr(req, "OK");
+    return ESP_OK;
+}
+
 static esp_err_t handle_screenshot(httpd_req_t *req) {
     lv_disp_t *disp = lv_disp_get_default();
     if (!disp || !disp->driver || !disp->driver->draw_buf || !disp->driver->draw_buf->buf1) {
@@ -444,6 +481,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_ncsi);
 
     // Now register the catch-all static handler LAST
+    httpd_uri_t uri_settime = { .uri = "/settime", .method = HTTP_POST, .handler = handle_settime };
+    httpd_register_uri_handler(server, &uri_settime);
     httpd_uri_t uri_screenshot = { .uri = "/screenshot", .method = HTTP_GET, .handler = handle_screenshot };
     httpd_register_uri_handler(server, &uri_screenshot);
 

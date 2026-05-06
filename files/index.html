@@ -20,6 +20,14 @@
       }
     }
   </style>
+  <script>
+    // Sincronizar hora del movil con el RTC del ESP32
+    fetch("/settime", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "timestamp=" + Math.floor(Date.now() / 1000)
+    }).catch(function() {});
+  </script>
 </head>
 <body>
   <div class="wobble-bg"></div>
