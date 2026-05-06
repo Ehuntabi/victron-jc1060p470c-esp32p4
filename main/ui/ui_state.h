@@ -90,6 +90,7 @@ typedef struct ui_state {
     bool has_received_data;
     uint16_t tab_settings_index;
     lv_obj_t *lbl_clock;       // Reloj en barra superior
+    lv_obj_t *lbl_ble;         // Indicador BLE
     
     // Victron devices configuration
     struct {

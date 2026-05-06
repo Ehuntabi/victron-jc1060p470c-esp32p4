@@ -24,6 +24,7 @@
 #include "rtc_rx8025t.h"
 #include <sys/time.h>
 #include <time.h>
+#include "datalogger.h"
 
 
 static const char *TAG = "cfg_srv";
@@ -262,6 +263,18 @@ static esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri) {
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET / -> serve index.html");
+    uint8_t portal_page = 0;
+    nvs_handle_t h;
+    if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u8(h, "portal_page", &portal_page);
+        nvs_close(h);
+    }
+    if (portal_page == 1) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/logs");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
     return serve_from_spiffs(req, "/index.html");
 }
 
@@ -441,6 +454,21 @@ static esp_err_t handle_settime(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t handle_logs(httpd_req_t *req)
+{
+    char *csv = datalogger_get_csv();
+    if (!csv) {
+        httpd_resp_set_type(req, "text/csv");
+        httpd_resp_sendstr(req, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=frigo_log.csv");
+    httpd_resp_sendstr(req, csv);
+    free(csv);
+    return ESP_OK;
+}
+
 static esp_err_t handle_screenshot(httpd_req_t *req) {
     lv_disp_t *disp = lv_disp_get_default();
     if (!disp || !disp->driver || !disp->driver->draw_buf || !disp->driver->draw_buf->buf1) {
@@ -491,7 +519,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_settime);
     httpd_uri_t uri_screenshot = { .uri = "/screenshot", .method = HTTP_GET, .handler = handle_screenshot };
     httpd_register_uri_handler(server, &uri_screenshot);
-
+    httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };
+    httpd_register_uri_handler(server, &uri_logs);
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
 

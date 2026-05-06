@@ -44,6 +44,7 @@ static void screensaver_wake(ui_state_t *ui);
 // Victron devices configuration functions
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
+static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
 static void victron_config_create_row(ui_state_t *ui, size_t index);
@@ -102,13 +103,6 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_style(ui->wifi.ssid, &ui->styles.small, 0);
 
     /* AP enable checkbox */
-    ui->wifi.ap_enable = lv_checkbox_create(ssid_row);
-    lv_checkbox_set_text(ui->wifi.ap_enable, "Enable AP");
-    lv_obj_add_style(ui->wifi.ap_enable, &ui->styles.medium, 0);
-    if (ap_enabled) {
-        lv_obj_add_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
-    }
-    lv_obj_add_event_cb(ui->wifi.ap_enable, ap_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     /* Password label */
     lv_obj_t *lbl_pass = lv_label_create(wifi_container);
@@ -149,6 +143,22 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text(lbl_toggle, "Show");
     lv_obj_center(lbl_toggle);
     lv_obj_add_style(lbl_toggle, &ui->styles.small, 0);
+    /* Separador */
+    lv_obj_t *sep_portal = lv_obj_create(wifi_container);
+    lv_obj_remove_style_all(sep_portal);
+    lv_obj_set_width(sep_portal, lv_pct(100));
+    lv_obj_set_height(sep_portal, 2);
+    lv_obj_set_style_bg_color(sep_portal, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep_portal, LV_OPA_COVER, 0);
+    lv_obj_t *lbl_portal = lv_label_create(wifi_container);
+    lv_obj_add_style(lbl_portal, &ui->styles.small, 0);
+    lv_label_set_text(lbl_portal, "Pagina inicial portal web:");
+    lv_obj_t *dd_portal = lv_dropdown_create(wifi_container);
+    lv_obj_add_style(dd_portal, &ui->styles.small, 0);
+    lv_obj_set_width(dd_portal, lv_pct(60));
+    lv_dropdown_set_options(dd_portal, "Keys\nLogs");
+    lv_dropdown_set_selected(dd_portal, 0);
+    lv_obj_add_event_cb(dd_portal, portal_page_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
@@ -1333,4 +1343,17 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_add_style(lbl_orig2, &ui->styles.small, 0);
     lv_obj_set_style_text_color(lbl_orig2, lv_color_hex(0xAAAAAA), 0);
     lv_label_set_text(lbl_orig2, "wytr / VictronSolarDisplayEsp");
+}
+
+static void portal_page_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    nvs_handle_t h;
+    if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "portal_page", (uint8_t)sel);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    ESP_LOGI(TAG_SETTINGS, "Portal page: %s", sel == 0 ? "Keys" : "Logs");
 }

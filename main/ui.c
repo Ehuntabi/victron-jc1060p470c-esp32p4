@@ -173,6 +173,16 @@ void ui_init(void) {
     lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
+    /* Indicador BLE - centro inferior */
+    ui->lbl_ble = lv_label_create(lv_scr_act());
+    lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
+    lv_label_set_text(ui->lbl_ble, "BLE: --");
+    lv_obj_align(ui->lbl_ble, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_ble, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_ble, 4, 0);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
@@ -250,6 +260,11 @@ void ui_on_panel_data(const victron_data_t *d) {
     ui_state_t *ui = &g_ui;
 
     lvgl_port_lock(0);
+
+    if (ui->lbl_ble) {
+        lv_label_set_text(ui->lbl_ble, "BLE: OK");
+        lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x00C851), 0);
+    }
 
     if (!ui->has_received_data) {
         ui->has_received_data = true;

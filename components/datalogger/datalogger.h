@@ -1,23 +1,21 @@
 #pragma once
 #include "esp_err.h"
 #include "frigo.h"
+#include <stdbool.h>
 
-/**
- * @brief Inicializar SD (slot 1, GPIO matrix, 1-bit) y montar FAT en /sdcard
- *        CLK=GPIO36, CMD=GPIO35, D0=GPIO37
- */
+#define DATALOGGER_MAX_ENTRIES  200
+
+typedef struct {
+    char timestamp[24];
+    float T_Aletas;
+    float T_Congelador;
+    float T_Exterior;
+    uint8_t fan_percent;
+} datalogger_entry_t;
+
 esp_err_t datalogger_init(void);
-
-/**
- * @brief Registrar una muestra en el CSV del día actual.
- *        Llama a rtc_get_time() si el RTC está disponible,
- *        si no usa millis como timestamp provisional.
- *
- * @param frigo  Estado actual del frigo (temperaturas + ventilador)
- */
 esp_err_t datalogger_log(const frigo_state_t *frigo);
-
-/**
- * @brief Devuelve true si la SD está montada y operativa
- */
 bool datalogger_is_ready(void);
+int datalogger_get_count(void);
+const datalogger_entry_t *datalogger_get_entry(int index);
+char *datalogger_get_csv(void);

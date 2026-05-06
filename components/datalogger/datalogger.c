@@ -1,131 +1,110 @@
 #include "datalogger.h"
 #include "rtc_rx8025t.h"
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include <stdlib.h>
+#include <sys/time.h>
 
 static const char *TAG = "DATALOGGER";
 
-#define MOUNT_POINT   "/sdcard"
-#define SD_CLK        GPIO_NUM_36
-#define SD_CMD        GPIO_NUM_35
-#define SD_D0         GPIO_NUM_37
-#define SD_D1         GPIO_NUM_38
-#define SD_D2         GPIO_NUM_39
-#define SD_D3         GPIO_NUM_40
+static datalogger_entry_t s_buf[DATALOGGER_MAX_ENTRIES];
+static int                s_head  = 0;
+static int                s_count = 0;
+static SemaphoreHandle_t  s_mutex = NULL;
 
-static bool           s_ready = false;
-static sdmmc_card_t  *s_card  = NULL;
-
-esp_err_t datalogger_init(void)
+static void get_timestamp(char *buf, size_t len)
 {
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot.clk   = SD_CLK;
-    slot.cmd   = SD_CMD;
-    slot.d0    = SD_D0;
-    slot.d1    = SD_D1;
-    slot.d2    = SD_D2;
-    slot.d3    = SD_D3;
-    slot.width = 1;
-    slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-    slot.cd = GPIO_NUM_NC;  /* sin pin card detect */
-    slot.wp = GPIO_NUM_NC;  /* sin write protect */
-
-    esp_err_t ret = sdmmc_host_init_slot(SDMMC_HOST_SLOT_0, &slot);
-    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "slot0 init failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.slot         = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = 400;  /* 400 KHz, mínimo absoluto */
-    host.flags        = SDMMC_HOST_FLAG_1BIT; /* 1-bit mode */
-    
-
-    esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
-        .format_if_mount_failed = false,
-        .max_files              = 4,
-        .allocation_unit_size   = 16 * 1024,
-    };
-
-    ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot, &mount_cfg, &s_card);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "SD mount failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    sdmmc_card_print_info(stdout, s_card);
-    s_ready = true;
-    ESP_LOGI(TAG, "SD montada en %s (SDMMC slot0, 4-bit)", MOUNT_POINT);
-    return ESP_OK;
-}
-
-bool datalogger_is_ready(void) { return s_ready; }
-
-static void get_timestamp(char *ts_buf, size_t ts_len,
-                           char *date_buf, size_t date_len)
-{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
     struct tm t;
-    if (rtc_get_time(&t) == ESP_OK && t.tm_year > 100) {
-        strftime(ts_buf,   ts_len,   "%Y-%m-%d %H:%M:%S", &t);
-        strftime(date_buf, date_len, "%Y%m%d",             &t);
+    localtime_r(&tv.tv_sec, &t);
+    if (t.tm_year > 100) {
+        snprintf(buf, len, "%04d-%02d-%02d %02d:%02d:%02d",
+                 t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                 t.tm_hour, t.tm_min, t.tm_sec);
     } else {
         uint64_t ms = esp_timer_get_time() / 1000;
         uint32_t s  = (uint32_t)(ms / 1000);
         uint32_t h  = s / 3600; s %= 3600;
         uint32_t m  = s / 60;   s %= 60;
-        snprintf(ts_buf,   ts_len,   "BOOT+%02lu:%02lu:%02lu",
+        snprintf(buf, len, "BOOT+%02lu:%02lu:%02lu",
                  (unsigned long)h, (unsigned long)m, (unsigned long)s);
-        snprintf(date_buf, date_len, "00000000");
     }
 }
 
-static void ensure_header(FILE *f, const char *path)
+esp_err_t datalogger_init(void)
 {
-    struct stat st;
-    if (stat(path, &st) != 0 || st.st_size == 0)
-        fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+    s_mutex = xSemaphoreCreateMutex();
+    if (!s_mutex) return ESP_ERR_NO_MEM;
+    s_head  = 0;
+    s_count = 0;
+    ESP_LOGI(TAG, "Datalogger iniciado (buffer RAM %d entradas)", DATALOGGER_MAX_ENTRIES);
+    return ESP_OK;
 }
+
+bool datalogger_is_ready(void) { return true; }
 
 esp_err_t datalogger_log(const frigo_state_t *frigo)
 {
-    if (!s_ready) return ESP_ERR_INVALID_STATE;
-
-    char ts[32], date[12];
-    get_timestamp(ts, sizeof(ts), date, sizeof(date));
-
-    char path[48];
-    snprintf(path, sizeof(path), MOUNT_POINT "/LOG_%s.csv", date);
-
-    FILE *f = fopen(path, "a");
-    if (!f) {
-        ESP_LOGE(TAG, "No se pudo abrir %s", path);
-        return ESP_FAIL;
+    if (!s_mutex) return ESP_ERR_INVALID_STATE;
+    datalogger_entry_t entry;
+    get_timestamp(entry.timestamp, sizeof(entry.timestamp));
+    entry.T_Aletas     = frigo->T_Aletas;
+    entry.T_Congelador = frigo->T_Congelador;
+    entry.T_Exterior   = frigo->T_Exterior;
+    entry.fan_percent  = frigo->fan_percent;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_buf[s_head] = entry;
+        s_head = (s_head + 1) % DATALOGGER_MAX_ENTRIES;
+        if (s_count < DATALOGGER_MAX_ENTRIES) s_count++;
+        xSemaphoreGive(s_mutex);
     }
-
-    ensure_header(f, path);
-
-    char ta[10], tc[10], te[10];
-    if (frigo->T_Aletas     < -120.0f) strcpy(ta, "---");
-    else snprintf(ta, sizeof(ta), "%.1f", frigo->T_Aletas);
-    if (frigo->T_Congelador < -120.0f) strcpy(tc, "---");
-    else snprintf(tc, sizeof(tc), "%.1f", frigo->T_Congelador);
-    if (frigo->T_Exterior   < -120.0f) strcpy(te, "---");
-    else snprintf(te, sizeof(te), "%.1f", frigo->T_Exterior);
-
-    fprintf(f, "%s,%s,%s,%s,%d\n", ts, ta, tc, te, frigo->fan_percent);
-    fclose(f);
-
-    ESP_LOGI(TAG, "Log: %s | %s | %s | %s | fan=%d%%",
-             ts, ta, tc, te, frigo->fan_percent);
+    ESP_LOGI(TAG, "Log[%d]: %s | %.1f | %.1f | %.1f | fan=%d%%",
+             s_count, entry.timestamp,
+             entry.T_Aletas, entry.T_Congelador,
+             entry.T_Exterior, entry.fan_percent);
     return ESP_OK;
+}
+
+int datalogger_get_count(void) { return s_count; }
+
+const datalogger_entry_t *datalogger_get_entry(int index)
+{
+    if (index < 0 || index >= s_count) return NULL;
+    int real = (s_count < DATALOGGER_MAX_ENTRIES) ? index : (s_head + index) % DATALOGGER_MAX_ENTRIES;
+    return &s_buf[real];
+}
+
+char *datalogger_get_csv(void)
+{
+    if (!s_mutex || s_count == 0) return NULL;
+    size_t size = 80 + (size_t)s_count * 80;
+    char *csv = malloc(size);
+    if (!csv) return NULL;
+    int pos = 0;
+    pos += snprintf(csv + pos, size - pos,
+                    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        for (int i = 0; i < s_count && pos < (int)size - 80; i++) {
+            const datalogger_entry_t *e = datalogger_get_entry(i);
+            if (!e) continue;
+            char ta[10], tc[10], te[10];
+            if (e->T_Aletas     < -120.0f) strcpy(ta, "---");
+            else snprintf(ta, sizeof(ta), "%.1f", e->T_Aletas);
+            if (e->T_Congelador < -120.0f) strcpy(tc, "---");
+            else snprintf(tc, sizeof(tc), "%.1f", e->T_Congelador);
+            if (e->T_Exterior   < -120.0f) strcpy(te, "---");
+            else snprintf(te, sizeof(te), "%.1f", e->T_Exterior);
+            pos += snprintf(csv + pos, size - pos,
+                            "%s,%s,%s,%s,%d\n",
+                            e->timestamp, ta, tc, te, e->fan_percent);
+        }
+        xSemaphoreGive(s_mutex);
+    }
+    return csv;
 }
