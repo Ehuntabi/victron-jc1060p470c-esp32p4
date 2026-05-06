@@ -2,6 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ui_format.h"
+#include "ui.h"
+
+static void battery_view_root_click_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (ui) ui_show_battery_history_screen(ui);
+}
+
 
 typedef enum {
     BATTERY_PRIMARY_VOLTAGE = 0,
@@ -142,6 +151,11 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     view->base.show    = battery_view_show;
     view->base.hide    = battery_view_hide;
     view->base.destroy = battery_view_destroy;
+
+    /* Tap sobre la vista BM abre el historico de corriente */
+    lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(view->base.root, battery_view_root_click_cb,
+                        LV_EVENT_CLICKED, ui);
 
     return &view->base;
 }

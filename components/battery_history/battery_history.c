@@ -1,0 +1,194 @@
+#include "battery_history.h"
+#include <string.h>
+#include <stdlib.h>
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+
+static const char *TAG = "bathist";
+#define NVS_NS "bathist"
+
+typedef struct {
+    bh_point_t points[BH_POINTS];
+    size_t     write_idx;        /* next index to write */
+    bool       wrapped;
+    int32_t    last_milli;       /* last received from BLE */
+    bool       has_latest;
+    int32_t    last_sample_ts;
+} bh_buffer_t;
+
+static bh_buffer_t s_bufs[BH_SRC_COUNT];
+static esp_timer_handle_t s_sample_timer = NULL;
+static esp_timer_handle_t s_persist_timer = NULL;
+
+static const char *s_source_names[BH_SRC_COUNT] = {
+    "BatteryMonitor",
+    "SolarCharger",
+    "OrionXS",
+    "ACCharger",
+};
+
+const char *battery_history_source_name(bh_source_t src)
+{
+    if (src >= BH_SRC_COUNT) return "?";
+    return s_source_names[src];
+}
+
+static int32_t now_seconds(void)
+{
+    return (int32_t)(esp_timer_get_time() / 1000000);
+}
+
+static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t milli, bool valid)
+{
+    b->points[b->write_idx].ts = ts;
+    b->points[b->write_idx].milli_amps = milli;
+    b->points[b->write_idx].valid = valid;
+    b->write_idx = (b->write_idx + 1) % BH_POINTS;
+    if (b->write_idx == 0) b->wrapped = true;
+}
+
+void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
+{
+    if (src >= BH_SRC_COUNT) return;
+    s_bufs[src].last_milli = milli_amps;
+    s_bufs[src].has_latest = true;
+}
+
+static void sample_timer_cb(void *arg)
+{
+    int32_t ts = now_seconds();
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        bh_buffer_t *b = &s_bufs[i];
+        if (b->has_latest) {
+            buffer_push(b, ts, b->last_milli, true);
+            b->last_sample_ts = ts;
+        } else {
+            buffer_push(b, ts, 0, false);
+        }
+    }
+}
+
+static void persist_one(bh_source_t src)
+{
+    nvs_handle_t h;
+    char key[16];
+    snprintf(key, sizeof key, "src%d", (int)src);
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_open: %s", esp_err_to_name(err));
+        return;
+    }
+    err = nvs_set_blob(h, key, &s_bufs[src], sizeof(bh_buffer_t));
+    if (err == ESP_OK) nvs_commit(h);
+    nvs_close(h);
+}
+
+static void persist_timer_cb(void *arg)
+{
+    for (int i = 0; i < BH_SRC_COUNT; ++i) persist_one((bh_source_t)i);
+    ESP_LOGI(TAG, "Persisted %d sources to NVS", BH_SRC_COUNT);
+}
+
+static void load_from_nvs(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        char key[16];
+        snprintf(key, sizeof key, "src%d", i);
+        size_t sz = sizeof(bh_buffer_t);
+        bh_buffer_t tmp;
+        if (nvs_get_blob(h, key, &tmp, &sz) == ESP_OK && sz == sizeof(bh_buffer_t)) {
+            memcpy(&s_bufs[i], &tmp, sizeof tmp);
+            ESP_LOGI(TAG, "Loaded src%d from NVS", i);
+        }
+    }
+    nvs_close(h);
+}
+
+esp_err_t battery_history_init(void)
+{
+    memset(s_bufs, 0, sizeof s_bufs);
+    load_from_nvs();
+
+    const esp_timer_create_args_t sample_args = {
+        .callback = sample_timer_cb,
+        .name = "bh_sample",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&sample_args, &s_sample_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_sample_timer, (uint64_t)BH_SAMPLE_MS * 1000ULL));
+
+    const esp_timer_create_args_t persist_args = {
+        .callback = persist_timer_cb,
+        .name = "bh_persist",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&persist_args, &s_persist_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_persist_timer, (uint64_t)BH_PERSIST_MS * 1000ULL));
+
+    ESP_LOGI(TAG, "battery_history initialised (sample %dms, persist %dms)",
+             BH_SAMPLE_MS, BH_PERSIST_MS);
+    return ESP_OK;
+}
+
+size_t battery_history_get_series(bh_source_t src,
+                                  bh_point_t *out_points,
+                                  int32_t *out_oldest_ts,
+                                  int32_t *out_newest_ts)
+{
+    if (src >= BH_SRC_COUNT || !out_points) return 0;
+    bh_buffer_t *b = &s_bufs[src];
+    size_t count = 0;
+    int32_t oldest = INT32_MAX, newest = INT32_MIN;
+
+    /* Reorder so the oldest comes first */
+    if (b->wrapped) {
+        for (size_t i = 0; i < BH_POINTS; ++i) {
+            size_t idx = (b->write_idx + i) % BH_POINTS;
+            out_points[count] = b->points[idx];
+            if (b->points[idx].valid) {
+                if (b->points[idx].ts < oldest) oldest = b->points[idx].ts;
+                if (b->points[idx].ts > newest) newest = b->points[idx].ts;
+            }
+            count++;
+        }
+    } else {
+        for (size_t i = 0; i < b->write_idx; ++i) {
+            out_points[count] = b->points[i];
+            if (b->points[i].valid) {
+                if (b->points[i].ts < oldest) oldest = b->points[i].ts;
+                if (b->points[i].ts > newest) newest = b->points[i].ts;
+            }
+            count++;
+        }
+    }
+    if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
+    if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
+    return count;
+}
+
+void battery_history_get_totals(bh_source_t src,
+                                float *out_charge_ah,
+                                float *out_discharge_ah)
+{
+    if (src >= BH_SRC_COUNT) {
+        if (out_charge_ah) *out_charge_ah = 0;
+        if (out_discharge_ah) *out_discharge_ah = 0;
+        return;
+    }
+    bh_buffer_t *b = &s_bufs[src];
+    /* Trapezoidal integration: each step BH_SAMPLE_MS apart.
+     * Ah = sum(milli_amps * dt_h) / 1000  with dt_h = 3min/60 = 0.05 */
+    const float dt_h = (BH_SAMPLE_MS / 1000.0f) / 3600.0f;
+    float charge_mah = 0, discharge_mah = 0;
+    size_t total = b->wrapped ? BH_POINTS : b->write_idx;
+    for (size_t i = 0; i < total; ++i) {
+        if (!b->points[i].valid) continue;
+        float ah = b->points[i].milli_amps * dt_h / 1000.0f * 1000.0f; /* kept in mAh */
+        if (b->points[i].milli_amps > 0) charge_mah += ah;
+        else discharge_mah += -ah;
+    }
+    if (out_charge_ah) *out_charge_ah = charge_mah / 1000.0f;
+    if (out_discharge_ah) *out_discharge_ah = discharge_mah / 1000.0f;
+}

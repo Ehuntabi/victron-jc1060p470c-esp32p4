@@ -26,6 +26,7 @@ idf_component_register(
         frigo                # DS18B20 + PWM ventilador
         rtc_rx8025t          # RTC RX8025T hora real
         datalogger           # SD + CSV logging
+    battery_history      # Histórico corriente batería
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

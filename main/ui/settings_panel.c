@@ -1,4 +1,5 @@
 #include "settings_panel.h"
+#include "ui.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -39,6 +40,7 @@ static void about_refresh_dynamic(ui_state_t *ui);
 static void about_timer_cb(lv_timer_t *t);
 static void reboot_msgbox_cb(lv_event_t *e);
 static void reboot_btn_cb(lv_event_t *e);
+static void bh_test_btn_cb(lv_event_t *e);
 static void brightness_slider_event_cb(lv_event_t *e);
 static void cb_screensaver_event_cb(lv_event_t *e);
 static void victron_debug_event_cb(lv_event_t *e);
@@ -1390,6 +1392,16 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     about_refresh_dynamic(ui);
     lv_timer_create(about_timer_cb, 1000, ui);
 
+    /* --- Boton ver historico bateria (debug) --- */
+    lv_obj_t *btn_bh = lv_btn_create(cont);
+    lv_obj_set_size(btn_bh, lv_pct(60), 60);
+    lv_obj_set_style_bg_color(btn_bh, lv_color_hex(0x336699), 0);
+    lv_obj_t *lbl_bh = lv_label_create(btn_bh);
+    lv_label_set_text(lbl_bh, "Ver historico bateria");
+    lv_obj_set_style_text_font(lbl_bh, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_bh);
+    lv_obj_add_event_cb(btn_bh, bh_test_btn_cb, LV_EVENT_CLICKED, ui);
+
     /* --- Boton Reboot --- */
     lv_obj_t *btn_reboot = lv_btn_create(cont);
     lv_obj_set_size(btn_reboot, lv_pct(60), 60);
@@ -1509,5 +1521,11 @@ static void reboot_btn_cb(lv_event_t *e)
         btns, false);
     lv_obj_center(mbox);
     lv_obj_add_event_cb(mbox, reboot_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+static void bh_test_btn_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (ui) ui_show_battery_history_screen(ui);
 }
 

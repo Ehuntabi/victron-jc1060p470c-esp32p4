@@ -8,6 +8,7 @@
 #include "esp_lvgl_port.h"  // lv_port.h sustituido por esp_lvgl_port
 #include "esp_log.h"
 #include "victron_ble.h"
+#include "battery_history.h"
 #include "victron_products.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
@@ -276,6 +277,29 @@ void ui_on_panel_data(const victron_data_t *d) {
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x00C851), 0);
     }
     s_last_ble_data_us = esp_timer_get_time();
+
+    /* Battery history: alimenta el modulo con la corriente del dispositivo */
+    switch (d->type) {
+        case VICTRON_BLE_RECORD_BATTERY_MONITOR:
+            battery_history_update_latest(BH_SRC_BATTERY_MONITOR,
+                d->record.battery.battery_current_milli);
+            break;
+        case VICTRON_BLE_RECORD_SOLAR_CHARGER:
+            battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
+                (int32_t)d->record.solar.battery_current_deci * 100);
+            break;
+        case VICTRON_BLE_RECORD_ORION_XS:
+            /* Output current = into battery side */
+            battery_history_update_latest(BH_SRC_ORION_XS,
+                (int32_t)d->record.orion.output_current_deci * 100);
+            break;
+        case VICTRON_BLE_RECORD_AC_CHARGER:
+            battery_history_update_latest(BH_SRC_AC_CHARGER,
+                (int32_t)d->record.ac_charger.battery_current_1_deci * 100);
+            break;
+        default:
+            break;
+    }
 
     if (!ui->has_received_data) {
         ui->has_received_data = true;
@@ -924,6 +948,124 @@ static void frigo_swipe_cb(lv_event_t *e)
     if (dir != LV_DIR_RIGHT) return;
     ui_state_t *ui = lv_event_get_user_data(e);
     ui_show_chart_screen(ui);
+}
+
+
+/* --- Pantalla historico bateria --- */
+static lv_obj_t *s_bh_screen = NULL;
+static lv_obj_t *s_bh_chart  = NULL;
+
+static lv_obj_t *s_bh_prev_screen = NULL;
+
+static void bh_screen_close_cb(lv_event_t *e)
+{
+    lv_obj_t *scr = s_bh_screen;
+    lv_obj_t *prev = s_bh_prev_screen;
+    s_bh_screen = NULL;
+    s_bh_chart  = NULL;
+    s_bh_prev_screen = NULL;
+    if (prev) lv_scr_load(prev);
+    if (scr) lv_obj_del(scr);
+}
+
+void ui_show_battery_history_screen(ui_state_t *ui)
+{
+    (void)ui;
+    if (s_bh_screen) return;
+
+    lv_obj_t *prev = lv_scr_act();
+    lv_obj_t *scr = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    s_bh_screen = scr;
+
+    /* Boton cerrar */
+    lv_obj_t *btn_close = lv_btn_create(scr);
+    lv_obj_set_size(btn_close, 100, 50);
+    lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
+    lv_obj_t *lbl_close = lv_label_create(btn_close);
+    lv_label_set_text(lbl_close, "Cerrar");
+    lv_obj_center(lbl_close);
+    /* Pasamos el screen al cb para borrarlo y volver al anterior */
+    lv_obj_add_event_cb(btn_close, bh_screen_close_cb, LV_EVENT_CLICKED, scr);
+    /* truco: en el cb usamos user_data == scr y lv_obj_get_screen(scr) devuelve scr,
+       asi que cargamos la pantalla anterior por su puntero capturado */
+
+    /* Titulo */
+    lv_obj_t *lbl_title = lv_label_create(scr);
+    lv_label_set_text(lbl_title, "Historico bateria (24h)");
+    lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 16);
+
+    /* Totales: 2x2 con flex wrap */
+    lv_obj_t *totals_cont = lv_obj_create(scr);
+    lv_obj_remove_style_all(totals_cont);
+    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 110);
+    lv_obj_align(totals_cont, LV_ALIGN_TOP_LEFT, 16, 70);
+    lv_obj_set_layout(totals_cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(totals_cont, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(totals_cont, 24, 0);
+    lv_obj_set_style_pad_row(totals_cont, 6, 0);
+
+    static const uint32_t colors[BH_SRC_COUNT] = {
+        0x4FC3F7, /* BM cyan */
+        0xFFD54F, /* Solar amber */
+        0xFF8A65, /* Orion orange */
+        0xAED581, /* AC green */
+    };
+
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        float ch = 0, dis = 0;
+        battery_history_get_totals((bh_source_t)i, &ch, &dis);
+        lv_obj_t *l = lv_label_create(totals_cont);
+        lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 2);
+        lv_obj_set_style_text_color(l, lv_color_hex(colors[i]), 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
+        lv_label_set_text_fmt(l, "%s\ncarga %.1f Ah  desc %.1f Ah",
+                              battery_history_source_name((bh_source_t)i), ch, dis);
+    }
+
+    /* Chart */
+    lv_obj_t *chart = lv_chart_create(scr);
+    lv_obj_set_size(chart, LV_HOR_RES - 40, LV_VER_RES - 220);
+    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+    lv_obj_set_style_bg_color(chart, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(chart, lv_color_hex(0x333333), 0);
+    lv_chart_set_div_line_count(chart, 5, 8);
+    lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_chart_set_point_count(chart, BH_POINTS);
+    /* Rango Y: -50A..+50A en deciamperios -> -500..+500 deci o -50000..+50000 milli */
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, -50000, 50000);
+    lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
+    s_bh_chart = chart;
+
+    /* Series + datos */
+    bh_point_t *pts = malloc(sizeof(bh_point_t) * BH_POINTS);
+    if (pts) {
+        for (int i = 0; i < BH_SRC_COUNT; ++i) {
+            lv_chart_series_t *ser = lv_chart_add_series(chart,
+                lv_color_hex(colors[i]), LV_CHART_AXIS_PRIMARY_Y);
+            int32_t old_ts = 0, new_ts = 0;
+            size_t n = battery_history_get_series((bh_source_t)i, pts, &old_ts, &new_ts);
+            for (size_t k = 0; k < n; ++k) {
+                if (pts[k].valid) {
+                    lv_chart_set_next_value(chart, ser, (lv_coord_t)pts[k].milli_amps);
+                } else {
+                    lv_chart_set_next_value(chart, ser, LV_CHART_POINT_NONE);
+                }
+            }
+        }
+        free(pts);
+    }
+    lv_chart_refresh(chart);
+
+    s_bh_prev_screen = prev;
+    lv_scr_load(scr);
 }
 
 static void clock_click_cb(lv_event_t *e)

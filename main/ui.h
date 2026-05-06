@@ -29,6 +29,7 @@ void ui_set_ble_mac(const uint8_t *mac);
 void ui_notify_user_activity(void);
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 void ui_show_chart_screen(ui_state_t *ui);
+void ui_show_battery_history_screen(ui_state_t *ui);
 
 /**
  * Mark a device as offline in the Victron Keys settings page.
