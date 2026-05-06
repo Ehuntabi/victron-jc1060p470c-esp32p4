@@ -27,6 +27,7 @@ void ui_set_ble_mac(const uint8_t *mac);
  * This will reset the screensaver timer and restore brightness if active.
  */
 void ui_notify_user_activity(void);
+void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 
 /**
  * Mark a device as offline in the Victron Keys settings page.

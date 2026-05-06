@@ -27,6 +27,8 @@ static const char *TAG = "VICTRON_LVGL_APP";
 #define LVGL_PORT_ROTATION_DEGREE 90
 #define REBOOT_INTERVAL_US (24ULL * 60 * 60 * 1000000) /* 24 horas */
 #define LOG_INTERVAL_MS    (5 * 60 * 1000)             /* 5 minutos */
+#define ALARM_RISE_MINUTES  30      /* minutos subiendo para alarma */
+#define ALARM_TEMP_THRESHOLD -2.0f  /* °C — si supera esto y lleva subiendo 30min */
 
 /* ── Reboot timer ────────────────────────────────────────────── */
 static void reboot_timer_cb(void *arg)
@@ -41,17 +43,51 @@ static ui_state_t *s_ui = NULL;
 /* ── Callback frigo: actualiza UI + log cada 5 min ──────────── */
 static void frigo_update_cb(const frigo_state_t *state)
 {
-    esp_task_wdt_reset();
-    
     if (!s_ui) return;
 
-    /* Actualizar UI — timeout 50ms para no bloquear si LVGL está ocupado */
+    /* ── Alarma congelador ─────────────────────────────────────── */
+    static float   s_temp_prev     = 0.0f;
+    static int64_t s_rising_since  = 0;
+    static bool    s_alarm_active  = false;
+
+    float T = state->T_Congelador;
+    int64_t now_ms = esp_timer_get_time() / 1000;
+
+    if (T > -120.0f) {  /* sensor conectado */
+        if (T > s_temp_prev && s_temp_prev > -120.0f) {
+            /* temperatura subiendo */
+            if (s_rising_since == 0) s_rising_since = now_ms;
+            int64_t rising_ms = now_ms - s_rising_since;
+            bool alarma = (rising_ms >= (int64_t)ALARM_RISE_MINUTES * 60 * 1000)
+                          && (T > ALARM_TEMP_THRESHOLD);
+            if (alarma != s_alarm_active) {
+                s_alarm_active = alarma;
+                if (lvgl_port_lock(50)) {
+                    ui_set_freezer_alarm(s_ui, alarma);
+                    lvgl_port_unlock();
+                }
+            }
+        } else {
+            /* temperatura bajando o estable — resetear contador */
+            s_rising_since = 0;
+            if (s_alarm_active) {
+                s_alarm_active = false;
+                if (lvgl_port_lock(50)) {
+                    ui_set_freezer_alarm(s_ui, false);
+                    lvgl_port_unlock();
+                }
+            }
+        }
+        s_temp_prev = T;
+    }
+
+    /* ── Actualizar UI ─────────────────────────────────────────── */
     if (lvgl_port_lock(50)) {
         ui_frigo_panel_update(s_ui, state);
         lvgl_port_unlock();
     }
 
-    /* Log cada 5 minutos — usar int64_t para evitar overflow a los 49 días */
+    /* ── Log cada 5 minutos ────────────────────────────────────── */
     static int64_t s_last_log = 0;
     int64_t now = esp_timer_get_time() / 1000;
     if (now - s_last_log >= LOG_INTERVAL_MS) {

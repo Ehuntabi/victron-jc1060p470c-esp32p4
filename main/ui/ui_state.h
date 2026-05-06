@@ -91,6 +91,7 @@ typedef struct ui_state {
     uint16_t tab_settings_index;
     lv_obj_t *lbl_clock;       // Reloj en barra superior
     lv_obj_t *lbl_ble;         // Indicador BLE
+    lv_obj_t *alarm_border;    // Borde rojo alarma congelador
     
     // Victron devices configuration
     struct {
