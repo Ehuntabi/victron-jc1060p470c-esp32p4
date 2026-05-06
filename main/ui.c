@@ -19,6 +19,7 @@
 #include "ui/view_default_battery.h"
 #include "rtc_rx8025t.h"
 #include <time.h>
+#include <sys/time.h>
 
 // Font Awesome symbols (declared in main.c)
 LV_FONT_DECLARE(font_awesome_solar_panel_40);
@@ -236,7 +237,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
-    lv_timer_create(clock_timer_cb, 60000, ui);
+    lv_timer_create(clock_timer_cb, 30000, ui);
     clock_timer_cb(NULL);
     lvgl_port_unlock();
 }
@@ -347,14 +348,18 @@ void ui_force_view_update(void)
     lvgl_port_unlock();
 }
 
-
 static void clock_timer_cb(lv_timer_t *timer)
 {
     ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : ui_get_state();
     if (!ui || !ui->lbl_clock) return;
 
+    /* Usar el reloj del sistema en lugar de leer el RTC cada vez */
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
     struct tm t;
-    if (rtc_get_time(&t) == ESP_OK && t.tm_year > 100) {
+    localtime_r(&tv.tv_sec, &t);
+
+    if (t.tm_year > 100) {
         char buf[40];
         snprintf(buf, sizeof(buf), "%02d:%02d  %02d/%02d/%04d",
                  t.tm_hour, t.tm_min,

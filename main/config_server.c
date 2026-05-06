@@ -416,7 +416,7 @@ static esp_err_t handle_settime(httpd_req_t *req)
     /* Esperar formato: "timestamp=1234567890" (Unix timestamp) */
     long ts = 0;
     long offset = 0;
-    sscanf(buf, "timestamp=%ld&offset=%ld", &ts, &offset);
+    sscanf(buf, "timestamp=%ld", &ts);
     ts += offset;
     if (ts > 1000000000L) {
         struct tm t;
@@ -424,6 +424,9 @@ static esp_err_t handle_settime(httpd_req_t *req)
         gmtime_r(&epoch, &t);
         if (rtc_is_ready()) {
             rtc_set_time(&t);
+            struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+            settimeofday(&tv, NULL);
+            
             ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil: %04d-%02d-%02d %02d:%02d:%02d",
                      t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
                      t.tm_hour, t.tm_min, t.tm_sec);

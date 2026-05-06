@@ -76,13 +76,22 @@ esp_err_t rtc_init(i2c_master_bus_handle_t bus)
 }
 
 bool rtc_is_ready(void) { return s_ready; }
-
 esp_err_t rtc_get_time(struct tm *tm_out)
 {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
     uint8_t regs[7];
+
+    /* Leer los 7 registros de una sola transacción I2C */
     esp_err_t ret = rtc_read(REG_SEC, regs, 7);
     if (ret != ESP_OK) return ret;
+
+    /* Validar que los valores BCD son razonables */
+    if ((regs[0] & 0x7F) > 0x59 || (regs[1] & 0x7F) > 0x59 ||
+        (regs[2] & 0x3F) > 0x23) {
+        /* Reintento */
+        ret = rtc_read(REG_SEC, regs, 7);
+        if (ret != ESP_OK) return ret;
+    }
 
     memset(tm_out, 0, sizeof(*tm_out));
     tm_out->tm_sec  = bcd2dec(regs[0] & 0x7F);
