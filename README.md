@@ -45,17 +45,13 @@ La tarjeta SD no monta correctamente. El problema parece estar relacionado con e
 
 ¿Alguien ha conseguido usar la SD en esta placa junto con esp_hosted?
 
-### 🔴 RTC RX8025T — Sin respuesta I2C
+### ✅ RTC — RESUELTO
 
-El RTC RX8025T (U9) no responde en el bus I2C (GPIO10=SCL, GPIO12=SDA, I2C_NUM_0).  
-El scan I2C no encuentra ningún dispositivo en el bus.
-
-**Dirección probada**: 0x32 y 0x64  
-**Velocidad probada**: 50KHz y 100KHz  
-**Pullups**: R87/R90 = 10K a ESP_3V3 según esquemático  
-**Nota**: sin pila CR1220 instalada actualmente  
-
-¿El RX8025T requiere la pila CR1220 para responder aunque esté alimentado por VCC?
+El chip es **RX8130** (no RX8025T como indica el esquemático).  
+- Dirección I2C: **0x32**  
+- Bus: **I2C_NUM_1** (GPIO7=SDA, GPIO8=SCL) — compartido con el touch GT911  
+- La hora se sincroniza automáticamente al abrir el portal web desde cualquier dispositivo  
+- Sin pila CR1220 pierde la hora al reiniciar — se recomienda instalar pila **CR1220**
 
 ### 🟡 DS18B20 — Sin sensores detectados
 
