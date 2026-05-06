@@ -870,13 +870,13 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_label_set_text(lbl_title, "Temperaturas");
     lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 8);
 
-    /* Botón cerrar */
+    /* Boton cerrar */
     lv_obj_t *btn_close = lv_btn_create(scr);
-    lv_obj_set_size(btn_close, 80, 40);
-    lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -8, 8);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x444444), 0);
+    lv_obj_set_size(btn_close, 100, 50);
+    lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
     lv_obj_t *lbl_close = lv_label_create(btn_close);
-    lv_label_set_text(lbl_close, "X");
+    lv_label_set_text(lbl_close, "Cerrar");
     lv_obj_center(lbl_close);
     lv_obj_add_event_cb(btn_close, chart_screen_close_cb, LV_EVENT_CLICKED, scr);
 
@@ -916,8 +916,14 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     int count = datalogger_get_count();
     lv_chart_set_point_count(s_chart, count > 0 ? count : 2);
-    lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, -30, 40);
+    lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, -20, 15);
     lv_chart_set_range(s_chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
+    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_PRIMARY_Y,   8, 4, 5, 1, true, 50);
+    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_SECONDARY_Y, 8, 4, 5, 1, true, 50);
+    lv_obj_set_style_pad_left(s_chart, 50, 0);
+    lv_obj_set_style_pad_right(s_chart, 50, 0);
+    lv_obj_set_style_text_color(s_chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
+    lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_14, LV_PART_TICKS);
 
     s_ser_aletas     = lv_chart_add_series(s_chart, colores[0], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
@@ -1040,12 +1046,12 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* truco: en el cb usamos user_data == scr y lv_obj_get_screen(scr) devuelve scr,
        asi que cargamos la pantalla anterior por su puntero capturado */
 
-    /* Titulo */
+    /* Titulo centrado */
     lv_obj_t *lbl_title = lv_label_create(scr);
-    lv_label_set_text(lbl_title, "Historico bateria (24h)");
+    lv_label_set_text(lbl_title, "HISTORICO BATERIA (24H)");
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 16);
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 16);
 
     /* Totales: 2x2 con flex wrap */
     lv_obj_t *totals_cont = lv_obj_create(scr);
@@ -1088,7 +1094,11 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
     lv_chart_set_point_count(chart, BH_POINTS);
     /* Rango Y: -50A..+50A en deciamperios -> -500..+500 deci o -50000..+50000 milli */
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, -50000, 50000);
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, -40, 40);
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 50);
+    lv_obj_set_style_pad_left(chart, 50, 0);
+    lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
+    lv_obj_set_style_text_font(chart, &lv_font_montserrat_14, LV_PART_TICKS);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
     s_bh_chart = chart;
 
@@ -1102,7 +1112,10 @@ void ui_show_battery_history_screen(ui_state_t *ui)
             size_t n = battery_history_get_series((bh_source_t)i, pts, &old_ts, &new_ts);
             for (size_t k = 0; k < n; ++k) {
                 if (pts[k].valid) {
-                    lv_chart_set_next_value(chart, ser, (lv_coord_t)pts[k].milli_amps);
+                    int32_t a = pts[k].milli_amps / 1000;
+                    if (a >  40) a =  40;
+                    if (a < -40) a = -40;
+                    lv_chart_set_next_value(chart, ser, (lv_coord_t)a);
                 } else {
                     lv_chart_set_next_value(chart, ser, LV_CHART_POINT_NONE);
                 }
