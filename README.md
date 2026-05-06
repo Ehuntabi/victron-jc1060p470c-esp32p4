@@ -36,7 +36,8 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 - Sync de hora automatica al abrir el portal web (JS a RTC RX8130)
 - Reloj y fecha en pantalla (esquina inferior izquierda)
 - Indicador de estado BLE en pantalla (centro inferior)
-- Tab Frigo: lectura DS18B20, control PWM ventilador, histeresis configurable
+- Tab Frigo: control de temperatura optima en aletas traseras de frigo trivalente mediante sensor DS18B20 en aletas 
+  y control PWM del ventilador. T_Exterior y T_Congelador son informativas
 - Datalogger en RAM: buffer circular 200 entradas, descargable como CSV desde /logs
 - Selector de pagina inicial del portal web (Keys / Logs)
 - Pagina About en Settings con version y creditos
@@ -141,7 +142,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 - Automatic time sync when opening web portal (JS to RTC RX8130)
 - Clock and date on screen (bottom left)
 - BLE status indicator on screen (bottom center)
-- Fridge tab: DS18B20 reading, PWM fan control, configurable hysteresis
+- Fridge tab: optimal temperature control on the rear fins of a trivalent fridge via DS18B20 sensor on fins and PWM fan      control. T_Exterior and T_Freezer are informational only
 - RAM datalogger: 200-entry circular buffer, downloadable as CSV from /logs
 - Web portal start page selector (Keys / Logs)
 - About page in Settings with version and credits
