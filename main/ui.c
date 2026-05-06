@@ -17,6 +17,8 @@
 #include "ui/view_registry.h"
 #include "ui/settings_panel.h"
 #include "ui/view_default_battery.h"
+#include "rtc_rx8025t.h"
+#include <time.h>
 
 // Font Awesome symbols (declared in main.c)
 LV_FONT_DECLARE(font_awesome_solar_panel_40);
@@ -48,6 +50,7 @@ static const char *device_type_name(victron_record_type_t type);
 static void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size);
 static void ui_update_device_activity(ui_state_t *ui, const char *mac_address);
 static void ui_check_device_timeouts(lv_timer_t *timer);
+static void clock_timer_cb(lv_timer_t *timer);
 
 static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
 {
@@ -159,6 +162,17 @@ void ui_init(void) {
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
     ui->tab_frigo_index = lv_obj_get_index(ui->tab_frigo);
 
+    /* Reloj en barra superior — esquina derecha */
+    ui->lbl_clock = lv_label_create(lv_scr_act());
+    lv_obj_set_style_text_font(ui->lbl_clock, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(ui->lbl_clock, lv_color_white(), 0);
+    lv_label_set_text(ui->lbl_clock, "00:00");
+    lv_obj_align(ui->lbl_clock, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+    lv_obj_set_style_bg_opa(ui->lbl_clock, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
+
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
@@ -222,7 +236,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
-
+    lv_timer_create(clock_timer_cb, 30000, ui);
     lvgl_port_unlock();
 }
 
@@ -330,6 +344,22 @@ void ui_force_view_update(void)
     ensure_device_layout(ui, saved_type);
     
     lvgl_port_unlock();
+}
+
+
+static void clock_timer_cb(lv_timer_t *timer)
+{
+    ui_state_t *ui = (ui_state_t *)timer->user_data;
+    if (!ui || !ui->lbl_clock) return;
+
+    struct tm t;
+    if (rtc_get_time(&t) == ESP_OK && t.tm_year > 100) {
+        char buf[40];
+        snprintf(buf, sizeof(buf), "%02d:%02d  %02d/%02d/%04d",
+                 t.tm_hour, t.tm_min,
+                 t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+        lv_label_set_text(ui->lbl_clock, buf);
+    }
 }
 
 void ui_notify_user_activity(void)

@@ -89,6 +89,7 @@ typedef struct ui_state {
     struct ui_device_view *views[UI_MAX_DEVICE_VIEWS];
     bool has_received_data;
     uint16_t tab_settings_index;
+    lv_obj_t *lbl_clock;       // Reloj en barra superior
     
     // Victron devices configuration
     struct {

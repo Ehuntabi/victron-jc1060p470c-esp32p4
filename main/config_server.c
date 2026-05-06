@@ -415,7 +415,10 @@ static esp_err_t handle_settime(httpd_req_t *req)
 
     /* Esperar formato: "timestamp=1234567890" (Unix timestamp) */
     long ts = 0;
-    if (sscanf(buf, "timestamp=%ld", &ts) == 1 && ts > 1000000000L) {
+    long offset = 0;
+    sscanf(buf, "timestamp=%ld&offset=%ld", &ts, &offset);
+    ts += offset;
+    if (ts > 1000000000L) {
         struct tm t;
         time_t epoch = (time_t)ts;
         gmtime_r(&epoch, &t);
