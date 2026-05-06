@@ -18,6 +18,7 @@
 #include "ui/settings_panel.h"
 #include "ui/view_default_battery.h"
 #include "rtc_rx8025t.h"
+#include "datalogger.h"
 #include <time.h>
 #include <sys/time.h>
 
@@ -46,6 +47,8 @@ static ui_state_t g_ui = {
 
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
+static void frigo_swipe_cb(lv_event_t *e);
+static void clock_click_cb(lv_event_t *e);
 static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
 static const char *device_type_name(victron_record_type_t type);
 static void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size);
@@ -153,6 +156,8 @@ void ui_init(void) {
 #endif
 
     ui->tabview   = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 60);
+    lv_obj_add_flag(ui->tabview, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_clear_flag(ui->tabview, LV_OBJ_FLAG_SCROLLABLE);
     /* Fuente grande para los tabs */
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28, 0);
@@ -173,6 +178,8 @@ void ui_init(void) {
     lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
+    lv_obj_add_flag(ui->lbl_clock, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ui->lbl_clock, clock_click_cb, LV_EVENT_CLICKED, ui);
     /* Indicador BLE - centro inferior */
     ui->lbl_ble = lv_label_create(lv_scr_act());
     lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
@@ -194,6 +201,8 @@ void ui_init(void) {
 
     lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_add_event_cb(ui->tabview, frigo_swipe_cb, LV_EVENT_GESTURE, ui);
+    lv_obj_add_event_cb(lv_scr_act(), frigo_swipe_cb, LV_EVENT_GESTURE, ui);
     lv_obj_add_event_cb(ui->tab_frigo, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
 
     ui->keyboard = lv_keyboard_create(lv_layer_top());
@@ -798,5 +807,129 @@ void ui_set_freezer_alarm(ui_state_t *ui, bool active)
     } else {
         lv_anim_del(ui->alarm_border, NULL);
         lv_obj_add_flag(ui->alarm_border, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* ── Pantalla gráfica temperaturas ─────────────────────────── */
+static lv_obj_t *s_chart      = NULL;
+static lv_chart_series_t *s_ser_aletas     = NULL;
+static lv_chart_series_t *s_ser_congelador = NULL;
+static lv_chart_series_t *s_ser_exterior   = NULL;
+static lv_chart_series_t *s_ser_fan        = NULL;
+
+static void chart_screen_close_cb(lv_event_t *e)
+{
+    lv_obj_t *screen = lv_event_get_user_data(e);
+    lv_obj_del(screen);
+    s_chart = NULL;
+}
+
+void ui_show_chart_screen(ui_state_t *ui)
+{
+    if (!ui) return;
+
+    /* Crear pantalla a pantalla completa */
+    lv_obj_t *scr = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(scr);
+    lv_obj_set_size(scr, LV_HOR_RES, LV_VER_RES);
+    lv_obj_set_pos(scr, 0, 0);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_move_foreground(scr);
+
+    /* Título */
+    lv_obj_t *lbl_title = lv_label_create(scr);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
+    lv_label_set_text(lbl_title, "Temperaturas");
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 8);
+
+    /* Botón cerrar */
+    lv_obj_t *btn_close = lv_btn_create(scr);
+    lv_obj_set_size(btn_close, 80, 40);
+    lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -8, 8);
+    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_close = lv_label_create(btn_close);
+    lv_label_set_text(lbl_close, "X");
+    lv_obj_center(lbl_close);
+    lv_obj_add_event_cb(btn_close, chart_screen_close_cb, LV_EVENT_CLICKED, scr);
+
+    /* Leyenda */
+    const char *leyenda[] = {"Aletas", "Congel.", "Exter.", "Fan%"};
+    lv_color_t colores[]  = {
+        lv_color_hex(0x00BFFF),
+        lv_color_hex(0xFF4444),
+        lv_color_hex(0x44FF44),
+        lv_color_hex(0xFFAA00)
+    };
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t *dot = lv_obj_create(scr);
+        lv_obj_remove_style_all(dot);
+        lv_obj_set_size(dot, 16, 16);
+        lv_obj_set_style_bg_color(dot, colores[i], 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(dot, 8, 0);
+        lv_obj_set_pos(dot, 10 + i * 120, 55);
+        lv_obj_t *lbl = lv_label_create(scr);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_color(lbl, colores[i], 0);
+        lv_label_set_text(lbl, leyenda[i]);
+        lv_obj_set_pos(lbl, 30 + i * 120, 50);
+    }
+
+    /* Gráfica */
+    s_chart = lv_chart_create(scr);
+    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 100);
+    lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
+    lv_obj_set_style_bg_color(s_chart, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_opa(s_chart, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(s_chart, lv_color_hex(0x333333), 0);
+    lv_chart_set_div_line_count(s_chart, 5, 10);
+    lv_obj_set_style_line_color(s_chart, lv_color_hex(0x333333), LV_PART_MAIN);
+
+    int count = datalogger_get_count();
+    lv_chart_set_point_count(s_chart, count > 0 ? count : 2);
+    lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, -30, 40);
+    lv_chart_set_range(s_chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
+
+    s_ser_aletas     = lv_chart_add_series(s_chart, colores[0], LV_CHART_AXIS_PRIMARY_Y);
+    s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
+    s_ser_exterior   = lv_chart_add_series(s_chart, colores[2], LV_CHART_AXIS_PRIMARY_Y);
+    s_ser_fan        = lv_chart_add_series(s_chart, colores[3], LV_CHART_AXIS_SECONDARY_Y);
+
+    /* Rellenar con datos del datalogger */
+    for (int i = 0; i < count; i++) {
+        const datalogger_entry_t *e = datalogger_get_entry(i);
+        if (!e) continue;
+        lv_chart_set_next_value(s_chart, s_ser_aletas,
+            e->T_Aletas > -120.0f ? (int16_t)e->T_Aletas : LV_CHART_POINT_NONE);
+        lv_chart_set_next_value(s_chart, s_ser_congelador,
+            e->T_Congelador > -120.0f ? (int16_t)e->T_Congelador : LV_CHART_POINT_NONE);
+        lv_chart_set_next_value(s_chart, s_ser_exterior,
+            e->T_Exterior > -120.0f ? (int16_t)e->T_Exterior : LV_CHART_POINT_NONE);
+        lv_chart_set_next_value(s_chart, s_ser_fan, e->fan_percent);
+    }
+
+    lv_chart_refresh(s_chart);
+}
+
+static void frigo_swipe_cb(lv_event_t *e)
+{
+    ESP_LOGI("SWIPE", "Evento gesture detectado");
+    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (dir != LV_DIR_RIGHT) return;
+    ui_state_t *ui = lv_event_get_user_data(e);
+    ui_show_chart_screen(ui);
+}
+
+static void clock_click_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (lvgl_port_lock(50)) {
+        ui_show_chart_screen(ui);
+        lvgl_port_unlock();
     }
 }
