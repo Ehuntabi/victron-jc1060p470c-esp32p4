@@ -11,4 +11,5 @@ idf_component_register(
         freertos
         frigo
         rtc_rx8025t
+        esp_hw_support
 )

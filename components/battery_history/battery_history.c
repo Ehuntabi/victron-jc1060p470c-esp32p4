@@ -4,11 +4,16 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <time.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <errno.h>
 #include "nvs.h"
 #include "nvs_flash.h"
 
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
+#define BH_LOG_DIR "/sdcard/bateria"
+#define BH_FLUSH_INTERVAL_MS 60000
 
 typedef struct {
     bh_point_t points[BH_POINTS];
@@ -22,6 +27,11 @@ typedef struct {
 static bh_buffer_t s_bufs[BH_SRC_COUNT];
 static esp_timer_handle_t s_sample_timer = NULL;
 static esp_timer_handle_t s_persist_timer = NULL;
+static esp_timer_handle_t s_bh_flush_timer = NULL;
+static bool s_bh_dir_ok = false;
+/* indices para flush */
+static size_t s_bh_last_flushed_idx[BH_SRC_COUNT] = {0};
+static bool   s_bh_last_flushed_wrapped[BH_SRC_COUNT] = {false};
 
 static const char *s_source_names[BH_SRC_COUNT] = {
     "BatteryMonitor",
@@ -114,6 +124,112 @@ static void load_from_nvs(void)
     nvs_close(h);
 }
 
+
+static void bh_get_day_filename(char *buf, size_t len)
+{
+    time_t t = time(NULL);
+    struct tm tm_local;
+    localtime_r(&t, &tm_local);
+    if (tm_local.tm_year > 100) {
+        snprintf(buf, len, BH_LOG_DIR "/%04d-%02d-%02d.csv",
+                 (int)(tm_local.tm_year + 1900) & 0xFFFF,
+                 (int)(tm_local.tm_mon + 1) & 0xFF,
+                 (int)tm_local.tm_mday & 0xFF);
+    } else {
+        snprintf(buf, len, BH_LOG_DIR "/boot.csv");
+    }
+}
+
+static void bh_flush_to_sd(void)
+{
+    /* Comprobar si /sdcard existe (datalogger lo monta) */
+    struct stat st;
+    if (stat("/sdcard", &st) != 0) return;
+
+    /* Crear directorio bateria si hace falta */
+    if (!s_bh_dir_ok) {
+        if (stat(BH_LOG_DIR, &st) == 0) {
+            ESP_LOGI(TAG, "Directorio %s ya existe", BH_LOG_DIR);
+            s_bh_dir_ok = true;
+        } else {
+            int r = mkdir(BH_LOG_DIR, 0775);
+            if (r == 0) {
+                ESP_LOGI(TAG, "Creado directorio %s", BH_LOG_DIR);
+                s_bh_dir_ok = true;
+            } else {
+                ESP_LOGW(TAG, "mkdir %s falló (errno=%d)", BH_LOG_DIR, errno);
+                /* No marcamos como ok, reintentamos en el siguiente ciclo */
+                return;
+            }
+        }
+    }
+
+    char path[64];
+    bh_get_day_filename(path, sizeof path);
+    bool need_header = (stat(path, &st) != 0);
+
+    FILE *f = fopen(path, "ab");
+    if (!f) {
+        ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));
+        return;
+    }
+    if (need_header) {
+        fprintf(f, "timestamp,source,milli_amps\n");
+    }
+
+    int total_written = 0;
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        bh_buffer_t *b = &s_bufs[s];
+        size_t total = b->wrapped ? BH_POINTS : b->write_idx;
+        if (total == 0) continue;
+        /* Determinar el rango de puntos nuevos desde el ultimo flush */
+        size_t since_idx = s_bh_last_flushed_idx[s];
+        bool since_wrapped = s_bh_last_flushed_wrapped[s];
+        for (size_t i = 0; i < total; ++i) {
+            size_t idx = b->wrapped ? (b->write_idx + i) % BH_POINTS : i;
+            /* Saltar lo ya escrito antes:
+               como simplificacion, si ts <= last_ts del source ignoramos */
+            if (!b->points[idx].valid) continue;
+            /* Comparar contra el ts del ultimo flush */
+            (void)since_idx; (void)since_wrapped;
+            /* Para evitar duplicados: solo escribimos puntos cuyo ts > umbral */
+            static int32_t last_ts_per_src[BH_SRC_COUNT] = {0};
+            if (b->points[idx].ts <= last_ts_per_src[s]) continue;
+            time_t pt = b->points[idx].ts;
+            struct tm tmp;
+            localtime_r(&pt, &tmp);
+            char ts_str[32];
+            if (tmp.tm_year > 100) {
+                snprintf(ts_str, sizeof ts_str, "%04d-%02d-%02d %02d:%02d:%02d",
+                         (int)(tmp.tm_year + 1900) & 0xFFFF,
+                         (int)(tmp.tm_mon + 1) & 0xFF,
+                         (int)tmp.tm_mday & 0xFF,
+                         (int)tmp.tm_hour & 0xFF,
+                         (int)tmp.tm_min & 0xFF,
+                         (int)tmp.tm_sec & 0xFF);
+            } else {
+                snprintf(ts_str, sizeof ts_str, "BOOT+%ld", (long)pt);
+            }
+            fprintf(f, "%s,%s,%ld\n",
+                    ts_str, battery_history_source_name((bh_source_t)s),
+                    (long)b->points[idx].milli_amps);
+            last_ts_per_src[s] = b->points[idx].ts;
+            total_written++;
+        }
+        s_bh_last_flushed_idx[s] = b->write_idx;
+        s_bh_last_flushed_wrapped[s] = b->wrapped;
+    }
+    fclose(f);
+    if (total_written > 0) {
+        ESP_LOGI(TAG, "Volcadas %d entradas a %s", total_written, path);
+    }
+}
+
+static void bh_flush_timer_cb(void *arg)
+{
+    bh_flush_to_sd();
+}
+
 esp_err_t battery_history_init(void)
 {
     memset(s_bufs, 0, sizeof s_bufs);
@@ -132,6 +248,16 @@ esp_err_t battery_history_init(void)
     };
     ESP_ERROR_CHECK(esp_timer_create(&persist_args, &s_persist_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_persist_timer, (uint64_t)BH_PERSIST_MS * 1000ULL));
+
+    /* Flush a SD cada 60s */
+    const esp_timer_create_args_t flush_args = {
+        .callback = bh_flush_timer_cb,
+        .name = "bh_flush",
+    };
+    if (esp_timer_create(&flush_args, &s_bh_flush_timer) == ESP_OK) {
+        esp_timer_start_periodic(s_bh_flush_timer, (uint64_t)BH_FLUSH_INTERVAL_MS * 1000ULL);
+        ESP_LOGI(TAG, "BH flush timer iniciado (%d ms)", BH_FLUSH_INTERVAL_MS);
+    }
 
     ESP_LOGI(TAG, "battery_history initialised (sample %dms, persist %dms)",
              BH_SAMPLE_MS, BH_PERSIST_MS);
