@@ -25,6 +25,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include "datalogger.h"
+#include "battery_history.h"
+#include <sys/stat.h>
 
 
 static const char *TAG = "cfg_srv";
@@ -446,6 +448,492 @@ static esp_err_t handle_settime(httpd_req_t *req)
 
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, "OK");
+    return ESP_OK;
+}
+
+
+/* --- Helpers data pages --- */
+static void get_today_csv_path(const char *subdir, char *out, size_t out_len)
+{
+    time_t t = time(NULL);
+    struct tm tm_local;
+    localtime_r(&t, &tm_local);
+    if (tm_local.tm_year > 100) {
+        snprintf(out, out_len, "/sdcard/%s/%04d-%02d-%02d.csv",
+                 subdir,
+                 (int)(tm_local.tm_year + 1900) & 0xFFFF,
+                 (int)(tm_local.tm_mon + 1) & 0xFF,
+                 (int)tm_local.tm_mday & 0xFF);
+    } else {
+        snprintf(out, out_len, "/sdcard/%s/boot.csv", subdir);
+    }
+}
+
+/* Lee fichero entero a buffer malloc'd. Devuelve NULL si falla. */
+static char *read_file_to_buf(const char *path, size_t *out_len)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) return NULL;
+    if (st.st_size <= 0 || st.st_size > 512 * 1024) return NULL; /* limite 512KB */
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    char *buf = malloc(st.st_size + 1);
+    if (!buf) { fclose(f); return NULL; }
+    size_t n = fread(buf, 1, st.st_size, f);
+    fclose(f);
+    buf[n] = 0;
+    if (out_len) *out_len = n;
+    return buf;
+}
+
+
+
+/* Construye filas tabla y polyline SVG a partir del CSV.
+   El CSV tiene header en la primera linea.
+   Devuelve dos buffers malloc'd: rows_html y svg_inner. */
+static void build_frigo_html(const char *csv,
+                             char **rows_html, char **svg_inner)
+{
+    /* Reservar buffers grandes; la pagina puede llegar a 60KB con 480 puntos */
+    size_t rows_cap = 64 * 1024;
+    size_t svg_cap  = 24 * 1024;
+    char *rows = malloc(rows_cap);
+    char *svg  = malloc(svg_cap);
+    if (!rows || !svg) { free(rows); free(svg); *rows_html=NULL; *svg_inner=NULL; return; }
+    rows[0] = 0;
+    svg[0]  = 0;
+    size_t rp = 0, sp = 0;
+
+    /* Saltar header */
+    const char *p = csv;
+    const char *nl = strchr(p, '\n');
+    if (nl) p = nl + 1;
+
+    /* Recolectar puntos: x = indice, y = T_Aletas, T_Cong, T_Ext, fan */
+    /* Construimos polylines de 4 series */
+    char poly_aletas[8192]   = "";
+    char poly_cong[8192]     = "";
+    char poly_ext[8192]      = "";
+    char poly_fan[8192]      = "";
+    size_t pa = 0, pc = 0, pe = 0, pf = 0;
+
+    /* Primera pasada: contar lineas para escalar X */
+    int total = 0;
+    const char *q = p;
+    while (*q) {
+        if (*q == '\n') total++;
+        q++;
+    }
+    if (total < 1) total = 1;
+
+    /* Dimensiones SVG: 800x300, margenes 40 */
+    const int W = 800, H = 300;
+    const int pad_l = 50, pad_r = 20, pad_t = 20, pad_b = 30;
+    const int gw = W - pad_l - pad_r;
+    const int gh = H - pad_t - pad_b;
+    /* Y range temperatura -20..15, fan 0..100 */
+    /* y_temp(t) = pad_t + gh * (15 - t) / 35 */
+    /* y_fan(f)  = pad_t + gh * (100 - f) / 100 */
+
+    int idx = 0;
+    while (*p) {
+        const char *line_end = strchr(p, '\n');
+        size_t line_len = line_end ? (size_t)(line_end - p) : strlen(p);
+        if (line_len < 5) { if (!line_end) break; p = line_end + 1; continue; }
+        char buf[160] = {0};
+        size_t cp = line_len < sizeof(buf)-1 ? line_len : sizeof(buf)-1;
+        memcpy(buf, p, cp);
+        buf[cp] = 0;
+        /* Parsear: ts,ta,tc,te,fan */
+        char *fields[5] = {0};
+        int fi = 0;
+        char *tok = buf;
+        for (size_t i = 0; i < cp && fi < 5; ++i) {
+            if (i == 0) fields[fi++] = tok;
+            if (buf[i] == ',') {
+                buf[i] = 0;
+                if (fi < 5) fields[fi++] = &buf[i+1];
+            }
+        }
+        if (fi >= 5) {
+            const char *ts = fields[0];
+            float ta = (strcmp(fields[1],"---")==0) ? -200.0f : atof(fields[1]);
+            float tc = (strcmp(fields[2],"---")==0) ? -200.0f : atof(fields[2]);
+            float te = (strcmp(fields[3],"---")==0) ? -200.0f : atof(fields[3]);
+            int   fp = atoi(fields[4]);
+            /* Fila tabla (ultimas 30) */
+            if (rp < rows_cap - 200) {
+                rp += snprintf(rows + rp, rows_cap - rp,
+                    "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d%%</td></tr>",
+                    ts, fields[1], fields[2], fields[3], fp);
+            }
+            /* Polylines */
+            int x = pad_l + (total > 1 ? gw * idx / (total - 1) : 0);
+            #define Y_TEMP(v) (pad_t + (int)((float)gh * (15.0f - (v)) / 35.0f))
+            #define Y_FAN(v)  (pad_t + (int)((float)gh * (100.0f - (v)) / 100.0f))
+            if (ta > -120.0f && pa < sizeof(poly_aletas) - 16)
+                pa += snprintf(poly_aletas + pa, sizeof(poly_aletas) - pa, "%d,%d ", x, Y_TEMP(ta));
+            if (tc > -120.0f && pc < sizeof(poly_cong) - 16)
+                pc += snprintf(poly_cong + pc, sizeof(poly_cong) - pc, "%d,%d ", x, Y_TEMP(tc));
+            if (te > -120.0f && pe < sizeof(poly_ext) - 16)
+                pe += snprintf(poly_ext + pe, sizeof(poly_ext) - pe, "%d,%d ", x, Y_TEMP(te));
+            if (pf < sizeof(poly_fan) - 16)
+                pf += snprintf(poly_fan + pf, sizeof(poly_fan) - pf, "%d,%d ", x, Y_FAN((float)fp));
+        }
+        idx++;
+        if (!line_end) break;
+        p = line_end + 1;
+    }
+
+    /* Construir SVG */
+    sp += snprintf(svg + sp, svg_cap - sp,
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%'>"
+        "<rect x='0' y='0' width='%d' height='%d' fill='#111'/>"
+        /* ejes */
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#444'/>"
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#444'/>"
+        /* gridlines T temp */
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>15</text>"
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>0</text>"
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>-20</text>",
+        W, H, W, H,
+        pad_l, pad_t, pad_l, H - pad_b,
+        pad_l, H - pad_b, W - pad_r, H - pad_b,
+        pad_l, Y_TEMP(15), W - pad_r, Y_TEMP(15), Y_TEMP(15) + 4,
+        pad_l, Y_TEMP(0),  W - pad_r, Y_TEMP(0),  Y_TEMP(0)  + 4,
+        pad_l, Y_TEMP(-20),W - pad_r, Y_TEMP(-20),Y_TEMP(-20)+ 4
+    );
+    sp += snprintf(svg + sp, svg_cap - sp,
+        "<polyline fill='none' stroke='#00BFFF' stroke-width='2' points='%s'/>"
+        "<polyline fill='none' stroke='#FF4444' stroke-width='2' points='%s'/>"
+        "<polyline fill='none' stroke='#44FF44' stroke-width='2' points='%s'/>"
+        "<polyline fill='none' stroke='#FFAA00' stroke-width='2' points='%s'/>"
+        "</svg>",
+        poly_aletas, poly_cong, poly_ext, poly_fan);
+
+    *rows_html = rows;
+    *svg_inner = svg;
+}
+
+static esp_err_t handle_data_frigo(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+
+    /* Intentar SD primero */
+    char path[64];
+    get_today_csv_path("frigo", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    bool from_sd = (csv != NULL);
+
+    /* Fallback RAM */
+    if (!csv) {
+        csv = datalogger_get_csv();
+    }
+    if (!csv) {
+        httpd_resp_sendstr(req,
+            "<!DOCTYPE html><html><body style='font-family:sans-serif;background:#111;color:#eee;padding:20px'>"
+            "<h2>Sin datos</h2><p>No hay datos disponibles ni en SD ni en RAM.</p>"
+            "<a href='/data' style='color:#00BFFF'>Volver</a></body></html>");
+        return ESP_OK;
+    }
+
+    char *rows_html = NULL, *svg_inner = NULL;
+    build_frigo_html(csv, &rows_html, &svg_inner);
+
+    /* Construir respuesta por chunks */
+    httpd_resp_send_chunk(req,
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Frigo</title>"
+        "<style>"
+        "body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:10px}"
+        "h2{text-align:center}"
+        ".legend{text-align:center;margin:8px 0;font-size:14px}"
+        ".legend span{display:inline-block;margin:0 10px}"
+        ".dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:4px}"
+        "table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}"
+        "th,td{padding:6px;border-bottom:1px solid #333;text-align:center}"
+        "th{background:#222}"
+        ".bar{text-align:center;margin:10px 0}"
+        ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
+        "</style></head><body>"
+        "<h2>FRIGO</h2>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV</a></div>"
+        "<div class='legend'>"
+        "<span><i class='dot' style='background:#00BFFF'></i>Aletas</span>"
+        "<span><i class='dot' style='background:#FF4444'></i>Congelador</span>"
+        "<span><i class='dot' style='background:#44FF44'></i>Exterior</span>"
+        "<span><i class='dot' style='background:#FFAA00'></i>Fan%</span>"
+        "</div>", -1);
+
+    if (svg_inner) httpd_resp_send_chunk(req, svg_inner, -1);
+
+    httpd_resp_send_chunk(req,
+        "<table><thead><tr><th>Timestamp</th><th>Aletas</th><th>Congel.</th><th>Exterior</th><th>Fan</th></tr></thead><tbody>", -1);
+    if (rows_html) httpd_resp_send_chunk(req, rows_html, -1);
+    httpd_resp_send_chunk(req, "</tbody></table>", -1);
+
+    /* Indicador origen */
+    httpd_resp_send_chunk(req,
+        from_sd ? "<p style='text-align:center;color:#888;font-size:12px'>Origen: SD</p>"
+                : "<p style='text-align:center;color:#888;font-size:12px'>Origen: RAM</p>", -1);
+
+    httpd_resp_send_chunk(req, "</body></html>", -1);
+    httpd_resp_send_chunk(req, NULL, 0);
+
+    free(csv);
+    free(rows_html);
+    free(svg_inner);
+    return ESP_OK;
+}
+
+static esp_err_t handle_data_frigo_csv(httpd_req_t *req)
+{
+    char path[64];
+    get_today_csv_path("frigo", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    if (!csv) csv = datalogger_get_csv();
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=frigo.csv");
+    if (csv) {
+        httpd_resp_sendstr(req, csv);
+        free(csv);
+    } else {
+        httpd_resp_sendstr(req, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+    }
+    return ESP_OK;
+}
+
+
+/* Construir HTML+SVG bateria.
+   CSV bateria: timestamp,source,milli_amps */
+static void build_bateria_html(const char *csv,
+                               char **rows_html, char **svg_inner)
+{
+    size_t rows_cap = 64 * 1024;
+    size_t svg_cap  = 32 * 1024;
+    char *rows = malloc(rows_cap);
+    char *svg  = malloc(svg_cap);
+    if (!rows || !svg) { free(rows); free(svg); *rows_html=NULL; *svg_inner=NULL; return; }
+    rows[0] = 0;
+    svg[0]  = 0;
+    size_t rp = 0, sp = 0;
+
+    /* Saltar header */
+    const char *p = csv;
+    const char *nl = strchr(p, '\n');
+    if (nl) p = nl + 1;
+
+    /* 4 polylines: una por fuente */
+    char poly[BH_SRC_COUNT][8192];
+    size_t pp[BH_SRC_COUNT];
+    for (int i = 0; i < BH_SRC_COUNT; ++i) { poly[i][0]=0; pp[i]=0; }
+
+    /* Contar lineas */
+    int total = 0;
+    const char *q = p;
+    while (*q) { if (*q=='\n') total++; q++; }
+    if (total < 1) total = 1;
+
+    /* SVG dims */
+    const int W = 800, H = 320;
+    const int pad_l = 50, pad_r = 20, pad_t = 20, pad_b = 30;
+    const int gw = W - pad_l - pad_r;
+    const int gh = H - pad_t - pad_b;
+    /* Y range -40..40 A; eje cero en el medio */
+    /* y(a) = pad_t + gh * (40 - a) / 80 */
+    #define Y_BAT(a) (pad_t + (int)((float)gh * (40.0f - (a)) / 80.0f))
+
+    int idx = 0;
+    while (*p) {
+        const char *line_end = strchr(p, '\n');
+        size_t line_len = line_end ? (size_t)(line_end - p) : strlen(p);
+        if (line_len < 5) { if (!line_end) break; p = line_end + 1; continue; }
+        char buf[160] = {0};
+        size_t cp = line_len < sizeof(buf)-1 ? line_len : sizeof(buf)-1;
+        memcpy(buf, p, cp);
+        buf[cp] = 0;
+        /* Parsear: ts,source,milli */
+        char *fields[3] = {0};
+        int fi = 0;
+        if (cp > 0) fields[fi++] = buf;
+        for (size_t i = 0; i < cp && fi < 3; ++i) {
+            if (buf[i] == ',') {
+                buf[i] = 0;
+                if (fi < 3) fields[fi++] = &buf[i+1];
+            }
+        }
+        if (fi >= 3) {
+            const char *ts = fields[0];
+            const char *src = fields[1];
+            int ma = atoi(fields[2]);
+            float a = ma / 1000.0f;
+            /* Fila tabla */
+            if (rp < rows_cap - 200) {
+                rp += snprintf(rows + rp, rows_cap - rp,
+                    "<tr><td>%s</td><td>%s</td><td>%.2f A</td></tr>",
+                    ts, src, a);
+            }
+            /* Detectar source idx */
+            int si = -1;
+            for (int k = 0; k < BH_SRC_COUNT; ++k) {
+                if (strcmp(src, battery_history_source_name((bh_source_t)k)) == 0) { si = k; break; }
+            }
+            if (si >= 0) {
+                int x = pad_l + (total > 1 ? gw * idx / (total - 1) : 0);
+                if (a > 40)  a = 40;
+                if (a < -40) a = -40;
+                if (pp[si] < sizeof(poly[si]) - 16)
+                    pp[si] += snprintf(poly[si] + pp[si], sizeof(poly[si]) - pp[si], "%d,%d ", x, Y_BAT(a));
+            }
+        }
+        idx++;
+        if (!line_end) break;
+        p = line_end + 1;
+    }
+
+    static const char *colors[BH_SRC_COUNT] = {
+        "#4FC3F7", "#FFD54F", "#FF8A65", "#AED581"
+    };
+
+    sp += snprintf(svg + sp, svg_cap - sp,
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%'>"
+        "<rect x='0' y='0' width='%d' height='%d' fill='#111'/>"
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#444'/>"
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#444'/>"
+        /* eje cero (linea horizontal) */
+        "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#666' stroke-dasharray='3,3'/>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>+40A</text>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>0</text>"
+        "<text x='5' y='%d' fill='#888' font-size='12'>-40A</text>",
+        W, H, W, H,
+        pad_l, pad_t, pad_l, H - pad_b,
+        pad_l, H - pad_b, W - pad_r, H - pad_b,
+        pad_l, Y_BAT(0), W - pad_r, Y_BAT(0),
+        Y_BAT(40) + 4, Y_BAT(0) + 4, Y_BAT(-40) + 4
+    );
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        sp += snprintf(svg + sp, svg_cap - sp,
+            "<polyline fill='none' stroke='%s' stroke-width='2' points='%s'/>",
+            colors[i], poly[i]);
+    }
+    sp += snprintf(svg + sp, svg_cap - sp, "</svg>");
+
+    *rows_html = rows;
+    *svg_inner = svg;
+}
+
+static esp_err_t handle_data_bateria(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+
+    char path[64];
+    get_today_csv_path("bateria", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    bool from_sd = (csv != NULL);
+
+    if (!csv) {
+        /* Sin RAM accesible para bateria multi-source: avisamos */
+        httpd_resp_sendstr(req,
+            "<!DOCTYPE html><html><body style='font-family:sans-serif;background:#111;color:#eee;padding:20px'>"
+            "<h2>Sin datos</h2><p>No hay CSV de bateria en SD todavia.</p>"
+            "<a href='/data' style='color:#00BFFF'>Volver</a></body></html>");
+        return ESP_OK;
+    }
+
+    char *rows_html = NULL, *svg_inner = NULL;
+    build_bateria_html(csv, &rows_html, &svg_inner);
+
+    httpd_resp_send_chunk(req,
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Bateria</title>"
+        "<style>"
+        "body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:10px}"
+        "h2{text-align:center}"
+        ".legend{text-align:center;margin:8px 0;font-size:14px}"
+        ".legend span{display:inline-block;margin:0 10px}"
+        ".dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:4px}"
+        "table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}"
+        "th,td{padding:6px;border-bottom:1px solid #333;text-align:center}"
+        "th{background:#222}"
+        ".bar{text-align:center;margin:10px 0}"
+        ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
+        "</style></head><body>"
+        "<h2>BATERIA</h2>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV</a></div>"
+        "<div class='legend'>"
+        "<span><i class='dot' style='background:#4FC3F7'></i>BatteryMonitor</span>"
+        "<span><i class='dot' style='background:#FFD54F'></i>SolarCharger</span>"
+        "<span><i class='dot' style='background:#FF8A65'></i>OrionXS</span>"
+        "<span><i class='dot' style='background:#AED581'></i>ACCharger</span>"
+        "</div>", -1);
+
+    if (svg_inner) httpd_resp_send_chunk(req, svg_inner, -1);
+
+    httpd_resp_send_chunk(req,
+        "<table><thead><tr><th>Timestamp</th><th>Fuente</th><th>Corriente</th></tr></thead><tbody>", -1);
+    if (rows_html) httpd_resp_send_chunk(req, rows_html, -1);
+    httpd_resp_send_chunk(req, "</tbody></table>", -1);
+
+    httpd_resp_send_chunk(req,
+        from_sd ? "<p style='text-align:center;color:#888;font-size:12px'>Origen: SD</p>"
+                : "<p style='text-align:center;color:#888;font-size:12px'>Origen: RAM</p>", -1);
+
+    httpd_resp_send_chunk(req, "</body></html>", -1);
+    httpd_resp_send_chunk(req, NULL, 0);
+
+    free(csv);
+    free(rows_html);
+    free(svg_inner);
+    return ESP_OK;
+}
+
+static esp_err_t handle_data_bateria_csv(httpd_req_t *req)
+{
+    char path[64];
+    get_today_csv_path("bateria", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=bateria.csv");
+    if (csv) {
+        httpd_resp_sendstr(req, csv);
+        free(csv);
+    } else {
+        httpd_resp_sendstr(req, "timestamp,source,milli_amps\n");
+    }
+    return ESP_OK;
+}
+
+static esp_err_t handle_data_index(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    const char *html =
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Datos</title>"
+        "<style>"
+        "body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:20px;text-align:center}"
+        "h1{margin-bottom:30px}"
+        ".btn{display:block;margin:20px auto;padding:30px;font-size:24px;"
+        "background:#2A2A2A;color:#eee;border:1px solid #555;border-radius:12px;"
+        "text-decoration:none;max-width:400px}"
+        ".btn:active{background:#3D5A80}"
+        ".back{margin-top:40px;color:#888;text-decoration:none;font-size:16px}"
+        "</style></head><body>"
+        "<h1>Datos historicos</h1>"
+        "<a class='btn' href='/data/frigo'>FRIGO</a>"
+        "<a class='btn' href='/data/bateria'>BATERIA</a>"
+        "<a class='back' href='/'>&larr; Volver</a>"
+        "</body></html>";
+    httpd_resp_sendstr(req, html);
     return ESP_OK;
 }
 
