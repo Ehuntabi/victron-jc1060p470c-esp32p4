@@ -43,6 +43,11 @@ La tarjeta SD no monta correctamente. El problema parece estar relacionado con e
 **Intentado**: modo SDMMC slot0, modo SDMMC slot1, modo SPI (SPI2, SPI3), con/sin sd_pwr_ctrl_new_on_chip_ldo  
 **Error**: `sdmmc_card_init failed (0x107)` / `ESP_ERR_TIMEOUT` en todos los modos  
 
+
+**Actualización**: Confirmado como bug de ESP-IDF — issue #17889 en espressif/esp-idf. 
+El ESP32-P4 tiene un único controlador SDMMC que es reclamado por esp_hosted para SDIO.
+Pendiente de fix por Espressif. Estado: "Selected for Development".
+
 ¿Alguien ha conseguido usar la SD en esta placa junto con esp_hosted?
 
 ### ✅ RTC — RESUELTO
