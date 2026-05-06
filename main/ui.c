@@ -236,7 +236,8 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
-    lv_timer_create(clock_timer_cb, 30000, ui);
+    lv_timer_create(clock_timer_cb, 60000, ui);
+    clock_timer_cb(NULL);
     lvgl_port_unlock();
 }
 
@@ -349,7 +350,7 @@ void ui_force_view_update(void)
 
 static void clock_timer_cb(lv_timer_t *timer)
 {
-    ui_state_t *ui = (ui_state_t *)timer->user_data;
+    ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : ui_get_state();
     if (!ui || !ui->lbl_clock) return;
 
     struct tm t;
