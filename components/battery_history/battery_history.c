@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "esp_log.h"
 #include "esp_timer.h"
+#include <time.h>
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -37,7 +38,12 @@ const char *battery_history_source_name(bh_source_t src)
 
 static int32_t now_seconds(void)
 {
-    return (int32_t)(esp_timer_get_time() / 1000000);
+    time_t t = time(NULL);
+    /* Si time() todavia no esta sincronizado (epoch < 2024-01-01) usar uptime */
+    if (t < 1704067200) {
+        return (int32_t)(esp_timer_get_time() / 1000000);
+    }
+    return (int32_t)t;
 }
 
 static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t milli, bool valid)
@@ -191,4 +197,21 @@ void battery_history_get_totals(bh_source_t src,
     }
     if (out_charge_ah) *out_charge_ah = charge_mah / 1000.0f;
     if (out_discharge_ah) *out_discharge_ah = discharge_mah / 1000.0f;
+}
+
+void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int32_t *out_newest_ts)
+{
+    if (out_oldest_ts) *out_oldest_ts = 0;
+    if (out_newest_ts) *out_newest_ts = 0;
+    if (src >= BH_SRC_COUNT) return;
+    bh_buffer_t *b = &s_bufs[src];
+    int32_t oldest = INT32_MAX, newest = INT32_MIN;
+    size_t total = b->wrapped ? BH_POINTS : b->write_idx;
+    for (size_t i = 0; i < total; ++i) {
+        if (!b->points[i].valid) continue;
+        if (b->points[i].ts < oldest) oldest = b->points[i].ts;
+        if (b->points[i].ts > newest) newest = b->points[i].ts;
+    }
+    if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
+    if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
 }

@@ -45,6 +45,9 @@ void battery_history_get_totals(bh_source_t src,
 
 const char *battery_history_source_name(bh_source_t src);
 
+/* Get only the timestamp range without copying points */
+void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int32_t *out_newest_ts);
+
 #ifdef __cplusplus
 }
 #endif

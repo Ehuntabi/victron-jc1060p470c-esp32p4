@@ -905,8 +905,8 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     /* Gráfica */
     s_chart = lv_chart_create(scr);
-    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 100);
-    lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 130);
+    lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -30);
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(s_chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(s_chart, LV_OPA_COVER, 0);
@@ -938,6 +938,54 @@ void ui_show_chart_screen(ui_state_t *ui)
     }
 
     lv_chart_refresh(s_chart);
+
+    /* Labels de hora bajo el chart de frigo */
+    {
+        int n = datalogger_get_count();
+        {
+            lv_obj_t *xlabels_cont = lv_obj_create(scr);
+            lv_obj_remove_style_all(xlabels_cont);
+            lv_obj_set_size(xlabels_cont, LV_HOR_RES - 20, 22);
+            lv_obj_align_to(xlabels_cont, s_chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+            lv_obj_set_layout(xlabels_cont, LV_LAYOUT_FLEX);
+            lv_obj_set_flex_flow(xlabels_cont, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(xlabels_cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                                  LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            for (int i = 0; i < 5; ++i) {
+                lv_obj_t *l = lv_label_create(xlabels_cont);
+                lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
+                lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+                if (n <= 0) {
+                    lv_label_set_text(l, "--:--");
+                    continue;
+                }
+                int idx = (n - 1) * i / 4;
+                const datalogger_entry_t *e = datalogger_get_entry(idx);
+                if (e) {
+                    /* timestamp formato "YYYY-MM-DD HH:MM:SS" o "BOOT+HH:MM:SS"
+                       Mostramos solo HH:MM (subcadena con offset) */
+                    const char *ts = e->timestamp;
+                    if (strncmp(ts, "BOOT", 4) == 0) {
+                        /* "BOOT+HH:MM:SS" -> HH:MM */
+                        char buf[8] = {0};
+                        if (strlen(ts) >= 10) {
+                            strncpy(buf, ts + 5, 5);
+                        }
+                        lv_label_set_text(l, buf);
+                    } else if (strlen(ts) >= 16) {
+                        /* "YYYY-MM-DD HH:MM:SS" -> HH:MM */
+                        char buf[8] = {0};
+                        strncpy(buf, ts + 11, 5);
+                        lv_label_set_text(l, buf);
+                    } else {
+                        lv_label_set_text(l, ts);
+                    }
+                } else {
+                    lv_label_set_text(l, "--:--");
+                }
+            }
+        }
+    }
 }
 
 static void frigo_swipe_cb(lv_event_t *e)
@@ -1030,8 +1078,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
 
     /* Chart */
     lv_obj_t *chart = lv_chart_create(scr);
-    lv_obj_set_size(chart, LV_HOR_RES - 40, LV_VER_RES - 220);
-    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_set_size(chart, LV_HOR_RES - 40, LV_VER_RES - 250);
+    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -40);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
@@ -1063,6 +1111,49 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         free(pts);
     }
     lv_chart_refresh(chart);
+
+    /* Labels de hora bajo el chart */
+    int32_t old_ts_global = INT32_MAX, new_ts_global = INT32_MIN;
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        int32_t ots = 0, nts = 0;
+        battery_history_get_time_range((bh_source_t)i, &ots, &nts);
+        if (ots > 0 && ots < old_ts_global) old_ts_global = ots;
+        if (nts > new_ts_global) new_ts_global = nts;
+    }
+    if (old_ts_global == INT32_MAX) old_ts_global = 0;
+    if (new_ts_global == INT32_MIN) new_ts_global = 0;
+
+    lv_obj_t *xlabels_cont = lv_obj_create(scr);
+    lv_obj_remove_style_all(xlabels_cont);
+    lv_obj_set_size(xlabels_cont, LV_HOR_RES - 40, 22);
+    lv_obj_align_to(xlabels_cont, chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+    lv_obj_set_layout(xlabels_cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(xlabels_cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(xlabels_cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    int32_t span = new_ts_global - old_ts_global;
+    if (span < 0) span = 0;
+    bool have_real_time = (new_ts_global > 1704067200);
+    for (int i = 0; i < 5; ++i) {
+        lv_obj_t *l = lv_label_create(xlabels_cont);
+        lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+        if (span <= 0) {
+            lv_label_set_text(l, "--:--");
+            continue;
+        }
+        int32_t ts_at = old_ts_global + (int32_t)((int64_t)span * i / 4);
+        if (have_real_time) {
+            time_t t = ts_at;
+            struct tm tm_local;
+            localtime_r(&t, &tm_local);
+            lv_label_set_text_fmt(l, "%02d:%02d", tm_local.tm_hour, tm_local.tm_min);
+        } else {
+            int32_t age_min = (new_ts_global - ts_at) / 60;
+            lv_label_set_text_fmt(l, "-%dm", (int)age_min);
+        }
+    }
 
     s_bh_prev_screen = prev;
     lv_scr_load(scr);
