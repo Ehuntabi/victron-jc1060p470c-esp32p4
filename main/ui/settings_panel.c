@@ -20,6 +20,8 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_idf_version.h"
+#include "esp_vfs_fat.h"
+#include "ff.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 
@@ -1375,9 +1377,23 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20, 0);
     lv_label_set_text(ui->lbl_about_uptime, "Uptime: --");
 
-    ui->lbl_about_heap = lv_label_create(cont);
+    /* Fila RAM (izda) + SD (drcha) */
+    lv_obj_t *row_mem = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_mem);
+    lv_obj_set_width(row_mem, lv_pct(100));
+    lv_obj_set_height(row_mem, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_mem, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_mem, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_mem, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    ui->lbl_about_heap = lv_label_create(row_mem);
     lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20, 0);
     lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
+
+    ui->lbl_about_sd = lv_label_create(row_mem);
+    lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_align(ui->lbl_about_sd, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
     ui->lbl_about_ip = lv_label_create(cont);
     lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20, 0);
@@ -1475,6 +1491,22 @@ static void about_refresh_dynamic(ui_state_t *ui)
         lv_label_set_text_fmt(ui->lbl_about_heap,
             "RAM libre: int %u KB  |  PSRAM %u KB",
             (unsigned)(free_int / 1024), (unsigned)(free_spi / 1024));
+    }
+    /* SD */
+    if (ui->lbl_about_sd) {
+        FATFS *fs = NULL;
+        DWORD free_clusters = 0;
+        if (f_getfree("0:", &free_clusters, &fs) == FR_OK && fs) {
+            uint64_t sect_per_cluster = fs->csize;
+            uint64_t total_sect = (fs->n_fatent - 2) * sect_per_cluster;
+            uint64_t free_sect  = (uint64_t)free_clusters * sect_per_cluster;
+            uint64_t total_mb = (total_sect * 512ULL) / (1024ULL * 1024ULL);
+            uint64_t free_mb  = (free_sect  * 512ULL) / (1024ULL * 1024ULL);
+            lv_label_set_text_fmt(ui->lbl_about_sd, "SD: %u/%u MB libres",
+                (unsigned)free_mb, (unsigned)total_mb);
+        } else {
+            lv_label_set_text(ui->lbl_about_sd, "SD: no montada");
+        }
     }
     /* IP */
     if (ui->lbl_about_ip) {

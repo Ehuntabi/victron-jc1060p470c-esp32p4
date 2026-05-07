@@ -27,6 +27,8 @@ idf_component_register(
         rtc_rx8025t          # RTC RX8025T hora real
         datalogger           # SD + CSV logging
     battery_history      # Histórico corriente batería
+    fatfs                # FATFS f_getfree para info SD
+    log_cleanup          # Limpieza automatica de logs antiguos
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

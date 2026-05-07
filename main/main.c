@@ -16,6 +16,7 @@
 #include "config_server.h"
 #include "frigo.h"
 #include "battery_history.h"
+#include "log_cleanup.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
 #include "ui/frigo_panel.h"
@@ -220,6 +221,7 @@ void app_main(void)
 
     /* --- BLE Victron --- */
     battery_history_init();
+    log_cleanup_init(60); /* Borrar logs > 60 dias */
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
 

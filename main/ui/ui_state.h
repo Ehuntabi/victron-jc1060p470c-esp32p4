@@ -93,6 +93,7 @@ typedef struct ui_state {
     /* About page dynamic info */
     lv_obj_t *lbl_about_uptime;
     lv_obj_t *lbl_about_heap;
+    lv_obj_t *lbl_about_sd;
     lv_obj_t *lbl_about_ip;
     lv_obj_t *alarm_border;    // Borde rojo alarma congelador
     lv_obj_t *screen_chart;    // Pantalla grafica temperaturas

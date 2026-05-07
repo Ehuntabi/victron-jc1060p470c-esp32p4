@@ -662,7 +662,7 @@ static esp_err_t handle_data_frigo(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>FRIGO</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV</a></div>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV (hoy)</a> <a href='/data/frigo.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#00BFFF'></i>Aletas</span>"
         "<span><i class='dot' style='background:#FF4444'></i>Congelador</span>"
@@ -876,7 +876,7 @@ static esp_err_t handle_data_bateria(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>BATERIA</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV</a></div>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV (hoy)</a> <a href='/data/bateria.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#4FC3F7'></i>BatteryMonitor</span>"
         "<span><i class='dot' style='background:#FFD54F'></i>SolarCharger</span>"
@@ -977,6 +977,143 @@ static esp_err_t handle_screenshot(httpd_req_t *req) {
 }
 
 // Start the HTTP configuration server
+
+/* === TAR streaming === */
+/* Header TAR USTAR de 512 bytes */
+#define TAR_BLOCK 512
+
+static unsigned tar_checksum(const uint8_t *header)
+{
+    unsigned sum = 0;
+    /* Cuando se calcula el checksum, los 8 bytes del campo checksum cuentan como espacios */
+    for (int i = 0; i < TAR_BLOCK; ++i) {
+        if (i >= 148 && i < 156) sum += ' ';
+        else sum += header[i];
+    }
+    return sum;
+}
+
+static void tar_write_octal(char *dst, size_t len, uint64_t val)
+{
+    /* Octal ASCII alineado a la derecha, terminado en 0 */
+    memset(dst, '0', len - 1);
+    dst[len - 1] = 0;
+    int i = (int)len - 2;
+    while (val > 0 && i >= 0) {
+        dst[i--] = '0' + (val & 7);
+        val >>= 3;
+    }
+}
+
+/* Construye un header TAR USTAR para un fichero. mtime epoch. */
+static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t mtime)
+{
+    memset(hdr, 0, TAR_BLOCK);
+    /* name: 100 bytes */
+    strncpy((char*)&hdr[0], name, 99);
+    /* mode 0644 */
+    tar_write_octal((char*)&hdr[100], 8, 0644);
+    /* uid/gid 0 */
+    tar_write_octal((char*)&hdr[108], 8, 0);
+    tar_write_octal((char*)&hdr[116], 8, 0);
+    /* size */
+    tar_write_octal((char*)&hdr[124], 12, (uint64_t)size);
+    /* mtime */
+    tar_write_octal((char*)&hdr[136], 12, (uint64_t)mtime);
+    /* checksum placeholder spaces */
+    memset(&hdr[148], ' ', 8);
+    /* typeflag '0' regular file */
+    hdr[156] = '0';
+    /* magic ustar */
+    memcpy(&hdr[257], "ustar", 5);
+    memcpy(&hdr[263], "00", 2);
+    /* checksum */
+    unsigned sum = tar_checksum(hdr);
+    char chk[8];
+    snprintf(chk, sizeof chk, "%06o", sum);
+    memcpy(&hdr[148], chk, 7);
+    hdr[155] = ' ';
+}
+
+static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const char *attach_name)
+{
+    httpd_resp_set_type(req, "application/x-tar");
+    char disp[160];
+    /* Construir manualmente para evitar warning de format-truncation */
+    strcpy(disp, "attachment; filename=");
+    strncat(disp, attach_name, sizeof(disp) - strlen(disp) - 1);
+    httpd_resp_set_hdr(req, "Content-Disposition", disp);
+
+    DIR *dp = opendir(src_dir);
+    if (!dp) {
+        /* Aun asi devolvemos un TAR vacio (dos bloques cero) */
+        uint8_t zeros[TAR_BLOCK * 2] = {0};
+        httpd_resp_send_chunk(req, (const char*)zeros, sizeof zeros);
+        httpd_resp_send_chunk(req, NULL, 0);
+        return ESP_OK;
+    }
+
+    uint8_t hdr[TAR_BLOCK];
+    char *buf = malloc(2048);
+    if (!buf) {
+        closedir(dp);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
+
+    struct dirent *de;
+    while ((de = readdir(dp)) != NULL) {
+        if (de->d_type == DT_DIR) continue;
+        char full_path[400];
+        snprintf(full_path, sizeof full_path, "%s/%s", src_dir, de->d_name);
+        struct stat st;
+        if (stat(full_path, &st) != 0) continue;
+        if (st.st_size <= 0) continue;
+
+        /* Header */
+        tar_build_header(hdr, de->d_name, st.st_size, st.st_mtime);
+        if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) break;
+
+        /* Contenido en chunks de 2KB */
+        FILE *f = fopen(full_path, "rb");
+        if (!f) continue;
+        size_t remaining = st.st_size;
+        while (remaining > 0) {
+            size_t to_read = remaining > 2048 ? 2048 : remaining;
+            size_t n = fread(buf, 1, to_read, f);
+            if (n == 0) break;
+            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { remaining = 0; break; }
+            remaining -= n;
+        }
+        fclose(f);
+
+        /* Padding hasta multiplo de 512 */
+        size_t pad = (TAR_BLOCK - (st.st_size % TAR_BLOCK)) % TAR_BLOCK;
+        if (pad > 0) {
+            uint8_t zero[TAR_BLOCK] = {0};
+            httpd_resp_send_chunk(req, (const char*)zero, pad);
+        }
+    }
+    closedir(dp);
+    free(buf);
+
+    /* Final TAR: dos bloques de zeros */
+    uint8_t zeros[TAR_BLOCK * 2] = {0};
+    httpd_resp_send_chunk(req, (const char*)zeros, sizeof zeros);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t handle_data_frigo_tar(httpd_req_t *req)
+{
+    return handle_tar_dir(req, "/sdcard/frigo", "frigo.tar");
+}
+
+static esp_err_t handle_data_bateria_tar(httpd_req_t *req)
+{
+    return handle_tar_dir(req, "/sdcard/bateria", "bateria.tar");
+}
+
 esp_err_t config_server_start(void) {
     mount_spiffs();
     httpd_handle_t server = NULL;
@@ -1023,6 +1160,10 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_bat);
     httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };
     httpd_register_uri_handler(server, &uri_data_bat_csv);
+    httpd_uri_t uri_data_frigo_tar = { .uri = "/data/frigo.tar", .method = HTTP_GET, .handler = handle_data_frigo_tar };
+    httpd_register_uri_handler(server, &uri_data_frigo_tar);
+    httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
+    httpd_register_uri_handler(server, &uri_data_bat_tar);
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
 
