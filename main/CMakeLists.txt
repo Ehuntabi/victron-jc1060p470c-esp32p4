@@ -29,6 +29,7 @@ idf_component_register(
     battery_history      # Histórico corriente batería
     fatfs                # FATFS f_getfree para info SD
     log_cleanup          # Limpieza automatica de logs antiguos
+    audio_es8311         # Codec audio ES8311 + amplificador NS4150
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

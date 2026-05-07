@@ -17,6 +17,8 @@
 #include "frigo.h"
 #include "battery_history.h"
 #include "log_cleanup.h"
+#include "audio_es8311.h"
+#include "esp_bsp.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
 #include "ui/frigo_panel.h"
@@ -222,6 +224,21 @@ void app_main(void)
     /* --- BLE Victron --- */
     battery_history_init();
     log_cleanup_init(60); /* Borrar logs > 60 dias */
+    /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
+    {
+        i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
+        if (i2c_bus) {
+            esp_err_t ar = audio_init(i2c_bus);
+            if (ar == ESP_OK) {
+                /* Beeps en bucle para diagnostico */
+                audio_beep(1000, 200);
+            } else {
+                ESP_LOGW(TAG, "audio_init falla: %s", esp_err_to_name(ar));
+            }
+        } else {
+            ESP_LOGW(TAG, "I2C bus no disponible para audio");
+        }
+    }
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
 

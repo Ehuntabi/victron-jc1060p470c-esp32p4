@@ -4,7 +4,7 @@
 #include "esp_err.h"
 
 #define FRIGO_ONEWIRE_GPIO   26
-#define FRIGO_FAN_GPIO        9
+#define FRIGO_FAN_GPIO        21
 #define FRIGO_FAN_FREQ_HZ  25000
 #define FRIGO_MAX_SENSORS     3
 
