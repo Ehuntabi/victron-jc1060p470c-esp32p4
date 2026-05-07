@@ -788,7 +788,7 @@ void ui_settings_panel_init(ui_state_t *ui,
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
-    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT");
+    lv_obj_t *page_about = lv_menu_page_create(menu, LV_SYMBOL_LIST "  ABOUT VictronSolarDisplay");
     
     /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
@@ -1351,70 +1351,35 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(cont, 12, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
     lv_obj_set_style_pad_all(cont, 16, 0);
 
-    lv_obj_t *lbl_title = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(lbl_title, lv_color_hex(0x00BFFF), 0);
-    lv_label_set_text(lbl_title, "VictronSolarDisplay");
 
-    lv_obj_t *lbl_ver = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_ver, &lv_font_montserrat_20, 0);
-    lv_label_set_text_fmt(lbl_ver, "Version: %s  |  ESP32-P4  |  ESP-IDF v5.4.4", APP_VERSION);
+    /* === Card 2: Info dinamica === */
+    lv_obj_t *card2 = lv_obj_create(cont);
+    lv_obj_set_width(card2, lv_pct(100));
+    lv_obj_set_height(card2, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_width(card2, 1, 0);
+    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_pad_all(card2, 16, 0);
+    lv_obj_set_style_pad_gap(card2, 10, 0);
+    lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *sep = lv_obj_create(cont);
-    lv_obj_remove_style_all(sep);
-    lv_obj_set_width(sep, lv_pct(100));
-    lv_obj_set_height(sep, 2);
-    lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+    lv_obj_t *card2_title = lv_label_create(card2);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_label_set_text(card2_title, LV_SYMBOL_REFRESH "  Estado");
 
-    lv_obj_t *lbl_port = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20, 0);
-    lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
-
-    lv_obj_t *lbl_gh = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x00BFFF), 0);
-    lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
-
-    lv_obj_t *sep2 = lv_obj_create(cont);
-    lv_obj_remove_style_all(sep2);
-    lv_obj_set_width(sep2, lv_pct(100));
-    lv_obj_set_height(sep2, 2);
-    lv_obj_set_style_bg_color(sep2, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep2, LV_OPA_COVER, 0);
-
-    lv_obj_t *lbl_cred = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20, 0);
-    lv_label_set_text(lbl_cred, "Basado en:");
-
-    lv_obj_t *lbl_orig1 = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_orig1, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_orig1, lv_color_hex(0xAAAAAA), 0);
-    lv_label_set_text(lbl_orig1, "CamdenSutherland / victronsolardisplayesp");
-
-    lv_obj_t *lbl_orig2 = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_orig2, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(lbl_orig2, lv_color_hex(0xAAAAAA), 0);
-    lv_label_set_text(lbl_orig2, "wytr / VictronSolarDisplayEsp");
-
-    /* --- Separador --- */
-    lv_obj_t *sep3 = lv_obj_create(cont);
-    lv_obj_remove_style_all(sep3);
-    lv_obj_set_width(sep3, lv_pct(100));
-    lv_obj_set_height(sep3, 2);
-    lv_obj_set_style_bg_color(sep3, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep3, LV_OPA_COVER, 0);
-
-    /* --- Info dinamica --- */
-    ui->lbl_about_uptime = lv_label_create(cont);
+    ui->lbl_about_uptime = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20, 0);
     lv_label_set_text(ui->lbl_about_uptime, "Uptime: --");
 
-    /* Fila RAM (izda) + SD (drcha) */
-    lv_obj_t *row_mem = lv_obj_create(cont);
+    /* Fila RAM + SD */
+    lv_obj_t *row_mem = lv_obj_create(card2);
     lv_obj_remove_style_all(row_mem);
     lv_obj_set_width(row_mem, lv_pct(100));
     lv_obj_set_height(row_mem, LV_SIZE_CONTENT);
@@ -1431,31 +1396,82 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_align(ui->lbl_about_sd, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
-    ui->lbl_about_ip = lv_label_create(cont);
+    ui->lbl_about_ip = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20, 0);
     lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
+
+    /* === Card 3: Credits === */
+    lv_obj_t *card3 = lv_obj_create(cont);
+    lv_obj_set_width(card3, lv_pct(100));
+    lv_obj_set_height(card3, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card3, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_border_width(card3, 1, 0);
+    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_pad_all(card3, 16, 0);
+    lv_obj_set_style_pad_gap(card3, 6, 0);
+    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
+
+    /* Header row: titulo a la izquierda, boton reiniciar a la derecha */
+    lv_obj_t *card3_header = lv_obj_create(card3);
+    lv_obj_remove_style_all(card3_header);
+    lv_obj_set_size(card3_header, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card3_header, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3_header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card3_title = lv_label_create(card3_header);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card3_title, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Version, Repo y Creditos");
+
+    /* Boton Reiniciar pequeno en la esquina */
+    lv_obj_t *btn_reboot_hdr = lv_btn_create(card3_header);
+    lv_obj_set_size(btn_reboot_hdr, 130, 40);
+    lv_obj_set_style_bg_color(btn_reboot_hdr, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_radius(btn_reboot_hdr, 8, 0);
+    lv_obj_t *lbl_reboot_hdr = lv_label_create(btn_reboot_hdr);
+    lv_label_set_text(lbl_reboot_hdr, LV_SYMBOL_POWER "  Reiniciar");
+    lv_obj_set_style_text_font(lbl_reboot_hdr, &lv_font_montserrat_20, 0);
+    lv_obj_center(lbl_reboot_hdr);
+    lv_obj_add_event_cb(btn_reboot_hdr, reboot_btn_cb, LV_EVENT_CLICKED, ui);
+
+    /* Version */
+    lv_obj_t *lbl_ver_top = lv_label_create(card3);
+    lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text_fmt(lbl_ver_top, "Version: %s", APP_VERSION);
 
     /* Chip + IDF */
     esp_chip_info_t chip = {0};
     esp_chip_info(&chip);
-    lv_obj_t *lbl_chip = lv_label_create(cont);
+    lv_obj_t *lbl_chip = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_chip, &lv_font_montserrat_20, 0);
-    lv_label_set_text_fmt(lbl_chip, "Chip: ESP32 model=%d cores=%d rev=%d  |  IDF: %s",
+    lv_obj_set_style_text_color(lbl_chip, lv_color_hex(0xAAAAAA), 0);
+    lv_label_set_text_fmt(lbl_chip, "ESP32 model=%d cores=%d rev=%d  |  IDF: %s",
         chip.model, chip.cores, chip.revision, esp_get_idf_version());
 
-    /* Refrescar ya y crear timer 1s */
+    lv_obj_t *lbl_port = lv_label_create(card3);
+    lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_port, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
+
+    lv_obj_t *lbl_gh = lv_label_create(card3);
+    lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
+
+    lv_obj_t *lbl_cred = lv_label_create(card3);
+    lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
+    lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
+
+    /* Refrescar y crear timer */
     about_refresh_dynamic(ui);
     lv_timer_create(about_timer_cb, 1000, ui);
 
-    /* --- Boton Reboot --- */
-    lv_obj_t *btn_reboot = lv_btn_create(cont);
-    lv_obj_set_size(btn_reboot, lv_pct(60), 60);
-    lv_obj_set_style_bg_color(btn_reboot, lv_color_hex(0xCC3333), 0);
-    lv_obj_t *lbl_reboot = lv_label_create(btn_reboot);
-    lv_label_set_text(lbl_reboot, "Reiniciar");
-    lv_obj_set_style_text_font(lbl_reboot, &lv_font_montserrat_24, 0);
-    lv_obj_center(lbl_reboot);
-    lv_obj_add_event_cb(btn_reboot, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 }
 
 static void portal_page_cb(lv_event_t *e)
