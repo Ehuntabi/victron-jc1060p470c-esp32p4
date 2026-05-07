@@ -1,5 +1,6 @@
 #include "lv_font_thermometer.h"
 #include "ui/frigo_panel.h"
+#include "alerts.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -163,6 +164,29 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
 }
 
 /* ── Init ────────────────────────────────────────────────────── */
+
+/* === Alarma congelador (dropdowns) === */
+static const int s_alarm_min_options[]  = { 15, 30, 45, 60, 90 };
+static const float s_alarm_temp_options[] = { -5.0f, -2.0f, 0.0f, 2.0f };
+
+static void alarm_min_dd_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(s_alarm_min_options)/sizeof(s_alarm_min_options[0])) {
+        alerts_set_freezer_minutes(s_alarm_min_options[sel]);
+    }
+}
+
+static void alarm_temp_dd_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(s_alarm_temp_options)/sizeof(s_alarm_temp_options[0])) {
+        alerts_set_freezer_temp_c(s_alarm_temp_options[sel]);
+    }
+}
+
 void ui_frigo_panel_init(ui_state_t *ui)
 {
     s_ui = ui;
@@ -301,6 +325,67 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(btn_max_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* === Seccion Alarma === */
+    lv_obj_t *sep_alarm = lv_obj_create(tab);
+    lv_obj_remove_style_all(sep_alarm);
+    lv_obj_set_size(sep_alarm, lv_pct(95), 2);
+    lv_obj_set_style_bg_color(sep_alarm, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep_alarm, LV_OPA_COVER, 0);
+
+    lv_obj_t *lbl_alarm_title = lv_label_create(tab);
+    lv_obj_set_style_text_font(lbl_alarm_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(0xFF8866), 0);
+    lv_label_set_text(lbl_alarm_title, "Alarma congelador");
+
+    lv_obj_t *row_alarm = lv_obj_create(tab);
+    lv_obj_remove_style_all(row_alarm);
+    lv_obj_set_size(row_alarm, lv_pct(95), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_alarm, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_alarm, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_alarm, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Col minutos */
+    lv_obj_t *col_min_a = lv_obj_create(row_alarm);
+    lv_obj_remove_style_all(col_min_a);
+    lv_obj_set_layout(col_min_a, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_min_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_min_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_min_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_min_a, 4, 0);
+    lv_obj_t *lbl_min = lv_label_create(col_min_a);
+    lv_obj_add_style(lbl_min, &ui->styles.small, 0);
+    lv_label_set_text(lbl_min, "Tras subir (min)");
+    lv_obj_t *dd_min = lv_dropdown_create(col_min_a);
+    lv_dropdown_set_options(dd_min, "15\n30\n45\n60\n90");
+    int cur_min = alerts_get_freezer_minutes();
+    int idx_min = 1; /* default 30 */
+    for (size_t k = 0; k < sizeof(s_alarm_min_options)/sizeof(s_alarm_min_options[0]); ++k) {
+        if (s_alarm_min_options[k] == cur_min) { idx_min = (int)k; break; }
+    }
+    lv_dropdown_set_selected(dd_min, idx_min);
+    lv_obj_add_event_cb(dd_min, alarm_min_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* Col temp umbral */
+    lv_obj_t *col_t_a = lv_obj_create(row_alarm);
+    lv_obj_remove_style_all(col_t_a);
+    lv_obj_set_layout(col_t_a, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_t_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_t_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_t_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_t_a, 4, 0);
+    lv_obj_t *lbl_t = lv_label_create(col_t_a);
+    lv_obj_add_style(lbl_t, &ui->styles.small, 0);
+    lv_label_set_text(lbl_t, "Si supera");
+    lv_obj_t *dd_t = lv_dropdown_create(col_t_a);
+    lv_dropdown_set_options(dd_t, "-5 \xc2\xb0""C\n-2 \xc2\xb0""C\n0 \xc2\xb0""C\n+2 \xc2\xb0""C");
+    float cur_t = alerts_get_freezer_temp_c();
+    int idx_t = 1; /* default -2 */
+    for (size_t k = 0; k < sizeof(s_alarm_temp_options)/sizeof(s_alarm_temp_options[0]); ++k) {
+        if (s_alarm_temp_options[k] == cur_t) { idx_t = (int)k; break; }
+    }
+    lv_dropdown_set_selected(dd_t, idx_t);
+    lv_obj_add_event_cb(dd_t, alarm_temp_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     /* Overlay Exterior */
     lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());

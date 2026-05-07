@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "victron_ble.h"
 #include "battery_history.h"
+#include "alerts.h"
 #include "victron_products.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
@@ -314,10 +315,37 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     /* Battery history: alimenta el modulo con la corriente del dispositivo */
     switch (d->type) {
-        case VICTRON_BLE_RECORD_BATTERY_MONITOR:
+        case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
             battery_history_update_latest(BH_SRC_BATTERY_MONITOR,
                 d->record.battery.battery_current_milli);
+            /* Deteccion cruce de SoC */
+            uint16_t soc_dp = d->record.battery.soc_deci_percent;
+            if (soc_dp != 0xFFFF) {
+                int soc_pct = soc_dp / 10;
+                int crit_th = alerts_get_soc_critical();
+                int warn_th = alerts_get_soc_warning();
+                static int s_last_soc = -1;
+                static bool s_crit_active = false;
+                static bool s_warn_active = false;
+                if (s_last_soc >= 0) {
+                    /* Cruce a la baja del umbral critico */
+                    if (s_last_soc >= crit_th && soc_pct < crit_th && !s_crit_active) {
+                        s_crit_active = true;
+                        audio_play_jingle(AUDIO_JINGLE_CRITICAL);
+                    }
+                    /* Recuperacion */
+                    if (soc_pct >= crit_th + 2) s_crit_active = false;
+                    /* Cruce a la baja del warning (solo si no ya en critico) */
+                    if (s_last_soc >= warn_th && soc_pct < warn_th && soc_pct >= crit_th && !s_warn_active) {
+                        s_warn_active = true;
+                        audio_play_jingle(AUDIO_JINGLE_WARNING);
+                    }
+                    if (soc_pct >= warn_th + 2) s_warn_active = false;
+                }
+                s_last_soc = soc_pct;
+            }
             break;
+        }
         case VICTRON_BLE_RECORD_SOLAR_CHARGER:
             battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
                 (int32_t)d->record.solar.battery_current_deci * 100);

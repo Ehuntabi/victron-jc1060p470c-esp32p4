@@ -17,6 +17,7 @@
 #include "frigo.h"
 #include "battery_history.h"
 #include "log_cleanup.h"
+#include "alerts.h"
 #include "audio_es8311.h"
 #include "esp_bsp.h"
 #include "rtc_rx8025t.h"
@@ -62,8 +63,8 @@ static void frigo_update_cb(const frigo_state_t *state)
             /* temperatura subiendo */
             if (s_rising_since == 0) s_rising_since = now_ms;
             int64_t rising_ms = now_ms - s_rising_since;
-            bool alarma = (rising_ms >= (int64_t)ALARM_RISE_MINUTES * 60 * 1000)
-                          && (T > ALARM_TEMP_THRESHOLD);
+            bool alarma = (rising_ms >= (int64_t)alerts_get_freezer_minutes() * 60 * 1000)
+                          && (T > alerts_get_freezer_temp_c());
             if (alarma != s_alarm_active) {
                 s_alarm_active = alarma;
                 if (lvgl_port_lock(50)) {
@@ -224,6 +225,7 @@ void app_main(void)
     /* --- BLE Victron --- */
     battery_history_init();
     log_cleanup_init(60); /* Borrar logs > 60 dias */
+    alerts_init();
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();

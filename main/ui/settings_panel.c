@@ -1,6 +1,7 @@
 #include "settings_panel.h"
 #include "ui.h"
 #include "audio_es8311.h"
+#include "alerts.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -60,6 +61,29 @@ static void screensaver_wake(ui_state_t *ui);
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
+
+/* === SoC umbrales (dropdowns) === */
+static const int s_soc_crit_options[] = { 10, 20, 30, 40 };
+static const int s_soc_warn_options[] = { 40, 50, 60, 70 };
+
+static void soc_crit_dd_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(s_soc_crit_options)/sizeof(s_soc_crit_options[0])) {
+        alerts_set_soc_critical(s_soc_crit_options[sel]);
+    }
+}
+
+static void soc_warn_dd_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(s_soc_warn_options)/sizeof(s_soc_warn_options[0])) {
+        alerts_set_soc_warning(s_soc_warn_options[sel]);
+    }
+}
+
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page);
 static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
@@ -1681,6 +1705,65 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(sep, 2);
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
     lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+
+    /* === Umbrales SoC === */
+    lv_obj_t *sep_soc = lv_obj_create(cont);
+    lv_obj_remove_style_all(sep_soc);
+    lv_obj_set_width(sep_soc, lv_pct(100));
+    lv_obj_set_height(sep_soc, 2);
+    lv_obj_set_style_bg_color(sep_soc, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep_soc, LV_OPA_COVER, 0);
+
+    lv_obj_t *lbl_soc_title = lv_label_create(cont);
+    lv_obj_set_style_text_font(lbl_soc_title, &lv_font_montserrat_24, 0);
+    lv_label_set_text(lbl_soc_title, "Umbrales bateria (SoC)");
+
+    lv_obj_t *row_soc = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_soc);
+    lv_obj_set_size(row_soc, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *col_crit = lv_obj_create(row_soc);
+    lv_obj_remove_style_all(col_crit);
+    lv_obj_set_layout(col_crit, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_crit, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_crit, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_crit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_crit, 4, 0);
+    lv_obj_t *lbl_crit = lv_label_create(col_crit);
+    lv_obj_set_style_text_color(lbl_crit, lv_color_hex(0xFF4444), 0);
+    lv_label_set_text(lbl_crit, "Critico");
+    lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
+    lv_dropdown_set_options(dd_crit, "10 %\n20 %\n30 %\n40 %");
+    int cur_crit = alerts_get_soc_critical();
+    int idx_crit = 2;
+    for (size_t k = 0; k < sizeof(s_soc_crit_options)/sizeof(s_soc_crit_options[0]); ++k) {
+        if (s_soc_crit_options[k] == cur_crit) { idx_crit = (int)k; break; }
+    }
+    lv_dropdown_set_selected(dd_crit, idx_crit);
+    lv_obj_add_event_cb(dd_crit, soc_crit_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *col_warn = lv_obj_create(row_soc);
+    lv_obj_remove_style_all(col_warn);
+    lv_obj_set_layout(col_warn, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_warn, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_warn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_warn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_warn, 4, 0);
+    lv_obj_t *lbl_warn = lv_label_create(col_warn);
+    lv_obj_set_style_text_color(lbl_warn, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(lbl_warn, "Aviso");
+    lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
+    lv_dropdown_set_options(dd_warn, "40 %\n50 %\n60 %\n70 %");
+    int cur_warn = alerts_get_soc_warning();
+    int idx_warn = 2;
+    for (size_t k = 0; k < sizeof(s_soc_warn_options)/sizeof(s_soc_warn_options[0]); ++k) {
+        if (s_soc_warn_options[k] == cur_warn) { idx_warn = (int)k; break; }
+    }
+    lv_dropdown_set_selected(dd_warn, idx_warn);
+    lv_obj_add_event_cb(dd_warn, soc_warn_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t *lbl_test = lv_label_create(cont);
     lv_obj_set_style_text_font(lbl_test, &lv_font_montserrat_24, 0);
