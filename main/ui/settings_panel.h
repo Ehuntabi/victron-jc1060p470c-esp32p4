@@ -24,3 +24,4 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui);
 void ui_force_view_update(void);
 
 #endif /* UI_SETTINGS_PANEL_H */
+void ui_settings_screensaver_create_timer(ui_state_t *ui);

@@ -50,3 +50,5 @@ void ui_refresh_victron_device_list(void);
 
 #endif /* UI_H */
 ui_state_t *ui_get_state(void);
+void ui_close_chart_screen(void);
+void ui_close_battery_history_screen(void);

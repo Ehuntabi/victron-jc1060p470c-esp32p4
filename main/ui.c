@@ -185,6 +185,9 @@ void ui_init(void) {
     load_screensaver_settings(&ui->screensaver.enabled,
                               &ui->screensaver.brightness,
                               &ui->screensaver.timeout);
+    load_screensaver_mode(&ui->screensaver.mode, &ui->screensaver.rotate_period_min);
+    ui->screensaver.rotate_index = 0;
+    ui->screensaver.rotate_timer = NULL;
 
 #if LV_USE_THEME_DEFAULT
     lv_theme_default_init(NULL,
@@ -335,6 +338,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_flag(ui->lbl_no_data, LV_OBJ_FLAG_HIDDEN); // Hide by default
 
     ui_settings_panel_init(ui, default_ssid, default_pass, ap_enabled);
+    ui_settings_screensaver_create_timer(ui);
 
     lv_obj_add_event_cb(lv_scr_act(), tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(lv_scr_act(), tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
@@ -963,6 +967,8 @@ static void chart_screen_close_cb(lv_event_t *e)
     s_chart = NULL;
 }
 
+
+
 void ui_show_chart_screen(ui_state_t *ui)
 {
     if (!ui) return;
@@ -1137,6 +1143,22 @@ static void frigo_swipe_cb(lv_event_t *e)
 
 /* --- Pantalla historico bateria --- */
 static lv_obj_t *s_bh_screen = NULL;
+
+/* Cerrar overlays para rotacion del salvapantallas */
+void ui_close_chart_screen(void)
+{
+    if (s_chart) { lv_obj_del(s_chart); s_chart = NULL; }
+}
+
+void ui_close_battery_history_screen(void)
+{
+    if (s_bh_screen) {
+        lv_obj_t *prev = lv_disp_get_scr_prev(NULL);
+        if (prev) lv_scr_load(prev);
+        lv_obj_del(s_bh_screen);
+        s_bh_screen = NULL;
+    }
+}
 static lv_obj_t *s_bh_chart  = NULL;
 
 static lv_obj_t *s_bh_prev_screen = NULL;

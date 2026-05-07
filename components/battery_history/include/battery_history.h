@@ -51,3 +51,4 @@ void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int
 #ifdef __cplusplus
 }
 #endif
+void battery_history_flush(void);

@@ -27,12 +27,21 @@ typedef struct {
     lv_obj_t *password_toggle;
 } ui_wifi_controls_t;
 
+typedef enum {
+    UI_SCREENSAVER_MODE_DIM = 0,    // Atenuar pantalla (modo actual)
+    UI_SCREENSAVER_MODE_ROTATE = 1, // Rotar entre vistas
+} ui_screensaver_mode_t;
+
 typedef struct {
     bool enabled;
     uint8_t brightness;
     uint16_t timeout;
     bool active;
+    uint8_t mode;                   // ui_screensaver_mode_t
+    uint8_t rotate_period_min;      // 1..10 minutos por vista
+    uint8_t rotate_index;           // indice actual de vista al rotar
     lv_timer_t *timer;
+    lv_timer_t *rotate_timer;
     lv_obj_t *checkbox;
     lv_obj_t *slider_brightness;
     lv_obj_t *spinbox_timeout;

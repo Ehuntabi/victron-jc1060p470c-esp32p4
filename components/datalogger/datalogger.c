@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 
+static void flush_pending_to_sd_impl(void);
 static const char *TAG = "DATALOGGER";
 
 #define MOUNT_POINT "/sdcard"
@@ -123,7 +124,13 @@ static void format_temp(char *buf, size_t len, float t)
     else snprintf(buf, len, "%.1f", t);
 }
 
-static void flush_pending_to_sd(void)
+void datalogger_flush(void)
+{
+    flush_pending_to_sd_impl();
+}
+
+static void flush_pending_to_sd_impl(void);
+static void flush_pending_to_sd_impl(void)
 {
     if (!s_sd_mounted || !s_mutex) return;
     if (s_pending_count <= 0) return;
@@ -168,7 +175,7 @@ static void flush_pending_to_sd(void)
 
 static void flush_timer_cb(void *arg)
 {
-    flush_pending_to_sd();
+    flush_pending_to_sd_impl();
 }
 
 esp_err_t datalogger_init(void)

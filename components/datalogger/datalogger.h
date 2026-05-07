@@ -19,3 +19,4 @@ bool datalogger_is_ready(void);
 int datalogger_get_count(void);
 const datalogger_entry_t *datalogger_get_entry(int index);
 char *datalogger_get_csv(void);
+void datalogger_flush(void);

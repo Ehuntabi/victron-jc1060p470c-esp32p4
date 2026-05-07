@@ -14,6 +14,8 @@
 #include "victron_ble.h"
 #include "display.h"
 #include "esp_log.h"
+#include "datalogger.h"
+#include "battery_history.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
@@ -45,6 +47,38 @@ static void about_timer_cb(lv_timer_t *t);
 static void reboot_msgbox_cb(lv_event_t *e);
 static void reboot_btn_cb(lv_event_t *e);
 static void brightness_slider_event_cb(lv_event_t *e);
+static void ss_mode_changed_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui) return;
+    lv_obj_t *dd = lv_event_get_target(e);
+    uint8_t mode = lv_dropdown_get_selected(dd);
+    ui->screensaver.mode = mode;
+    save_screensaver_mode(mode, ui->screensaver.rotate_period_min);
+}
+
+static void ss_period_dec_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui) return;
+    if (ui->screensaver.rotate_period_min > 1) ui->screensaver.rotate_period_min--;
+    save_screensaver_mode(ui->screensaver.mode, ui->screensaver.rotate_period_min);
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if (lbl) lv_label_set_text_fmt(lbl, "%d", ui->screensaver.rotate_period_min);
+}
+
+static void ss_period_inc_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui) return;
+    if (ui->screensaver.rotate_period_min < 10) ui->screensaver.rotate_period_min++;
+    save_screensaver_mode(ui->screensaver.mode, ui->screensaver.rotate_period_min);
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(btn);
+    if (lbl) lv_label_set_text_fmt(lbl, "%d", ui->screensaver.rotate_period_min);
+}
+
 static void cb_screensaver_event_cb(lv_event_t *e);
 static void victron_debug_event_cb(lv_event_t *e);
 static void slider_ss_brightness_event_cb(lv_event_t *e);
@@ -53,6 +87,7 @@ static void spinbox_ss_time_increment_event_cb(lv_event_t *e);
 static void spinbox_ss_time_decrement_event_cb(lv_event_t *e);
 static void screensaver_timer_cb(lv_timer_t *timer);
 static void view_selection_dropdown_event_cb(lv_event_t *e);
+
 static void screensaver_enable(ui_state_t *ui, bool enable);
 static void screensaver_wake(ui_state_t *ui);
 
@@ -99,6 +134,11 @@ static void ap_msgbox_btn_cb(lv_event_t *e)
     lv_obj_t *lbl = lv_obj_get_child(btn, 0);
     const char *txt = lbl ? lv_label_get_text(lbl) : "";
     if (txt && strstr(txt, "Reiniciar")) {
+        /* Flush datos antes de reiniciar */
+        ESP_LOGI("UI", "Flushing data before restart...");
+        datalogger_flush();
+        battery_history_flush();
+        vTaskDelay(pdMS_TO_TICKS(200));
         esp_restart();
     } else {
         /* Cancelar: revertir switch al estado opuesto al guardado */
@@ -577,10 +617,12 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_add_event_cb(btn_dec, spinbox_ss_time_decrement_event_cb, LV_EVENT_ALL, ui);
 
     ui->screensaver.spinbox_timeout = lv_spinbox_create(cont_to);
+    lv_obj_set_style_text_font(ui->screensaver.spinbox_timeout, &lv_font_montserrat_24, 0);
     lv_spinbox_set_range(ui->screensaver.spinbox_timeout, 0, 30);
     lv_spinbox_set_value(ui->screensaver.spinbox_timeout, ui->screensaver.timeout / 60);
-    lv_spinbox_set_digit_format(ui->screensaver.spinbox_timeout, 2, 0);
-    lv_obj_set_width(ui->screensaver.spinbox_timeout, 70);
+    lv_spinbox_set_digit_format(ui->screensaver.spinbox_timeout, 1, 0);
+    lv_obj_set_width(ui->screensaver.spinbox_timeout, 80);
+    lv_obj_set_height(ui->screensaver.spinbox_timeout, 44);
     lv_obj_add_event_cb(ui->screensaver.spinbox_timeout, spinbox_ss_time_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_obj_t *btn_inc = lv_btn_create(cont_to);
@@ -589,6 +631,73 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_label_set_text(lbl_inc, LV_SYMBOL_PLUS);
     lv_obj_center(lbl_inc);
     lv_obj_add_event_cb(btn_inc, spinbox_ss_time_increment_event_cb, LV_EVENT_ALL, ui);
+
+    /* Row UNICA: Modo + Tiempo por vista */
+    lv_obj_t *row_mode = lv_obj_create(card2);
+    lv_obj_remove_style_all(row_mode);
+    lv_obj_set_size(row_mode, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_mode, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_mode, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_mode, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_mode, 12, 0);
+
+    lv_obj_t *lbl_mode = lv_label_create(row_mode);
+    lv_obj_set_style_text_font(lbl_mode, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_mode, "Modo:");
+
+    lv_obj_t *dd_mode = lv_dropdown_create(row_mode);
+    lv_dropdown_set_options(dd_mode, "Atenuar\nRotar vistas");
+    lv_obj_set_width(dd_mode, 200);
+    lv_dropdown_set_selected(dd_mode, ui->screensaver.mode);
+    lv_obj_add_event_cb(dd_mode, ss_mode_changed_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Sub-grupo: label + selector juntos */
+    lv_obj_t *grp_period = lv_obj_create(row_mode);
+    lv_obj_remove_style_all(grp_period);
+    lv_obj_set_size(grp_period, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(grp_period, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(grp_period, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(grp_period, 10, 0);
+    lv_obj_set_flex_align(grp_period, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_period = lv_label_create(grp_period);
+    lv_obj_set_style_text_font(lbl_period, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_period, "Tiempo (min):");
+
+    lv_obj_t *cont_period = lv_obj_create(grp_period);
+    lv_obj_remove_style_all(cont_period);
+    lv_obj_set_size(cont_period, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(cont_period, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont_period, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(cont_period, 8, 0);
+    lv_obj_set_flex_align(cont_period, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_period_dec = lv_btn_create(cont_period);
+    lv_obj_set_size(btn_period_dec, 40, 40);
+    lv_obj_set_style_bg_color(btn_period_dec, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_period_dec, 8, 0);
+    lv_obj_t *lbl_pdec = lv_label_create(btn_period_dec);
+    lv_label_set_text(lbl_pdec, LV_SYMBOL_MINUS);
+    lv_obj_center(lbl_pdec);
+    lv_obj_add_event_cb(btn_period_dec, ss_period_dec_cb, LV_EVENT_CLICKED, ui);
+
+    lv_obj_t *lbl_period_val = lv_label_create(cont_period);
+    lv_obj_set_style_text_font(lbl_period_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_period_val, lv_color_white(), 0);
+    lv_obj_set_width(lbl_period_val, 60);
+    lv_obj_set_style_text_align(lbl_period_val, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text_fmt(lbl_period_val, "%d", ui->screensaver.rotate_period_min);
+    lv_obj_set_user_data(btn_period_dec, lbl_period_val);
+
+    lv_obj_t *btn_period_inc = lv_btn_create(cont_period);
+    lv_obj_set_size(btn_period_inc, 40, 40);
+    lv_obj_set_style_bg_color(btn_period_inc, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_radius(btn_period_inc, 8, 0);
+    lv_obj_t *lbl_pinc = lv_label_create(btn_period_inc);
+    lv_label_set_text(lbl_pinc, LV_SYMBOL_PLUS);
+    lv_obj_center(lbl_pinc);
+    lv_obj_add_event_cb(btn_period_inc, ss_period_inc_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_set_user_data(btn_period_inc, lbl_period_val);
 
     /* === Card 3: Modo de vista === */
     lv_obj_t *card3 = lv_obj_create(cont);
@@ -1384,6 +1493,11 @@ static void ap_checkbox_event_cb(lv_event_t *e)
 static void reboot_btn_event_cb(lv_event_t *e)
 {
     ESP_LOGI(TAG_SETTINGS, "Reboot requested via UI");
+    /* Flush datos antes de reiniciar */
+    ESP_LOGI("UI", "Flushing data before restart...");
+    datalogger_flush();
+    battery_history_flush();
+    vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
 }
 
@@ -1517,6 +1631,18 @@ static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
     }
 }
 
+void ui_settings_screensaver_create_timer(ui_state_t *ui)
+{
+    if (!ui || ui->screensaver.timer) return;
+    /* Crear timer pausado, screensaver_enable lo activara */
+    ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
+                                             ui->screensaver.timeout * 1000U, ui);
+    lv_timer_pause(ui->screensaver.timer);
+    if (ui->screensaver.enabled) {
+        screensaver_enable(ui, true);
+    }
+}
+
 static void screensaver_enable(ui_state_t *ui, bool enable)
 {
     if (ui == NULL || ui->screensaver.timer == NULL) {
@@ -1537,13 +1663,59 @@ static void screensaver_enable(ui_state_t *ui, bool enable)
     }
 }
 
+/* Forward declarations para rotacion */
+extern void ui_show_battery_history_screen(ui_state_t *ui);
+extern void ui_show_chart_screen(ui_state_t *ui);
+
+extern void ui_close_chart_screen(void);
+extern void ui_close_battery_history_screen(void);
+
+static void screensaver_rotate_timer_cb(lv_timer_t *timer)
+{
+    ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : NULL;
+    if (!ui) return;
+    ESP_LOGI("SAVER", "rotate fired idx=%d->%d", ui->screensaver.rotate_index, (ui->screensaver.rotate_index + 1) % 3);
+    /* Cerrar overlays previos */
+    ui_close_chart_screen();
+    ui_close_battery_history_screen();
+    /* 3 vistas: 0=Live, 1=LogFrigo, 2=LogBateria */
+    ui->screensaver.rotate_index = (ui->screensaver.rotate_index + 1) % 3;
+    switch (ui->screensaver.rotate_index) {
+        case 0:
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            break;
+        case 1:
+            ui_show_chart_screen(ui);
+            break;
+        case 2:
+            ui_show_battery_history_screen(ui);
+            break;
+    }
+}
+
 static void screensaver_timer_cb(lv_timer_t *timer)
 {
     ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : NULL;
     if (ui == NULL) {
         return;
     }
-    if (ui->screensaver.enabled && !ui->screensaver.active) {
+    if (!ui->screensaver.enabled || ui->screensaver.active) return;
+
+    ESP_LOGI("SAVER", "timer fired mode=%d period=%d", ui->screensaver.mode, ui->screensaver.rotate_period_min);
+
+    if (ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) {
+        /* Modo rotar: brillo bajo + iniciar rotacion */
+        bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
+        ui->screensaver.active = true;
+        ui->screensaver.rotate_index = 0;
+        /* Crear timer de rotacion si no existe */
+        if (ui->screensaver.rotate_timer) {
+            lv_timer_del(ui->screensaver.rotate_timer);
+        }
+        uint32_t period_ms = (uint32_t)ui->screensaver.rotate_period_min * 60U * 1000U;
+        ui->screensaver.rotate_timer = lv_timer_create(screensaver_rotate_timer_cb, period_ms, ui);
+    } else {
+        /* Modo atenuar (default) */
         bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
         ui->screensaver.active = true;
     }
@@ -1559,6 +1731,11 @@ static void screensaver_wake(ui_state_t *ui)
         if (ui->screensaver.active) {
             bsp_display_brightness_set(ui->brightness);
             ui->screensaver.active = false;
+            /* Parar timer de rotacion si esta activo */
+            if (ui->screensaver.rotate_timer) {
+                lv_timer_del(ui->screensaver.rotate_timer);
+                ui->screensaver.rotate_timer = NULL;
+            }
         }
     }
 }
@@ -2021,6 +2198,11 @@ static void reboot_msgbox_cb(lv_event_t *e)
     if (btn_id == 0) {
         ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
         lv_msgbox_close(mbox);
+        /* Flush datos antes de reiniciar */
+        ESP_LOGI("UI", "Flushing data before restart...");
+        datalogger_flush();
+        battery_history_flush();
+        vTaskDelay(pdMS_TO_TICKS(200));
         esp_restart();
     } else {
         lv_msgbox_close(mbox);

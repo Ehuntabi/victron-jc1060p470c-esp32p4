@@ -10,6 +10,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+static void bh_flush_to_sd_impl(void);
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
 #define BH_LOG_DIR "/sdcard/bateria"
@@ -140,7 +141,13 @@ static void bh_get_day_filename(char *buf, size_t len)
     }
 }
 
-static void bh_flush_to_sd(void)
+void battery_history_flush(void)
+{
+    bh_flush_to_sd_impl();
+}
+
+static void bh_flush_to_sd_impl(void);
+static void bh_flush_to_sd_impl(void)
 {
     /* Comprobar si /sdcard existe (datalogger lo monta) */
     struct stat st;
@@ -227,7 +234,7 @@ static void bh_flush_to_sd(void)
 
 static void bh_flush_timer_cb(void *arg)
 {
-    bh_flush_to_sd();
+    bh_flush_to_sd_impl();
 }
 
 esp_err_t battery_history_init(void)

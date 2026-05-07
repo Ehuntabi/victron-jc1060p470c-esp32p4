@@ -40,6 +40,8 @@ esp_err_t add_victron_device(const uint8_t mac[6], const uint8_t aes_key[16]);
 // Screensaver settings
 esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t *timeout);
 esp_err_t save_screensaver_settings(bool enabled, uint8_t brightness, uint16_t timeout);
+esp_err_t load_screensaver_mode(uint8_t *mode_out, uint8_t *rotate_period_min_out);
+esp_err_t save_screensaver_mode(uint8_t mode, uint8_t rotate_period_min);
 
 // Wi‑Fi AP settings handling (NVS namespace: "wifi")
 // ssid_out and pass_out must have space for ssid_len and pass_len, respectively.

@@ -161,6 +161,35 @@ esp_err_t save_screensaver_settings(bool enabled, uint8_t brightness, uint16_t t
     return err;
 }
 
+esp_err_t load_screensaver_mode(uint8_t *mode_out, uint8_t *rotate_period_min_out) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SCREENSAVER_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    uint8_t mode = 0;          // default: atenuar
+    uint8_t period = 1;        // default: 1 min
+    nvs_get_u8(h, "mode", &mode);
+    nvs_get_u8(h, "rot_period", &period);
+    if (period < 1) period = 1;
+    if (period > 10) period = 10;
+    if (mode_out) *mode_out = mode;
+    if (rotate_period_min_out) *rotate_period_min_out = period;
+    nvs_close(h);
+    return ESP_OK;
+}
+
+esp_err_t save_screensaver_mode(uint8_t mode, uint8_t rotate_period_min) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(SCREENSAVER_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    if (rotate_period_min < 1) rotate_period_min = 1;
+    if (rotate_period_min > 10) rotate_period_min = 10;
+    nvs_set_u8(h, "mode", mode);
+    nvs_set_u8(h, "rot_period", rotate_period_min);
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
 esp_err_t load_relay_config(bool *enabled_out,
                             uint8_t *count_out,
                             uint8_t *pins_out,
