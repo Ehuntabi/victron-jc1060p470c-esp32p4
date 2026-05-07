@@ -64,7 +64,7 @@ static void btn_tmin_plus_cb(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     const frigo_state_t *st = frigo_get_state();
     uint8_t t = st->T_min;
-    if (t + 5 < st->T_max) t += 5;
+    if (t + 5 <= st->T_max) t += 5;
     frigo_set_thresholds(t, st->T_max);
     if (s_lbl_tmin_val) {
         char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);
@@ -76,7 +76,7 @@ static void btn_tmax_minus_cb(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     const frigo_state_t *st = frigo_get_state();
     uint8_t t = st->T_max;
-    if (t - 5 > st->T_min) t -= 5;
+    if (t - 5 >= st->T_min) t -= 5;
     frigo_set_thresholds(st->T_min, t);
     if (s_lbl_tmax_val) {
         char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);

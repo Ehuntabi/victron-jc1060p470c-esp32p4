@@ -1814,12 +1814,30 @@ static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_add_style(cont, &s_settings_btn_style, 0);
     lv_obj_add_style(cont, &s_settings_btn_pressed_style, LV_STATE_PRESSED);
-    /* Forzar ancho ~48% para 2 columnas */
     lv_obj_set_width(cont, lv_pct(48));
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Color por entrada */
+    uint32_t bg = 0x2A4A6A;     /* fondo por defecto */
+    uint32_t border = 0x4FC3F7; /* azul */
+    const char *icon = LV_SYMBOL_LIST;
+    if (strstr(text, "Frigo"))         { bg = 0x004D40; border = 0x00C851; icon = LV_SYMBOL_REFRESH; }
+    else if (strstr(text, "Logs"))     { bg = 0x4A3300; border = 0xFFAA00; icon = LV_SYMBOL_SAVE; }
+    else if (strstr(text, "Wi-Fi"))    { bg = 0x0D3B66; border = 0x4FC3F7; icon = LV_SYMBOL_WIFI; }
+    else if (strstr(text, "Display"))  { bg = 0x2D004D; border = 0xBA68C8; icon = LV_SYMBOL_EYE_OPEN; }
+    else if (strstr(text, "Sonido"))   { bg = 0x4A1A00; border = 0xFF7043; icon = LV_SYMBOL_VOLUME_MAX; }
+    else if (strstr(text, "Victron"))  { bg = 0x4A0033; border = 0xE91E63; icon = LV_SYMBOL_GPS; }
+    else if (strstr(text, "About"))    { bg = 0x1F3A4D; border = 0x90A4AE; icon = LV_SYMBOL_LIST; }
+    lv_obj_set_style_bg_color(cont, lv_color_hex(bg), 0);
+    lv_obj_set_style_border_color(cont, lv_color_hex(border), 0);
+    lv_obj_set_style_border_width(cont, 2, 0);
+
     lv_obj_t *label = lv_label_create(cont);
-    lv_label_set_text(label, text);
+    char full[40];
+    snprintf(full, sizeof(full), "%s  %s", icon, text);
+    lv_label_set_text(label, full);
     lv_obj_add_style(label, &ui->styles.medium, 0);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_menu_set_load_page_event(menu, cont, target_page);
 }
