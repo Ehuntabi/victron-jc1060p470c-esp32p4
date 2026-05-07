@@ -231,7 +231,7 @@ void app_main(void)
             esp_err_t ar = audio_init(i2c_bus);
             if (ar == ESP_OK) {
                 /* Beeps en bucle para diagnostico */
-                audio_beep(1000, 200);
+                audio_play_jingle(AUDIO_JINGLE_BOOT_OK);
             } else {
                 ESP_LOGW(TAG, "audio_init falla: %s", esp_err_to_name(ar));
             }

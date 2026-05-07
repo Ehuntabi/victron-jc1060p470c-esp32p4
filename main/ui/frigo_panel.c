@@ -303,7 +303,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_add_event_cb(btn_max_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* Overlay Exterior */
-    lv_obj_t *overlay_cont = lv_obj_create(lv_scr_act());
+    lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());
     lv_obj_remove_style_all(overlay_cont);
     lv_obj_set_layout(overlay_cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(overlay_cont, LV_FLEX_FLOW_ROW);
@@ -314,7 +314,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(overlay_cont, lv_color_hex(0x000000), 0);
     lv_obj_set_style_radius(overlay_cont, 4, 0);
     lv_obj_set_size(overlay_cont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_align(overlay_cont, LV_ALIGN_BOTTOM_RIGHT, -10, -8);
+/* alineacion gestionada por flex padre */
 
     static lv_font_t font_thermo_with_fallback;
     font_thermo_with_fallback = lv_font_thermometer;

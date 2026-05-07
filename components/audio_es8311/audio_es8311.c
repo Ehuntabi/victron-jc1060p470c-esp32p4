@@ -6,6 +6,9 @@
 #include "freertos/task.h"
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#include <stdbool.h>
 #include <math.h>
 #include <string.h>
 
@@ -25,16 +28,60 @@ static const char *TAG = "audio_es8311";
 static i2s_chan_handle_t          s_tx_chan = NULL;
 static esp_codec_dev_handle_t     s_codec   = NULL;
 
+
+static int  s_volume = 50;     /* 0..100 */
+static bool s_muted  = false;
+
+static void load_audio_prefs(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("audio", NVS_READONLY, &h) == ESP_OK) {
+        int8_t vol = 50; uint8_t mute = 0;
+        nvs_get_i8(h, "vol", &vol);
+        nvs_get_u8(h, "mute", &mute);
+        if (vol < 0) vol = 0;
+        if (vol > 100) vol = 100;
+        s_volume = vol;
+        s_muted  = mute ? true : false;
+        nvs_close(h);
+    }
+}
+
+static void save_audio_prefs(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("audio", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_i8(h, "vol", (int8_t)s_volume);
+        nvs_set_u8(h, "mute", s_muted ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+esp_err_t audio_set_volume(int vol)
+{
+    if (vol < 0) vol = 0;
+    if (vol > 100) vol = 100;
+    s_volume = vol;
+    save_audio_prefs();
+    if (s_codec) esp_codec_dev_set_out_vol(s_codec, vol);
+    return ESP_OK;
+}
+
+int audio_get_volume(void) { return s_volume; }
+
+esp_err_t audio_set_mute(bool mute)
+{
+    s_muted = mute;
+    save_audio_prefs();
+    if (s_codec) esp_codec_dev_set_out_mute(s_codec, mute);
+    return ESP_OK;
+}
+
+bool audio_is_muted(void) { return s_muted; }
+
 esp_err_t audio_init(i2c_master_bus_handle_t bus)
 {
-    /* SCAN I2C */
-    ESP_LOGI(TAG, "Escaneando bus I2C...");
-    for (uint8_t a = 1; a < 128; ++a) {
-        if (i2c_master_probe(bus, a, 50) == ESP_OK) {
-            ESP_LOGI(TAG, "  Dispositivo encontrado en 0x%02X", a);
-        }
-    }
-    ESP_LOGI(TAG, "Fin scan I2C");
 
     /* 1. Configurar I2S TX */
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM, I2S_ROLE_MASTER);
@@ -124,7 +171,9 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
         ESP_LOGE(TAG, "esp_codec_dev_open fallo");
         return ESP_FAIL;
     }
-    esp_codec_dev_set_out_vol(s_codec, 50);    /* 0..100 - moderado */
+    load_audio_prefs();
+    esp_codec_dev_set_out_vol(s_codec, s_volume);
+    if (s_muted) esp_codec_dev_set_out_mute(s_codec, true);
 
     ESP_LOGI(TAG, "Audio inicializado (sr=%d Hz)", SAMPLE_RATE);
     return ESP_OK;
@@ -133,9 +182,9 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
 esp_err_t audio_beep(int freq_hz, int duration_ms)
 {
     if (!s_codec) return ESP_ERR_INVALID_STATE;
+    if (s_muted) return ESP_OK;
     /* Asegurar PA encendido */
     gpio_set_level(PA_CTRL, 1);
-    ESP_LOGI(TAG, "BEEP %d Hz %d ms (PA HIGH)", freq_hz, duration_ms);
     if (freq_hz < 50) freq_hz = 50;
     if (freq_hz > 8000) freq_hz = 8000;
     if (duration_ms < 10) duration_ms = 10;
@@ -186,3 +235,112 @@ esp_err_t audio_beep(int freq_hz, int duration_ms)
     free(buf);
     return ESP_OK;
 }
+
+esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
+{
+    if (!s_codec) return ESP_ERR_INVALID_STATE;
+    if (s_muted) return ESP_OK;
+    if (!notes || count == 0) return ESP_ERR_INVALID_ARG;
+
+    /* Asegurar PA encendido durante toda la secuencia */
+    gpio_set_level(PA_CTRL, 1);
+
+    const int chunk_ms = 50;
+    const size_t samples_per_chunk = (SAMPLE_RATE * chunk_ms) / 1000;
+    size_t buf_bytes = samples_per_chunk * 2 * sizeof(int16_t);
+    int16_t *buf = malloc(buf_bytes);
+    if (!buf) {
+        gpio_set_level(PA_CTRL, 0);
+        return ESP_ERR_NO_MEM;
+    }
+
+    for (size_t n = 0; n < count; ++n) {
+        int freq = notes[n].freq_hz;
+        int dur  = notes[n].duration_ms;
+        if (dur < 5) dur = 5;
+        if (dur > 5000) dur = 5000;
+        int chunks = (dur + chunk_ms - 1) / chunk_ms;
+
+        if (freq == 0) {
+            /* Silencio */
+            memset(buf, 0, buf_bytes);
+            for (int c = 0; c < chunks; ++c) {
+                esp_codec_dev_write(s_codec, buf, buf_bytes);
+            }
+            continue;
+        }
+
+        if (freq < 50) freq = 50;
+        if (freq > 8000) freq = 8000;
+
+        float phase = 0.0f;
+        float step  = 2.0f * (float)M_PI * (float)freq / (float)SAMPLE_RATE;
+        int amp = 2500; /* moderado para evitar brownout */
+
+        for (int c = 0; c < chunks; ++c) {
+            for (size_t i = 0; i < samples_per_chunk; ++i) {
+                int16_t s = (int16_t)(amp * sinf(phase));
+                phase += step;
+                if (phase > 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
+                buf[i*2 + 0] = s;
+                buf[i*2 + 1] = s;
+            }
+            /* Fade-in y fade-out cortos para evitar clicks entre notas */
+            if (c == 0) {
+                for (size_t i = 0; i < samples_per_chunk; ++i) {
+                    float k = (float)i / (float)samples_per_chunk;
+                    buf[i*2 + 0] = (int16_t)(buf[i*2 + 0] * k);
+                    buf[i*2 + 1] = (int16_t)(buf[i*2 + 1] * k);
+                }
+            }
+            if (c == chunks - 1) {
+                for (size_t i = 0; i < samples_per_chunk; ++i) {
+                    float k = 1.0f - (float)i / (float)samples_per_chunk;
+                    buf[i*2 + 0] = (int16_t)(buf[i*2 + 0] * k);
+                    buf[i*2 + 1] = (int16_t)(buf[i*2 + 1] * k);
+                }
+            }
+            esp_codec_dev_write(s_codec, buf, buf_bytes);
+        }
+    }
+
+    /* Silencio final + apagar PA */
+    memset(buf, 0, buf_bytes);
+    for (int i = 0; i < 4; ++i) esp_codec_dev_write(s_codec, buf, buf_bytes);
+    gpio_set_level(PA_CTRL, 0);
+    free(buf);
+    return ESP_OK;
+}
+
+esp_err_t audio_play_jingle(audio_jingle_t j)
+{
+    /* Notas en Hz: C5=523, D5=587, E5=659, G5=784, A5=880, C6=1047, E6=1319, G4=392, C4=261 */
+    switch (j) {
+        case AUDIO_JINGLE_BOOT_OK: {
+            static const audio_note_t notes[] = {
+                {523, 100}, {659, 100}, {784, 100}, {1047, 200},
+            };
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+        }
+        case AUDIO_JINGLE_CRITICAL: {
+            static const audio_note_t notes[] = {
+                {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 300},
+            };
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+        }
+        case AUDIO_JINGLE_WARNING: {
+            static const audio_note_t notes[] = {
+                {784, 120}, {0, 60}, {659, 120},
+            };
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+        }
+        case AUDIO_JINGLE_CONFIRM: {
+            static const audio_note_t notes[] = {
+                {1319, 80},
+            };
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+        }
+    }
+    return ESP_ERR_INVALID_ARG;
+}
+

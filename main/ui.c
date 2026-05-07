@@ -1,5 +1,6 @@
 /* ui.c */
 #include "ui.h"
+#include "audio_es8311.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -55,6 +56,20 @@ static ui_state_t g_ui = {
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
 static void frigo_swipe_cb(lv_event_t *e);
+
+static void volume_icon_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_volume) return;
+    static bool last_muted = false;
+    bool muted = audio_is_muted();
+    if (muted != last_muted) {
+        lv_label_set_text(ui->lbl_volume, muted ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+        lv_obj_set_style_text_color(ui->lbl_volume,
+            muted ? lv_color_hex(0xFF4444) : lv_color_white(), 0);
+        last_muted = muted;
+    }
+}
 static void clock_click_cb(lv_event_t *e);
 static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
 static const char *device_type_name(victron_record_type_t type);
@@ -174,25 +189,48 @@ void ui_init(void) {
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
 
     /* Reloj en barra superior — esquina derecha */
-    ui->lbl_clock = lv_label_create(lv_scr_act());
+    /* Barra inferior unificada: contenedor flex con 4 zonas (reloj | BLE | volumen | temp ext) */
+    ui->bottom_bar = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(ui->bottom_bar);
+    lv_obj_set_size(ui->bottom_bar, lv_pct(100), 50);
+    lv_obj_align(ui->bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_layout(ui->bottom_bar, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ui->bottom_bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(ui->bottom_bar, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(ui->bottom_bar, 4, 0);
+    lv_obj_clear_flag(ui->bottom_bar, LV_OBJ_FLAG_SCROLLABLE);
+    /* Que la barra no intercepte clicks (los recoge lo de abajo) */
+    lv_obj_clear_flag(ui->bottom_bar, LV_OBJ_FLAG_CLICKABLE);
+
+    ui->lbl_clock = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_clock, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(ui->lbl_clock, lv_color_white(), 0);
     lv_label_set_text(ui->lbl_clock, "00:00");
-    lv_obj_align(ui->lbl_clock, LV_ALIGN_BOTTOM_LEFT, 10, -8);
     lv_obj_set_style_bg_opa(ui->lbl_clock, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
     /* Indicador BLE - centro inferior */
-    ui->lbl_ble = lv_label_create(lv_scr_act());
+    ui->lbl_ble = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->lbl_ble, "BLE: --");
-    lv_obj_align(ui->lbl_ble, LV_ALIGN_BOTTOM_MID, 0, -8);
     lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_ble, 4, 0);
     lv_obj_set_style_radius(ui->lbl_ble, 4, 0);
+
+    /* Icono de volumen / mute */
+    ui->lbl_volume = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_volume, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(ui->lbl_volume, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(ui->lbl_volume, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_volume, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_volume, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_volume, 4, 0);
+    /* Texto inicial: depende de mute */
+    lv_label_set_text(ui->lbl_volume, audio_is_muted() ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+    lv_timer_create(volume_icon_timer_cb, 500, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);

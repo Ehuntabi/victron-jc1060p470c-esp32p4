@@ -1,5 +1,6 @@
 #include "settings_panel.h"
 #include "ui.h"
+#include "audio_es8311.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -59,6 +60,7 @@ static void screensaver_wake(ui_state_t *ui);
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
+static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page);
 static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
@@ -754,20 +756,26 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
     lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
+    lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
     lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT");
     
-    /* Padding del main_page del menu */
+    /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
-    lv_obj_set_style_pad_row(main_page, 8, 0);
+    lv_obj_set_style_pad_row(main_page, 12, 0);
+    lv_obj_set_style_pad_column(main_page, 12, 0);
+    lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     settings_menu_add_entry(ui, main_page, menu, page_frigo,   "Frigo");
     settings_menu_add_entry(ui, main_page, menu, page_logs,    "Logs");
     settings_menu_add_entry(ui, main_page, menu, page_wifi,    "Wi-Fi");
     settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
+    settings_menu_add_entry(ui, main_page, menu, page_sound,   "Sonido");
     settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
     settings_menu_add_entry(ui, main_page, menu, page_about,   "About");
 
@@ -777,6 +785,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
     create_logs_settings_page(ui, page_logs);
+    create_sound_settings_page(ui, page_sound);
     create_about_settings_page(ui, page_about);
     ui_frigo_panel_init(ui);
 
@@ -1461,9 +1470,13 @@ static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_add_style(cont, &s_settings_btn_style, 0);
     lv_obj_add_style(cont, &s_settings_btn_pressed_style, LV_STATE_PRESSED);
+    /* Forzar ancho ~48% para 2 columnas */
+    lv_obj_set_width(cont, lv_pct(48));
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *label = lv_label_create(cont);
     lv_label_set_text(label, text);
     lv_obj_add_style(label, &ui->styles.medium, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_menu_set_load_page_event(menu, cont, target_page);
 }
 
@@ -1592,5 +1605,112 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_color(lbl_bat, lv_color_hex(0x000000), 0);
     lv_obj_center(lbl_bat);
     lv_obj_add_event_cb(btn_bat, logs_btn_bat_cb, LV_EVENT_CLICKED, ui);
+}
+
+/* === Pagina Sonido === */
+static void sound_volume_changed_cb(lv_event_t *e)
+{
+    lv_obj_t *slider = lv_event_get_target(e);
+    int v = lv_slider_get_value(slider);
+    /* Redondeo a multiplos de 5 */
+    v = (v / 5) * 5;
+    lv_slider_set_value(slider, v, LV_ANIM_OFF);
+    audio_set_volume(v);
+    lv_obj_t *lbl = (lv_obj_t *)lv_event_get_user_data(e);
+    if (lbl) lv_label_set_text_fmt(lbl, "Volumen: %d%%", v);
+}
+
+static void sound_mute_changed_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool muted = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    audio_set_mute(muted);
+}
+
+static void sound_btn_test_jingle(lv_event_t *e)
+{
+    audio_jingle_t j = (audio_jingle_t)(uintptr_t)lv_event_get_user_data(e);
+    audio_play_jingle(j);
+}
+
+static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
+{
+    (void)ui;
+    lv_obj_t *cont = lv_obj_create(page);
+    lv_obj_set_size(cont, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
+
+    /* Volumen */
+    lv_obj_t *lbl_vol = lv_label_create(cont);
+    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_24, 0);
+    lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
+
+    lv_obj_t *slider = lv_slider_create(cont);
+    lv_obj_set_width(slider, lv_pct(95));
+    lv_obj_set_height(slider, 30);
+    lv_slider_set_range(slider, 0, 100);
+    lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
+    lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
+
+    /* Mute */
+    lv_obj_t *row_mute = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_mute);
+    lv_obj_set_size(row_mute, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_mute, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_mute, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_mute, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row_mute, 16, 0);
+
+    lv_obj_t *lbl_mute = lv_label_create(row_mute);
+    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_24, 0);
+    lv_label_set_text(lbl_mute, "Silenciar avisos");
+
+    lv_obj_t *sw = lv_switch_create(row_mute);
+    if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* Separador */
+    lv_obj_t *sep = lv_obj_create(cont);
+    lv_obj_remove_style_all(sep);
+    lv_obj_set_width(sep, lv_pct(100));
+    lv_obj_set_height(sep, 2);
+    lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+
+    lv_obj_t *lbl_test = lv_label_create(cont);
+    lv_obj_set_style_text_font(lbl_test, &lv_font_montserrat_24, 0);
+    lv_label_set_text(lbl_test, "Probar avisos:");
+
+    /* Grid 2x2 con los 4 jingles */
+    lv_obj_t *grid = lv_obj_create(cont);
+    lv_obj_remove_style_all(grid);
+    lv_obj_set_size(grid, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_gap(grid, 12, 0);
+
+    struct { const char *txt; uint32_t color; audio_jingle_t j; } jingles[] = {
+        {"Inicio (OK)",   0x00C851, AUDIO_JINGLE_BOOT_OK},
+        {"Critico",      0xCC3333, AUDIO_JINGLE_CRITICAL},
+        {"Aviso",         0xFF9800, AUDIO_JINGLE_WARNING},
+        {"Confirm.",      0x4FC3F7, AUDIO_JINGLE_CONFIRM},
+    };
+    for (int i = 0; i < 4; ++i) {
+        lv_obj_t *btn = lv_btn_create(grid);
+        lv_obj_set_size(btn, lv_pct(48), 70);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(jingles[i].color), 0);
+        lv_obj_set_style_radius(btn, 8, 0);
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, jingles[i].txt);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn, sound_btn_test_jingle, LV_EVENT_CLICKED,
+                            (void*)(uintptr_t)jingles[i].j);
+    }
 }
 
