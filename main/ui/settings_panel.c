@@ -217,98 +217,206 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 {
-    /* Root container for display settings */
-    lv_obj_t *disp_container = lv_obj_create(page_display);
-    lv_obj_remove_style_all(disp_container);
-    lv_obj_set_size(disp_container, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(disp_container, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(disp_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(disp_container, 10, 0);
-    lv_obj_set_style_pad_gap(disp_container, 14, 0);
-    lv_obj_set_scroll_dir(disp_container, LV_DIR_VER);
+    /* Root container */
+    lv_obj_t *cont = lv_obj_create(page_display);
+    lv_obj_set_width(cont, lv_pct(100));
+    lv_obj_set_height(cont, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
 
-    /* --- Brightness --- */
-    lv_obj_t *lbl_brightness = lv_label_create(disp_container);
-    lv_obj_add_style(lbl_brightness, &ui->styles.small, 0);
-    lv_label_set_text(lbl_brightness, "Brightness:");
+    /* === Card 1: Brillo === */
+    lv_obj_t *card1 = lv_obj_create(cont);
+    lv_obj_set_width(card1, lv_pct(100));
+    lv_obj_set_height(card1, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card1, 1, 0);
+    lv_obj_set_style_radius(card1, 12, 0);
+    lv_obj_set_style_pad_all(card1, 16, 0);
+    lv_obj_set_style_pad_gap(card1, 12, 0);
+    lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *slider_brightness = lv_slider_create(disp_container);
-    lv_obj_set_width(slider_brightness, lv_pct(50));
+    /* Row: titulo a la izquierda, slider a la derecha */
+    lv_obj_t *card1_row = lv_obj_create(card1);
+    lv_obj_remove_style_all(card1_row);
+    lv_obj_set_size(card1_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card1_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card1_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card1_title = lv_label_create(card1_row);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
+
+    /* Sub-row: valor + slider */
+    lv_obj_t *card1_sub = lv_obj_create(card1_row);
+    lv_obj_remove_style_all(card1_sub);
+    lv_obj_set_size(card1_sub, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(card1_sub, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card1_sub, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card1_sub, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_left(card1_sub, 16, 0);
+    lv_obj_set_style_pad_right(card1_sub, 16, 0);
+    lv_obj_set_style_pad_gap(card1_sub, 10, 0);
+
+    lv_obj_t *lbl_val_b = lv_label_create(card1_sub);
+    lv_obj_set_style_text_font(lbl_val_b, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_val_b, lv_color_white(), 0);
+    lv_obj_set_width(lbl_val_b, 70);
+    lv_obj_set_style_text_align(lbl_val_b, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(lbl_val_b, "%d%%", ui->brightness);
+
+    lv_obj_t *slider_brightness = lv_slider_create(card1_sub);
+    lv_obj_set_width(slider_brightness, 165);
+    lv_obj_set_height(slider_brightness, 26);
+    lv_obj_set_style_pad_right(card1_sub, 12, 0);
+    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_KNOB);
     lv_slider_set_range(slider_brightness, 1, 100);
     lv_slider_set_value(slider_brightness, ui->brightness, LV_ANIM_OFF);
     bsp_display_brightness_set(ui->brightness);
+    /* Helper: tag el label como user data secundaria via custom property */
+    lv_obj_set_user_data(slider_brightness, lbl_val_b);
     lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-    lv_obj_add_style(slider_brightness, &ui->styles.medium, 0);
 
-    /* --- Screensaver enable --- */
-    ui->screensaver.checkbox = lv_checkbox_create(disp_container);
-    lv_checkbox_set_text(ui->screensaver.checkbox, "Enable Screensaver");
-    if (ui->screensaver.enabled) {
-        lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
-    }
+    /* === Card 2: Screensaver === */
+    lv_obj_t *card2 = lv_obj_create(cont);
+    lv_obj_set_width(card2, lv_pct(100));
+    lv_obj_set_height(card2, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_width(card2, 1, 0);
+    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_pad_all(card2, 16, 0);
+    lv_obj_set_style_pad_gap(card2, 12, 0);
+    lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *card2_title = lv_label_create(card2);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
+
+    /* Row: Activar checkbox + Tiempo spinbox en la misma linea */
+    lv_obj_t *row_enable_to = lv_obj_create(card2);
+    lv_obj_remove_style_all(row_enable_to);
+    lv_obj_set_size(row_enable_to, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_enable_to, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_enable_to, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_enable_to, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Enable */
+    ui->screensaver.checkbox = lv_checkbox_create(row_enable_to);
+    lv_checkbox_set_text(ui->screensaver.checkbox, "Activar");
+    lv_obj_set_style_text_font(ui->screensaver.checkbox, &lv_font_montserrat_20, 0);
+    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
     lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-    lv_obj_add_style(ui->screensaver.checkbox, &ui->styles.medium, 0);
 
-    /* --- Screensaver brightness --- */
-    lv_obj_t *lbl_ss_brightness = lv_label_create(disp_container);
-    lv_obj_add_style(lbl_ss_brightness, &ui->styles.small, 0);
-    lv_label_set_text(lbl_ss_brightness, "Screensaver Brightness:");
+    /* Tiempo (min): label + [-][spin][+] */
+    lv_obj_t *cont_to = lv_obj_create(row_enable_to);
+    lv_obj_remove_style_all(cont_to);
+    lv_obj_set_size(cont_to, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(cont_to, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont_to, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(cont_to, 8, 0);
+    lv_obj_set_flex_align(cont_to, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    ui->screensaver.slider_brightness = lv_slider_create(disp_container);
-    lv_obj_set_width(ui->screensaver.slider_brightness, lv_pct(50));
-    lv_slider_set_range(ui->screensaver.slider_brightness, 0, 100);
+    lv_obj_t *lbl_to_inline = lv_label_create(cont_to);
+    lv_obj_set_style_text_font(lbl_to_inline, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_to_inline, "Tiempo (min):");
+
+    /* Brillo SS - en row */
+    lv_obj_t *row_ss_b = lv_obj_create(card2);
+    lv_obj_remove_style_all(row_ss_b);
+    lv_obj_set_size(row_ss_b, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_ss_b, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_ss_b, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_ss_b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_ss_b, 16, 0);
+
+    lv_obj_t *lbl_ss = lv_label_create(row_ss_b);
+    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_ss, "Brillo en reposo:");
+
+    lv_obj_t *lbl_val_ss = lv_label_create(row_ss_b);
+    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
+    lv_obj_set_width(lbl_val_ss, 70);
+    lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(lbl_val_ss, "%d%%", ui->screensaver.brightness);
+
+    ui->screensaver.slider_brightness = lv_slider_create(row_ss_b);
+
+    lv_obj_set_height(ui->screensaver.slider_brightness, 26);
+    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, lv_color_hex(0xFF9800), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(ui->screensaver.slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, lv_color_hex(0xFF9800), LV_PART_KNOB);
+    lv_slider_set_range(ui->screensaver.slider_brightness, 0, ui->brightness);
+    if (ui->screensaver.brightness > ui->brightness) ui->screensaver.brightness = ui->brightness;
     lv_slider_set_value(ui->screensaver.slider_brightness, ui->screensaver.brightness, LV_ANIM_OFF);
+    lv_obj_set_user_data(ui->screensaver.slider_brightness, lbl_val_ss);
     lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-    lv_obj_add_style(ui->screensaver.slider_brightness, &ui->styles.medium, 0);
 
-    /* --- Screensaver timeout section --- */
-    lv_obj_t *lbl_ss_time = lv_label_create(disp_container);
-    lv_obj_add_style(lbl_ss_time, &ui->styles.small, 0);
-    lv_label_set_text(lbl_ss_time, "Screen Timeout (min, 0=off):");
-
-    /* Row container for spinbox + buttons */
-    lv_obj_t *timeout_row = lv_obj_create(disp_container);
-    lv_obj_remove_style_all(timeout_row);
-    lv_obj_set_width(timeout_row, lv_pct(100));
-    lv_obj_set_height(timeout_row, LV_SIZE_CONTENT);
-    lv_obj_set_layout(timeout_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(timeout_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(timeout_row, 10, 0);
-    lv_obj_set_flex_align(timeout_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    /* Decrement button */
-    lv_obj_t *btn_dec = lv_btn_create(timeout_row);
+    /* +/- y spinbox dentro de cont_to (ya creado arriba) */
+    lv_obj_t *btn_dec = lv_btn_create(cont_to);
     lv_obj_set_size(btn_dec, 40, 40);
     lv_obj_t *lbl_dec = lv_label_create(btn_dec);
     lv_label_set_text(lbl_dec, LV_SYMBOL_MINUS);
     lv_obj_center(lbl_dec);
     lv_obj_add_event_cb(btn_dec, spinbox_ss_time_decrement_event_cb, LV_EVENT_ALL, ui);
 
-    /* Timeout spinbox */
-    ui->screensaver.spinbox_timeout = lv_spinbox_create(timeout_row);
+    ui->screensaver.spinbox_timeout = lv_spinbox_create(cont_to);
     lv_spinbox_set_range(ui->screensaver.spinbox_timeout, 0, 30);
     lv_spinbox_set_value(ui->screensaver.spinbox_timeout, ui->screensaver.timeout / 60);
     lv_spinbox_set_digit_format(ui->screensaver.spinbox_timeout, 2, 0);
-    lv_obj_set_width(ui->screensaver.spinbox_timeout, 80);
+    lv_obj_set_width(ui->screensaver.spinbox_timeout, 70);
     lv_obj_add_event_cb(ui->screensaver.spinbox_timeout, spinbox_ss_time_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-    lv_obj_add_style(ui->screensaver.spinbox_timeout, &ui->styles.small, 0);
 
-    /* Increment button */
-    lv_obj_t *btn_inc = lv_btn_create(timeout_row);
+    lv_obj_t *btn_inc = lv_btn_create(cont_to);
     lv_obj_set_size(btn_inc, 40, 40);
     lv_obj_t *lbl_inc = lv_label_create(btn_inc);
     lv_label_set_text(lbl_inc, LV_SYMBOL_PLUS);
     lv_obj_center(lbl_inc);
     lv_obj_add_event_cb(btn_inc, spinbox_ss_time_increment_event_cb, LV_EVENT_ALL, ui);
 
-    /* --- UI View Selection --- */
-    lv_obj_t *lbl_view_mode = lv_label_create(disp_container);
-    lv_obj_add_style(lbl_view_mode, &ui->styles.small, 0);
-    lv_label_set_text(lbl_view_mode, "Live Display Mode:");
+    /* === Card 3: Modo de vista === */
+    lv_obj_t *card3 = lv_obj_create(cont);
+    lv_obj_set_width(card3, lv_pct(100));
+    lv_obj_set_height(card3, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card3, 1, 0);
+    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_pad_all(card3, 16, 0);
+    lv_obj_set_style_pad_gap(card3, 12, 0);
+    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
-    ui->view_selection.dropdown = lv_dropdown_create(disp_container);
-    lv_obj_set_width(ui->view_selection.dropdown, lv_pct(70));
-    lv_dropdown_set_options(ui->view_selection.dropdown, 
+    lv_obj_t *card3_row = lv_obj_create(card3);
+    lv_obj_remove_style_all(card3_row);
+    lv_obj_set_size(card3_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card3_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card3_title = lv_label_create(card3_row);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
+
+    ui->view_selection.dropdown = lv_dropdown_create(card3_row);
+    lv_obj_set_width(ui->view_selection.dropdown, 280);
+    lv_dropdown_set_options(ui->view_selection.dropdown,
         "Auto Detection\n"
         "Default Battery View\n"
         "Solar Charger View\n"
@@ -316,29 +424,14 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         "Inverter View\n"
         "DC/DC Converter View"
     );
-    
-    /* Load saved view mode */
-    uint8_t saved_mode = 1; // Default to UI_VIEW_MODE_DEFAULT_BATTERY
+    uint8_t saved_mode = 1;
     if (load_ui_view_mode(&saved_mode) == ESP_OK) {
         ui->view_selection.mode = (ui_view_mode_t)saved_mode;
     } else {
         ui->view_selection.mode = UI_VIEW_MODE_DEFAULT_BATTERY;
     }
     lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
-    
     lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-    lv_obj_add_style(ui->view_selection.dropdown, &ui->styles.small, 0);
-
-    /* --- Timer setup --- */
-    ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
-                                            ui->screensaver.timeout * 1000,  /* timeout en segundos */
-                                            ui);
-    if (ui->screensaver.enabled) {
-        lv_timer_reset(ui->screensaver.timer);
-        lv_timer_resume(ui->screensaver.timer);
-    } else {
-        lv_timer_pause(ui->screensaver.timer);
-    }
 }
 
 
@@ -985,10 +1078,14 @@ static void brightness_slider_event_cb(lv_event_t *e)
     if (ui == NULL) {
         return;
     }
-    int val = lv_slider_get_value(lv_event_get_target(e));
+    lv_obj_t *slider = lv_event_get_target(e);
+    int val = lv_slider_get_value(slider);
     ui->brightness = (uint8_t)val;
     bsp_display_brightness_set(val);
     save_brightness(ui->brightness);
+    /* Update label */
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(slider);
+    if (lbl) lv_label_set_text_fmt(lbl, "%d%%", val);
     ESP_LOGI(TAG_SETTINGS, "Brightness set to %d", val);
     /* Ajustar máximo del slider screensaver al nuevo brightness */
     if (ui->screensaver.slider_brightness != NULL) {
@@ -1037,10 +1134,13 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
     if (ui == NULL || ui->screensaver.slider_brightness == NULL) {
         return;
     }
-    ui->screensaver.brightness = lv_slider_get_value(ui->screensaver.slider_brightness);
+    int v = lv_slider_get_value(ui->screensaver.slider_brightness);
+    ui->screensaver.brightness = v;
     save_screensaver_settings(ui->screensaver.enabled,
                               ui->screensaver.brightness,
                               ui->screensaver.timeout);
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(ui->screensaver.slider_brightness);
+    if (lbl) lv_label_set_text_fmt(lbl, "%d%%", v);
     if (ui->screensaver.active) {
         bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
     }
