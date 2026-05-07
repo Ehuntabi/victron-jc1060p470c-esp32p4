@@ -252,78 +252,89 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_width(row_t, lv_pct(100));
     lv_obj_set_height(row_t, LV_SIZE_CONTENT);
     lv_obj_set_layout(row_t, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_t, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_t, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_flow(row_t, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(row_t, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_t, 12, 0);
 
-    /* T_Min */
+    /* T_Min - layout horizontal compacto */
     lv_obj_t *col_min = lv_obj_create(row_t);
     lv_obj_remove_style_all(col_min);
-    lv_obj_set_style_bg_opa(col_min, LV_OPA_TRANSP, 0);
     lv_obj_set_layout(col_min, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_min, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_min, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(col_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col_min, 4, 0);
-    lv_obj_set_size(col_min, LV_SIZE_CONTENT, 100);
+    lv_obj_set_style_pad_gap(col_min, 8, 0);
+    lv_obj_set_size(col_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
     lv_obj_t *lbl_tmin = lv_label_create(col_min);
-    lv_obj_add_style(lbl_tmin, &ui->styles.small, 0);
-    lv_label_set_text(lbl_tmin, "T_Minima");
-    lv_obj_t *row_min = lv_obj_create(col_min);
-    lv_obj_remove_style_all(row_min);
-    lv_obj_set_style_bg_opa(row_min, LV_OPA_TRANSP, 0);
-    lv_obj_set_layout(row_min, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_min, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_min, 6, 0);
-    lv_obj_set_size(row_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_t *btn_min_m = lv_btn_create(row_min);
-    lv_obj_set_size(btn_min_m, 40, 40);
+    lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(lbl_tmin, "Min:");
+
+    lv_obj_t *btn_min_m = lv_btn_create(col_min);
+    lv_obj_set_size(btn_min_m, 44, 44);
+    lv_obj_set_style_radius(btn_min_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_min_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_mm = lv_label_create(btn_min_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_mm);
     lv_obj_add_event_cb(btn_min_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
-    s_lbl_tmin_val = lv_label_create(row_min);
-    lv_obj_add_style(s_lbl_tmin_val, &ui->styles.small, 0);
-    { char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_min); lv_label_set_text(s_lbl_tmin_val, buf); }
-    lv_obj_t *btn_min_p = lv_btn_create(row_min);
-    lv_obj_set_size(btn_min_p, 40, 40);
+
+    s_lbl_tmin_val = lv_label_create(col_min);
+    lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(s_lbl_tmin_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_tmin_val, 80);
+    lv_obj_set_style_text_align(s_lbl_tmin_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_min); lv_label_set_text(s_lbl_tmin_val, buf); }
+
+    lv_obj_t *btn_min_p = lv_btn_create(col_min);
+    lv_obj_set_size(btn_min_p, 44, 44);
+    lv_obj_set_style_radius(btn_min_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_min_p, lv_color_hex(0x4FC3F7), 0);
     lv_obj_t *lbl_mp = lv_label_create(btn_min_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_mp);
     lv_obj_add_event_cb(btn_min_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
-    /* T_Max */
+    /* T_Max - layout horizontal compacto */
     lv_obj_t *col_max = lv_obj_create(row_t);
     lv_obj_remove_style_all(col_max);
-    lv_obj_set_style_bg_opa(col_max, LV_OPA_TRANSP, 0);
     lv_obj_set_layout(col_max, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_max, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_max, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(col_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col_max, 4, 0);
-    lv_obj_set_size(col_max, LV_SIZE_CONTENT, 100);
+    lv_obj_set_style_pad_gap(col_max, 8, 0);
+    lv_obj_set_size(col_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
     lv_obj_t *lbl_tmax = lv_label_create(col_max);
-    lv_obj_add_style(lbl_tmax, &ui->styles.small, 0);
-    lv_label_set_text(lbl_tmax, "T_Maxima");
-    lv_obj_t *row_max = lv_obj_create(col_max);
-    lv_obj_remove_style_all(row_max);
-    lv_obj_set_style_bg_opa(row_max, LV_OPA_TRANSP, 0);
-    lv_obj_set_layout(row_max, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_max, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_max, 6, 0);
-    lv_obj_set_size(row_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_t *btn_max_m = lv_btn_create(row_max);
-    lv_obj_set_size(btn_max_m, 40, 40);
+    lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(lbl_tmax, "Max:");
+
+    lv_obj_t *btn_max_m = lv_btn_create(col_max);
+    lv_obj_set_size(btn_max_m, 44, 44);
+    lv_obj_set_style_radius(btn_max_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_max_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_xm = lv_label_create(btn_max_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_xm);
     lv_obj_add_event_cb(btn_max_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
-    s_lbl_tmax_val = lv_label_create(row_max);
-    lv_obj_add_style(s_lbl_tmax_val, &ui->styles.small, 0);
-    { char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_max); lv_label_set_text(s_lbl_tmax_val, buf); }
-    lv_obj_t *btn_max_p = lv_btn_create(row_max);
-    lv_obj_set_size(btn_max_p, 40, 40);
+
+    s_lbl_tmax_val = lv_label_create(col_max);
+    lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(s_lbl_tmax_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_tmax_val, 80);
+    lv_obj_set_style_text_align(s_lbl_tmax_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_max); lv_label_set_text(s_lbl_tmax_val, buf); }
+
+    lv_obj_t *btn_max_p = lv_btn_create(col_max);
+    lv_obj_set_size(btn_max_p, 44, 44);
+    lv_obj_set_style_radius(btn_max_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_max_p, lv_color_hex(0xFFAA00), 0);
     lv_obj_t *lbl_xp = lv_label_create(btn_max_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(btn_max_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 
