@@ -104,7 +104,7 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_style_border_width(view->main_container, 0, 0);
     lv_obj_set_style_outline_width(view->main_container, 0, 0);
     lv_obj_set_style_pad_top(view->main_container, 10, 0);    // Minimal padding to account for menu
-    lv_obj_set_style_pad_bottom(view->main_container, 10, 0);
+    lv_obj_set_style_pad_bottom(view->main_container, 60, 0);
     lv_obj_set_style_pad_left(view->main_container, 10, 0);
     lv_obj_set_style_pad_right(view->main_container, 10, 0);
     lv_obj_clear_flag(view->main_container, LV_OBJ_FLAG_SCROLLABLE);
@@ -113,7 +113,8 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
 
     // Create horizontal row container for the three columns
     view->metrics_row = lv_obj_create(view->main_container);
-    lv_obj_set_size(view->metrics_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_size(view->metrics_row, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_pad_bottom(view->metrics_row, 60, 0);
     lv_obj_set_style_bg_opa(view->metrics_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(view->metrics_row, 0, 0);
     lv_obj_set_style_outline_width(view->metrics_row, 0, 0);
@@ -122,35 +123,44 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_flex_flow(view->metrics_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(view->metrics_row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Create left column (DC/DC metrics)
+    // Create left column (DC/DC metrics) - card style
     view->left_column = lv_obj_create(view->metrics_row);
-    lv_obj_set_size(view->left_column, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(view->left_column, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(view->left_column, 0, 0);
+    lv_obj_set_size(view->left_column, lv_pct(32), lv_pct(100));
+    lv_obj_set_style_bg_color(view->left_column, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(view->left_column, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(view->left_column, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(view->left_column, 1, 0);
+    lv_obj_set_style_radius(view->left_column, 12, 0);
     lv_obj_set_style_outline_width(view->left_column, 0, 0);
-    lv_obj_set_style_pad_all(view->left_column, 20, 0);
+    lv_obj_set_style_pad_all(view->left_column, 16, 0);
     lv_obj_clear_flag(view->left_column, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(view->left_column, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(view->left_column, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Create center column (SOC arc and battery info)
+    // Create center column (SOC arc and battery info) - card style
     view->center_column = lv_obj_create(view->metrics_row);
-    lv_obj_set_size(view->center_column, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(view->center_column, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(view->center_column, 0, 0);
+    lv_obj_set_size(view->center_column, lv_pct(32), lv_pct(100));
+    lv_obj_set_style_bg_color(view->center_column, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(view->center_column, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(view->center_column, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_width(view->center_column, 1, 0);
+    lv_obj_set_style_radius(view->center_column, 12, 0);
     lv_obj_set_style_outline_width(view->center_column, 0, 0);
-    lv_obj_set_style_pad_all(view->center_column, 20, 0);
+    lv_obj_set_style_pad_all(view->center_column, 16, 0);
     lv_obj_clear_flag(view->center_column, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(view->center_column, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(view->center_column, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Create right column (Solar metrics)
+    // Create right column (Solar metrics) - card style
     view->right_column = lv_obj_create(view->metrics_row);
-    lv_obj_set_size(view->right_column, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(view->right_column, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(view->right_column, 0, 0);
+    lv_obj_set_size(view->right_column, lv_pct(32), lv_pct(100));
+    lv_obj_set_style_bg_color(view->right_column, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(view->right_column, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(view->right_column, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(view->right_column, 1, 0);
+    lv_obj_set_style_radius(view->right_column, 12, 0);
     lv_obj_set_style_outline_width(view->right_column, 0, 0);
-    lv_obj_set_style_pad_all(view->right_column, 20, 0);
+    lv_obj_set_style_pad_all(view->right_column, 16, 0);
     lv_obj_clear_flag(view->right_column, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(view->right_column, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(view->right_column, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
