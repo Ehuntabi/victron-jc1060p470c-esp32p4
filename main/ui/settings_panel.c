@@ -245,6 +245,7 @@ static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_add
 
 
 /* --- Estilo botones del menu Settings --- */
+static lv_obj_t *s_settings_menu = NULL;
 static lv_style_t s_settings_btn_style;
 static lv_style_t s_settings_btn_pressed_style;
 static bool s_settings_styles_inited = false;
@@ -636,8 +637,114 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 }
 
 
+static void victron_keys_show_warning(ui_state_t *ui);
+static void victron_warning_btn_cb(lv_event_t *e);
+static void victron_keys_clicked_cb(lv_event_t *e);
+static void victron_keys_clicked_cb(lv_event_t *e)
+{
+    ui_state_t *u = (ui_state_t *)lv_event_get_user_data(e);
+    victron_keys_show_warning(u);
+}
+
+
+static lv_obj_t *s_victron_warning = NULL;
+
+static void victron_keys_show_warning(ui_state_t *ui)
+{
+    (void)ui;
+    if (s_victron_warning) return;
+    /* Modal background */
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_victron_warning = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_label_set_text(title, LV_SYMBOL_WARNING "  Atencion");
+
+    lv_obj_t *msg = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, lv_pct(100));
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg, "Los cambios en esta seccion pueden afectar al funcionamiento del sistema. Procede con cuidado.");
+
+    lv_obj_t *row_btns = lv_obj_create(dlg);
+    lv_obj_remove_style_all(row_btns);
+    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_cancel = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_cancel, 220, 60);
+    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_cancel, 12, 0);
+    lv_obj_t *lc = lv_label_create(btn_cancel);
+    lv_label_set_text(lc, "Cancelar");
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24, 0);
+    lv_obj_center(lc);
+    lv_obj_add_event_cb(btn_cancel, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_ok = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_ok, 220, 60);
+    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_radius(btn_ok, 12, 0);
+    lv_obj_t *lo = lv_label_create(btn_ok);
+    lv_label_set_text(lo, "Continuar");
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24, 0);
+    lv_obj_center(lo);
+    lv_obj_add_event_cb(btn_ok, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void victron_warning_btn_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
+    const char *txt = lbl ? lv_label_get_text(lbl) : "";
+    if (txt && strcmp(txt, "Cancelar") == 0) {
+        /* Cerrar el msgbox y volver al menu principal */
+        if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
+        /* Volver al menu */
+        if (s_settings_menu) lv_menu_set_page(s_settings_menu, NULL);
+    } else {
+        if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
+    }
+}
+
+/* Callback en el boton del menu principal para mostrar warning antes */
+static void victron_menu_clicked_cb(lv_event_t *e)
+{
+    (void)e;
+    extern void victron_keys_show_warning(ui_state_t *ui);
+    /* Diferimos para que el menu cargue primero */
+}
+
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
 {
+    /* Asignar evento al lv_obj para detectar cuando se carga */
+    lv_obj_add_event_cb(page_victron, (lv_event_cb_t)NULL, LV_EVENT_SCREEN_LOADED, NULL);
     /* Root container for Victron keys settings */
     lv_obj_t *victron_container = lv_obj_create(page_victron);
     lv_obj_remove_style_all(victron_container);
@@ -1098,6 +1205,13 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
     settings_menu_add_entry(ui, main_page, menu, page_sound,   "Sonido y avisos");
     settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
+    /* Mostrar warning al entrar en Victron Keys */
+    {
+        lv_obj_t *cont_vk = lv_obj_get_child(main_page, lv_obj_get_child_cnt(main_page) - 1);
+        if (cont_vk) {
+            lv_obj_add_event_cb(cont_vk, victron_keys_clicked_cb, LV_EVENT_CLICKED, ui);
+        }
+    }
     settings_menu_add_entry(ui, main_page, menu, page_about,   "About");
 
   
