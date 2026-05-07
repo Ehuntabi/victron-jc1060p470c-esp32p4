@@ -181,11 +181,25 @@ void ui_init(void) {
     ui->tabview   = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 60);
     lv_obj_add_flag(ui->tabview, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_clear_flag(ui->tabview, LV_OBJ_FLAG_SCROLLABLE);
-    /* Fuente grande para los tabs */
+    /* Estilo de los tabs: fondo oscuro, fuente grande, indicador azul */
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28, 0);
-    ui->tab_live  = lv_tabview_add_tab(ui->tabview, "Live");
-    ui->tab_settings = lv_tabview_add_tab(ui->tabview, "Settings");
+    /* Fondo de la barra de tabs */
+    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x121212), 0);
+    lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, 0);
+    /* Color de texto en estado normal: gris claro */
+    lv_obj_set_style_text_color(tab_btns, lv_color_hex(0xBBBBBB), 0);
+    /* Color de texto en estado activo: blanco */
+    lv_obj_set_style_text_color(tab_btns, lv_color_white(), LV_PART_ITEMS | LV_STATE_CHECKED);
+    /* Indicador (linea bajo el activo) en azul */
+    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_height(tab_btns, 4, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(tab_btns, 2, LV_PART_INDICATOR);
+    /* Quitar borde inferior por defecto del tabview */
+    lv_obj_set_style_border_width(tab_btns, 0, 0);
+    ui->tab_live  = lv_tabview_add_tab(ui->tabview, LV_SYMBOL_HOME "  Live");
+    ui->tab_settings = lv_tabview_add_tab(ui->tabview, LV_SYMBOL_SETTINGS "  Settings");
 
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
 
@@ -215,7 +229,7 @@ void ui_init(void) {
     ui->lbl_ble = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
-    lv_label_set_text(ui->lbl_ble, "BLE: --");
+    lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_ble, 4, 0);
@@ -308,7 +322,7 @@ void ui_on_panel_data(const victron_data_t *d) {
     lvgl_port_lock(0);
 
     if (ui->lbl_ble) {
-        lv_label_set_text(ui->lbl_ble, "BLE: OK");
+        lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x00C851), 0);
     }
     s_last_ble_data_us = esp_timer_get_time();
@@ -1291,7 +1305,7 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
     int64_t age_ms = (now - s_last_ble_data_us) / 1000;
     /* Sin datos nunca recibidos o > 5s sin actualizacion -> gris */
     if (s_last_ble_data_us == 0 || age_ms > 5000) {
-        lv_label_set_text(ui->lbl_ble, "BLE: --");
+        lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
     }
 }
