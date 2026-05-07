@@ -169,10 +169,6 @@ esp_err_t wifi_ap_init(void)
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_err_t wifi_cfg_err = esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
     ESP_LOGI(TAG, "esp_wifi_set_config result: 0x%x (%s)", wifi_cfg_err, esp_err_to_name(wifi_cfg_err));
-    /* Re-arrancar el AP para que el C6 aplique el nuevo SSID */
-    esp_wifi_stop();
-    vTaskDelay(pdMS_TO_TICKS(200));
-    ESP_ERROR_CHECK(esp_wifi_start());
 
     dhcp_set_captiveportal_url();
     
@@ -253,7 +249,7 @@ static esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri) {
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET / -> serve index.html");
-    uint8_t portal_page = 0;
+    uint8_t portal_page = 1; /* default: Logs */
     nvs_handle_t h;
     if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
         nvs_get_u8(h, "portal_page", &portal_page);

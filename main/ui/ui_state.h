@@ -91,6 +91,7 @@ typedef struct ui_state {
     lv_obj_t *lbl_clock;       // Reloj en barra superior
     lv_obj_t *lbl_ble;
     lv_obj_t *lbl_volume;
+    lv_obj_t *lbl_wifi;
     lv_obj_t *bottom_bar;         // Indicador BLE
     /* About page dynamic info */
     lv_obj_t *lbl_about_uptime;

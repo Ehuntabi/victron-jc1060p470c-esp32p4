@@ -221,6 +221,8 @@ void app_main(void)
     /* --- WiFi + config server --- */
     wifi_ap_init();
     config_server_start();
+    /* Actualizar SSID real del AP en el UI */
+    if (s_ui) ui_update_wifi_ssid(s_ui);
 
     /* --- BLE Victron --- */
     battery_history_init();

@@ -15,6 +15,7 @@ extern "C" {
  * Initialize all LVGL UI elements, including Live, Settings and Frigo tabs.
  */
 void ui_init(void);
+void ui_update_wifi_ssid(ui_state_t *ui);
 
 /**
  * BLE data callback to update the UI with new panel data.

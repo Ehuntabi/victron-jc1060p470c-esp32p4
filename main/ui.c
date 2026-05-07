@@ -8,6 +8,7 @@
 #include <lvgl.h>
 #include "esp_lvgl_port.h"  // lv_port.h sustituido por esp_lvgl_port
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "victron_ble.h"
 #include "battery_history.h"
 #include "alerts.h"
@@ -69,6 +70,21 @@ static void volume_icon_timer_cb(lv_timer_t *t)
         lv_obj_set_style_text_color(ui->lbl_volume,
             muted ? lv_color_hex(0xFF4444) : lv_color_white(), 0);
         last_muted = muted;
+    }
+    /* Refresca wifi icon */
+    if (ui->lbl_wifi) {
+        static int last_en = -1;
+        nvs_handle_t h;
+        uint8_t en = 1;
+        if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+            nvs_get_u8(h, "enabled", &en);
+            nvs_close(h);
+        }
+        if ((int)en != last_en) {
+            lv_obj_set_style_text_color(ui->lbl_wifi,
+                en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+            last_en = en;
+        }
     }
 }
 static void clock_click_cb(lv_event_t *e);
@@ -165,6 +181,7 @@ void ui_init(void) {
         save_wifi_config(default_ssid, default_pass, ap_enabled);
     }
 
+
     load_screensaver_settings(&ui->screensaver.enabled,
                               &ui->screensaver.brightness,
                               &ui->screensaver.timeout);
@@ -245,6 +262,26 @@ void ui_init(void) {
     lv_obj_set_style_radius(ui->lbl_volume, 4, 0);
     /* Texto inicial: depende de mute */
     lv_label_set_text(ui->lbl_volume, audio_is_muted() ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+
+    /* Icono Wi-Fi (AP) */
+    ui->lbl_wifi = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_wifi, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_bg_opa(ui->lbl_wifi, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_wifi, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_wifi, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_wifi, 4, 0);
+    lv_label_set_text(ui->lbl_wifi, LV_SYMBOL_WIFI);
+    /* Color inicial segun NVS */
+    {
+        nvs_handle_t h;
+        uint8_t en = 1;
+        if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+            nvs_get_u8(h, "enabled", &en);
+            nvs_close(h);
+        }
+        lv_obj_set_style_text_color(ui->lbl_wifi,
+            en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+    }
     lv_timer_create(volume_icon_timer_cb, 500, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
@@ -1310,3 +1347,16 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
     }
 }
 
+void ui_update_wifi_ssid(ui_state_t *ui)
+{
+    if (!ui || !ui->wifi.ssid) return;
+    uint8_t mac[6];
+    if (esp_wifi_get_mac(WIFI_IF_AP, mac) == ESP_OK) {
+        char ssid[20];
+        snprintf(ssid, sizeof(ssid), "ESP_%02X%02X%02X", mac[3], mac[4], mac[5]);
+        if (lvgl_port_lock(50)) {
+            lv_textarea_set_text(ui->wifi.ssid, ssid);
+            lvgl_port_unlock();
+        }
+    }
+}

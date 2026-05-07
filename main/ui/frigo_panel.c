@@ -120,49 +120,48 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
                                   uint8_t dd_selected,
                                   lv_event_cb_t dd_cb)
 {
+    /* Contenedor en columna */
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_remove_style_all(row);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_right(row, COL_DD_PAD, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(row, 4, 0);
+    lv_obj_set_style_pad_bottom(row, 8, 0);
 
-    /* Columna nombre — ancho fijo */
+    /* Linea 1: Nombre */
     lv_obj_t *lbl_name = lv_label_create(row);
-    lv_obj_add_style(lbl_name, &ui->styles.small, 0);
-    lv_obj_set_width(lbl_name, COL_NAME_W);
+    lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_name, lv_color_white(), 0);
     lv_label_set_text(lbl_name, nombre);
 
-    /* Columna valor — ancho fijo, texto centrado */
-    lv_obj_t *lbl_val = lv_label_create(row);
-    lv_obj_add_style(lbl_val, &ui->styles.small, 0);
-    lv_obj_set_width(lbl_val, COL_VAL_W);
-    lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_CENTER, 0);
+    /* Linea 2: temperatura + dropdown */
+    lv_obj_t *sub = lv_obj_create(row);
+    lv_obj_remove_style_all(sub);
+    lv_obj_set_width(sub, lv_pct(100));
+    lv_obj_set_height(sub, LV_SIZE_CONTENT);
+    lv_obj_set_layout(sub, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(sub, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(sub, 8, 0);
+    lv_obj_set_flex_align(sub, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_val = lv_label_create(sub);
+    lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_width(lbl_val, 70);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
     *lbl_val_out = lbl_val;
 
-    /* Espacio flexible entre valor y dropdown */
-    lv_obj_t *spacer = lv_obj_create(row);
-    lv_obj_remove_style_all(spacer);
-    lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, 0);
-    lv_obj_set_height(spacer, 1);
-    lv_obj_set_flex_grow(spacer, 1);
-
-    /* Columna dropdown — ancho fijo */
-    lv_obj_t *dd = lv_dropdown_create(row);
-    lv_obj_add_style(dd, &ui->styles.small, 0);
-    lv_obj_set_width(dd, COL_DD_W);
+    lv_obj_t *dd = lv_dropdown_create(sub);
+    lv_obj_set_flex_grow(dd, 1);
+    lv_obj_set_height(dd, 40);
     lv_dropdown_set_options(dd, opts);
     lv_dropdown_set_selected(dd, dd_selected);
     lv_obj_add_event_cb(dd, dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
     *dd_out = dd;
-
     return row;
-
-
 }
 
 void ui_frigo_panel_init(ui_state_t *ui)
@@ -172,42 +171,65 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     lv_obj_t *tab = ui->frigo_page;
     lv_obj_set_layout(tab, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(tab, 12, 0);
-    lv_obj_set_style_pad_gap(tab, 8, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_style_pad_gap(tab, 16, 0);
     lv_obj_set_scroll_dir(tab, LV_DIR_VER);
+
+    /* === Card 1: Sensores DS18B20 (azul) === */
+    lv_obj_t *card_sensors = lv_obj_create(tab);
+    lv_obj_set_width(card_sensors, lv_pct(49));
+    lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card_sensors, 1, 0);
+    lv_obj_set_style_radius(card_sensors, 12, 0);
+    lv_obj_set_style_pad_all(card_sensors, 16, 0);
+    lv_obj_set_style_pad_gap(card_sensors, 8, 0);
+    lv_obj_set_layout(card_sensors, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_sensors, LV_FLEX_FLOW_COLUMN);
 
     char opts[128];
     build_sensor_options(opts, sizeof(opts), st);
 
     /* Titulo */
-    lv_obj_t *lbl_sec1 = lv_label_create(tab);
-    lv_obj_add_style(lbl_sec1, &ui->styles.small, 0);
-    lv_label_set_text(lbl_sec1, "Asignacion de Sensores DS18B20:");
+    lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
+    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
 
     /* Filas sensores */
-    make_sensor_row(tab, ui, "Aletas:",
+    make_sensor_row(card_sensors, ui, "Aletas:",
                     &s_lbl_aletas, &s_dd_aletas,
                     opts, st->assignment[FRIGO_SLOT_ALETAS], dd_aletas_cb);
 
-    make_sensor_row(tab, ui, "Congelador:",
+    make_sensor_row(card_sensors, ui, "Congelador:",
                     &s_lbl_congelador, &s_dd_congelador,
                     opts, st->assignment[FRIGO_SLOT_CONGELADOR], dd_congelador_cb);
 
-    make_sensor_row(tab, ui, "Exterior:",
+    make_sensor_row(card_sensors, ui, "Exterior:",
                     &s_lbl_exterior, &s_dd_exterior,
                     opts, st->assignment[FRIGO_SLOT_EXTERIOR], dd_exterior_cb);
 
-    /* Separador */
-    lv_obj_t *sep = lv_obj_create(tab);
-    lv_obj_remove_style_all(sep);
-    lv_obj_set_width(sep, lv_pct(100));
-    lv_obj_set_height(sep, 2);
-    lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+    /* === Card 2: Ventilador y temperaturas (verde) === */
+    lv_obj_t *card_fan = lv_obj_create(tab);
+    lv_obj_set_width(card_fan, lv_pct(49));
+    lv_obj_set_height(card_fan, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card_fan, 1, 0);
+    lv_obj_set_style_radius(card_fan, 12, 0);
+    lv_obj_set_style_pad_all(card_fan, 16, 0);
+    lv_obj_set_style_pad_gap(card_fan, 12, 0);
+    lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
+
 
     /* Fila ventilador */
-    lv_obj_t *row_fan_hdr = lv_obj_create(tab);
+    lv_obj_t *row_fan_hdr = lv_obj_create(card_fan);
     lv_obj_remove_style_all(row_fan_hdr);
     lv_obj_set_style_bg_opa(row_fan_hdr, LV_OPA_TRANSP, 0);
     lv_obj_set_width(row_fan_hdr, lv_pct(100));
@@ -216,14 +238,15 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_flow(row_fan_hdr, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_fan_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *lbl_fan_sec = lv_label_create(row_fan_hdr);
-    lv_obj_add_style(lbl_fan_sec, &ui->styles.small, 0);
-    lv_label_set_text(lbl_fan_sec, "Ventilador:");
+    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     s_lbl_fan = lv_label_create(row_fan_hdr);
     lv_obj_add_style(s_lbl_fan, &ui->styles.small, 0);
     lv_label_set_text(s_lbl_fan, "0 %");
 
     /* Fila T_Min y T_Max */
-    lv_obj_t *row_t = lv_obj_create(tab);
+    lv_obj_t *row_t = lv_obj_create(card_fan);
     lv_obj_remove_style_all(row_t);
     lv_obj_set_style_bg_opa(row_t, LV_OPA_TRANSP, 0);
     lv_obj_set_width(row_t, lv_pct(100));
