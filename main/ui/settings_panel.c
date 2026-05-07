@@ -85,6 +85,9 @@ static void soc_warn_dd_cb(lv_event_t *e)
 }
 
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page);
+static void alarm_min_dd_cb_sound(lv_event_t *e);
+static void alarm_temp_dd_cb_sound(lv_event_t *e);
+
 static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
@@ -780,7 +783,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
     lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
-    lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO");
+    lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y AVISOS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
@@ -799,7 +802,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_logs,    "Logs");
     settings_menu_add_entry(ui, main_page, menu, page_wifi,    "Wi-Fi");
     settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
-    settings_menu_add_entry(ui, main_page, menu, page_sound,   "Sonido");
+    settings_menu_add_entry(ui, main_page, menu, page_sound,   "Sonido y avisos");
     settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
     settings_menu_add_entry(ui, main_page, menu, page_about,   "About");
 
@@ -1651,15 +1654,11 @@ static void sound_mute_changed_cb(lv_event_t *e)
     audio_set_mute(muted);
 }
 
-static void sound_btn_test_jingle(lv_event_t *e)
-{
-    audio_jingle_t j = (audio_jingle_t)(uintptr_t)lv_event_get_user_data(e);
-    audio_play_jingle(j);
-}
 
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
+    /* Contenedor principal vertical */
     lv_obj_t *cont = lv_obj_create(page);
     lv_obj_set_size(cont, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
@@ -1669,131 +1668,216 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_all(cont, 16, 0);
     lv_obj_set_style_pad_gap(cont, 16, 0);
 
+    /* === Card 1: Sonido === */
+    lv_obj_t *card1 = lv_obj_create(cont);
+    lv_obj_set_width(card1, lv_pct(100));
+    lv_obj_set_height(card1, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card1, 1, 0);
+    lv_obj_set_style_radius(card1, 12, 0);
+    lv_obj_set_style_pad_all(card1, 16, 0);
+    lv_obj_set_style_pad_gap(card1, 12, 0);
+    lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *card1_title = lv_label_create(card1);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
+
     /* Volumen */
-    lv_obj_t *lbl_vol = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_24, 0);
+    lv_obj_t *lbl_vol = lv_label_create(card1);
+    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20, 0);
     lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
 
-    lv_obj_t *slider = lv_slider_create(cont);
+    lv_obj_t *slider = lv_slider_create(card1);
     lv_obj_set_width(slider, lv_pct(95));
-    lv_obj_set_height(slider, 30);
+    lv_obj_set_height(slider, 26);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0x4FC3F7), LV_PART_KNOB);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
 
-    /* Mute */
-    lv_obj_t *row_mute = lv_obj_create(cont);
+    /* Mute (texto + switch) */
+    lv_obj_t *row_mute = lv_obj_create(card1);
     lv_obj_remove_style_all(row_mute);
-    lv_obj_set_size(row_mute, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_size(row_mute, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(row_mute, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_mute, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_mute, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(row_mute, 16, 0);
 
     lv_obj_t *lbl_mute = lv_label_create(row_mute);
-    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20, 0);
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
     lv_obj_t *sw = lv_switch_create(row_mute);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* Separador */
-    lv_obj_t *sep = lv_obj_create(cont);
-    lv_obj_remove_style_all(sep);
-    lv_obj_set_width(sep, lv_pct(100));
-    lv_obj_set_height(sep, 2);
-    lv_obj_set_style_bg_color(sep, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+    /* === Card 2: Bateria === */
+    lv_obj_t *card2 = lv_obj_create(cont);
+    lv_obj_set_width(card2, lv_pct(100));
+    lv_obj_set_height(card2, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_width(card2, 1, 0);
+    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_pad_all(card2, 16, 0);
+    lv_obj_set_style_pad_gap(card2, 16, 0);
+    lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* === Umbrales SoC === */
-    lv_obj_t *sep_soc = lv_obj_create(cont);
-    lv_obj_remove_style_all(sep_soc);
-    lv_obj_set_width(sep_soc, lv_pct(100));
-    lv_obj_set_height(sep_soc, 2);
-    lv_obj_set_style_bg_color(sep_soc, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_bg_opa(sep_soc, LV_OPA_COVER, 0);
+    lv_obj_t *card2_title = lv_label_create(card2);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Bateria");
 
-    lv_obj_t *lbl_soc_title = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_soc_title, &lv_font_montserrat_24, 0);
-    lv_label_set_text(lbl_soc_title, "Umbrales bateria (SoC)");
+    /* row_soc deja de ser child de card2; usa card2 como flex padre directamente */
+    lv_obj_t *row_soc = card2;
 
-    lv_obj_t *row_soc = lv_obj_create(cont);
-    lv_obj_remove_style_all(row_soc);
-    lv_obj_set_size(row_soc, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
+    /* SoC Critico */
     lv_obj_t *col_crit = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_crit);
     lv_obj_set_layout(col_crit, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_crit, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_crit, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_crit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_crit, 4, 0);
+    lv_obj_set_style_pad_gap(col_crit, 6, 0);
     lv_obj_t *lbl_crit = lv_label_create(col_crit);
+    lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_crit, lv_color_hex(0xFF4444), 0);
-    lv_label_set_text(lbl_crit, "Critico");
+    lv_label_set_text(lbl_crit, LV_SYMBOL_WARNING " Critico");
     lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
+    lv_obj_set_width(dd_crit, 130);
     lv_dropdown_set_options(dd_crit, "10 %\n20 %\n30 %\n40 %");
-    int cur_crit = alerts_get_soc_critical();
-    int idx_crit = 2;
-    for (size_t k = 0; k < sizeof(s_soc_crit_options)/sizeof(s_soc_crit_options[0]); ++k) {
-        if (s_soc_crit_options[k] == cur_crit) { idx_crit = (int)k; break; }
+    {
+        int cur = alerts_get_soc_critical();
+        int idx = 2;
+        for (size_t k = 0; k < sizeof(s_soc_crit_options)/sizeof(s_soc_crit_options[0]); ++k) {
+            if (s_soc_crit_options[k] == cur) { idx = (int)k; break; }
+        }
+        lv_dropdown_set_selected(dd_crit, idx);
     }
-    lv_dropdown_set_selected(dd_crit, idx_crit);
     lv_obj_add_event_cb(dd_crit, soc_crit_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    /* SoC Aviso */
     lv_obj_t *col_warn = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_warn);
     lv_obj_set_layout(col_warn, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_warn, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_warn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_warn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_warn, 4, 0);
+    lv_obj_set_style_pad_gap(col_warn, 6, 0);
     lv_obj_t *lbl_warn = lv_label_create(col_warn);
+    lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lbl_warn, lv_color_hex(0xFFAA00), 0);
-    lv_label_set_text(lbl_warn, "Aviso");
+    lv_label_set_text(lbl_warn, LV_SYMBOL_BELL " Aviso");
     lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
+    lv_obj_set_width(dd_warn, 130);
     lv_dropdown_set_options(dd_warn, "40 %\n50 %\n60 %\n70 %");
-    int cur_warn = alerts_get_soc_warning();
-    int idx_warn = 2;
-    for (size_t k = 0; k < sizeof(s_soc_warn_options)/sizeof(s_soc_warn_options[0]); ++k) {
-        if (s_soc_warn_options[k] == cur_warn) { idx_warn = (int)k; break; }
+    {
+        int cur = alerts_get_soc_warning();
+        int idx = 2;
+        for (size_t k = 0; k < sizeof(s_soc_warn_options)/sizeof(s_soc_warn_options[0]); ++k) {
+            if (s_soc_warn_options[k] == cur) { idx = (int)k; break; }
+        }
+        lv_dropdown_set_selected(dd_warn, idx);
     }
-    lv_dropdown_set_selected(dd_warn, idx_warn);
     lv_obj_add_event_cb(dd_warn, soc_warn_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    lv_obj_t *lbl_test = lv_label_create(cont);
-    lv_obj_set_style_text_font(lbl_test, &lv_font_montserrat_24, 0);
-    lv_label_set_text(lbl_test, "Probar avisos:");
+    /* === Card 3: Congelador === */
+    lv_obj_t *card3 = lv_obj_create(cont);
+    lv_obj_set_width(card3, lv_pct(100));
+    lv_obj_set_height(card3, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card3, 1, 0);
+    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_pad_all(card3, 16, 0);
+    lv_obj_set_style_pad_gap(card3, 16, 0);
+    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* Grid 2x2 con los 4 jingles */
-    lv_obj_t *grid = lv_obj_create(cont);
-    lv_obj_remove_style_all(grid);
-    lv_obj_set_size(grid, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_style_pad_gap(grid, 12, 0);
+    lv_obj_t *card3_title = lv_label_create(card3);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(card3_title, LV_SYMBOL_CHARGE "  Congelador");
 
-    struct { const char *txt; uint32_t color; audio_jingle_t j; } jingles[] = {
-        {"Inicio (OK)",   0x00C851, AUDIO_JINGLE_BOOT_OK},
-        {"Critico",      0xCC3333, AUDIO_JINGLE_CRITICAL},
-        {"Aviso",         0xFF9800, AUDIO_JINGLE_WARNING},
-        {"Confirm.",      0x4FC3F7, AUDIO_JINGLE_CONFIRM},
-    };
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *btn = lv_btn_create(grid);
-        lv_obj_set_size(btn, lv_pct(48), 70);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(jingles[i].color), 0);
-        lv_obj_set_style_radius(btn, 8, 0);
-        lv_obj_t *lbl = lv_label_create(btn);
-        lv_label_set_text(lbl, jingles[i].txt);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20, 0);
-        lv_obj_center(lbl);
-        lv_obj_add_event_cb(btn, sound_btn_test_jingle, LV_EVENT_CLICKED,
-                            (void*)(uintptr_t)jingles[i].j);
+    lv_obj_t *row_frigo = card3;
+
+    /* Col minutos */
+    lv_obj_t *col_min_a = lv_obj_create(row_frigo);
+    lv_obj_remove_style_all(col_min_a);
+    lv_obj_set_layout(col_min_a, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_min_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_min_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_min_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_min_a, 6, 0);
+    lv_obj_t *lbl_min_a = lv_label_create(col_min_a);
+    lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_min_a, "Tras subir (min)");
+    lv_obj_t *dd_min_a = lv_dropdown_create(col_min_a);
+    lv_obj_set_width(dd_min_a, 130);
+    lv_dropdown_set_options(dd_min_a, "15\n30\n45\n60\n90");
+    {
+        static const int opts[] = { 15, 30, 45, 60, 90 };
+        int cur = alerts_get_freezer_minutes();
+        int idx = 1;
+        for (size_t k = 0; k < sizeof(opts)/sizeof(opts[0]); ++k) {
+            if (opts[k] == cur) { idx = (int)k; break; }
+        }
+        lv_dropdown_set_selected(dd_min_a, idx);
     }
+    lv_obj_add_event_cb(dd_min_a, alarm_min_dd_cb_sound, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* Col temp umbral */
+    lv_obj_t *col_t_a = lv_obj_create(row_frigo);
+    lv_obj_remove_style_all(col_t_a);
+    lv_obj_set_layout(col_t_a, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_t_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_t_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_size(col_t_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_gap(col_t_a, 6, 0);
+    lv_obj_t *lbl_t_a = lv_label_create(col_t_a);
+    lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20, 0);
+    lv_label_set_text(lbl_t_a, "Si supera");
+    lv_obj_t *dd_t_a = lv_dropdown_create(col_t_a);
+    lv_obj_set_width(dd_t_a, 140);
+    lv_dropdown_set_options(dd_t_a, "-5 \xc2\xb0""C\n-2 \xc2\xb0""C\n0 \xc2\xb0""C\n+2 \xc2\xb0""C");
+    {
+        static const float opts[] = { -5.0f, -2.0f, 0.0f, 2.0f };
+        float cur = alerts_get_freezer_temp_c();
+        int idx = 1;
+        for (size_t k = 0; k < sizeof(opts)/sizeof(opts[0]); ++k) {
+            if (opts[k] == cur) { idx = (int)k; break; }
+        }
+        lv_dropdown_set_selected(dd_t_a, idx);
+    }
+    lv_obj_add_event_cb(dd_t_a, alarm_temp_dd_cb_sound, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
+
+static void alarm_min_dd_cb_sound(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    static const int opts[] = { 15, 30, 45, 60, 90 };
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(opts)/sizeof(opts[0])) alerts_set_freezer_minutes(opts[sel]);
+}
+
+static void alarm_temp_dd_cb_sound(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    static const float opts[] = { -5.0f, -2.0f, 0.0f, 2.0f };
+    uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if (sel < sizeof(opts)/sizeof(opts[0])) alerts_set_freezer_temp_c(opts[sel]);
+}
