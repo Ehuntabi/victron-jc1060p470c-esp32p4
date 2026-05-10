@@ -94,6 +94,9 @@ static void ui_prepare_detailed_device_status(const victron_data_t *data, char *
 static void ui_update_device_activity(ui_state_t *ui, const char *mac_address);
 static void ui_check_device_timeouts(lv_timer_t *timer);
 static void clock_timer_cb(lv_timer_t *timer);
+static void idle_to_live_timer_cb(lv_timer_t *t);
+static lv_timer_t *s_idle_to_live_timer;
+#define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
 static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
 {
@@ -349,6 +352,8 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
     lv_timer_create(clock_timer_cb, 30000, ui);
     lv_timer_create(ble_indicator_timer_cb, 1000, ui);
+    s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
+                                           IDLE_TO_LIVE_TIMEOUT_MS, ui);
     clock_timer_cb(NULL);
     lvgl_port_unlock();
 }
@@ -543,9 +548,25 @@ void ui_refresh_clock(void)
     }
 }
 
+/* ── Auto-volver a Live tras 60 s sin actividad del usuario ── */
+static void idle_to_live_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = t ? (ui_state_t *)t->user_data : ui_get_state();
+    if (!ui || !ui->tabview) return;
+    /* No interferir con el screensaver: si está activo, deja que rote/atenúe */
+    if (ui->screensaver.active) return;
+    if (lv_tabview_get_tab_act(ui->tabview) != 0) {
+        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+    }
+    /* Cerrar overlays si quedaran abiertos (chart frigo, histórico batería) */
+    ui_close_chart_screen();
+    ui_close_battery_history_screen();
+}
+
 void ui_notify_user_activity(void)
 {
     ui_state_t *ui = &g_ui;
+    if (s_idle_to_live_timer) lv_timer_reset(s_idle_to_live_timer);
     ui_settings_panel_on_user_activity(ui);
 }
 
@@ -1158,28 +1179,29 @@ void ui_close_chart_screen(void)
     if (s_chart) { lv_obj_del(s_chart); s_chart = NULL; }
 }
 
-void ui_close_battery_history_screen(void)
-{
-    if (s_bh_screen) {
-        lv_obj_t *prev = lv_disp_get_scr_prev(NULL);
-        if (prev) lv_scr_load(prev);
-        lv_obj_del(s_bh_screen);
-        s_bh_screen = NULL;
-    }
-}
 static lv_obj_t *s_bh_chart  = NULL;
 
 static lv_obj_t *s_bh_prev_screen = NULL;
 
+void ui_close_battery_history_screen(void)
+{
+    if (s_bh_screen) {
+        lv_obj_t *prev = s_bh_prev_screen;
+        if (!prev) prev = lv_disp_get_scr_prev(NULL);
+        /* auto_del=true → LVGL borra s_bh_screen al terminar la transición.
+         * Hacerlo manualmente con lv_obj_del aquí provoca corrupción porque
+         * la pantalla aún puede estar siendo renderizada. */
+        if (prev) lv_scr_load_anim(prev, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
+        s_bh_screen = NULL;
+        s_bh_chart = NULL;
+        s_bh_prev_screen = NULL;
+    }
+}
+
 static void bh_screen_close_cb(lv_event_t *e)
 {
-    lv_obj_t *scr = s_bh_screen;
-    lv_obj_t *prev = s_bh_prev_screen;
-    s_bh_screen = NULL;
-    s_bh_chart  = NULL;
-    s_bh_prev_screen = NULL;
-    if (prev) lv_scr_load(prev);
-    if (scr) lv_obj_del(scr);
+    (void)e;
+    ui_close_battery_history_screen();
 }
 
 void ui_show_battery_history_screen(ui_state_t *ui)
@@ -1192,6 +1214,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     s_bh_screen = scr;
+    s_bh_prev_screen = prev;
 
     /* Boton cerrar */
     lv_obj_t *btn_close = lv_btn_create(scr);

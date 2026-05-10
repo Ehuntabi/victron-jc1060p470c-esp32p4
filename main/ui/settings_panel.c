@@ -82,7 +82,6 @@ static void ss_period_inc_cb(lv_event_t *e)
 static void cb_screensaver_event_cb(lv_event_t *e);
 static void victron_debug_event_cb(lv_event_t *e);
 static void slider_ss_brightness_event_cb(lv_event_t *e);
-static void spinbox_ss_time_event_cb(lv_event_t *e);
 static void spinbox_ss_time_increment_event_cb(lv_event_t *e);
 static void spinbox_ss_time_decrement_event_cb(lv_event_t *e);
 static void screensaver_timer_cb(lv_timer_t *timer);
@@ -522,9 +521,17 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
     lv_obj_set_style_radius(slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_KNOB);
-    lv_slider_set_range(slider_brightness, 1, 100);
-    lv_slider_set_value(slider_brightness, ui->brightness, LV_ANIM_OFF);
-    bsp_display_brightness_set(ui->brightness);
+    lv_slider_set_range(slider_brightness, 5, 100);
+    /* Pasos de 5: snap del valor inicial al múltiplo más cercano (mínimo 5) */
+    int b_init = ((ui->brightness + 2) / 5) * 5;
+    if (b_init < 5) b_init = 5;
+    if (b_init > 100) b_init = 100;
+    if (b_init != ui->brightness) {
+        ui->brightness = (uint8_t)b_init;
+        lv_label_set_text_fmt(lbl_val_b, "%d%%", b_init);
+    }
+    lv_slider_set_value(slider_brightness, b_init, LV_ANIM_OFF);
+    bsp_display_brightness_set(b_init);
     /* Helper: tag el label como user data secundaria via custom property */
     lv_obj_set_user_data(slider_brightness, lbl_val_b);
     lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
@@ -604,33 +611,44 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, lv_color_hex(0xFF9800), LV_PART_KNOB);
     lv_slider_set_range(ui->screensaver.slider_brightness, 0, ui->brightness);
     if (ui->screensaver.brightness > ui->brightness) ui->screensaver.brightness = ui->brightness;
-    lv_slider_set_value(ui->screensaver.slider_brightness, ui->screensaver.brightness, LV_ANIM_OFF);
+    /* Pasos de 5: snap del valor inicial al múltiplo más cercano */
+    int ss_init = ((ui->screensaver.brightness + 2) / 5) * 5;
+    if (ss_init > ui->brightness) ss_init = ui->brightness;
+    if (ss_init < 0) ss_init = 0;
+    if (ss_init != ui->screensaver.brightness) {
+        ui->screensaver.brightness = (uint8_t)ss_init;
+        lv_label_set_text_fmt(lbl_val_ss, "%d%%", ss_init);
+    }
+    lv_slider_set_value(ui->screensaver.slider_brightness, ss_init, LV_ANIM_OFF);
     lv_obj_set_user_data(ui->screensaver.slider_brightness, lbl_val_ss);
     lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* +/- y spinbox dentro de cont_to (ya creado arriba) */
+    /* +/- y label dentro de cont_to (mismo estilo que el selector de tiempo del modo) */
     lv_obj_t *btn_dec = lv_btn_create(cont_to);
     lv_obj_set_size(btn_dec, 40, 40);
+    lv_obj_set_style_bg_color(btn_dec, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_dec, 8, 0);
     lv_obj_t *lbl_dec = lv_label_create(btn_dec);
     lv_label_set_text(lbl_dec, LV_SYMBOL_MINUS);
     lv_obj_center(lbl_dec);
-    lv_obj_add_event_cb(btn_dec, spinbox_ss_time_decrement_event_cb, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(btn_dec, spinbox_ss_time_decrement_event_cb, LV_EVENT_CLICKED, ui);
 
-    ui->screensaver.spinbox_timeout = lv_spinbox_create(cont_to);
+    /* Label central (reutilizamos el campo spinbox_timeout como lv_obj_t* genérico) */
+    ui->screensaver.spinbox_timeout = lv_label_create(cont_to);
     lv_obj_set_style_text_font(ui->screensaver.spinbox_timeout, &lv_font_montserrat_24, 0);
-    lv_spinbox_set_range(ui->screensaver.spinbox_timeout, 0, 30);
-    lv_spinbox_set_value(ui->screensaver.spinbox_timeout, ui->screensaver.timeout / 60);
-    lv_spinbox_set_digit_format(ui->screensaver.spinbox_timeout, 1, 0);
-    lv_obj_set_width(ui->screensaver.spinbox_timeout, 80);
-    lv_obj_set_height(ui->screensaver.spinbox_timeout, 44);
-    lv_obj_add_event_cb(ui->screensaver.spinbox_timeout, spinbox_ss_time_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_set_style_text_color(ui->screensaver.spinbox_timeout, lv_color_white(), 0);
+    lv_obj_set_width(ui->screensaver.spinbox_timeout, 60);
+    lv_obj_set_style_text_align(ui->screensaver.spinbox_timeout, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text_fmt(ui->screensaver.spinbox_timeout, "%d", ui->screensaver.timeout / 60);
 
     lv_obj_t *btn_inc = lv_btn_create(cont_to);
     lv_obj_set_size(btn_inc, 40, 40);
+    lv_obj_set_style_bg_color(btn_inc, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_radius(btn_inc, 8, 0);
     lv_obj_t *lbl_inc = lv_label_create(btn_inc);
     lv_label_set_text(lbl_inc, LV_SYMBOL_PLUS);
     lv_obj_center(lbl_inc);
-    lv_obj_add_event_cb(btn_inc, spinbox_ss_time_increment_event_cb, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(btn_inc, spinbox_ss_time_increment_event_cb, LV_EVENT_CLICKED, ui);
 
     /* Row UNICA: Modo + Tiempo por vista */
     lv_obj_t *row_mode = lv_obj_create(card2);
@@ -1509,6 +1527,14 @@ static void brightness_slider_event_cb(lv_event_t *e)
     }
     lv_obj_t *slider = lv_event_get_target(e);
     int val = lv_slider_get_value(slider);
+    /* Snap a múltiplos de 5 (rango 5..100) */
+    int snapped = ((val + 2) / 5) * 5;
+    if (snapped < 5) snapped = 5;
+    if (snapped > 100) snapped = 100;
+    if (snapped != val) {
+        lv_slider_set_value(slider, snapped, LV_ANIM_OFF);
+        val = snapped;
+    }
     ui->brightness = (uint8_t)val;
     bsp_display_brightness_set(val);
     save_brightness(ui->brightness);
@@ -1564,6 +1590,14 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
         return;
     }
     int v = lv_slider_get_value(ui->screensaver.slider_brightness);
+    /* Snap a múltiplos de 5 (rango 0..ui->brightness) */
+    int snapped = ((v + 2) / 5) * 5;
+    if (snapped < 0) snapped = 0;
+    if (snapped > ui->brightness) snapped = ui->brightness;
+    if (snapped != v) {
+        lv_slider_set_value(ui->screensaver.slider_brightness, snapped, LV_ANIM_OFF);
+        v = snapped;
+    }
     ui->screensaver.brightness = v;
     save_screensaver_settings(ui->screensaver.enabled,
                               ui->screensaver.brightness,
@@ -1575,18 +1609,20 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
     }
 }
 
-static void spinbox_ss_time_event_cb(lv_event_t *e)
+/* Aplica el cambio de timeout: persiste en NVS y reprograma el timer */
+static void ss_timeout_apply(ui_state_t *ui)
 {
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
-        return;
+    if (ui->screensaver.spinbox_timeout) {
+        lv_label_set_text_fmt(ui->screensaver.spinbox_timeout,
+                              "%d", ui->screensaver.timeout / 60);
     }
-    ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
     save_screensaver_settings(ui->screensaver.enabled,
                               ui->screensaver.brightness,
                               ui->screensaver.timeout);
     if (ui->screensaver.timer) {
-        uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
+        uint32_t ms = ui->screensaver.timeout > 0
+                          ? ui->screensaver.timeout * 1000U
+                          : 0xFFFFFFFF;
         lv_timer_set_period(ui->screensaver.timer, ms);
     }
 }
@@ -1594,41 +1630,21 @@ static void spinbox_ss_time_event_cb(lv_event_t *e)
 static void spinbox_ss_time_increment_event_cb(lv_event_t *e)
 {
     ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
-        return;
-    }
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
-        lv_spinbox_increment(ui->screensaver.spinbox_timeout);
-        ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
-        save_screensaver_settings(ui->screensaver.enabled,
-                                  ui->screensaver.brightness,
-                                  ui->screensaver.timeout);
-        if (ui->screensaver.timer) {
-            uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
-            lv_timer_set_period(ui->screensaver.timer, ms);
-        }
-    }
+    if (ui == NULL) return;
+    int min = ui->screensaver.timeout / 60;
+    if (min < 30) min++;
+    ui->screensaver.timeout = min * 60;
+    ss_timeout_apply(ui);
 }
 
 static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
 {
     ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL || ui->screensaver.spinbox_timeout == NULL) {
-        return;
-    }
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_LONG_PRESSED_REPEAT) {
-        lv_spinbox_decrement(ui->screensaver.spinbox_timeout);
-        ui->screensaver.timeout = lv_spinbox_get_value(ui->screensaver.spinbox_timeout) * 60;
-        save_screensaver_settings(ui->screensaver.enabled,
-                                  ui->screensaver.brightness,
-                                  ui->screensaver.timeout);
-        if (ui->screensaver.timer) {
-            uint32_t ms = ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U : 0xFFFFFFFF;
-            lv_timer_set_period(ui->screensaver.timer, ms);
-        }
-    }
+    if (ui == NULL) return;
+    int min = ui->screensaver.timeout / 60;
+    if (min > 0) min--;
+    ui->screensaver.timeout = min * 60;
+    ss_timeout_apply(ui);
 }
 
 void ui_settings_screensaver_create_timer(ui_state_t *ui)
@@ -1674,13 +1690,27 @@ static void screensaver_rotate_timer_cb(lv_timer_t *timer)
 {
     ui_state_t *ui = timer ? (ui_state_t *)timer->user_data : NULL;
     if (!ui) return;
-    ESP_LOGI("SAVER", "rotate fired idx=%d->%d", ui->screensaver.rotate_index, (ui->screensaver.rotate_index + 1) % 3);
-    /* Cerrar overlays previos */
-    ui_close_chart_screen();
-    ui_close_battery_history_screen();
-    /* 3 vistas: 0=Live, 1=LogFrigo, 2=LogBateria */
-    ui->screensaver.rotate_index = (ui->screensaver.rotate_index + 1) % 3;
-    switch (ui->screensaver.rotate_index) {
+    int prev_idx = ui->screensaver.rotate_index;
+    int next_idx = (prev_idx + 1) % 3;
+    ESP_LOGI("SAVER", "rotate fired idx=%d->%d", prev_idx, next_idx);
+
+    /* 3 vistas: 0=Live (tab del tabview), 1=LogFrigo (overlay chart),
+     * 2=LogBateria (pantalla independiente).
+     * Cerrar SOLO la vista actual antes de abrir la siguiente, para que la
+     * transición sea limpia (Frigo→Bateria cierra Frigo; Bateria→Live cierra Bateria). */
+    switch (prev_idx) {
+        case 1:
+            ui_close_chart_screen();
+            break;
+        case 2:
+            ui_close_battery_history_screen();
+            break;
+        default:
+            break;  /* 0 = Live: no hay overlay que cerrar */
+    }
+
+    ui->screensaver.rotate_index = next_idx;
+    switch (next_idx) {
         case 0:
             lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
             break;
@@ -1731,11 +1761,17 @@ static void screensaver_wake(ui_state_t *ui)
         if (ui->screensaver.active) {
             bsp_display_brightness_set(ui->brightness);
             ui->screensaver.active = false;
-            /* Parar timer de rotacion si esta activo */
+            /* Parar timer de rotacion si esta activo y cerrar overlays */
             if (ui->screensaver.rotate_timer) {
                 lv_timer_del(ui->screensaver.rotate_timer);
                 ui->screensaver.rotate_timer = NULL;
             }
+            if (ui->screensaver.rotate_index == 1) {
+                ui_close_chart_screen();
+            } else if (ui->screensaver.rotate_index == 2) {
+                ui_close_battery_history_screen();
+            }
+            ui->screensaver.rotate_index = 0;
         }
     }
 }
