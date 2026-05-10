@@ -22,6 +22,7 @@ typedef struct {
     lv_obj_t *arc_soc;
     lv_obj_t *m_ttg;
     lv_obj_t *m_current;
+    lv_obj_t *bar_current;
     /* Solar */
     lv_obj_t *m_solar_power;
     lv_obj_t *m_solar_charge;
@@ -94,7 +95,8 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_flex_align(view->card_dcdc, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     ui_card_set_title_img(view->card_dcdc, &icon_dcdc, "DC/DC", UI_COLOR_CYAN);
-    view->m_dc_in_v   = ui_metric_create_compact(view->card_dcdc, "Entrada");
+    view->m_dc_in_v   = ui_metric_create_compact(view->card_dcdc,
+                                                 LV_SYMBOL_BATTERY_FULL " Bat. motor");
     view->m_dc_out_v  = ui_metric_create_compact(view->card_dcdc, "Salida");
     view->m_dc_status = ui_metric_create_compact(view->card_dcdc, "Estado");
 
@@ -109,6 +111,18 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     view->arc_soc = ui_arc_soc_create(view->card_battery, 180);
     view->m_ttg     = ui_metric_create_compact(view->card_battery, "Autonomía");
     view->m_current = ui_metric_create_compact(view->card_battery, "Corriente");
+
+    /* Barra bipolar de corriente bajo m_current (rango ±50 A, simétrica) */
+    view->bar_current = lv_bar_create(view->card_battery);
+    lv_obj_set_size(view->bar_current, lv_pct(85), 10);
+    lv_bar_set_range(view->bar_current, -50, 50);
+    lv_bar_set_mode(view->bar_current, LV_BAR_MODE_SYMMETRICAL);
+    lv_bar_set_value(view->bar_current, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(view->bar_current, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 5, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
 
     /* ── Card Solar (verde) ─────────────────────────────────────── */
     view->card_solar = ui_card_create(view->base.root, UI_COLOR_GREEN);
@@ -259,10 +273,24 @@ static void update_display_elements(ui_default_battery_view_t *bv)
         snprintf(buf, sizeof(buf), "%c%d.%02d",
                  mi >= 0 ? '+' : '-', abs_a_centi/100, abs_a_centi%100);
         ui_metric_set(bv->m_current, buf, "A", ui_color_for_current(mi));
+        if (bv->bar_current) {
+            int amps_int = (int)(mi / 1000);
+            if (amps_int > 50)  amps_int = 50;
+            if (amps_int < -50) amps_int = -50;
+            lv_bar_set_value(bv->bar_current, amps_int, LV_ANIM_ON);
+            lv_color_t col = (mi > 0) ? UI_COLOR_GREEN
+                           : (mi < 0) ? UI_COLOR_ORANGE
+                           : UI_COLOR_TEXT_DIM;
+            lv_obj_set_style_bg_color(bv->bar_current, col, LV_PART_INDICATOR);
+        }
     } else {
         ui_arc_soc_set(bv->arc_soc, 0xFFFF, 0);
         ui_metric_set(bv->m_ttg, "--", "", UI_COLOR_TEXT);
         ui_metric_set(bv->m_current, "--", "", UI_COLOR_TEXT);
+        if (bv->bar_current) {
+            lv_bar_set_value(bv->bar_current, 0, LV_ANIM_OFF);
+            lv_obj_set_style_bg_color(bv->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
+        }
     }
 
     /* ── Izquierda: DCDC ────────────────────────────────────────── */
@@ -270,12 +298,23 @@ static void update_display_elements(ui_default_battery_view_t *bv)
                     (now - bv->dcdc_state.last_update_time) < TIMEOUT_MS;
     if (dc_fresh) {
         if (bv->dcdc_state.input_voltage_centi > 0) {
-            snprintf(buf, sizeof(buf), "%u.%02u",
-                     bv->dcdc_state.input_voltage_centi / 100,
-                     bv->dcdc_state.input_voltage_centi % 100);
-            ui_metric_set(bv->m_dc_in_v, buf, "V", UI_COLOR_TEXT);
+            uint16_t vin = bv->dcdc_state.input_voltage_centi;
+            /* Detectar alternador encendido por umbral según sistema:
+             * 12 V → ≥13.3 V indica carga; 24 V → ≥26.6 V. */
+            bool alt_on = (vin >= 2660) ||
+                          (vin >= 1330 && vin < 1800);
+            snprintf(buf, sizeof(buf), "%u.%02u", vin / 100, vin % 100);
+            ui_metric_set(bv->m_dc_in_v, buf, "V",
+                          alt_on ? UI_COLOR_GREEN : UI_COLOR_TEXT);
+            ui_metric_set_label(bv->m_dc_in_v,
+                                alt_on ? LV_SYMBOL_CHARGE " Alternador"
+                                       : LV_SYMBOL_BATTERY_FULL " Bat. motor",
+                                alt_on ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
         } else {
             ui_metric_set(bv->m_dc_in_v, "--", "", UI_COLOR_TEXT);
+            ui_metric_set_label(bv->m_dc_in_v,
+                                LV_SYMBOL_BATTERY_FULL " Bat. motor",
+                                UI_COLOR_TEXT_DIM);
         }
         if (bv->dcdc_state.output_voltage_centi > 0 &&
             bv->dcdc_state.device_state != VIC_STATE_OFF) {

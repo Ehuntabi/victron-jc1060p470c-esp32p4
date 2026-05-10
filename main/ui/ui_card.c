@@ -211,6 +211,17 @@ void ui_metric_set(lv_obj_t *metric, const char *value_str,
     if (unit) lv_label_set_text(unit, unit_str ? unit_str : "");
 }
 
+void ui_metric_set_label(lv_obj_t *metric, const char *label_text,
+                         lv_color_t label_color)
+{
+    if (!metric) return;
+    lv_obj_t *title = lv_obj_get_child(metric, 0);
+    if (!title) return;
+    lv_label_set_text(title, label_text ? label_text : "");
+    if (label_color.full == 0) label_color = UI_COLOR_TEXT_DIM;
+    lv_obj_set_style_text_color(title, label_color, 0);
+}
+
 /* ── Pill ────────────────────────────────────────────────────────── */
 lv_obj_t *ui_pill_create(lv_obj_t *parent, const char *text, lv_color_t bg)
 {

@@ -65,6 +65,11 @@ lv_obj_t *ui_metric_create_large(lv_obj_t *parent, const char *label_text);
 void ui_metric_set(lv_obj_t *metric, const char *value_str,
                    const char *unit_str, lv_color_t value_color);
 
+/* Cambia dinámicamente el texto y color del label superior de una métrica
+ * (útil para rótulos que cambian según estado: "Alternador"/"Bat. motor"). */
+void ui_metric_set_label(lv_obj_t *metric, const char *label_text,
+                         lv_color_t label_color);
+
 /* ── Pill de estado (badge redondeado) ──────────────────────────── */
 lv_obj_t *ui_pill_create(lv_obj_t *parent, const char *text, lv_color_t bg);
 void ui_pill_set(lv_obj_t *pill, const char *text, lv_color_t bg);

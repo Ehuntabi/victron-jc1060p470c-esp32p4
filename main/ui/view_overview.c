@@ -58,35 +58,36 @@ static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
                                   lv_obj_t **out_metric)
 {
     lv_obj_t *card = ui_card_create(parent, accent);
-    lv_obj_set_width(card, lv_pct(100));
-    /* Header con icono raster + metric debajo */
+    /* Header con icono raster + metric debajo. El caller fija altura/grow */
     ui_card_set_title_img(card, img, title, accent);
     if (out_metric) {
-        *out_metric = ui_metric_create_large(card, "");
+        *out_metric = ui_metric_create_compact(card, "");
     }
     return card;
 }
 
+/* Columna vertical (flecha derecha + label de potencia debajo) que se inserta
+ * como separador entre las cards en el layout horizontal del Overview. */
 static lv_obj_t *create_arrow_label(lv_obj_t *parent, lv_obj_t **out_flow)
 {
-    lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+    lv_obj_t *col = lv_obj_create(parent);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row, 12, 0);
+    lv_obj_set_style_pad_gap(col, 4, 0);
 
-    lv_obj_t *arrow = lv_label_create(row);
+    lv_obj_t *arrow = lv_label_create(col);
     lv_obj_set_style_text_font(arrow, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(arrow, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(arrow, LV_SYMBOL_DOWN);
+    lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
 
-    lv_obj_t *flow = lv_label_create(row);
-    lv_obj_set_style_text_font(flow, &lv_font_montserrat_24_es, 0);
+    lv_obj_t *flow = lv_label_create(col);
+    lv_obj_set_style_text_font(flow, &lv_font_montserrat_14_es, 0);
     lv_obj_set_style_text_color(flow, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(flow, "-- W");
+    lv_label_set_text(flow, "--");
     if (out_flow) *out_flow = flow;
     return arrow;
 }
@@ -102,49 +103,58 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_size(ov->base.root, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(ov->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(ov->base.root, 0, 0);
-    lv_obj_set_style_pad_all(ov->base.root, 12, 0);
+    lv_obj_set_style_pad_all(ov->base.root, 8, 0);
     lv_obj_set_style_pad_gap(ov->base.root, 8, 0);
     lv_obj_set_layout(ov->base.root, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ov->base.root, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(ov->base.root, LV_FLEX_ALIGN_START,
+    lv_obj_set_flex_align(ov->base.root, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(ov->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    /* Título */
-    lv_obj_t *title = lv_label_create(ov->base.root);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, UI_COLOR_TEXT, 0);
-    lv_label_set_text(title, "Overview");
-    lv_obj_set_style_pad_bottom(title, 4, 0);
+    /* ── Fila principal: Solar | flow | Bat | flow | Loads ───────── */
+    lv_obj_t *row = lv_obj_create(ov->base.root);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_width(row, lv_pct(100));
+    lv_obj_set_flex_grow(row, 1);
+    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Card Solar (verde) compacta */
-    ov->card_solar = create_node_card(ov->base.root, &icon_solar,
+    /* Card Solar (verde) lateral */
+    ov->card_solar = create_node_card(row, &icon_solar,
                                       "Solar", UI_COLOR_GREEN, &ov->m_solar_w);
+    lv_obj_set_height(ov->card_solar, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_solar, 2);
     ui_metric_set(ov->m_solar_w, "--", "W", UI_COLOR_TEXT);
 
     /* Flecha Solar→Bat */
-    ov->arrow_solar = create_arrow_label(ov->base.root, &ov->flow_solar);
+    ov->arrow_solar = create_arrow_label(row, &ov->flow_solar);
 
     /* Card Bateria (naranja, central, más grande) */
-    ov->card_bat = ui_card_create(ov->base.root, UI_COLOR_ORANGE);
-    lv_obj_set_width(ov->card_bat, lv_pct(100));
+    ov->card_bat = ui_card_create(row, UI_COLOR_ORANGE);
+    lv_obj_set_height(ov->card_bat, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_bat, 3);
     ui_card_set_title_img(ov->card_bat, &icon_battery,
                           "Batería", UI_COLOR_ORANGE);
-    /* Arc SOC centrado (flex_align del card lo coloca en cross center) */
-    ov->arc_soc = ui_arc_soc_create(ov->card_bat, 240);
-    ov->m_bat_current = ui_metric_create_large(ov->card_bat, "Corriente");
+    ov->arc_soc = ui_arc_soc_create(ov->card_bat, 200);
+    ov->m_bat_current = ui_metric_create_compact(ov->card_bat, "Corriente");
 
     /* Flecha Bat→Loads */
-    ov->arrow_loads = create_arrow_label(ov->base.root, &ov->flow_loads);
+    ov->arrow_loads = create_arrow_label(row, &ov->flow_loads);
 
-    /* Card Loads (cyan) compacta */
-    ov->card_loads = create_node_card(ov->base.root, &icon_home,
+    /* Card Loads (cyan) lateral */
+    ov->card_loads = create_node_card(row, &icon_home,
                                       "Cargas", UI_COLOR_CYAN, &ov->m_loads_w);
+    lv_obj_set_height(ov->card_loads, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_loads, 2);
     ui_metric_set(ov->m_loads_w, "--", "W", UI_COLOR_TEXT);
 
-    /* Footer: TTG */
-    ov->m_ttg = ui_metric_create_large(ov->base.root, "Autonomía");
+    /* Footer: TTG (compacto, fuera de la fila) */
+    ov->m_ttg = ui_metric_create_compact(ov->base.root, "Autonomía");
 
     /* Defaults */
     ov->bat.ttg_min = 0xFFFFFFFF;
@@ -232,7 +242,7 @@ static void overview_render(ui_overview_view_t *ov)
     /* ── Flecha Solar→Bat (W de carga desde PV) ────────────────── */
     unsigned solar_to_bat_w = solar_fresh ? ov->solar.pv_w : 0;
     if (solar_to_bat_w > 0) {
-        snprintf(buf, sizeof(buf), "%u W", solar_to_bat_w);
+        snprintf(buf, sizeof(buf), "%uW", solar_to_bat_w);
         lv_label_set_text(ov->flow_solar, buf);
         lv_obj_set_style_text_color(ov->flow_solar, UI_COLOR_GREEN, 0);
         lv_obj_set_style_text_color(ov->arrow_solar, UI_COLOR_GREEN, 0);
@@ -272,7 +282,7 @@ static void overview_render(ui_overview_view_t *ov)
         snprintf(buf, sizeof(buf), "%ld", loads_w);
         ui_metric_set(ov->m_loads_w, buf, "W",
                       loads_w > 0 ? UI_COLOR_ORANGE : UI_COLOR_TEXT_DIM);
-        snprintf(buf, sizeof(buf), "%ld W", loads_w);
+        snprintf(buf, sizeof(buf), "%ldW", loads_w);
         lv_label_set_text(ov->flow_loads, buf);
         lv_color_t flow_col = loads_w > 0 ? UI_COLOR_ORANGE : UI_COLOR_TEXT_DIM;
         lv_obj_set_style_text_color(ov->flow_loads, flow_col, 0);

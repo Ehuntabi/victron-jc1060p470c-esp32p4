@@ -20,10 +20,11 @@ static void battery_view_root_click_cb(lv_event_t *e)
 typedef struct {
     ui_device_view_t base;
     lv_obj_t *card;
-    lv_obj_t *pill_state;     /* Cargando / Descargando / Reposo */
+    lv_obj_t *pill_state;      /* "Cargando 5.5 A" / "Descargando 3.2 A" / "Reposo" */
     lv_obj_t *arc_soc;
     lv_obj_t *m_voltage;
     lv_obj_t *m_current;
+    lv_obj_t *bar_current;     /* Barra bipolar bajo m_current */
     lv_obj_t *m_power;
     lv_obj_t *m_ttg;
     lv_obj_t *m_consumed;
@@ -48,8 +49,8 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_size(view->base.root, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(view->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(view->base.root, 0, 0);
-    lv_obj_set_style_pad_all(view->base.root, 12, 0);
-    lv_obj_set_style_pad_gap(view->base.root, 12, 0);
+    lv_obj_set_style_pad_all(view->base.root, 8, 0);
+    lv_obj_set_style_pad_gap(view->base.root, 8, 0);
     lv_obj_set_layout(view->base.root, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(view->base.root, LV_FLEX_FLOW_COLUMN);
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
@@ -71,9 +72,9 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(body, 24, 0);
+    lv_obj_set_style_pad_gap(body, 16, 0);
 
-    view->arc_soc = ui_arc_soc_create(body, 240);
+    view->arc_soc = ui_arc_soc_create(body, 180);
 
     lv_obj_t *col = lv_obj_create(body);
     lv_obj_remove_style_all(col);
@@ -83,11 +84,26 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_SPACE_AROUND,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col, 16, 0);
+    lv_obj_set_style_pad_gap(col, 8, 0);
 
-    view->m_voltage = ui_metric_create_large(col, "Tensión");
-    view->m_current = ui_metric_create_large(col, "Corriente");
-    view->m_power   = ui_metric_create_large(col, "Potencia");
+    view->m_voltage = ui_metric_create_compact(col, "Tensión");
+    view->m_current = ui_metric_create_compact(col, "Corriente");
+
+    /* Barra bipolar de corriente bajo m_current.
+     * Centro = 0 A, izquierda = descarga (naranja), derecha = carga (verde).
+     * Rango ±50 A cubre las baterías típicas de 12 V. */
+    view->bar_current = lv_bar_create(col);
+    lv_obj_set_size(view->bar_current, lv_pct(95), 8);
+    lv_bar_set_range(view->bar_current, -50, 50);
+    lv_bar_set_mode(view->bar_current, LV_BAR_MODE_SYMMETRICAL);
+    lv_bar_set_value(view->bar_current, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(view->bar_current, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
+
+    view->m_power   = ui_metric_create_compact(col, "Potencia");
 
     /* Footer row: TTG + Consumido + Aux distribuidos en todo el ancho */
     lv_obj_t *footer = lv_obj_create(view->card);
@@ -97,12 +113,12 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_AROUND,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(footer, 12, 0);
-    lv_obj_set_style_pad_top(footer, 12, 0);
+    lv_obj_set_style_pad_gap(footer, 8, 0);
+    lv_obj_set_style_pad_top(footer, 8, 0);
 
-    view->m_ttg      = ui_metric_create_large(footer, "Autonomía");
-    view->m_consumed = ui_metric_create_large(footer, "Consumido");
-    view->m_aux      = ui_metric_create_large(footer, "Aux");
+    view->m_ttg      = ui_metric_create_compact(footer, "Autonomía");
+    view->m_consumed = ui_metric_create_compact(footer, "Consumido");
+    view->m_aux      = ui_metric_create_compact(footer, "Aux");
 
     view->base.update  = battery_view_update;
     view->base.show    = battery_view_show;
@@ -168,13 +184,31 @@ static void battery_view_update(ui_device_view_t *view, const victron_data_t *da
     ui_metric_set(bat->m_power, buf, "W",
                   ui_color_for_current((int32_t)b->battery_current_milli));
 
-    /* Pill de estado: Cargando / Descargando / Reposo */
+    /* Pill de estado con magnitud: "Cargando 5.5 A" / "Descargando 3.2 A" */
+    char pill_buf[32];
+    int abs_a_pill = abs_c;  /* en centiamperios */
     if (b->battery_current_milli > 50) {
-        ui_pill_set(bat->pill_state, "Cargando", UI_COLOR_GREEN);
+        snprintf(pill_buf, sizeof(pill_buf), "Cargando %d.%d A",
+                 abs_a_pill / 100, (abs_a_pill / 10) % 10);
+        ui_pill_set(bat->pill_state, pill_buf, UI_COLOR_GREEN);
     } else if (b->battery_current_milli < -50) {
-        ui_pill_set(bat->pill_state, "Descargando", UI_COLOR_ORANGE);
+        snprintf(pill_buf, sizeof(pill_buf), "Descargando %d.%d A",
+                 abs_a_pill / 100, (abs_a_pill / 10) % 10);
+        ui_pill_set(bat->pill_state, pill_buf, UI_COLOR_ORANGE);
     } else {
         ui_pill_set(bat->pill_state, "Reposo", UI_COLOR_TEXT_DIM);
+    }
+
+    /* Barra bipolar de corriente: valor en A, color según signo */
+    if (bat->bar_current) {
+        int amps_int = (int)(b->battery_current_milli / 1000);
+        if (amps_int > 50)  amps_int = 50;
+        if (amps_int < -50) amps_int = -50;
+        lv_bar_set_value(bat->bar_current, amps_int, LV_ANIM_ON);
+        lv_color_t bar_col = (b->battery_current_milli > 0) ? UI_COLOR_GREEN
+                           : (b->battery_current_milli < 0) ? UI_COLOR_ORANGE
+                           : UI_COLOR_TEXT_DIM;
+        lv_obj_set_style_bg_color(bat->bar_current, bar_col, LV_PART_INDICATOR);
     }
 
     /* Arc SOC + voltaje */
