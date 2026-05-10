@@ -4,6 +4,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <time.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -31,6 +33,11 @@ typedef struct {
 
 /* Alojado en PSRAM en init() — 552 KB no caben en internal RAM */
 static bh_buffer_t *s_bufs = NULL;
+/* Mutex para proteger s_bufs entre el sample_timer (esp_timer task) y los
+ * accesos desde LVGL task (update_latest, get_series, flush). */
+static SemaphoreHandle_t s_bufs_mutex = NULL;
+#define BH_LOCK()   do { if (s_bufs_mutex) xSemaphoreTake(s_bufs_mutex, portMAX_DELAY); } while (0)
+#define BH_UNLOCK() do { if (s_bufs_mutex) xSemaphoreGive(s_bufs_mutex); } while (0)
 static esp_timer_handle_t s_sample_timer = NULL;
 static esp_timer_handle_t s_bh_flush_timer = NULL;
 static bool s_bh_dir_ok = false;
@@ -74,9 +81,9 @@ static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t avg, int32_t mx, int
 
 void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
 {
-    if (src >= BH_SRC_COUNT) return;
+    if (src >= BH_SRC_COUNT || !s_bufs) return;
+    BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
-    /* Acumular en el intervalo activo para calcular avg/max/min */
     if (b->acc_count == 0) {
         b->acc_max_ma = milli_amps;
         b->acc_min_ma = milli_amps;
@@ -88,11 +95,14 @@ void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
     b->acc_count++;
     b->last_milli = milli_amps;
     b->has_latest = true;
+    BH_UNLOCK();
 }
 
 static void sample_timer_cb(void *arg)
 {
+    if (!s_bufs) return;
     int32_t ts = now_seconds();
+    BH_LOCK();
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         bh_buffer_t *b = &s_bufs[i];
         if (b->acc_count > 0) {
@@ -111,6 +121,7 @@ static void sample_timer_cb(void *arg)
         b->acc_max_ma = 0;
         b->acc_min_ma = 0;
     }
+    BH_UNLOCK();
 }
 
 /* Persistencia NVS deshabilitada: el buffer es ~552 KB total y NVS no puede
@@ -140,6 +151,7 @@ void battery_history_flush(void)
 static void bh_flush_to_sd_impl(void);
 static void bh_flush_to_sd_impl(void)
 {
+    if (!s_bufs) return;
     /* Comprobar si /sdcard existe (datalogger lo monta) */
     struct stat st;
     if (stat("/sdcard", &st) != 0) return;
@@ -176,6 +188,7 @@ static void bh_flush_to_sd_impl(void)
     }
 
     int total_written = 0;
+    BH_LOCK();
     for (int s = 0; s < BH_SRC_COUNT; ++s) {
         bh_buffer_t *b = &s_bufs[s];
         size_t total = b->wrapped ? BH_POINTS : b->write_idx;
@@ -219,6 +232,7 @@ static void bh_flush_to_sd_impl(void)
         s_bh_last_flushed_idx[s] = b->write_idx;
         s_bh_last_flushed_wrapped[s] = b->wrapped;
     }
+    BH_UNLOCK();
     fclose(f);
     if (total_written > 0) {
         ESP_LOGI(TAG, "Volcadas %d entradas a %s", total_written, path);
@@ -232,6 +246,14 @@ static void bh_flush_timer_cb(void *arg)
 
 esp_err_t battery_history_init(void)
 {
+    /* Crear mutex antes de alocar buffer */
+    if (!s_bufs_mutex) {
+        s_bufs_mutex = xSemaphoreCreateMutex();
+        if (!s_bufs_mutex) {
+            ESP_LOGE(TAG, "No se pudo crear mutex");
+            return ESP_ERR_NO_MEM;
+        }
+    }
     /* Alocar buffer en PSRAM (552 KB) */
     if (!s_bufs) {
         s_bufs = heap_caps_calloc(BH_SRC_COUNT, sizeof(bh_buffer_t),
@@ -271,7 +293,8 @@ size_t battery_history_get_series(bh_source_t src,
                                   int32_t *out_oldest_ts,
                                   int32_t *out_newest_ts)
 {
-    if (src >= BH_SRC_COUNT || !out_points) return 0;
+    if (src >= BH_SRC_COUNT || !out_points || !s_bufs) return 0;
+    BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
     size_t count = 0;
     int32_t oldest = INT32_MAX, newest = INT32_MIN;
@@ -297,6 +320,7 @@ size_t battery_history_get_series(bh_source_t src,
             count++;
         }
     }
+    BH_UNLOCK();
     if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
     if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
     return count;
@@ -306,11 +330,10 @@ void battery_history_get_totals(bh_source_t src,
                                 float *out_charge_ah,
                                 float *out_discharge_ah)
 {
-    if (src >= BH_SRC_COUNT) {
-        if (out_charge_ah) *out_charge_ah = 0;
-        if (out_discharge_ah) *out_discharge_ah = 0;
-        return;
-    }
+    if (out_charge_ah) *out_charge_ah = 0;
+    if (out_discharge_ah) *out_discharge_ah = 0;
+    if (src >= BH_SRC_COUNT || !s_bufs) return;
+    BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
     /* Trapezoidal integration: each step BH_SAMPLE_MS apart.
      * Ah = sum(milli_amps * dt_h) / 1000  with dt_h = 3min/60 = 0.05 */
@@ -323,6 +346,7 @@ void battery_history_get_totals(bh_source_t src,
         if (b->points[i].milli_amps > 0) charge_mah += ah;
         else discharge_mah += -ah;
     }
+    BH_UNLOCK();
     if (out_charge_ah) *out_charge_ah = charge_mah / 1000.0f;
     if (out_discharge_ah) *out_discharge_ah = discharge_mah / 1000.0f;
 }
@@ -331,7 +355,8 @@ void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int
 {
     if (out_oldest_ts) *out_oldest_ts = 0;
     if (out_newest_ts) *out_newest_ts = 0;
-    if (src >= BH_SRC_COUNT) return;
+    if (src >= BH_SRC_COUNT || !s_bufs) return;
+    BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
     int32_t oldest = INT32_MAX, newest = INT32_MIN;
     size_t total = b->wrapped ? BH_POINTS : b->write_idx;
@@ -340,6 +365,7 @@ void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int
         if (b->points[i].ts < oldest) oldest = b->points[i].ts;
         if (b->points[i].ts > newest) newest = b->points[i].ts;
     }
+    BH_UNLOCK();
     if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
     if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
 }

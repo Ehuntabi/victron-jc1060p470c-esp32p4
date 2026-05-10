@@ -1130,7 +1130,8 @@ void ui_set_freezer_alarm(ui_state_t *ui, bool active)
 }
 
 /* ── Pantalla gráfica temperaturas ─────────────────────────── */
-static lv_obj_t *s_chart      = NULL;
+static lv_obj_t *s_chart_screen = NULL;  /* overlay raíz */
+static lv_obj_t *s_chart      = NULL;     /* widget chart interno */
 static lv_chart_series_t *s_ser_aletas     = NULL;
 static lv_chart_series_t *s_ser_congelador = NULL;
 static lv_chart_series_t *s_ser_exterior   = NULL;
@@ -1140,6 +1141,7 @@ static void chart_screen_close_cb(lv_event_t *e)
 {
     lv_obj_t *screen = lv_event_get_user_data(e);
     lv_obj_del(screen);
+    s_chart_screen = NULL;
     s_chart = NULL;
 }
 
@@ -1157,6 +1159,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_move_foreground(scr);
+    s_chart_screen = scr;
 
     /* Título */
     lv_obj_t *lbl_title = lv_label_create(scr);
@@ -1323,7 +1326,9 @@ static lv_obj_t *s_bh_screen = NULL;
 /* Cerrar overlays para rotacion del salvapantallas */
 void ui_close_chart_screen(void)
 {
-    if (s_chart) { lv_obj_del(s_chart); s_chart = NULL; }
+    /* Borrar el overlay raíz, que arrastra al chart y todos sus hijos */
+    if (s_chart_screen) { lv_obj_del(s_chart_screen); s_chart_screen = NULL; }
+    s_chart = NULL;
 }
 
 static lv_obj_t *s_bh_chart  = NULL;
