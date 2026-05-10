@@ -1,5 +1,6 @@
 #include "settings_panel.h"
 #include "ui.h"
+#include "ui_card.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "alerts.h"
@@ -892,65 +893,69 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 {
     /* Asignar evento al lv_obj para detectar cuando se carga */
     lv_obj_add_event_cb(page_victron, (lv_event_cb_t)NULL, LV_EVENT_SCREEN_LOADED, NULL);
-    /* Root container for Victron keys settings */
+    /* Root container — aprovecha todo el ancho del page */
     lv_obj_t *victron_container = lv_obj_create(page_victron);
     lv_obj_remove_style_all(victron_container);
     lv_obj_set_size(victron_container, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(victron_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(victron_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(victron_container, 10, 0);
-    lv_obj_set_style_pad_gap(victron_container, 14, 0);
+    lv_obj_set_style_pad_all(victron_container, 16, 0);
+    lv_obj_set_style_pad_gap(victron_container, 16, 0);
     lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
 
-    /* Header text */
-    lv_obj_t *lbl_header = lv_label_create(victron_container);
-    lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_header, "Configure multiple Victron devices with MAC addresses and AES keys:");
+    /* === Card de controles (border rosa) — header + botones add/remove === */
+    lv_obj_t *card_ctrl = ui_card_create(victron_container, UI_COLOR_RED);
+    lv_obj_t *header = ui_card_set_title(card_ctrl, LV_SYMBOL_LIST,
+                                         "Dispositivos Victron", UI_COLOR_RED);
 
-    /* --- Victron devices configuration section --- */
-    lv_obj_t *victron_section = lv_obj_create(victron_container);
-    lv_obj_remove_style_all(victron_section);
-    lv_obj_set_width(victron_section, lv_pct(100));
-    lv_obj_set_height(victron_section, LV_SIZE_CONTENT);
-    lv_obj_set_layout(victron_section, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(victron_section, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(victron_section, 14, 0);
-    ui->victron_config.container = victron_section;
-
-    /* --- Row for Add / Remove buttons --- */
-    lv_obj_t *controls_row = lv_obj_create(victron_section);
+    /* Botones +/- a la derecha del header */
+    lv_obj_t *controls_row = lv_obj_create(header);
     lv_obj_remove_style_all(controls_row);
-    lv_obj_set_width(controls_row, lv_pct(100));
-    lv_obj_set_height(controls_row, LV_SIZE_CONTENT);
+    lv_obj_set_size(controls_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(controls_row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(controls_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_gap(controls_row, 10, 0);
-    lv_obj_set_flex_align(controls_row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* Add button */
     ui->victron_config.add_btn = lv_btn_create(controls_row);
-    lv_obj_set_size(ui->victron_config.add_btn, 36, 36);
+    lv_obj_set_size(ui->victron_config.add_btn, 44, 44);
+    lv_obj_set_style_bg_color(ui->victron_config.add_btn, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_radius(ui->victron_config.add_btn, 8, 0);
     lv_obj_t *lbl_add = lv_label_create(ui->victron_config.add_btn);
     lv_label_set_text(lbl_add, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_add, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_add);
-    lv_obj_add_event_cb(ui->victron_config.add_btn, victron_config_add_btn_event_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_add_event_cb(ui->victron_config.add_btn,
+                        victron_config_add_btn_event_cb, LV_EVENT_CLICKED, ui);
 
-    /* Remove button */
     ui->victron_config.remove_btn = lv_btn_create(controls_row);
-    lv_obj_set_size(ui->victron_config.remove_btn, 36, 36);
+    lv_obj_set_size(ui->victron_config.remove_btn, 44, 44);
+    lv_obj_set_style_bg_color(ui->victron_config.remove_btn, UI_COLOR_RED_DARK, 0);
+    lv_obj_set_style_radius(ui->victron_config.remove_btn, 8, 0);
     lv_obj_t *lbl_remove = lv_label_create(ui->victron_config.remove_btn);
     lv_label_set_text(lbl_remove, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_remove, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_remove);
-    lv_obj_add_event_cb(ui->victron_config.remove_btn, victron_config_remove_btn_event_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_add_event_cb(ui->victron_config.remove_btn,
+                        victron_config_remove_btn_event_cb, LV_EVENT_CLICKED, ui);
 
-    /* --- Victron devices list section --- */
-    ui->victron_config.list = lv_obj_create(victron_section);
+    /* Texto descriptivo dentro del card */
+    lv_obj_t *lbl_header = lv_label_create(card_ctrl);
+    lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_header, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_long_mode(lbl_header, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_header, lv_pct(100));
+    lv_label_set_text(lbl_header, "Configura hasta 8 dispositivos Victron con su dirección MAC y clave AES.");
+
+    ui->victron_config.container = victron_container;
+
+    /* Lista vertical de cards de dispositivo */
+    ui->victron_config.list = lv_obj_create(victron_container);
     lv_obj_remove_style_all(ui->victron_config.list);
     lv_obj_set_width(ui->victron_config.list, lv_pct(100));
     lv_obj_set_height(ui->victron_config.list, LV_SIZE_CONTENT);
     lv_obj_set_layout(ui->victron_config.list, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ui->victron_config.list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(ui->victron_config.list, 10, 0);
+    lv_obj_set_style_pad_gap(ui->victron_config.list, 14, 0);
     lv_obj_set_scroll_dir(ui->victron_config.list, LV_DIR_VER);
 
     /* Initialize victron config state */
@@ -1067,50 +1072,52 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
         return;
     }
 
-    /* Main row container */
-    lv_obj_t *row = lv_obj_create(ui->victron_config.list);
+    /* Card por dispositivo (border cyan, mismo estilo que las demás) */
+    lv_obj_t *row = ui_card_create(ui->victron_config.list, UI_COLOR_CYAN);
     if (row == NULL) { ESP_LOGE("UI", "row create failed idx=%d", (int)index); return; }
-    lv_obj_remove_style_all(row);
-    lv_obj_set_width(row, lv_pct(100));
-    lv_obj_set_height(row, LV_SIZE_CONTENT);
-    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    lv_obj_set_style_pad_all(row, 8, 0);
-    lv_obj_set_style_bg_opa(row, LV_OPA_20, 0);
-    lv_obj_set_style_radius(row, 4, 0);
 
-    /* Header row with device number and enabled checkbox */
-    lv_obj_t *header_row = lv_obj_create(row);
-    lv_obj_remove_style_all(header_row);
-    lv_obj_set_width(header_row, lv_pct(100));
-    lv_obj_set_height(header_row, LV_SIZE_CONTENT);
-    lv_obj_set_layout(header_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(header_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(header_row, 10, 0);
-    lv_obj_set_flex_align(header_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Header con título "Device N" + switch enabled a la derecha */
+    char title_buf[20];
+    snprintf(title_buf, sizeof(title_buf), "Device %d", (int)(index + 1));
+    lv_obj_t *header_row = ui_card_set_title(row, LV_SYMBOL_BLUETOOTH,
+                                             title_buf, UI_COLOR_CYAN);
 
-    /* Device label */
-    lv_obj_t *device_label = lv_label_create(header_row);
-    lv_obj_set_style_text_font(device_label, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text_fmt(device_label, "Device %d", (int)(index + 1));
-
-    /* Enabled checkbox */
     lv_obj_t *enabled_cb = lv_checkbox_create(header_row);
-    lv_checkbox_set_text(enabled_cb, "Enabled");
+    lv_checkbox_set_text(enabled_cb, "Activo");
     lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20_es, 0);
-    lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_set_style_text_color(enabled_cb, UI_COLOR_TEXT, 0);
+    lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb,
+                        LV_EVENT_VALUE_CHANGED, ui);
 
-    /* Device name input */
-    lv_obj_t *name_label = lv_label_create(row);
+    /* Body en 2 columnas: izquierda inputs, derecha estado en vivo */
+    lv_obj_t *body = lv_obj_create(row);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(body, 14, 0);
+
+    /* Columna izquierda — inputs (flex_grow=1 para mitad ancho) */
+    lv_obj_t *col_left = lv_obj_create(body);
+    lv_obj_remove_style_all(col_left);
+    lv_obj_set_height(col_left, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(col_left, 1);
+    lv_obj_set_layout(col_left, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_left, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(col_left, 6, 0);
+
+    lv_obj_t *name_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(name_label, "Device Name:");
+    lv_obj_set_style_text_color(name_label, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_text(name_label, "Nombre:");
 
-    lv_obj_t *name_ta = lv_textarea_create(row);
+    lv_obj_t *name_ta = lv_textarea_create(col_left);
     lv_textarea_set_max_length(name_ta, 31);
-    lv_obj_set_width(name_ta, lv_pct(80));
+    lv_obj_set_width(name_ta, lv_pct(100));
     lv_textarea_set_one_line(name_ta, true);
-    lv_textarea_set_placeholder_text(name_ta, "e.g. Solar Charger 1");
+    lv_textarea_set_placeholder_text(name_ta, "ej. Solar Charger 1");
     lv_obj_set_style_text_font(name_ta, &lv_font_montserrat_20_es, 0);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
@@ -1118,14 +1125,14 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
 
-    /* MAC address input */
-    lv_obj_t *mac_label = lv_label_create(row);
+    lv_obj_t *mac_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(mac_label, "MAC Address:");
+    lv_obj_set_style_text_color(mac_label, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_text(mac_label, "Dirección MAC:");
 
-    lv_obj_t *mac_ta = lv_textarea_create(row);
+    lv_obj_t *mac_ta = lv_textarea_create(col_left);
     lv_textarea_set_max_length(mac_ta, 17);
-    lv_obj_set_width(mac_ta, lv_pct(60));
+    lv_obj_set_width(mac_ta, lv_pct(100));
     lv_textarea_set_one_line(mac_ta, true);
     lv_textarea_set_placeholder_text(mac_ta, "XX:XX:XX:XX:XX:XX");
     lv_obj_set_style_text_font(mac_ta, &lv_font_montserrat_20_es, 0);
@@ -1135,14 +1142,14 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
 
-    /* AES Key input */
-    lv_obj_t *key_label = lv_label_create(row);
+    lv_obj_t *key_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(key_label, "AES Key (32 hex characters):");
+    lv_obj_set_style_text_color(key_label, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_text(key_label, "Clave AES (32 hex):");
 
-    lv_obj_t *key_ta = lv_textarea_create(row);
+    lv_obj_t *key_ta = lv_textarea_create(col_left);
     lv_textarea_set_max_length(key_ta, 32);
-    lv_obj_set_width(key_ta, lv_pct(90));
+    lv_obj_set_width(key_ta, lv_pct(100));
     lv_textarea_set_one_line(key_ta, true);
     lv_textarea_set_placeholder_text(key_ta, "00000000000000000000000000000000");
     lv_obj_set_style_text_font(key_ta, &lv_font_montserrat_20_es, 0);
@@ -1152,44 +1159,38 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_add_event_cb(key_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(key_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
 
-    /* --- Device Status Section --- */
-    lv_obj_t *status_label = lv_label_create(row);
-    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(status_label, "Live Device Status:");
-
-    lv_obj_t *status_container = lv_obj_create(row);
+    /* Columna derecha — sub-card de estado en vivo (border verde) */
+    lv_obj_t *status_container = lv_obj_create(body);
     lv_obj_remove_style_all(status_container);
-    lv_obj_set_width(status_container, lv_pct(100));
     lv_obj_set_height(status_container, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(status_container, 1);
     lv_obj_set_layout(status_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(status_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(status_container, 6, 0);  // Increased gap for better readability
-    lv_obj_set_style_pad_all(status_container, 10, 0);  // Increased padding
-    lv_obj_set_style_bg_opa(status_container, LV_OPA_20, 0);  // More visible background
-    lv_obj_set_style_radius(status_container, 4, 0);  // Rounded corners
-    lv_obj_set_style_border_width(status_container, 1, 0);  // Add border
-    lv_obj_set_style_border_opa(status_container, LV_OPA_30, 0);
-    lv_obj_set_style_border_color(status_container, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_pad_gap(status_container, 6, 0);
+    lv_obj_set_style_pad_all(status_container, 12, 0);
+    lv_obj_set_style_bg_color(status_container, lv_color_hex(0x0A1018), 0);
+    lv_obj_set_style_bg_opa(status_container, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(status_container, 8, 0);
+    lv_obj_set_style_border_width(status_container, 1, 0);
+    lv_obj_set_style_border_opa(status_container, LV_OPA_50, 0);
+    lv_obj_set_style_border_color(status_container, UI_COLOR_GREEN, 0);
 
-    /* Device type label */
     lv_obj_t *device_type_lbl = lv_label_create(status_container);
     lv_obj_set_style_text_font(device_type_lbl, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(device_type_lbl, "Device: --");
-    lv_obj_set_style_text_color(device_type_lbl, lv_color_hex(0x888888), 0);
+    lv_label_set_text(device_type_lbl, "Tipo: --");
+    lv_obj_set_style_text_color(device_type_lbl, UI_COLOR_TEXT_DIM, 0);
 
-    /* Product name label */
     lv_obj_t *product_name_lbl = lv_label_create(status_container);
     lv_obj_set_style_text_font(product_name_lbl, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(product_name_lbl, "Product: --");
-    lv_obj_set_style_text_color(product_name_lbl, lv_color_hex(0x888888), 0);
+    lv_label_set_text(product_name_lbl, "Producto: --");
+    lv_obj_set_style_text_color(product_name_lbl, UI_COLOR_TEXT_DIM, 0);
 
-    /* Live metrics status label - enhanced for detailed status */
     lv_obj_t *error_lbl = lv_label_create(status_container);
     lv_obj_set_style_text_font(error_lbl, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(error_lbl, "Status: Waiting for data...");
-    lv_obj_set_style_text_color(error_lbl, lv_color_hex(0x888888), 0);
-    lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);  // Enable text wrapping for longer status
-    lv_obj_set_width(error_lbl, lv_pct(100));  // Full width for better text layout
+    lv_label_set_text(error_lbl, "Estado: esperando datos...");
+    lv_obj_set_style_text_color(error_lbl, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(error_lbl, lv_pct(100));
 
     /* Store references */
     ui->victron_config.rows[index] = row;
@@ -1310,19 +1311,27 @@ void ui_settings_panel_init(ui_state_t *ui,
 
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x2A2A2A), 0);
-    lv_obj_set_style_border_color(back_btn, lv_color_hex(0x555555), 0);
-    lv_obj_set_style_border_width(back_btn, 1, 0);
-    lv_obj_set_style_radius(back_btn, 8, 0);
-    lv_obj_set_style_pad_hor(back_btn, 14, 0);
-    lv_obj_set_style_pad_ver(back_btn, 8, 0);
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x3D5A80), LV_STATE_PRESSED);
+    /* Botón naranja cálido con sombra naranja exterior */
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_color(back_btn, lv_color_white(), 0);
+    lv_obj_set_style_border_opa(back_btn, LV_OPA_60, 0);
+    lv_obj_set_style_border_width(back_btn, 2, 0);
+    lv_obj_set_style_radius(back_btn, 10, 0);
+    lv_obj_set_style_pad_hor(back_btn, 18, 0);
+    lv_obj_set_style_pad_ver(back_btn, 10, 0);
+    lv_obj_set_style_shadow_width(back_btn, 12, 0);
+    lv_obj_set_style_shadow_color(back_btn, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_shadow_opa(back_btn, LV_OPA_50, 0);
+    lv_obj_set_style_shadow_spread(back_btn, 0, 0);
+    /* Estado pulsado: naranja oscuro */
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0xE65100), LV_STATE_PRESSED);
     lv_obj_set_style_text_font(back_btn, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(back_btn, lv_color_hex(0x00BFFF), 0);
+    lv_obj_set_style_text_color(back_btn, lv_color_white(), 0);
 
     lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back");
+    lv_label_set_text(back_label, LV_SYMBOL_LEFT "  Back");
     lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
     /* Spacer invisible para centrar el titulo via SPACE_BETWEEN */
     lv_obj_t *header_spacer = lv_obj_create(main_header);
     lv_obj_remove_style_all(header_spacer);
@@ -1806,49 +1815,134 @@ static void screensaver_wake(ui_state_t *ui)
 
 
 
-static void victron_config_add_btn_event_cb(lv_event_t *e)
+/* ── Modal de confirmación reutilizable para acciones en Victron Keys ──
+ * Cualquier modificación (añadir, quitar, toggle activo) pasa por aquí. */
+typedef void (*victron_confirm_fn)(void *ud);
+
+static lv_obj_t *s_victron_confirm_modal = NULL;
+static victron_confirm_fn s_victron_confirm_ok = NULL;
+static victron_confirm_fn s_victron_confirm_cancel = NULL;
+static void *s_victron_confirm_ud = NULL;
+
+static void victron_confirm_btn_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
+    const char *txt = lbl ? lv_label_get_text(lbl) : "";
+    bool confirmed = (txt && strstr(txt, "Confirmar") != NULL);
 
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL) {
-        return;
-    }
+    victron_confirm_fn ok = s_victron_confirm_ok;
+    victron_confirm_fn cancel = s_victron_confirm_cancel;
+    void *ud = s_victron_confirm_ud;
+    s_victron_confirm_ok = NULL;
+    s_victron_confirm_cancel = NULL;
+    s_victron_confirm_ud = NULL;
 
-    if (ui->victron_config.count >= UI_MAX_VICTRON_DEVICES) {
-        return;
+    if (s_victron_confirm_modal) {
+        lv_obj_del(s_victron_confirm_modal);
+        s_victron_confirm_modal = NULL;
     }
+    if (confirmed) { if (ok) ok(ud); }
+    else           { if (cancel) cancel(ud); }
+}
 
+static void victron_show_confirm_modal(const char *msg,
+                                       victron_confirm_fn on_ok,
+                                       victron_confirm_fn on_cancel,
+                                       void *ud)
+{
+    if (s_victron_confirm_modal) return;
+    s_victron_confirm_ok = on_ok;
+    s_victron_confirm_cancel = on_cancel;
+    s_victron_confirm_ud = ud;
+
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_victron_confirm_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 560, 240);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_label_set_text(title, LV_SYMBOL_WARNING "  ¿Confirmar cambio?");
+
+    lv_obj_t *m = lv_label_create(dlg);
+    lv_obj_set_style_text_font(m, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(m, lv_color_white(), 0);
+    lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(m, lv_pct(100));
+    lv_obj_set_style_text_align(m, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(m, msg ? msg : "Vas a modificar la configuración. ¿Continuar?");
+
+    lv_obj_t *row_btns = lv_obj_create(dlg);
+    lv_obj_remove_style_all(row_btns);
+    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_cancel = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_cancel, 200, 56);
+    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_cancel, 12, 0);
+    lv_obj_t *lc = lv_label_create(btn_cancel);
+    lv_label_set_text(lc, "Cancelar");
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lc);
+    lv_obj_add_event_cb(btn_cancel, victron_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_ok = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_ok, 200, 56);
+    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_radius(btn_ok, 12, 0);
+    lv_obj_t *lo = lv_label_create(btn_ok);
+    lv_label_set_text(lo, "Confirmar");
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lo);
+    lv_obj_add_event_cb(btn_ok, victron_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+}
+
+/* ── Acciones reales tras confirmación ─────────────────────────────── */
+
+static void victron_do_add(void *ud)
+{
+    ui_state_t *ui = (ui_state_t *)ud;
+    if (!ui || ui->victron_config.count >= UI_MAX_VICTRON_DEVICES) return;
     size_t index = ui->victron_config.count;
     ui->victron_config.count++;
-
     victron_config_create_row(ui, index);
     victron_config_update_controls(ui);
     victron_config_persist(ui);
 }
 
-static void victron_config_remove_btn_event_cb(lv_event_t *e)
+static void victron_do_remove(void *ud)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL) {
-        return;
-    }
-
-    if (ui->victron_config.count == 0) {
-        return;
-    }
-
+    ui_state_t *ui = (ui_state_t *)ud;
+    if (!ui || ui->victron_config.count == 0) return;
     size_t index = ui->victron_config.count - 1;
     if (ui->victron_config.rows[index] != NULL) {
         lv_obj_del(ui->victron_config.rows[index]);
     }
-
     ui->victron_config.rows[index] = NULL;
     ui->victron_config.mac_textareas[index] = NULL;
     ui->victron_config.key_textareas[index] = NULL;
@@ -1859,19 +1953,69 @@ static void victron_config_remove_btn_event_cb(lv_event_t *e)
     ui->victron_config.error_labels[index] = NULL;
     ui->victron_config.status_containers[index] = NULL;
     ui->victron_config.count--;
-
     victron_config_update_controls(ui);
     victron_config_persist(ui);
+}
+
+/* Para el toggle: guardamos el checkbox + nuevo estado para revertir */
+typedef struct {
+    ui_state_t *ui;
+    lv_obj_t *cb;
+    bool new_state;  /* estado al que se cambió antes de mostrar el modal */
+} victron_toggle_ctx_t;
+
+static victron_toggle_ctx_t s_toggle_ctx;
+
+static void victron_do_toggle_confirm(void *ud)
+{
+    victron_toggle_ctx_t *ctx = (victron_toggle_ctx_t *)ud;
+    if (!ctx || !ctx->ui) return;
+    victron_config_persist(ctx->ui);
+}
+
+static void victron_do_toggle_cancel(void *ud)
+{
+    victron_toggle_ctx_t *ctx = (victron_toggle_ctx_t *)ud;
+    if (!ctx || !ctx->cb) return;
+    /* Revertir el estado del checkbox al anterior (opuesto al nuevo) */
+    if (ctx->new_state) lv_obj_clear_state(ctx->cb, LV_STATE_CHECKED);
+    else                lv_obj_add_state(ctx->cb, LV_STATE_CHECKED);
+}
+
+/* ── Wrappers de los event_cb originales con confirmación ──────────── */
+
+static void victron_config_add_btn_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui || ui->victron_config.count >= UI_MAX_VICTRON_DEVICES) return;
+    victron_show_confirm_modal("Vas a añadir un nuevo dispositivo Victron. ¿Continuar?",
+                               victron_do_add, NULL, ui);
+}
+
+static void victron_config_remove_btn_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui || ui->victron_config.count == 0) return;
+    victron_show_confirm_modal("Vas a eliminar el último dispositivo Victron. ¿Continuar?",
+                               victron_do_remove, NULL, ui);
 }
 
 static void victron_enabled_checkbox_event_cb(lv_event_t *e)
 {
     ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL || lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) {
-        return;
-    }
-
-    victron_config_persist(ui);
+    lv_obj_t *cb = lv_event_get_target(e);
+    if (!ui || !cb || lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    /* Capturar nuevo estado para poder revertir si cancela */
+    s_toggle_ctx.ui = ui;
+    s_toggle_ctx.cb = cb;
+    s_toggle_ctx.new_state = lv_obj_has_state(cb, LV_STATE_CHECKED);
+    const char *msg = s_toggle_ctx.new_state
+        ? "Vas a activar este dispositivo. ¿Continuar?"
+        : "Vas a desactivar este dispositivo. ¿Continuar?";
+    victron_show_confirm_modal(msg,
+        victron_do_toggle_confirm, victron_do_toggle_cancel, &s_toggle_ctx);
 }
 
 static void victron_field_ta_event_cb(lv_event_t *e)

@@ -3,8 +3,11 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
-#define FRIGO_ONEWIRE_GPIO   26
-#define FRIGO_FAN_GPIO        21
+/* GPIOs físicamente accesibles vía el header JP1 (2x13 / 2.54 mm) del módulo
+ * Guition JC1060P470C_I. Antes estaban en 26 y 21, que NO están enrutados al
+ * conector — sólo eran selecciones sobre el papel. */
+#define FRIGO_ONEWIRE_GPIO    4    /* JP1 pin 13 — DS18B20 1-Wire (pullup 4.7 kΩ a 3.3 V) */
+#define FRIGO_FAN_GPIO        5    /* JP1 pin 15 — PWM ventilador (LEDC) */
 #define FRIGO_FAN_FREQ_HZ  25000
 #define FRIGO_MAX_SENSORS     3
 

@@ -44,6 +44,9 @@ static const char *TAG = "VICTRON_LVGL_APP";
 static void reboot_timer_cb(void *arg)
 {
     ESP_LOGI(TAG, "Rebooting after 24h uptime...");
+    /* Flush de datalogger y battery_history a SD para no perder muestras */
+    datalogger_flush();
+    battery_history_flush();
     esp_restart();
 }
 
