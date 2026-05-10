@@ -54,6 +54,7 @@ typedef enum {
     UI_VIEW_MODE_BATTERY_MONITOR,   // Always show battery monitor view
     UI_VIEW_MODE_INVERTER,          // Always show inverter view
     UI_VIEW_MODE_DCDC_CONVERTER,    // Always show DC/DC converter view
+    UI_VIEW_MODE_OVERVIEW,          // Vista Overview (diagrama de flujo)
     UI_VIEW_MODE_COUNT              // Number of view modes
 } ui_view_mode_t;
 
@@ -81,6 +82,7 @@ typedef struct ui_state {
     lv_obj_t *ta_mac;  // Legacy - kept for compatibility
     lv_obj_t *ta_key;  // Legacy - kept for compatibility
     struct ui_device_view *default_view;
+    struct ui_device_view *overview_view;
     uint8_t brightness;
     bool victron_debug_enabled;
     lv_obj_t *victron_debug_checkbox;
@@ -102,6 +104,8 @@ typedef struct ui_state {
     lv_obj_t *lbl_volume;
     lv_obj_t *lbl_wifi;
     lv_obj_t *bottom_bar;         // Indicador BLE
+    lv_obj_t *btn_nav;            // Botón toggle Live↔Settings en bottom_bar
+    lv_obj_t *sound_mute_switch;  // Switch "Silenciar avisos" del panel Settings/Sonido
     /* About page dynamic info */
     lv_obj_t *lbl_about_uptime;
     lv_obj_t *lbl_about_heap;

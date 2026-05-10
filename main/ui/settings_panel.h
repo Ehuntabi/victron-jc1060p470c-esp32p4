@@ -23,5 +23,11 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui);
 // Force view update when display mode changes
 void ui_force_view_update(void);
 
+/* Mostrar el diálogo modal "Cambio en Wi-Fi — requiere reiniciar".
+ * El caller ya debe haber guardado el nuevo estado en NVS antes de llamar.
+ * El botón Cancelar revierte el NVS al opuesto y sincroniza el checkbox
+ * de Settings (ui->wifi.ap_enable) si está creado. */
+void ui_show_wifi_restart_dialog(ui_state_t *ui);
+
 #endif /* UI_SETTINGS_PANEL_H */
 void ui_settings_screensaver_create_timer(ui_state_t *ui);

@@ -8,8 +8,8 @@
 extern "C" {
 #endif
 
-#define BH_POINTS         480     /* 24h @ 3 min sample */
-#define BH_SAMPLE_MS      (3 * 60 * 1000)
+#define BH_POINTS         8640    /* 24h @ 10 s sample */
+#define BH_SAMPLE_MS      10000
 #define BH_PERSIST_MS     (15 * 60 * 1000)
 
 typedef enum {
@@ -21,8 +21,10 @@ typedef enum {
 } bh_source_t;
 
 typedef struct {
-    int32_t ts;             /* unix-ish seconds (relative to esp_timer if no rtc) */
-    int32_t milli_amps;     /* signed; positive = charging into battery */
+    int32_t ts;              /* unix-ish seconds (relative to esp_timer if no rtc) */
+    int32_t milli_amps;      /* avg en el intervalo (signed; +=charging) */
+    int32_t milli_amps_max;  /* máximo del intervalo */
+    int32_t milli_amps_min;  /* mínimo del intervalo */
     bool    valid;
 } bh_point_t;
 

@@ -18,36 +18,82 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 |---|---|
 | **Pantalla** | Guition JC1060P470C_I (7", 1024x600, DSI, touch GT911) |
 | **SoC principal** | ESP32-P4 |
-| **SoC WiFi/BT** | ESP32-C6 (via SDIO, gestionado por esp_hosted, SDMMC slot 1: CLK=18, CMD=19, D0..D3=14..17) |
-| **RTC** | RX8130CE — I2C addr 0x32, bus GPIO7=SDA / GPIO8=SCL (compartido con GT911) |
+| **SoC WiFi/BT** | ESP32-C6 (vía SDIO, gestionado por esp_hosted, SDMMC slot 1: CLK=18, CMD=19, D0..D3=14..17) |
+| **RTC** | RX8025T — I2C addr 0x32, bus GPIO7=SDA / GPIO8=SCL (compartido con GT911) |
 | **Tarjeta microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), alimentación por LDO interno ch4 (3.3V) |
 | **Sensores temperatura** | DS18B20 1-Wire en GPIO26 |
 | **Control ventilador** | PWM LEDC en GPIO9, 25KHz |
+| **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL en GPIO11). I2S MCLK=13/BCLK=12/LRCK=10/DOUT=9 |
 | **Batería RTC** | CR1220 |
 
 ---
 
 ### Funcionalidades
 
-- Display DSI 1024x600 con touch capacitivo GT911
-- WiFi AP via ESP32-C6 con esp_hosted sobre SDIO
-- BLE Victron Energy — monitor de baterías y cargadores solares
-- Portal web de configuración en http://192.168.4.1
-- Sync de hora automática al abrir el portal web (JS a RTC RX8130)
-- Reloj y fecha en pantalla (esquina inferior izquierda)
-- Indicador BLE con timeout a gris si no llegan datos en 5s
-- Tab Live: vistas dinámicas según el dispositivo Victron detectado (BMV, MPPT, Orion, AC charger, etc.)
-- **Histórico de batería 24h**: tap en la vista Battery Monitor abre pantalla modal con chart multi-fuente
-  (Battery Monitor, Solar, Orion XS, AC Charger), totales de carga/descarga (Ah) y eje X con hora real
-- **Tab Frigo dentro de Settings**: control PWM del ventilador en función de T_Aletas (DS18B20).
-  T_Exterior y T_Congelador informativos
-- **Settings reorganizado** con aspecto de botones: Frigo, Wi-Fi, Display, Victron Keys, About
-- About con info dinámica: uptime, RAM libre, IP del AP, chip, versión IDF, y botón Reboot con confirmación
-- Datalogger frigo: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`
-- Datalogger batería: histórico 24h en RAM + CSV diario en `/sdcard/bateria/YYYY-MM-DD.csv`
-- Persistencia NVS del histórico batería cada 15 min (sobrevive reinicios)
-- Selector de página inicial del portal web (Keys / Logs)
-- TWDT con panic activado
+#### UI estilo Venus OS
+- Lenguaje visual unificado tipo Venus OS de Victron: cards oscuras con borde de color por rol (cyan/verde/naranja/rojo), métricas con número grande + unidad pequeña, pills de estado, gauges circulares para SOC y sombras suaves.
+- **Iconos PNG propios** en los headers de las cards (batería de coche, panel solar, conversor DC/DC, casa para cargas) generados como `lv_img_dsc_t` embebidos en flash.
+- Helpers reutilizables (`main/ui/ui_card.h`): `ui_card_create`, `ui_card_set_title_img`, `ui_metric_create_compact/_large`, `ui_pill_create`, `ui_arc_soc_create`, paleta semántica `UI_COLOR_*`.
+- Pestañas Live/Settings ocultas — navegación con icono ⚙ discreto en la barra inferior + swipe horizontal del tabview.
+- **Auto-vuelta a Live** tras 60 s sin actividad táctil (no actúa si el screensaver está activo).
+
+#### Vistas Live
+- **Overview** (vista por defecto): diagrama vertical Solar → Batería → Cargas con flechas y potencia W; arc SOC central + corriente.
+- **Battery Monitor**: card naranja con arc SOC grande, V/A/W (font_46) y footer TTG/Consumido/Aux. Tap abre histórico 24h.
+- **Solar Charger**: 2 cards (Solar verde + Salida batería naranja) con pill de estado del cargador (Bulk/Absorción/Float).
+- **Default Battery**: 3 cards en fila (DC/DC cyan, Batería naranja con arc, Solar verde) con todos los datos consolidados.
+- **Simple devices** (Inverter, Smart Lithium, AC Charger, etc.): card único con métricas apiladas; color e icono según el tipo.
+
+#### Settings
+Páginas con cards de borde de color y diálogos modales:
+- **Frigo** (verde): control PWM del ventilador en función de T_Aletas (DS18B20). T_Exterior y T_Congelador informativos.
+- **Logs** (naranja): chart 24 h de batería (con downsample max/min/avg) y de temperaturas frigo.
+- **Wi-Fi** (azul): SSID, contraseña, switch on/off; al cambiar muestra modal "Cambio en Wi-Fi requiere reiniciar" con Cancelar / Reiniciar.
+- **Display** (morado): brillo pantalla y brillo en reposo en pasos de 5; selector de modo screensaver (Atenuar / Rotar vistas) y periodo.
+- **Sonido y avisos** (rojo): volumen, switch silenciar avisos, umbrales de SoC y temperatura del frigorífico.
+- **Victron Keys** (rosa): MAC + clave AES por dispositivo (hasta 8); diálogo de aviso al entrar.
+- **About** (gris): uptime, RAM libre, IP del AP, chip, versión IDF, botón Reboot con confirmación.
+
+#### Barra inferior
+- Posiciones fijas (anchos definidos, `flex_align SPACE_BETWEEN`).
+- Reloj + fecha (sincronizado con RTC, refrescado cada 30 s; refresco inmediato tras `settime`).
+- Iconos de **estado interactivos**:
+  - 🔵 BLE — gris si no hay datos en 5 s.
+  - 🔊 / 🔇 Volumen — tap = mute/unmute (sincronizado con switch del Settings).
+  - 📶 Wi-Fi — tap = toggle AP on/off con el mismo modal "requiere reiniciar".
+  - 🌡 Temperatura exterior — color según valor.
+  - ⚙ Settings — tap = navegar a Settings, cambia a 🏠 cuando ya estás en Settings (vuelve a Live).
+
+#### BLE Victron
+- Configuración de hasta 8 dispositivos por MAC + clave AES (NVS).
+- Soporte de records: 0x01 Solar Charger, 0x02 Battery Monitor, 0x03 Inverter, 0x04 DC/DC Converter, 0x05 Smart Lithium.
+- Indicador BLE con timeout a gris si no llegan datos en 5 s.
+- Detección automática del tipo de dispositivo y vista correspondiente.
+
+#### Portal web
+- AP `VictronConfig` automático al arrancar.
+- `http://192.168.4.1` con sincronización automática de hora (script `<img>` GET → /settime, compatible con captive portals).
+- Páginas con `Cache-Control: no-store` para evitar HTML cacheado.
+- `/data/frigo` y `/data/bateria`: gráficos SVG con **auto-escala Y** según los valores reales y **downsample** automático cuando hay > 1500 puntos.
+- En el gráfico de batería, **polígono semitransparente con el rango max-min** + línea media (avg), de modo que los picos no desaparecen aunque la línea avg suavice.
+- Selector de página inicial del portal web (Keys / Logs).
+
+#### Datalogger y persistencia
+- **Frigo**: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`.
+- **Batería**: 24 h en RAM (en PSRAM, 552 KB) con muestreo cada **10 s** y `avg/max/min` por intervalo. CSV diario en `/sdcard/bateria/YYYY-MM-DD.csv` con 5 columnas (`timestamp, source, milli_amps, milli_amps_max, milli_amps_min`).
+- Si el CSV de hoy no existe, las páginas web sirven el más reciente del directorio.
+- Flush a SD cada 60 s.
+- Backup horario del epoch del sistema en NVS (`rtc_backup/epoch`) como red de seguridad si el RTC pierde la hora.
+
+#### RTC y hora
+- Zona horaria **Europe/Madrid** configurada (CET/CEST con DST automático) antes de cualquier `settimeofday`.
+- El RTC almacena hora local; `mktime` la interpreta correctamente con la TZ.
+- Bug del bit STOP corregido (RX8025T usa CONTROL bit 6, no CTRL0 bit 0). El bit de siglo no se escribe (asumimos siglo 21).
+
+#### Salvapantallas
+- Modos: **Atenuar** (baja brillo) o **Rotar vistas** (alterna Live → LogFrigo → LogBateria cada N min).
+- En modo Rotar, al pulsar la pantalla se cierran TODOS los overlays y vuelve a la pestaña Live.
+- Periodo y brillo de reposo configurables en Settings → Display.
 
 ---
 
@@ -60,76 +106,29 @@ git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 cd victron-jc1060p470c-esp32p4
 idf.py set-target esp32p4
 idf.py build
-idf.py -p /dev/ttyACM1 flash monitor
+idf.py -p /dev/ttyACM0 flash monitor
 ```
 
 ---
 
 ### Configuración inicial
 
-1. Encender la pantalla — el AP WiFi VictronConfig arranca automáticamente
-2. Conectarse al WiFi VictronConfig desde el móvil o PC
-3. Abrir http://192.168.4.1 en el navegador
-4. La hora se sincroniza automáticamente con el RTC
-5. En Settings → Wi-Fi, seleccionar "Página inicial portal web: Keys" (por defecto)
-6. Abrir de nuevo http://192.168.4.1 — aparece la página de configuración de claves
-7. Introducir la MAC y clave AES del dispositivo Victron y guardar
-8. Una vez configurado, se puede cambiar la página inicial a "Logs" en Settings → Wi-Fi
-
----
-
-### Datalogger y SD
-
-Estructura en SD:
-
-```
-/sdcard/
-  frigo/
-    2026-05-06.csv      timestamp, T_Aletas, T_Congelador, T_Exterior, fan_pct
-    2026-05-07.csv
-  bateria/
-    2026-05-06.csv      timestamp, source, milli_amps
-```
-
-- Volcado a SD cada 60 s (mejor vida útil de la tarjeta)
-- Si la SD no está montada, los datos siguen disponibles en RAM
-- Los CSV se descargan también desde el portal web (datalogger frigo)
-
-**Nota sobre SD**: la microSD usa el SDMMC slot 0 del ESP32-P4 (IOMUX dedicado), independiente del slot 1 que usa esp_hosted para WiFi. Es necesario activar el LDO interno ch4 (3.3V) para alimentar TF_VCC. FATFS está configurado con LFN heap mode para nombres largos.
-
----
-
-### Histórico de batería
-
-Pantalla modal accesible al pulsar la vista Battery Monitor en el tab Live:
-
-- 4 series simultáneas (Battery Monitor / Solar Charger / Orion XS / AC Charger), cada una con su color
-- Eje X: hora real (HH:MM) tomada del RTC
-- Eje Y: corriente en amperios (-40 a +40 A), positivo=carga, negativo=descarga
-- Totales acumulados (Ah cargados / descargados) por cada fuente
-- Buffer 24h con muestreo cada 3 min (480 puntos)
-- Persistencia en NVS cada 15 min — sobrevive reinicios y flasheos `idf.py flash`
-- Volcado a `/sdcard/bateria/YYYY-MM-DD.csv` cada 60 s
-
----
-
-### RTC RX8130
-
-El chip es RX8130, no RX8025T como indica el esquemático de Guition.
-- Dirección I2C: 0x32
-- Bus compartido con GT911: GPIO7=SDA, GPIO8=SCL
-- Sin pila CR1220 pierde la hora al reiniciar
-- La hora se sincroniza al abrir el portal web
+1. Encender la pantalla — el AP WiFi VictronConfig arranca automáticamente.
+2. Conectarse al WiFi VictronConfig desde el móvil o PC.
+3. Abrir `http://192.168.4.1` en el navegador — la hora se sincroniza automáticamente con el RTC.
+4. En Settings → Wi-Fi, seleccionar "Página inicial portal web: Keys" (por defecto).
+5. Abrir de nuevo el portal — aparece la página de configuración de claves.
+6. Introducir la MAC y clave AES del dispositivo Victron y guardar.
+7. Una vez configurado, se puede cambiar la página inicial a "Logs" en Settings → Wi-Fi.
 
 ---
 
 ### Estado del hardware
 
-**SD Card — Funcionando** ✅
-Resuelto: el ESP32-P4 tiene 2 slots SDMMC. esp_hosted ocupa el slot 1 (GPIO matrix); la microSD usa el slot 0 con IOMUX dedicado, sin conflicto. Requiere activar `esp_ldo_acquire_channel(ch=4, 3300mV)` antes de montar.
-
-**DS18B20 — Sin conexión física**
-Bus 1-Wire configurado en GPIO26. Conectar con resistencia pullup de 4.7K a 3.3V.
+- **SD Card** ✅ — esp_hosted ocupa el slot SDMMC 1 (GPIO matrix); la microSD usa el slot 0 con IOMUX dedicado. Requiere `esp_ldo_acquire_channel(ch=4, 3300mV)` antes de montar.
+- **RTC RX8025T** ✅ — soporta pérdida de pila con backup en NVS.
+- **DS18B20** ⚠️ — bus 1-Wire en GPIO26, pendiente de conexión física (resistencia pullup 4.7K a 3.3V).
+- **Ventilador** ⚠️ — PWM en GPIO21 (mapeado en código), pendiente de cableado físico.
 
 ---
 
@@ -137,7 +136,7 @@ Bus 1-Wire configurado en GPIO26. Conectar con resistencia pullup de 4.7K a 3.3V
 
 - Proyecto original: VictronSolarDisplayEsp por wytr
 - Fork multi-device: victronsolardisplayesp por CamdenSutherland
-- Port ESP32-P4 / Guition JC1060P470C_I: Ehuntabi
+- Port ESP32-P4 / Guition JC1060P470C_I + UI estilo Venus OS: Ehuntabi
 
 ---
 
@@ -158,35 +157,81 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Display** | Guition JC1060P470C_I (7", 1024x600, DSI, GT911 touch) |
 | **Main SoC** | ESP32-P4 |
 | **WiFi/BT SoC** | ESP32-C6 (via SDIO, managed by esp_hosted, SDMMC slot 1: CLK=18, CMD=19, D0..D3=14..17) |
-| **RTC** | RX8130CE — I2C addr 0x32, bus GPIO7=SDA / GPIO8=SCL (shared with GT911) |
+| **RTC** | RX8025T — I2C addr 0x32, bus GPIO7=SDA / GPIO8=SCL (shared with GT911) |
 | **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), powered by internal LDO ch4 (3.3V) |
 | **Temp sensors** | DS18B20 1-Wire on GPIO26 |
 | **Fan control** | PWM LEDC on GPIO9, 25KHz |
+| **Audio** | ES8311 codec + NS4150 amp (PA_CTRL on GPIO11). I2S MCLK=13/BCLK=12/LRCK=10/DOUT=9 |
 | **RTC battery** | CR1220 |
 
 ---
 
 ### Features
 
-- DSI 1024x600 display with GT911 capacitive touch
-- WiFi AP via ESP32-C6 with esp_hosted over SDIO
-- Victron Energy BLE — battery monitor and solar charger
-- Web configuration portal at http://192.168.4.1
-- Automatic time sync when opening web portal (JS to RTC RX8130)
-- Clock and date on screen (bottom left)
-- BLE status indicator with auto-grey-out if no data for 5s
-- Live tab: dynamic views based on detected Victron device (BMV, MPPT, Orion, AC charger, etc.)
-- **24h battery history**: tap the Battery Monitor view to open a modal chart with multiple sources
-  (Battery Monitor, Solar, Orion XS, AC Charger), charge/discharge totals (Ah) and X-axis with real time
-- **Frigo tab inside Settings**: PWM fan control based on T_Fins (DS18B20).
-  T_Exterior and T_Freezer are informational only
-- **Restyled Settings menu** with button look: Frigo, Wi-Fi, Display, Victron Keys, About
-- About page with dynamic info: uptime, free RAM, AP IP, chip, IDF version, and Reboot button with confirmation
-- Frigo datalogger: 200-entry RAM circular buffer + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`
-- Battery datalogger: 24h RAM history + daily CSV at `/sdcard/bateria/YYYY-MM-DD.csv`
-- NVS persistence of battery history every 15 min (survives reboots)
-- Web portal start page selector (Keys / Logs)
-- TWDT with panic enabled
+#### Venus-OS-style UI
+- Unified visual language inspired by Victron's Venus OS: dark cards with role-coloured borders (cyan/green/orange/red), big-number metrics with small unit, status pills, circular SOC gauges, soft drop shadows.
+- **Custom PNG icons** in card headers (car battery, solar panel, DC/DC converter, house for loads), embedded as `lv_img_dsc_t` in flash.
+- Reusable helpers (`main/ui/ui_card.h`): `ui_card_create`, `ui_card_set_title_img`, `ui_metric_create_compact/_large`, `ui_pill_create`, `ui_arc_soc_create`, semantic palette `UI_COLOR_*`.
+- Live/Settings tab buttons hidden — navigation via discreet ⚙ icon in the bottom bar + horizontal swipe of the tabview.
+- **Auto-return to Live** after 60 s of touch inactivity (skipped while screensaver is active).
+
+#### Live views
+- **Overview** (default view): vertical diagram Solar → Battery → Loads with arrows and W; central SOC arc + battery current.
+- **Battery Monitor**: orange card with big SOC arc, V/A/W (font_46) and footer TTG/Consumed/Aux. Tap opens 24 h history.
+- **Solar Charger**: 2 cards (green Solar + orange Battery output) with charger state pill (Bulk/Absorption/Float).
+- **Default Battery**: 3 columns (cyan DC/DC, orange Battery with arc, green Solar) consolidating all sources.
+- **Simple devices** (Inverter, Smart Lithium, AC Charger, etc.): single card with stacked metrics; colour and icon depending on the device type.
+
+#### Settings
+Pages with role-coloured cards and modal dialogs:
+- **Frigo** (green): PWM fan control based on T_Fins (DS18B20). T_Exterior and T_Freezer are informational only.
+- **Logs** (orange): 24 h battery chart (with max/min/avg downsample) and frigo temperatures chart.
+- **Wi-Fi** (blue): SSID, password, on/off switch; switching shows "Wi-Fi change requires restart" modal with Cancel / Restart.
+- **Display** (purple): screen and idle brightness in steps of 5; screensaver mode (Dim / Rotate views) and period.
+- **Sound & alerts** (red): volume, mute switch, SoC and frigo temperature thresholds.
+- **Victron Keys** (pink): MAC + AES key per device (up to 8); warning dialog on entry.
+- **About** (gray): uptime, free RAM, AP IP, chip, IDF version, Reboot button with confirmation.
+
+#### Bottom bar
+- Fixed positions (defined widths, `flex_align SPACE_BETWEEN`).
+- Clock + date (RTC-synced, refreshed every 30 s; instant refresh after `settime`).
+- **Interactive status icons**:
+  - 🔵 BLE — grey if no data in 5 s.
+  - 🔊 / 🔇 Volume — tap = mute/unmute (synced with Settings switch).
+  - 📶 Wi-Fi — tap = toggle AP on/off with the same "requires restart" modal.
+  - 🌡 Outdoor temp — colour by value.
+  - ⚙ Settings — tap = navigate to Settings, becomes 🏠 when in Settings (back to Live).
+
+#### Victron BLE
+- Up to 8 devices configurable by MAC + AES key (NVS).
+- Records supported: 0x01 Solar Charger, 0x02 Battery Monitor, 0x03 Inverter, 0x04 DC/DC Converter, 0x05 Smart Lithium.
+- BLE indicator with auto-grey-out if no data for 5 s.
+- Automatic device-type detection and matching view.
+
+#### Web portal
+- `VictronConfig` AP starts automatically on boot.
+- `http://192.168.4.1` with automatic time sync (`<img>` GET → /settime, captive-portal compatible).
+- All pages with `Cache-Control: no-store` to avoid stale HTML.
+- `/data/frigo` and `/data/bateria`: SVG charts with **Y-axis auto-scale** based on real values and **automatic downsample** when > 1500 points.
+- Battery chart shows a **semitransparent max-min envelope polygon** + average line, so peaks remain visible even when the average smooths.
+- Web portal start page selector (Keys / Logs).
+
+#### Datalogger and persistence
+- **Frigo**: 200-entry RAM ring buffer + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`.
+- **Battery**: 24 h in RAM (in PSRAM, 552 KB) sampling every **10 s** with `avg/max/min` per interval. Daily CSV at `/sdcard/bateria/YYYY-MM-DD.csv` with 5 columns (`timestamp, source, milli_amps, milli_amps_max, milli_amps_min`).
+- If today's CSV doesn't exist, the web pages serve the most recent file in the directory.
+- SD flush every 60 s.
+- Hourly backup of the system epoch in NVS (`rtc_backup/epoch`) as a safety net if the RTC loses time.
+
+#### RTC and time
+- **Europe/Madrid** timezone configured (CET/CEST with automatic DST) before any `settimeofday`.
+- The RTC stores local time; `mktime` interprets it correctly with the TZ.
+- STOP-bit bug fixed (RX8025T uses CONTROL bit 6, not CTRL0 bit 0). Century bit not written (assumes 21st century).
+
+#### Screensaver
+- Modes: **Dim** (lower brightness) or **Rotate views** (cycle Live → FrigoLog → BatteryLog every N min).
+- In Rotate mode, tapping the screen closes ALL overlays and returns to the Live tab.
+- Idle brightness and period configurable in Settings → Display.
 
 ---
 
@@ -199,76 +244,29 @@ git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 cd victron-jc1060p470c-esp32p4
 idf.py set-target esp32p4
 idf.py build
-idf.py -p /dev/ttyACM1 flash monitor
+idf.py -p /dev/ttyACM0 flash monitor
 ```
 
 ---
 
-### First time setup
+### First-time setup
 
-1. Power on the display — the VictronConfig WiFi AP starts automatically
-2. Connect to the VictronConfig WiFi from your phone or PC
-3. Open http://192.168.4.1 in your browser
-4. Device time is automatically synced to the RTC
-5. In Settings → Wi-Fi, select "Web portal start page: Keys" (default)
-6. Open http://192.168.4.1 again — the key configuration page appears
-7. Enter your Victron device MAC address and AES encryption key and save
-8. Once configured, you can change the start page to "Logs" in Settings → Wi-Fi
-
----
-
-### Datalogger and SD
-
-SD layout:
-
-```
-/sdcard/
-  frigo/
-    2026-05-06.csv      timestamp, T_Fins, T_Freezer, T_Exterior, fan_pct
-    2026-05-07.csv
-  bateria/
-    2026-05-06.csv      timestamp, source, milli_amps
-```
-
-- Flushed to SD every 60s (better SD lifespan)
-- If SD is not mounted, data still available in RAM
-- Frigo CSV is also downloadable via the web portal
-
-**SD note**: the microSD uses ESP32-P4 SDMMC slot 0 (dedicated IOMUX), independent from slot 1 used by esp_hosted for WiFi. Internal LDO ch4 (3.3V) must be enabled to power TF_VCC. FATFS is configured with LFN heap mode for long filenames.
-
----
-
-### Battery history
-
-Modal screen accessible by tapping the Battery Monitor view in the Live tab:
-
-- 4 simultaneous series (Battery Monitor / Solar Charger / Orion XS / AC Charger), each with its own color
-- X-axis: real time (HH:MM) from the RTC
-- Y-axis: current in amperes (-40 to +40 A), positive=charge, negative=discharge
-- Accumulated totals (Ah charged / discharged) for each source
-- 24h buffer with sampling every 3 min (480 points)
-- NVS persistence every 15 min — survives reboots and `idf.py flash`
-- Flushed to `/sdcard/bateria/YYYY-MM-DD.csv` every 60s
-
----
-
-### RTC RX8130
-
-The chip is RX8130, not RX8025T as stated in the Guition schematic.
-- I2C address: 0x32
-- Shared bus with GT911: GPIO7=SDA, GPIO8=SCL
-- Without CR1220 battery, time is lost on power cycle
-- Time is synced when opening the web portal
+1. Power on the display — the VictronConfig WiFi AP starts automatically.
+2. Connect to the VictronConfig WiFi from your phone or PC.
+3. Open `http://192.168.4.1` in your browser — time is automatically synced to the RTC.
+4. In Settings → Wi-Fi, select "Web portal start page: Keys" (default).
+5. Open the portal again — the key configuration page appears.
+6. Enter your Victron device MAC and AES encryption key and save.
+7. Once configured, you can change the start page to "Logs" in Settings → Wi-Fi.
 
 ---
 
 ### Hardware status
 
-**SD Card — Working** ✅
-Solved: ESP32-P4 has 2 SDMMC slots. esp_hosted uses slot 1 (GPIO matrix); the microSD uses slot 0 with dedicated IOMUX, no conflict. Requires `esp_ldo_acquire_channel(ch=4, 3300mV)` before mount.
-
-**DS18B20 — Not physically connected**
-1-Wire bus configured on GPIO26. Connect with 4.7K pullup resistor to 3.3V.
+- **SD Card** ✅ — esp_hosted uses SDMMC slot 1 (GPIO matrix); microSD uses slot 0 with dedicated IOMUX. Requires `esp_ldo_acquire_channel(ch=4, 3300mV)` before mount.
+- **RTC RX8025T** ✅ — survives battery loss with NVS backup.
+- **DS18B20** ⚠️ — 1-Wire bus on GPIO26, pending physical connection (4.7K pullup to 3.3V).
+- **Fan** ⚠️ — PWM on GPIO21 (mapped in code), pending physical wiring.
 
 ---
 
@@ -276,6 +274,6 @@ Solved: ESP32-P4 has 2 SDMMC slots. esp_hosted uses slot 1 (GPIO matrix); the mi
 
 - Original project: VictronSolarDisplayEsp by wytr
 - Multi-device fork: victronsolardisplayesp by CamdenSutherland
-- ESP32-P4 / Guition JC1060P470C_I port: Ehuntabi
+- ESP32-P4 / Guition JC1060P470C_I port + Venus-OS-style UI: Ehuntabi
 
-This project maintains the same license as the original. See LICENSE.
+This project keeps the same license as the original. See LICENSE.

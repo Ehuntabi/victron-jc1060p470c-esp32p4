@@ -1,5 +1,6 @@
 #include "settings_panel.h"
 #include "ui.h"
+#include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "alerts.h"
 
@@ -125,7 +126,7 @@ static void alarm_temp_dd_cb_sound(lv_event_t *e);
 
 
 static lv_obj_t *s_ap_msgbox = NULL;
-static lv_obj_t *s_ap_switch = NULL;
+static ui_state_t *s_ap_dialog_ui = NULL;
 
 static void ap_msgbox_btn_cb(lv_event_t *e)
 {
@@ -133,26 +134,44 @@ static void ap_msgbox_btn_cb(lv_event_t *e)
     lv_obj_t *lbl = lv_obj_get_child(btn, 0);
     const char *txt = lbl ? lv_label_get_text(lbl) : "";
     if (txt && strstr(txt, "Reiniciar")) {
-        /* Flush datos antes de reiniciar */
+        /* Cerrar modal antes del restart para evitar glitch visual */
+        if (s_ap_msgbox) { lv_obj_del(s_ap_msgbox); s_ap_msgbox = NULL; }
+        /* Splash "Reiniciando..." pantalla completa en negro */
+        lv_obj_t *splash = lv_obj_create(lv_layer_top());
+        lv_obj_set_size(splash, lv_pct(100), lv_pct(100));
+        lv_obj_set_style_bg_color(splash, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(splash, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(splash, 0, 0);
+        lv_obj_set_style_pad_all(splash, 0, 0);
+        lv_obj_t *spl_lbl = lv_label_create(splash);
+        lv_obj_set_style_text_font(spl_lbl, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(spl_lbl, lv_color_white(), 0);
+        lv_label_set_text(spl_lbl, LV_SYMBOL_POWER "  Reiniciando...");
+        lv_obj_center(spl_lbl);
+        lv_refr_now(NULL);
+
         ESP_LOGI("UI", "Flushing data before restart...");
         datalogger_flush();
         battery_history_flush();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        /* Apagar backlight para que la pantalla quede negra entre el reset
+         * y la reinicialización del panel DSI (evita el flash azul del
+         * buffer DSI sin inicializar). */
+        bsp_display_brightness_set(0);
+        vTaskDelay(pdMS_TO_TICKS(50));
         esp_restart();
     } else {
-        /* Cancelar: revertir switch al estado opuesto al guardado */
-        if (s_ap_switch) {
-            nvs_handle_t h;
-            if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
-                uint8_t cur = 1;
-                nvs_get_u8(h, "enabled", &cur);
-                /* Revertir: poner el opuesto */
-                uint8_t reverted = cur ? 0 : 1;
-                nvs_set_u8(h, "enabled", reverted);
-                nvs_commit(h);
-                nvs_close(h);
-                if (reverted) lv_obj_add_state(s_ap_switch, LV_STATE_CHECKED);
-                else          lv_obj_clear_state(s_ap_switch, LV_STATE_CHECKED);
+        /* Cancelar: revertir NVS al estado opuesto y sincronizar el switch */
+        nvs_handle_t h;
+        if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
+            uint8_t cur = 1;
+            nvs_get_u8(h, "enabled", &cur);
+            uint8_t reverted = cur ? 0 : 1;
+            nvs_set_u8(h, "enabled", reverted);
+            nvs_commit(h);
+            nvs_close(h);
+            if (s_ap_dialog_ui && s_ap_dialog_ui->wifi.ap_enable) {
+                if (reverted) lv_obj_add_state(s_ap_dialog_ui->wifi.ap_enable, LV_STATE_CHECKED);
+                else          lv_obj_clear_state(s_ap_dialog_ui->wifi.ap_enable, LV_STATE_CHECKED);
             }
         }
     }
@@ -160,32 +179,13 @@ static void ap_msgbox_btn_cb(lv_event_t *e)
         lv_obj_del(s_ap_msgbox);
         s_ap_msgbox = NULL;
     }
+    s_ap_dialog_ui = NULL;
 }
 
-static void ap_switch_cb(lv_event_t *e)
+void ui_show_wifi_restart_dialog(ui_state_t *ui)
 {
-    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-    lv_obj_t *sw = lv_event_get_target(e);
-    s_ap_switch = sw;
-    bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    s_ap_dialog_ui = ui;
 
-    /* Guardar el estado opuesto en NVS para poder revertir si cancela */
-    /* En realidad: guardamos el NUEVO estado y, si cancela, revertimos */
-    nvs_handle_t h;
-    if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
-        /* Antes de guardar, leemos el actual (es el "antiguo") */
-        uint8_t old_v = 1;
-        nvs_get_u8(h, "enabled", &old_v);
-        /* Si la cancelacion ocurre, restauramos a old_v */
-        nvs_set_u8(h, "enabled", checked ? 1 : 0);
-        nvs_commit(h);
-        nvs_close(h);
-        /* Guardamos old_v en variable estatica para revertir */
-        static uint8_t s_prev_enabled;
-        s_prev_enabled = old_v;
-    }
-
-    /* Mostrar dialog custom estilo card */
     /* Fondo modal semi-transparente */
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
@@ -212,12 +212,12 @@ static void ap_switch_cb(lv_event_t *e)
     lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *title = lv_label_create(dlg);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(title, LV_SYMBOL_WIFI "  Cambio en Wi-Fi");
 
     lv_obj_t *msg = lv_label_create(dlg);
-    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(msg, lv_color_white(), 0);
     lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(msg, lv_pct(100));
@@ -232,27 +232,43 @@ static void ap_switch_cb(lv_event_t *e)
     lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* Boton Cancelar */
     lv_obj_t *btn_cancel = lv_btn_create(row_btns);
     lv_obj_set_size(btn_cancel, 200, 60);
     lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, "Cancelar");
-    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
     lv_obj_add_event_cb(btn_cancel, ap_msgbox_btn_cb, LV_EVENT_CLICKED, NULL);
 
-    /* Boton Reiniciar */
     lv_obj_t *btn_restart = lv_btn_create(row_btns);
     lv_obj_set_size(btn_restart, 200, 60);
     lv_obj_set_style_bg_color(btn_restart, lv_color_hex(0xCC3333), 0);
     lv_obj_set_style_radius(btn_restart, 12, 0);
     lv_obj_t *lr = lv_label_create(btn_restart);
     lv_label_set_text(lr, LV_SYMBOL_POWER "  Reiniciar");
-    lv_obj_set_style_text_font(lr, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lr, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lr);
     lv_obj_add_event_cb(btn_restart, ap_msgbox_btn_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void ap_switch_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    lv_obj_t *sw = lv_event_get_target(e);
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
+
+    /* Guardar el nuevo estado en NVS; si cancela, el modal lo revertirá. */
+    nvs_handle_t h;
+    if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "enabled", checked ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+
+    ui_show_wifi_restart_dialog(ui);
 }
 
 static void portal_switch_cb(lv_event_t *e)
@@ -334,7 +350,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(card1_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card1_title = lv_label_create(card1_header);
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_WIFI "  Punto de acceso");
 
@@ -343,6 +359,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_bg_color(sw_ap, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ap_enabled) lv_obj_add_state(sw_ap, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_ap, ap_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
+    ui->wifi.ap_enable = sw_ap;
 
     /* SSID row: label + input */
     lv_obj_t *ssid_row = lv_obj_create(card1);
@@ -354,11 +371,11 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(ssid_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_ssid = lv_label_create(ssid_row);
-    lv_obj_set_style_text_font(lbl_ssid, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_ssid, &lv_font_montserrat_24_es, 0);
     lv_label_set_text(lbl_ssid, "SSID:");
 
     ui->wifi.ssid = lv_textarea_create(ssid_row);
-    lv_obj_set_style_text_font(ui->wifi.ssid, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->wifi.ssid, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_one_line(ui->wifi.ssid, true);
     lv_obj_set_width(ui->wifi.ssid, 350);
     lv_textarea_set_text(ui->wifi.ssid, default_ssid);
@@ -379,7 +396,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(pass_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_pass = lv_label_create(pass_row);
-    lv_obj_set_style_text_font(lbl_pass, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_pass, &lv_font_montserrat_24_es, 0);
     lv_label_set_text(lbl_pass, "Password:");
 
     const char *ap_password = (default_pass && default_pass[0] != '\0') ? default_pass : DEFAULT_AP_PASSWORD;
@@ -393,7 +410,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_center(lbl_toggle);
 
     ui->wifi.password = lv_textarea_create(pass_row);
-    lv_obj_set_style_text_font(ui->wifi.password, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->wifi.password, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_password_mode(ui->wifi.password, true);
     lv_textarea_set_one_line(ui->wifi.password, true);
     lv_obj_set_width(ui->wifi.password, 280);
@@ -420,7 +437,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card2_title = lv_label_create(card2);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_LIST "  Pagina inicial portal");
 
@@ -434,7 +451,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_pad_gap(cont_sw, 12, 0);
 
     lv_obj_t *lbl_keys = lv_label_create(cont_sw);
-    lv_obj_set_style_text_font(lbl_keys, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_keys, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_keys, "Keys");
 
     lv_obj_t *sw_portal = lv_switch_create(cont_sw);
@@ -452,7 +469,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(sw_portal, portal_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t *lbl_logs = lv_label_create(cont_sw);
-    lv_obj_set_style_text_font(lbl_logs, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_logs, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_logs, "Logs");
 }
 
@@ -492,7 +509,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card1_title = lv_label_create(card1_row);
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
 
@@ -508,7 +525,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_pad_gap(card1_sub, 10, 0);
 
     lv_obj_t *lbl_val_b = lv_label_create(card1_sub);
-    lv_obj_set_style_text_font(lbl_val_b, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_val_b, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val_b, lv_color_white(), 0);
     lv_obj_set_width(lbl_val_b, 70);
     lv_obj_set_style_text_align(lbl_val_b, LV_TEXT_ALIGN_RIGHT, 0);
@@ -551,7 +568,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *card2_title = lv_label_create(card2);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 
@@ -566,7 +583,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* Enable */
     ui->screensaver.checkbox = lv_checkbox_create(row_enable_to);
     lv_checkbox_set_text(ui->screensaver.checkbox, "Activar");
-    lv_obj_set_style_text_font(ui->screensaver.checkbox, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(ui->screensaver.checkbox, &lv_font_montserrat_20_es, 0);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
     lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
@@ -580,7 +597,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(cont_to, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_to_inline = lv_label_create(cont_to);
-    lv_obj_set_style_text_font(lbl_to_inline, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_to_inline, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_to_inline, "Tiempo (min):");
 
     /* Brillo SS - en row */
@@ -593,11 +610,11 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_pad_gap(row_ss_b, 16, 0);
 
     lv_obj_t *lbl_ss = lv_label_create(row_ss_b);
-    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_ss, "Brillo en reposo:");
 
     lv_obj_t *lbl_val_ss = lv_label_create(row_ss_b);
-    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
     lv_obj_set_width(lbl_val_ss, 70);
     lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
@@ -635,7 +652,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     /* Label central (reutilizamos el campo spinbox_timeout como lv_obj_t* genérico) */
     ui->screensaver.spinbox_timeout = lv_label_create(cont_to);
-    lv_obj_set_style_text_font(ui->screensaver.spinbox_timeout, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->screensaver.spinbox_timeout, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(ui->screensaver.spinbox_timeout, lv_color_white(), 0);
     lv_obj_set_width(ui->screensaver.spinbox_timeout, 60);
     lv_obj_set_style_text_align(ui->screensaver.spinbox_timeout, LV_TEXT_ALIGN_CENTER, 0);
@@ -660,7 +677,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_pad_gap(row_mode, 12, 0);
 
     lv_obj_t *lbl_mode = lv_label_create(row_mode);
-    lv_obj_set_style_text_font(lbl_mode, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_mode, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_mode, "Modo:");
 
     lv_obj_t *dd_mode = lv_dropdown_create(row_mode);
@@ -679,7 +696,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(grp_period, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_period = lv_label_create(grp_period);
-    lv_obj_set_style_text_font(lbl_period, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_period, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_period, "Tiempo (min):");
 
     lv_obj_t *cont_period = lv_obj_create(grp_period);
@@ -700,7 +717,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_add_event_cb(btn_period_dec, ss_period_dec_cb, LV_EVENT_CLICKED, ui);
 
     lv_obj_t *lbl_period_val = lv_label_create(cont_period);
-    lv_obj_set_style_text_font(lbl_period_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_period_val, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(lbl_period_val, lv_color_white(), 0);
     lv_obj_set_width(lbl_period_val, 60);
     lv_obj_set_style_text_align(lbl_period_val, LV_TEXT_ALIGN_CENTER, 0);
@@ -739,7 +756,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(card3_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card3_title = lv_label_create(card3_row);
-    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
 
@@ -751,13 +768,14 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         "Solar Charger View\n"
         "Battery Monitor View\n"
         "Inverter View\n"
-        "DC/DC Converter View"
+        "DC/DC Converter View\n"
+        "Overview"
     );
-    uint8_t saved_mode = 1;
+    uint8_t saved_mode = (uint8_t)UI_VIEW_MODE_OVERVIEW;
     if (load_ui_view_mode(&saved_mode) == ESP_OK) {
         ui->view_selection.mode = (ui_view_mode_t)saved_mode;
     } else {
-        ui->view_selection.mode = UI_VIEW_MODE_DEFAULT_BATTERY;
+        ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
     }
     lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
     lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
@@ -805,12 +823,12 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *title = lv_label_create(dlg);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
     lv_label_set_text(title, LV_SYMBOL_WARNING "  Atencion");
 
     lv_obj_t *msg = lv_label_create(dlg);
-    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(msg, lv_color_white(), 0);
     lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(msg, lv_pct(100));
@@ -830,7 +848,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, "Cancelar");
-    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
     lv_obj_add_event_cb(btn_cancel, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
 
@@ -840,7 +858,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_obj_set_style_radius(btn_ok, 12, 0);
     lv_obj_t *lo = lv_label_create(btn_ok);
     lv_label_set_text(lo, "Continuar");
-    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lo);
     lv_obj_add_event_cb(btn_ok, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
 }
@@ -884,7 +902,7 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 
     /* Header text */
     lv_obj_t *lbl_header = lv_label_create(victron_container);
-    lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_header, "Configure multiple Victron devices with MAC addresses and AES keys:");
 
     /* --- Victron devices configuration section --- */
@@ -1072,18 +1090,18 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* Device label */
     lv_obj_t *device_label = lv_label_create(header_row);
-    lv_obj_set_style_text_font(device_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(device_label, &lv_font_montserrat_20_es, 0);
     lv_label_set_text_fmt(device_label, "Device %d", (int)(index + 1));
 
     /* Enabled checkbox */
     lv_obj_t *enabled_cb = lv_checkbox_create(header_row);
     lv_checkbox_set_text(enabled_cb, "Enabled");
-    lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20_es, 0);
     lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     /* Device name input */
     lv_obj_t *name_label = lv_label_create(row);
-    lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(name_label, "Device Name:");
 
     lv_obj_t *name_ta = lv_textarea_create(row);
@@ -1091,7 +1109,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(name_ta, lv_pct(80));
     lv_textarea_set_one_line(name_ta, true);
     lv_textarea_set_placeholder_text(name_ta, "e.g. Solar Charger 1");
-    lv_obj_set_style_text_font(name_ta, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(name_ta, &lv_font_montserrat_20_es, 0);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(name_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -1100,7 +1118,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* MAC address input */
     lv_obj_t *mac_label = lv_label_create(row);
-    lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(mac_label, "MAC Address:");
 
     lv_obj_t *mac_ta = lv_textarea_create(row);
@@ -1108,7 +1126,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(mac_ta, lv_pct(60));
     lv_textarea_set_one_line(mac_ta, true);
     lv_textarea_set_placeholder_text(mac_ta, "XX:XX:XX:XX:XX:XX");
-    lv_obj_set_style_text_font(mac_ta, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(mac_ta, &lv_font_montserrat_20_es, 0);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -1117,7 +1135,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* AES Key input */
     lv_obj_t *key_label = lv_label_create(row);
-    lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(key_label, "AES Key (32 hex characters):");
 
     lv_obj_t *key_ta = lv_textarea_create(row);
@@ -1125,7 +1143,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_width(key_ta, lv_pct(90));
     lv_textarea_set_one_line(key_ta, true);
     lv_textarea_set_placeholder_text(key_ta, "00000000000000000000000000000000");
-    lv_obj_set_style_text_font(key_ta, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(key_ta, &lv_font_montserrat_20_es, 0);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(key_ta, ta_event_cb, LV_EVENT_READY, ui);
@@ -1134,7 +1152,7 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* --- Device Status Section --- */
     lv_obj_t *status_label = lv_label_create(row);
-    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(status_label, "Live Device Status:");
 
     lv_obj_t *status_container = lv_obj_create(row);
@@ -1153,19 +1171,19 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
 
     /* Device type label */
     lv_obj_t *device_type_lbl = lv_label_create(status_container);
-    lv_obj_set_style_text_font(device_type_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(device_type_lbl, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(device_type_lbl, "Device: --");
     lv_obj_set_style_text_color(device_type_lbl, lv_color_hex(0x888888), 0);
 
     /* Product name label */
     lv_obj_t *product_name_lbl = lv_label_create(status_container);
-    lv_obj_set_style_text_font(product_name_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(product_name_lbl, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(product_name_lbl, "Product: --");
     lv_obj_set_style_text_color(product_name_lbl, lv_color_hex(0x888888), 0);
 
     /* Live metrics status label - enhanced for detailed status */
     lv_obj_t *error_lbl = lv_label_create(status_container);
-    lv_obj_set_style_text_font(error_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(error_lbl, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(error_lbl, "Status: Waiting for data...");
     lv_obj_set_style_text_color(error_lbl, lv_color_hex(0x888888), 0);
     lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);  // Enable text wrapping for longer status
@@ -1284,7 +1302,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     ui->settings_menu = menu;
 
     lv_obj_t *main_header = lv_menu_get_main_header(menu);
-    lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28_es, 0);
     lv_obj_set_flex_align(main_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
@@ -1296,12 +1314,12 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_hor(back_btn, 14, 0);
     lv_obj_set_style_pad_ver(back_btn, 8, 0);
     lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x3D5A80), LV_STATE_PRESSED);
-    lv_obj_set_style_text_font(back_btn, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(back_btn, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(back_btn, lv_color_hex(0x00BFFF), 0);
 
     lv_obj_t *back_label = lv_label_create(back_btn);
     lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back");
-    lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24_es, 0);
     /* Spacer invisible para centrar el titulo via SPACE_BETWEEN */
     lv_obj_t *header_spacer = lv_obj_create(main_header);
     lv_obj_remove_style_all(header_spacer);
@@ -1759,17 +1777,23 @@ static void screensaver_wake(ui_state_t *ui)
     if (ui->screensaver.enabled) {
         lv_timer_reset(ui->screensaver.timer);
         if (ui->screensaver.active) {
+            bool was_rotating = (ui->screensaver.rotate_timer != NULL);
             bsp_display_brightness_set(ui->brightness);
             ui->screensaver.active = false;
-            /* Parar timer de rotacion si esta activo y cerrar overlays */
+            /* Parar timer de rotacion si estaba activo */
             if (ui->screensaver.rotate_timer) {
                 lv_timer_del(ui->screensaver.rotate_timer);
                 ui->screensaver.rotate_timer = NULL;
             }
-            if (ui->screensaver.rotate_index == 1) {
+            /* En modo rotación: al despertar, cerrar TODOS los overlays
+             * (chart frigo, histórico batería) y volver a la pestaña Live. */
+            if (was_rotating) {
                 ui_close_chart_screen();
-            } else if (ui->screensaver.rotate_index == 2) {
                 ui_close_battery_history_screen();
+                if (ui->tabview &&
+                    lv_tabview_get_tab_act(ui->tabview) != 0) {
+                    lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+                }
             }
             ui->screensaver.rotate_index = 0;
         }
@@ -1998,12 +2022,12 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *card2_title = lv_label_create(card2);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_REFRESH "  Estado");
 
     ui->lbl_about_uptime = lv_label_create(card2);
-    lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_uptime, "Uptime: --");
 
     /* Fila RAM + SD */
@@ -2016,16 +2040,16 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_align(row_mem, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     ui->lbl_about_heap = lv_label_create(row_mem);
-    lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
 
     ui->lbl_about_sd = lv_label_create(row_mem);
-    lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_align(ui->lbl_about_sd, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
     ui->lbl_about_ip = lv_label_create(card2);
-    lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
 
     /* === Card 3: Credits === */
@@ -2051,7 +2075,7 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_align(card3_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card3_title = lv_label_create(card3_header);
-    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Version, Repo y Creditos");
 
@@ -2062,13 +2086,13 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_radius(btn_reboot_hdr, 8, 0);
     lv_obj_t *lbl_reboot_hdr = lv_label_create(btn_reboot_hdr);
     lv_label_set_text(lbl_reboot_hdr, LV_SYMBOL_POWER "  Reiniciar");
-    lv_obj_set_style_text_font(lbl_reboot_hdr, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_reboot_hdr, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_reboot_hdr);
     lv_obj_add_event_cb(btn_reboot_hdr, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 
     /* Version */
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text_fmt(lbl_ver_top, "Version: %s", APP_VERSION);
 
@@ -2076,23 +2100,23 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     esp_chip_info_t chip = {0};
     esp_chip_info(&chip);
     lv_obj_t *lbl_chip = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_chip, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_chip, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_chip, lv_color_hex(0xAAAAAA), 0);
     lv_label_set_text_fmt(lbl_chip, "ESP32 model=%d cores=%d rev=%d  |  IDF: %s",
         chip.model, chip.cores, chip.revision, esp_get_idf_version());
 
     lv_obj_t *lbl_port = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_port, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
 
     lv_obj_t *lbl_gh = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
 
     lv_obj_t *lbl_cred = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
     lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
 
@@ -2351,13 +2375,13 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *card1_title = lv_label_create(card1);
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 
     /* Volumen */
     lv_obj_t *lbl_vol = lv_label_create(card1);
-    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20_es, 0);
     lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
 
     lv_obj_t *slider = lv_slider_create(card1);
@@ -2379,13 +2403,14 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_column(row_mute, 16, 0);
 
     lv_obj_t *lbl_mute = lv_label_create(row_mute);
-    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
     lv_obj_t *sw = lv_switch_create(row_mute);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    ui->sound_mute_switch = sw;
 
     /* === Card 2: Bateria === */
     lv_obj_t *card2 = lv_obj_create(cont);
@@ -2403,7 +2428,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card2_title = lv_label_create(card2);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Bateria");
 
@@ -2419,7 +2444,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_size(col_crit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_gap(col_crit, 6, 0);
     lv_obj_t *lbl_crit = lv_label_create(col_crit);
-    lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_crit, lv_color_hex(0xFF4444), 0);
     lv_label_set_text(lbl_crit, LV_SYMBOL_WARNING " Critico");
     lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
@@ -2444,7 +2469,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_size(col_warn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_gap(col_warn, 6, 0);
     lv_obj_t *lbl_warn = lv_label_create(col_warn);
-    lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_warn, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(lbl_warn, LV_SYMBOL_BELL " Aviso");
     lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
@@ -2476,7 +2501,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card3_title = lv_label_create(card3);
-    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_CHARGE "  Congelador");
 
@@ -2491,7 +2516,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_size(col_min_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_gap(col_min_a, 6, 0);
     lv_obj_t *lbl_min_a = lv_label_create(col_min_a);
-    lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_min_a, "Tras subir (min)");
     lv_obj_t *dd_min_a = lv_dropdown_create(col_min_a);
     lv_obj_set_width(dd_min_a, 130);
@@ -2516,7 +2541,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_size(col_t_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_gap(col_t_a, 6, 0);
     lv_obj_t *lbl_t_a = lv_label_create(col_t_a);
-    lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_t_a, "Si supera");
     lv_obj_t *dd_t_a = lv_dropdown_create(col_t_a);
     lv_obj_set_width(dd_t_a, 140);

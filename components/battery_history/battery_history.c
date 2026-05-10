@@ -3,12 +3,11 @@
 #include <stdlib.h>
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include <time.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <errno.h>
-#include "nvs.h"
-#include "nvs_flash.h"
 
 static void bh_flush_to_sd_impl(void);
 static const char *TAG = "bathist";
@@ -18,16 +17,21 @@ static const char *TAG = "bathist";
 
 typedef struct {
     bh_point_t points[BH_POINTS];
-    size_t     write_idx;        /* next index to write */
+    size_t     write_idx;
     bool       wrapped;
-    int32_t    last_milli;       /* last received from BLE */
+    /* Acumulador del intervalo activo (entre dos sample_timer ticks) */
+    int64_t    acc_sum_ma;
+    uint32_t   acc_count;
+    int32_t    acc_max_ma;
+    int32_t    acc_min_ma;
+    int32_t    last_milli;
     bool       has_latest;
     int32_t    last_sample_ts;
 } bh_buffer_t;
 
-static bh_buffer_t s_bufs[BH_SRC_COUNT];
+/* Alojado en PSRAM en init() — 552 KB no caben en internal RAM */
+static bh_buffer_t *s_bufs = NULL;
 static esp_timer_handle_t s_sample_timer = NULL;
-static esp_timer_handle_t s_persist_timer = NULL;
 static esp_timer_handle_t s_bh_flush_timer = NULL;
 static bool s_bh_dir_ok = false;
 /* indices para flush */
@@ -57,10 +61,12 @@ static int32_t now_seconds(void)
     return (int32_t)t;
 }
 
-static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t milli, bool valid)
+static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t avg, int32_t mx, int32_t mn, bool valid)
 {
     b->points[b->write_idx].ts = ts;
-    b->points[b->write_idx].milli_amps = milli;
+    b->points[b->write_idx].milli_amps = avg;
+    b->points[b->write_idx].milli_amps_max = mx;
+    b->points[b->write_idx].milli_amps_min = mn;
     b->points[b->write_idx].valid = valid;
     b->write_idx = (b->write_idx + 1) % BH_POINTS;
     if (b->write_idx == 0) b->wrapped = true;
@@ -69,8 +75,19 @@ static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t milli, bool valid)
 void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
 {
     if (src >= BH_SRC_COUNT) return;
-    s_bufs[src].last_milli = milli_amps;
-    s_bufs[src].has_latest = true;
+    bh_buffer_t *b = &s_bufs[src];
+    /* Acumular en el intervalo activo para calcular avg/max/min */
+    if (b->acc_count == 0) {
+        b->acc_max_ma = milli_amps;
+        b->acc_min_ma = milli_amps;
+    } else {
+        if (milli_amps > b->acc_max_ma) b->acc_max_ma = milli_amps;
+        if (milli_amps < b->acc_min_ma) b->acc_min_ma = milli_amps;
+    }
+    b->acc_sum_ma += milli_amps;
+    b->acc_count++;
+    b->last_milli = milli_amps;
+    b->has_latest = true;
 }
 
 static void sample_timer_cb(void *arg)
@@ -78,52 +95,26 @@ static void sample_timer_cb(void *arg)
     int32_t ts = now_seconds();
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         bh_buffer_t *b = &s_bufs[i];
-        if (b->has_latest) {
-            buffer_push(b, ts, b->last_milli, true);
+        if (b->acc_count > 0) {
+            int32_t avg = (int32_t)(b->acc_sum_ma / (int64_t)b->acc_count);
+            buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, true);
             b->last_sample_ts = ts;
+        } else if (b->has_latest) {
+            /* Sin nuevas muestras este intervalo: repite el último valor */
+            buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, true);
         } else {
-            buffer_push(b, ts, 0, false);
+            buffer_push(b, ts, 0, 0, 0, false);
         }
+        /* Reset acumulador del siguiente intervalo */
+        b->acc_sum_ma = 0;
+        b->acc_count = 0;
+        b->acc_max_ma = 0;
+        b->acc_min_ma = 0;
     }
 }
 
-static void persist_one(bh_source_t src)
-{
-    nvs_handle_t h;
-    char key[16];
-    snprintf(key, sizeof key, "src%d", (int)src);
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "nvs_open: %s", esp_err_to_name(err));
-        return;
-    }
-    err = nvs_set_blob(h, key, &s_bufs[src], sizeof(bh_buffer_t));
-    if (err == ESP_OK) nvs_commit(h);
-    nvs_close(h);
-}
-
-static void persist_timer_cb(void *arg)
-{
-    for (int i = 0; i < BH_SRC_COUNT; ++i) persist_one((bh_source_t)i);
-    ESP_LOGI(TAG, "Persisted %d sources to NVS", BH_SRC_COUNT);
-}
-
-static void load_from_nvs(void)
-{
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
-    for (int i = 0; i < BH_SRC_COUNT; ++i) {
-        char key[16];
-        snprintf(key, sizeof key, "src%d", i);
-        size_t sz = sizeof(bh_buffer_t);
-        bh_buffer_t tmp;
-        if (nvs_get_blob(h, key, &tmp, &sz) == ESP_OK && sz == sizeof(bh_buffer_t)) {
-            memcpy(&s_bufs[i], &tmp, sizeof tmp);
-            ESP_LOGI(TAG, "Loaded src%d from NVS", i);
-        }
-    }
-    nvs_close(h);
-}
+/* Persistencia NVS deshabilitada: el buffer es ~552 KB total y NVS no puede
+ * con eso cada 15 min. Los datos sobreviven en SD vía bh_flush_to_sd_impl. */
 
 
 static void bh_get_day_filename(char *buf, size_t len)
@@ -181,7 +172,7 @@ static void bh_flush_to_sd_impl(void)
         return;
     }
     if (need_header) {
-        fprintf(f, "timestamp,source,milli_amps\n");
+        fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min\n");
     }
 
     int total_written = 0;
@@ -217,9 +208,11 @@ static void bh_flush_to_sd_impl(void)
             } else {
                 snprintf(ts_str, sizeof ts_str, "BOOT+%ld", (long)pt);
             }
-            fprintf(f, "%s,%s,%ld\n",
+            fprintf(f, "%s,%s,%ld,%ld,%ld\n",
                     ts_str, battery_history_source_name((bh_source_t)s),
-                    (long)b->points[idx].milli_amps);
+                    (long)b->points[idx].milli_amps,
+                    (long)b->points[idx].milli_amps_max,
+                    (long)b->points[idx].milli_amps_min);
             last_ts_per_src[s] = b->points[idx].ts;
             total_written++;
         }
@@ -239,8 +232,17 @@ static void bh_flush_timer_cb(void *arg)
 
 esp_err_t battery_history_init(void)
 {
-    memset(s_bufs, 0, sizeof s_bufs);
-    load_from_nvs();
+    /* Alocar buffer en PSRAM (552 KB) */
+    if (!s_bufs) {
+        s_bufs = heap_caps_calloc(BH_SRC_COUNT, sizeof(bh_buffer_t),
+                                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_bufs) {
+            ESP_LOGE(TAG, "No se pudo alocar %u bytes en PSRAM",
+                     (unsigned)(BH_SRC_COUNT * sizeof(bh_buffer_t)));
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    memset(s_bufs, 0, BH_SRC_COUNT * sizeof(bh_buffer_t));
 
     const esp_timer_create_args_t sample_args = {
         .callback = sample_timer_cb,
@@ -248,13 +250,6 @@ esp_err_t battery_history_init(void)
     };
     ESP_ERROR_CHECK(esp_timer_create(&sample_args, &s_sample_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_sample_timer, (uint64_t)BH_SAMPLE_MS * 1000ULL));
-
-    const esp_timer_create_args_t persist_args = {
-        .callback = persist_timer_cb,
-        .name = "bh_persist",
-    };
-    ESP_ERROR_CHECK(esp_timer_create(&persist_args, &s_persist_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(s_persist_timer, (uint64_t)BH_PERSIST_MS * 1000ULL));
 
     /* Flush a SD cada 60s */
     const esp_timer_create_args_t flush_args = {
@@ -266,8 +261,8 @@ esp_err_t battery_history_init(void)
         ESP_LOGI(TAG, "BH flush timer iniciado (%d ms)", BH_FLUSH_INTERVAL_MS);
     }
 
-    ESP_LOGI(TAG, "battery_history initialised (sample %dms, persist %dms)",
-             BH_SAMPLE_MS, BH_PERSIST_MS);
+    ESP_LOGI(TAG, "battery_history initialised (sample %dms, %d points)",
+             BH_SAMPLE_MS, BH_POINTS);
     return ESP_OK;
 }
 

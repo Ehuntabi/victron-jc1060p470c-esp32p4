@@ -1,94 +1,40 @@
 #include "view_battery_monitor.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "ui_format.h"
+#include "ui_card.h"
+#include "fonts/fonts_es.h"
+#include "icons/icons.h"
 #include "esp_log.h"
 #include "ui.h"
 
 static void battery_view_root_click_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    ESP_LOGI("BMVIEW", "tap event code=%d", (int)code);
     if (code != LV_EVENT_SHORT_CLICKED) return;
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
     if (ui) ui_show_battery_history_screen(ui);
 }
 
-
-typedef enum {
-    BATTERY_PRIMARY_VOLTAGE = 0,
-    BATTERY_PRIMARY_CURRENT,
-    BATTERY_PRIMARY_SOC,
-    BATTERY_PRIMARY_COUNT
-} battery_primary_label_t;
-
-typedef enum {
-    BATTERY_SECONDARY_TTG = 0,
-    BATTERY_SECONDARY_CONSUMED,
-    BATTERY_SECONDARY_AUX,
-    BATTERY_SECONDARY_COUNT
-} battery_secondary_label_t;
-
-typedef struct {
-    lv_obj_t *header;
-    lv_obj_t *value;
-} ui_label_pair_t;
-
 typedef struct {
     ui_device_view_t base;
-    lv_obj_t *row_primary;
-    lv_obj_t *row_secondary;
-    ui_label_pair_t primary[BATTERY_PRIMARY_COUNT];
-    ui_label_pair_t secondary[BATTERY_SECONDARY_COUNT];
+    lv_obj_t *card;
+    lv_obj_t *pill_state;     /* Cargando / Descargando / Reposo */
+    lv_obj_t *arc_soc;
+    lv_obj_t *m_voltage;
+    lv_obj_t *m_current;
+    lv_obj_t *m_power;
+    lv_obj_t *m_ttg;
+    lv_obj_t *m_consumed;
+    lv_obj_t *m_aux;
 } ui_battery_view_t;
 
 static void battery_view_update(ui_device_view_t *view, const victron_data_t *data);
 static void battery_view_show(ui_device_view_t *view);
 static void battery_view_hide(ui_device_view_t *view);
 static void battery_view_destroy(ui_device_view_t *view);
-static void format_primary_voltage(lv_obj_t *label, const victron_data_t *data);
-static void format_primary_current(lv_obj_t *label, const victron_data_t *data);
-static void format_primary_soc(lv_obj_t *label, const victron_data_t *data);
-static void format_secondary_ttg(lv_obj_t *label, const victron_data_t *data);
-static void format_secondary_consumed(lv_obj_t *label, const victron_data_t *data);
-static void format_secondary_aux(lv_obj_t *label, const victron_data_t *data);
-
-static const ui_label_descriptor_t battery_primary_descriptors[BATTERY_PRIMARY_COUNT] = {
-    { "battery_voltage", "Voltaje",   format_primary_voltage },
-    { "battery_current", "Corriente", format_primary_current },
-    { "battery_soc",     "SOC",       format_primary_soc },
-};
-
-static const ui_label_descriptor_t battery_secondary_descriptors[BATTERY_SECONDARY_COUNT] = {
-    { "ttg",      "Autonomía",  format_secondary_ttg },
-    { "consumed", "Consumido",  format_secondary_consumed },
-    { "aux",      "Aux",        format_secondary_aux },
-};
-
-static ui_label_pair_t create_label_box(ui_state_t *ui, lv_obj_t *parent,
-                                        const ui_label_descriptor_t *desc)
-{
-    ui_label_pair_t pair = {0};
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_set_size(box, lv_pct(30), 100);
-    lv_obj_set_style_pad_all(box, 0, 0);
-    lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(box, 0, 0);
-    lv_obj_set_style_outline_width(box, 0, 0);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-
-    pair.header = lv_label_create(box);
-    lv_label_set_text(pair.header, desc->title ? desc->title : "");
-    lv_obj_add_style(pair.header, &ui->styles.medium, 0);
-    lv_obj_align(pair.header, LV_ALIGN_TOP_MID, 0, 15);
-
-    pair.value = lv_label_create(box);
-    lv_label_set_text(pair.value, "--");
-    lv_obj_add_style(pair.value, &ui->styles.value, 0);
-    lv_obj_align(pair.value, LV_ALIGN_BOTTOM_MID, 0, -15);
-
-    return pair;
-}
+static void register_tap(ui_battery_view_t *view, lv_obj_t *obj, ui_state_t *ui);
 
 ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
 {
@@ -102,92 +48,89 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_size(view->base.root, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(view->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(view->base.root, 0, 0);
-    lv_obj_set_style_outline_width(view->base.root, 0, 0);
-    lv_obj_set_style_pad_all(view->base.root, 0, 0);
+    lv_obj_set_style_pad_all(view->base.root, 12, 0);
+    lv_obj_set_style_pad_gap(view->base.root, 12, 0);
+    lv_obj_set_layout(view->base.root, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(view->base.root, LV_FLEX_FLOW_COLUMN);
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    /* Fila primaria — 3 valores grandes */
-    view->row_primary = lv_obj_create(view->base.root);
-    lv_obj_set_size(view->row_primary, lv_pct(100), 120);
-    lv_obj_set_flex_flow(view->row_primary, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(view->row_primary,
-                          LV_FLEX_ALIGN_SPACE_EVENLY,
-                          LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(view->row_primary, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_width(view->row_primary, 0, 0);
-    lv_obj_set_style_outline_width(view->row_primary, 0, 0);
-    lv_obj_set_style_bg_opa(view->row_primary, LV_OPA_TRANSP, 0);
-    lv_obj_align(view->row_primary, LV_ALIGN_TOP_MID, 0, 10);
+    /* ── Card "Batería" border naranja ─────────────────────────── */
+    view->card = ui_card_create(view->base.root, UI_COLOR_ORANGE);
 
-    for (size_t i = 0; i < BATTERY_PRIMARY_COUNT; ++i) {
-        view->primary[i] = create_label_box(ui, view->row_primary,
-                                            &battery_primary_descriptors[i]);
-    }
+    lv_obj_t *header = ui_card_set_title_img(view->card, &icon_battery,
+                                             "Batería", UI_COLOR_ORANGE);
+    view->pill_state = ui_pill_create(header, "Reposo", UI_COLOR_TEXT_DIM);
 
-    /* Fila secundaria — TTG, Consumido, Aux */
-    view->row_secondary = lv_obj_create(view->base.root);
-    lv_obj_set_size(view->row_secondary, lv_pct(100), 120);
-    lv_obj_set_flex_flow(view->row_secondary, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(view->row_secondary,
-                          LV_FLEX_ALIGN_SPACE_EVENLY,
-                          LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(view->row_secondary, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_width(view->row_secondary, 0, 0);
-    lv_obj_set_style_outline_width(view->row_secondary, 0, 0);
-    lv_obj_set_style_bg_opa(view->row_secondary, LV_OPA_TRANSP, 0);
-    lv_obj_align(view->row_secondary, LV_ALIGN_TOP_MID, 0, 140);
+    /* Body row: arc SOC izquierda (tamaño fijo) + columna métricas que
+     * llena el espacio restante (flex_grow=1) y centra sus métricas. */
+    lv_obj_t *body = lv_obj_create(view->card);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(body, 24, 0);
 
-    for (size_t i = 0; i < BATTERY_SECONDARY_COUNT; ++i) {
-        view->secondary[i] = create_label_box(ui, view->row_secondary,
-                                              &battery_secondary_descriptors[i]);
-    }
+    view->arc_soc = ui_arc_soc_create(body, 240);
 
-    /* Alarma */
-    if (ui->lbl_error) {
-        lv_label_set_text(ui->lbl_error, "");
-    }
+    lv_obj_t *col = lv_obj_create(body);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_height(col, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(col, 1);  /* ocupa todo el espacio horizontal restante */
+    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col, 16, 0);
+
+    view->m_voltage = ui_metric_create_large(col, "Tensión");
+    view->m_current = ui_metric_create_large(col, "Corriente");
+    view->m_power   = ui_metric_create_large(col, "Potencia");
+
+    /* Footer row: TTG + Consumido + Aux distribuidos en todo el ancho */
+    lv_obj_t *footer = lv_obj_create(view->card);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(footer, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(footer, 12, 0);
+    lv_obj_set_style_pad_top(footer, 12, 0);
+
+    view->m_ttg      = ui_metric_create_large(footer, "Autonomía");
+    view->m_consumed = ui_metric_create_large(footer, "Consumido");
+    view->m_aux      = ui_metric_create_large(footer, "Aux");
 
     view->base.update  = battery_view_update;
     view->base.show    = battery_view_show;
     view->base.hide    = battery_view_hide;
     view->base.destroy = battery_view_destroy;
 
-    /* Tap sobre la vista BM abre el historico de corriente.
-       Anadimos el handler tambien a los rows porque los hijos pueden
-       interceptar el touch antes de que llegue al root. */
-    lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(view->base.root, battery_view_root_click_cb,
-                        LV_EVENT_SHORT_CLICKED, ui);
-    if (view->row_primary) {
-        lv_obj_add_flag(view->row_primary, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(view->row_primary, battery_view_root_click_cb,
-                            LV_EVENT_SHORT_CLICKED, ui);
-    }
-    if (view->row_secondary) {
-        lv_obj_add_flag(view->row_secondary, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(view->row_secondary, battery_view_root_click_cb,
-                            LV_EVENT_SHORT_CLICKED, ui);
-    }
-    /* Engancha tambien a cada caja individual y a sus labels */
-    for (int i = 0; i < BATTERY_PRIMARY_COUNT; ++i) {
-        lv_obj_t *box = view->primary[i].header ? lv_obj_get_parent(view->primary[i].header) : NULL;
-        if (box) {
-            lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_add_event_cb(box, battery_view_root_click_cb, LV_EVENT_SHORT_CLICKED, ui);
-        }
-    }
-    for (int i = 0; i < BATTERY_SECONDARY_COUNT; ++i) {
-        lv_obj_t *box = view->secondary[i].header ? lv_obj_get_parent(view->secondary[i].header) : NULL;
-        if (box) {
-            lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_add_event_cb(box, battery_view_root_click_cb, LV_EVENT_SHORT_CLICKED, ui);
-        }
-    }
+    /* Tap → histórico 24h. Engancha en root + card + body + footer + métricas */
+    register_tap(view, view->base.root, ui);
+    register_tap(view, view->card, ui);
+    register_tap(view, body, ui);
+    register_tap(view, footer, ui);
+    register_tap(view, view->m_voltage, ui);
+    register_tap(view, view->m_current, ui);
+    register_tap(view, view->m_power, ui);
+    register_tap(view, view->m_ttg, ui);
+    register_tap(view, view->m_consumed, ui);
+    register_tap(view, view->m_aux, ui);
 
     return &view->base;
+}
+
+static void register_tap(ui_battery_view_t *view, lv_obj_t *obj, ui_state_t *ui)
+{
+    (void)view;
+    if (!obj) return;
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(obj, battery_view_root_click_cb,
+                        LV_EVENT_SHORT_CLICKED, ui);
 }
 
 static ui_battery_view_t *battery_view_from_base(ui_device_view_t *base)
@@ -201,14 +144,64 @@ static void battery_view_update(ui_device_view_t *view, const victron_data_t *da
     if (bat == NULL || data == NULL ||
         data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
 
-    for (size_t i = 0; i < BATTERY_PRIMARY_COUNT; ++i) {
-        if (bat->primary[i].value)
-            battery_primary_descriptors[i].formatter(bat->primary[i].value, data);
+    const victron_record_battery_monitor_t *b = &data->record.battery;
+    char buf[24];
+
+    /* Tensión */
+    snprintf(buf, sizeof(buf), "%u.%02u",
+             b->battery_voltage_centi / 100, b->battery_voltage_centi % 100);
+    ui_metric_set(bat->m_voltage, buf, "V", UI_COLOR_TEXT);
+
+    /* Corriente — signo y color por carga/descarga */
+    int current_centi = ui_round_div_signed((int)b->battery_current_milli, 10);
+    int abs_c = current_centi < 0 ? -current_centi : current_centi;
+    snprintf(buf, sizeof(buf), "%c%d.%02d",
+             current_centi >= 0 ? '+' : '-', abs_c / 100, abs_c % 100);
+    ui_metric_set(bat->m_current, buf, "A",
+                  ui_color_for_current((int32_t)b->battery_current_milli));
+
+    /* Potencia W = V * A (signo del A) */
+    int64_t power_mw = (int64_t)b->battery_voltage_centi *
+                       (int64_t)b->battery_current_milli / 100;
+    int power_w = (int)(power_mw / 1000);
+    snprintf(buf, sizeof(buf), "%+d", power_w);
+    ui_metric_set(bat->m_power, buf, "W",
+                  ui_color_for_current((int32_t)b->battery_current_milli));
+
+    /* Pill de estado: Cargando / Descargando / Reposo */
+    if (b->battery_current_milli > 50) {
+        ui_pill_set(bat->pill_state, "Cargando", UI_COLOR_GREEN);
+    } else if (b->battery_current_milli < -50) {
+        ui_pill_set(bat->pill_state, "Descargando", UI_COLOR_ORANGE);
+    } else {
+        ui_pill_set(bat->pill_state, "Reposo", UI_COLOR_TEXT_DIM);
     }
-    for (size_t i = 0; i < BATTERY_SECONDARY_COUNT; ++i) {
-        if (bat->secondary[i].value)
-            battery_secondary_descriptors[i].formatter(bat->secondary[i].value, data);
+
+    /* Arc SOC + voltaje */
+    ui_arc_soc_set(bat->arc_soc, b->soc_deci_percent, b->battery_voltage_centi);
+
+    /* Footer: TTG */
+    if (b->time_to_go_minutes == 0xFFFF) {
+        ui_metric_set(bat->m_ttg, "--", "", UI_COLOR_TEXT);
+    } else {
+        snprintf(buf, sizeof(buf), "%uh %02um",
+                 b->time_to_go_minutes / 60, b->time_to_go_minutes % 60);
+        ui_metric_set(bat->m_ttg, buf, "", UI_COLOR_TEXT);
     }
+
+    /* Footer: Consumido */
+    int consumed_deci = (int)b->consumed_ah_deci;
+    int abs_cons = consumed_deci < 0 ? -consumed_deci : consumed_deci;
+    snprintf(buf, sizeof(buf), "%c%d.%d",
+             consumed_deci < 0 ? '-' : '+',
+             abs_cons / 10, abs_cons % 10);
+    ui_metric_set(bat->m_consumed, buf, "Ah",
+                  consumed_deci < 0 ? UI_COLOR_ORANGE : UI_COLOR_TEXT);
+
+    /* Footer: Aux (temperatura / mid voltage / aux voltage) */
+    char aux_buf[32];
+    ui_format_aux_value(b->aux_input, b->aux_value, aux_buf, sizeof(aux_buf));
+    ui_metric_set(bat->m_aux, aux_buf, "", UI_COLOR_TEXT);
 }
 
 static void battery_view_show(ui_device_view_t *view)
@@ -226,89 +219,4 @@ static void battery_view_destroy(ui_device_view_t *view)
     if (view == NULL) return;
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
-}
-
-/* ── Formatters primarios ────────────────────────────────────── */
-static void format_primary_voltage(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-    ui_label_set_unsigned_fixed(label, (unsigned)b->battery_voltage_centi, 100, 2, " V");
-}
-
-static void format_primary_current(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-    int current_cent = ui_round_div_signed((int)b->battery_current_milli, 10);
-    lv_obj_set_style_text_color(label,
-        current_cent >= 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xFF9800), 0);
-    ui_label_set_signed_fixed(label, current_cent, 100, 2, " A");
-}
-
-static void format_primary_soc(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-    uint16_t soc = b->soc_deci_percent;
-    /* Color según SOC */
-    lv_color_t col;
-    if      (soc >= 700) col = lv_color_hex(0x00C851); /* verde  ≥70% */
-    else if (soc >= 300) col = lv_color_hex(0xFF9800); /* naranja 30-70% */
-    else                 col = lv_color_hex(0xFF4444); /* rojo   <30% */
-    lv_obj_set_style_text_color(label, col, 0);
-    ui_label_set_unsigned_fixed(label, (unsigned)soc, 10, 1, " %");
-}
-
-/* ── Formatters secundarios ──────────────────────────────────── */
-static void format_secondary_ttg(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-    uint16_t ttg = b->time_to_go_minutes;
-    /* 0xFFFF = no disponible (cargando o sin datos) */
-    if (ttg == 0xFFFF) {
-        lv_label_set_text(label, "--");
-    } else if (ttg == 0) {
-        lv_label_set_text(label, "0m");
-    } else {
-        lv_label_set_text_fmt(label, "%uh %02um",
-                              (unsigned)(ttg / 60), (unsigned)(ttg % 60));
-    }
-}
-
-static void format_secondary_consumed(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-    ui_label_set_signed_fixed(label, (int)b->consumed_ah_deci, 10, 1, " Ah");
-}
-
-static void format_secondary_aux(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
-
-    lv_obj_t *box    = lv_obj_get_parent(label);
-    lv_obj_t *header = NULL;
-    uint32_t  n      = lv_obj_get_child_cnt(box);
-    for (uint32_t i = 0; i < n; i++) {
-        lv_obj_t *child = lv_obj_get_child(box, i);
-        if (child != label) { header = child; break; }
-    }
-
-    const victron_record_battery_monitor_t *b = &data->record.battery;
-
-    if ((b->aux_input & 0x03u) == 0x03u) {
-        /* Potencia instantánea */
-        if (header) lv_label_set_text(header, "Amps");
-       int32_t current_tenths = ui_round_div_signed(b->battery_current_milli, 100);
-        lv_obj_set_style_text_color(label,
-            current_tenths >= 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xFF9800), 0);
-        ui_label_set_signed_fixed(label, current_tenths, 10, 1, " A");
-    } else {
-        if (header) lv_label_set_text(header, "Aux");
-        char aux_buf[32];
-        ui_format_aux_value(b->aux_input, b->aux_value, aux_buf, sizeof(aux_buf));
-        lv_label_set_text(label, aux_buf);
-    }
 }

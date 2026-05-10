@@ -1,6 +1,8 @@
 /* ui.c */
 #include "ui.h"
+#include "fonts/fonts_es.h"
 #include "audio_es8311.h"
+#include "config_server.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -21,6 +23,7 @@
 #include "ui/view_registry.h"
 #include "ui/settings_panel.h"
 #include "ui/view_default_battery.h"
+#include "ui/view_overview.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
 #include <time.h>
@@ -95,6 +98,9 @@ static void ui_update_device_activity(ui_state_t *ui, const char *mac_address);
 static void ui_check_device_timeouts(lv_timer_t *timer);
 static void clock_timer_cb(lv_timer_t *timer);
 static void idle_to_live_timer_cb(lv_timer_t *t);
+static void nav_btn_event_cb(lv_event_t *e);
+static void volume_btn_event_cb(lv_event_t *e);
+static void wifi_btn_event_cb(lv_event_t *e);
 static lv_timer_t *s_idle_to_live_timer;
 #define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
@@ -157,12 +163,12 @@ void ui_init(void) {
     // Create timer to check for device timeouts (check every 10 seconds)
     ui->device_timeout_timer = lv_timer_create(ui_check_device_timeouts, 10000, ui);
 
-    /* Initialize view selection - load saved mode or use default */
-    uint8_t saved_mode = 1; // Default to UI_VIEW_MODE_DEFAULT_BATTERY
+    /* Initialize view selection - load saved mode or use Overview por defecto */
+    uint8_t saved_mode = (uint8_t)UI_VIEW_MODE_OVERVIEW;
     if (load_ui_view_mode(&saved_mode) == ESP_OK) {
         ui->view_selection.mode = (ui_view_mode_t)saved_mode;
     } else {
-        ui->view_selection.mode = UI_VIEW_MODE_DEFAULT_BATTERY;
+        ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
     }
     ui->view_selection.dropdown = NULL;
 
@@ -197,7 +203,7 @@ void ui_init(void) {
         lv_palette_main(LV_PALETTE_BLUE),
         lv_palette_main(LV_PALETTE_RED),
         LV_THEME_DEFAULT_DARK,
-        &lv_font_montserrat_28
+        &lv_font_montserrat_28_es
     );
 #endif
 
@@ -206,7 +212,7 @@ void ui_init(void) {
     lv_obj_clear_flag(ui->tabview, LV_OBJ_FLAG_SCROLLABLE);
     /* Estilo de los tabs: fondo oscuro, fuente grande, indicador azul */
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
-    lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28_es, 0);
     /* Fondo de la barra de tabs */
     lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x121212), 0);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, 0);
@@ -226,57 +232,88 @@ void ui_init(void) {
 
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
 
+    /* Ocultar la barra de pestañas: usamos icono en bottom_bar para navegar.
+     * Importante: además de HIDDEN hay que poner altura 0 para que el contenido
+     * (tab_live/tab_settings) ocupe toda la pantalla. */
+    lv_obj_add_flag(tab_btns, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_height(tab_btns, 0);
+    /* Reserva inferior para que ninguna card invada la bottom_bar (50 px + 12) */
+    lv_obj_set_style_pad_bottom(ui->tab_live, 62, 0);
+    lv_obj_set_style_pad_bottom(ui->tab_settings, 62, 0);
+
     /* Reloj en barra superior — esquina derecha */
     /* Barra inferior unificada: contenedor flex con 4 zonas (reloj | BLE | volumen | temp ext) */
     ui->bottom_bar = lv_obj_create(lv_scr_act());
     lv_obj_remove_style_all(ui->bottom_bar);
     lv_obj_set_size(ui->bottom_bar, lv_pct(100), 50);
     lv_obj_align(ui->bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(ui->bottom_bar, lv_color_hex(0x06080C), 0);
+    lv_obj_set_style_bg_opa(ui->bottom_bar, LV_OPA_COVER, 0);
     lv_obj_set_layout(ui->bottom_bar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ui->bottom_bar, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(ui->bottom_bar, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(ui->bottom_bar, 4, 0);
+    /* SPACE_BETWEEN ancla primer y último elemento a los bordes y reparte el
+     * resto uniformemente. Combinado con anchos fijos, las posiciones de los
+     * iconos son las mismas independientemente del contenido (textos del
+     * reloj que cambian de longitud, pills, etc.). */
+    lv_obj_set_flex_align(ui->bottom_bar, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_hor(ui->bottom_bar, 12, 0);
+    lv_obj_set_style_pad_ver(ui->bottom_bar, 4, 0);
     lv_obj_clear_flag(ui->bottom_bar, LV_OBJ_FLAG_SCROLLABLE);
     /* Que la barra no intercepte clicks (los recoge lo de abajo) */
     lv_obj_clear_flag(ui->bottom_bar, LV_OBJ_FLAG_CLICKABLE);
 
+    /* Reloj — ancho fijo para que el cambio de "00:00" a "00:00 dd/mm/yyyy"
+     * no desplace al resto de iconos. */
     ui->lbl_clock = lv_label_create(ui->bottom_bar);
-    lv_obj_set_style_text_font(ui->lbl_clock, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(ui->lbl_clock, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(ui->lbl_clock, lv_color_white(), 0);
     lv_label_set_text(ui->lbl_clock, "00:00");
     lv_obj_set_style_bg_opa(ui->lbl_clock, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
-    /* Indicador BLE - centro inferior */
+    lv_obj_set_width(ui->lbl_clock, 280);
+    lv_obj_set_style_text_align(ui->lbl_clock, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(ui->lbl_clock, LV_LABEL_LONG_CLIP);
+    /* Indicador BLE — ancho fijo */
     ui->lbl_ble = lv_label_create(ui->bottom_bar);
-    lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_ble, 4, 0);
     lv_obj_set_style_radius(ui->lbl_ble, 4, 0);
+    lv_obj_set_size(ui->lbl_ble, 44, 38);
+    lv_obj_set_style_text_align(ui->lbl_ble, LV_TEXT_ALIGN_CENTER, 0);
 
-    /* Icono de volumen / mute */
+    /* Icono de volumen / mute — ancho fijo */
     ui->lbl_volume = lv_label_create(ui->bottom_bar);
-    lv_obj_set_style_text_font(ui->lbl_volume, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->lbl_volume, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(ui->lbl_volume, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(ui->lbl_volume, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_volume, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_volume, 4, 0);
     lv_obj_set_style_radius(ui->lbl_volume, 4, 0);
-    /* Texto inicial: depende de mute */
     lv_label_set_text(ui->lbl_volume, audio_is_muted() ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+    lv_obj_set_size(ui->lbl_volume, 44, 38);
+    lv_obj_set_style_text_align(ui->lbl_volume, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(ui->lbl_volume, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ui->lbl_volume, volume_btn_event_cb, LV_EVENT_CLICKED, ui);
 
-    /* Icono Wi-Fi (AP) */
+    /* Icono Wi-Fi (AP) — ancho fijo */
     ui->lbl_wifi = lv_label_create(ui->bottom_bar);
-    lv_obj_set_style_text_font(ui->lbl_wifi, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(ui->lbl_wifi, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_bg_opa(ui->lbl_wifi, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_wifi, lv_color_hex(0x000000), 0);
     lv_obj_set_style_pad_all(ui->lbl_wifi, 4, 0);
     lv_obj_set_style_radius(ui->lbl_wifi, 4, 0);
     lv_label_set_text(ui->lbl_wifi, LV_SYMBOL_WIFI);
+    lv_obj_set_size(ui->lbl_wifi, 44, 38);
+    lv_obj_set_style_text_align(ui->lbl_wifi, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(ui->lbl_wifi, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ui->lbl_wifi, wifi_btn_event_cb, LV_EVENT_CLICKED, ui);
     /* Color inicial segun NVS */
     {
         nvs_handle_t h;
@@ -288,6 +325,21 @@ void ui_init(void) {
         lv_obj_set_style_text_color(ui->lbl_wifi,
             en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
     }
+    /* Botón de navegación Live↔Settings — estilo discreto idéntico a los
+     * demás iconos de estado de la barra (sin fondo destacado). */
+    ui->btn_nav = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->btn_nav, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(ui->btn_nav, lv_color_hex(0xBBBBBB), 0);
+    lv_label_set_text(ui->btn_nav, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_bg_opa(ui->btn_nav, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->btn_nav, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->btn_nav, 4, 0);
+    lv_obj_set_style_radius(ui->btn_nav, 4, 0);
+    lv_obj_set_size(ui->btn_nav, 44, 38);
+    lv_obj_set_style_text_align(ui->btn_nav, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(ui->btn_nav, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ui->btn_nav, nav_btn_event_cb, LV_EVENT_CLICKED, ui);
+
     lv_timer_create(volume_icon_timer_cb, 500, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
@@ -307,7 +359,7 @@ void ui_init(void) {
     // Styles
     lv_style_init(&ui->styles.small);
     /* Use montserrat 22 for titles as requested */
-lv_style_set_text_font(&ui->styles.small, &lv_font_montserrat_28);
+lv_style_set_text_font(&ui->styles.small, &lv_font_montserrat_28_es);
     lv_style_set_text_color(&ui->styles.small, lv_color_white());
 
     lv_style_init(&ui->styles.medium);
@@ -324,10 +376,20 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
 
     // Create default battery view instead of "No live data" label
     ui->default_view = ui_default_battery_view_create(ui, ui->tab_live);
-    
-    // Show the default view initially (will be updated when data arrives based on view selection)
-    if (ui->default_view && ui->default_view->show) {
-        ui->default_view->show(ui->default_view);
+    // Crear también la vista Overview (paralela a default_view)
+    ui->overview_view = ui_overview_view_create(ui, ui->tab_live);
+
+    /* Mostrar la vista inicial según la selección guardada */
+    if (ui->view_selection.mode == UI_VIEW_MODE_OVERVIEW) {
+        if (ui->overview_view && ui->overview_view->show)
+            ui->overview_view->show(ui->overview_view);
+        if (ui->default_view && ui->default_view->hide)
+            ui->default_view->hide(ui->default_view);
+    } else {
+        if (ui->default_view && ui->default_view->show)
+            ui->default_view->show(ui->default_view);
+        if (ui->overview_view && ui->overview_view->hide)
+            ui->overview_view->hide(ui->overview_view);
     }
     
     // Keep the old label for compatibility but hide it
@@ -433,6 +495,10 @@ void ui_on_panel_data(const victron_data_t *d) {
     // Always update the default view with incoming data (it handles multiple device types)
     if (ui->default_view && ui->default_view->update) {
         ui->default_view->update(ui->default_view, d);
+    }
+    // Overview también se alimenta siempre — mantiene state interno consolidado
+    if (ui->overview_view && ui->overview_view->update) {
+        ui->overview_view->update(ui->overview_view, d);
     }
 
     const char *type_str = device_type_name(d->type);
@@ -570,6 +636,63 @@ void ui_notify_user_activity(void)
     ui_settings_panel_on_user_activity(ui);
 }
 
+/* Toggle Live ↔ Settings al pulsar el icono de la barra inferior */
+static void nav_btn_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui || !ui->tabview) return;
+    uint16_t cur = lv_tabview_get_tab_act(ui->tabview);
+    uint16_t next = (cur == 0) ? ui->tab_settings_index : 0;
+    lv_tabview_set_act(ui->tabview, next, LV_ANIM_OFF);
+    /* Cambiar el icono según el destino: settings en Live, home en Settings */
+    if (ui->btn_nav) {
+        lv_label_set_text(ui->btn_nav,
+            (next == 0) ? LV_SYMBOL_SETTINGS : LV_SYMBOL_HOME);
+    }
+}
+
+/* Toggle mute/unmute al pulsar el icono de volumen — mismo efecto exacto
+ * que el switch "Silenciar avisos" en Settings/Sonido. El refresco visual
+ * del label lo hace volume_icon_timer_cb (cada 500 ms). */
+static void volume_btn_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    bool new_muted = !audio_is_muted();
+    audio_set_mute(new_muted);
+    /* Sincronizar el switch del panel Settings si ya está creado */
+    if (ui && ui->sound_mute_switch) {
+        if (new_muted) lv_obj_add_state(ui->sound_mute_switch, LV_STATE_CHECKED);
+        else           lv_obj_clear_state(ui->sound_mute_switch, LV_STATE_CHECKED);
+    }
+}
+
+/* Toggle Wi-Fi AP on/off al pulsar el icono — comportamiento idéntico al
+ * switch del panel Settings: guarda NVS, sincroniza el switch y muestra el
+ * mismo modal "Cambio en Wi-Fi requiere reiniciar" con Cancelar / Reiniciar. */
+static void wifi_btn_event_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui) return;
+
+    nvs_handle_t h;
+    if (nvs_open("wifi", NVS_READWRITE, &h) != ESP_OK) return;
+    uint8_t en = 1;
+    nvs_get_u8(h, "enabled", &en);
+    en = en ? 0 : 1;
+    nvs_set_u8(h, "enabled", en);
+    nvs_commit(h);
+    nvs_close(h);
+
+    /* Sincronizar el switch del Settings antes de mostrar el modal — si el
+     * usuario cancela, el modal volverá a invertir y todo queda coherente. */
+    if (ui->wifi.ap_enable) {
+        if (en) lv_obj_add_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
+        else    lv_obj_clear_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
+    }
+
+    ui_show_wifi_restart_dialog(ui);
+}
+
 void ui_set_ble_mac(const uint8_t *mac) {
     // Format MAC as "XX:XX:XX:XX:XX:XX"
     char mac_str[18];
@@ -598,8 +721,13 @@ static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
         // Manual view mode selected - determine which view to show
         victron_record_type_t target_type = VICTRON_BLE_RECORD_TEST;
         bool show_default = true;
-        
+        bool show_overview = false;
+
         switch (ui->view_selection.mode) {
+            case UI_VIEW_MODE_OVERVIEW:
+                show_overview = true;
+                show_default = false;
+                break;
             case UI_VIEW_MODE_DEFAULT_BATTERY:
                 show_default = true;
                 break;
@@ -623,13 +751,28 @@ static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
                 show_default = true;
                 break;
         }
-        
-        if (show_default) {
+
+        if (show_overview) {
+            /* Mostrar Overview, ocultar default y cualquier active_view */
+            if (ui->active_view && ui->active_view->hide) {
+                ui->active_view->hide(ui->active_view);
+            }
+            ui->active_view = NULL;
+            if (ui->default_view && ui->default_view->hide) {
+                ui->default_view->hide(ui->default_view);
+            }
+            if (ui->overview_view && ui->overview_view->show) {
+                ui->overview_view->show(ui->overview_view);
+            }
+        } else if (show_default) {
             // Show default battery view
             if (ui->active_view && ui->active_view->hide) {
                 ui->active_view->hide(ui->active_view);
             }
             ui->active_view = NULL;
+            if (ui->overview_view && ui->overview_view->hide) {
+                ui->overview_view->hide(ui->overview_view);
+            }
             if (ui->default_view && ui->default_view->show) {
                 ui->default_view->show(ui->default_view);
             }
@@ -638,8 +781,11 @@ static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
             if (ui->active_view && ui->active_view->hide) {
                 ui->active_view->hide(ui->active_view);
             }
-            
+
             ui->active_view = NULL;
+            if (ui->overview_view && ui->overview_view->hide) {
+                ui->overview_view->hide(ui->overview_view);
+            }
             ui_device_view_t *view = ui_view_registry_ensure(ui, target_type, ui->tab_live);
             if (view && view->show) {
                 if (ui->default_view && ui->default_view->hide) {
@@ -655,8 +801,9 @@ static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
                 ESP_LOGW(TAG_UI, "Requested view type 0x%02X not available, showing default", (unsigned)target_type);
             }
         }
-        
-        ui->current_device_type = show_default ? VICTRON_BLE_RECORD_TEST : target_type;
+
+        ui->current_device_type = (show_overview || show_default)
+            ? VICTRON_BLE_RECORD_TEST : target_type;
         return;
     }
 
@@ -1013,7 +1160,7 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     /* Título */
     lv_obj_t *lbl_title = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
     lv_label_set_text(lbl_title, "Temperaturas");
     lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 8);
@@ -1045,7 +1192,7 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_obj_set_style_radius(dot, 8, 0);
         lv_obj_set_pos(dot, 10 + i * 120, 55);
         lv_obj_t *lbl = lv_label_create(scr);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24_es, 0);
         lv_obj_set_style_text_color(lbl, colores[i], 0);
         lv_label_set_text(lbl, leyenda[i]);
         lv_obj_set_pos(lbl, 30 + i * 120, 50);
@@ -1088,7 +1235,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_set_style_pad_left(s_chart, 50, 0);
     lv_obj_set_style_pad_right(s_chart, 50, 0);
     lv_obj_set_style_text_color(s_chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
-    lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_14, LV_PART_TICKS);
+    lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_14_es, LV_PART_TICKS);
 
     s_ser_aletas     = lv_chart_add_series(s_chart, colores[0], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
@@ -1125,7 +1272,7 @@ void ui_show_chart_screen(ui_state_t *ui)
             for (int i = 0; i < 5; ++i) {
                 lv_obj_t *l = lv_label_create(xlabels_cont);
                 lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
-                lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+                lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
                 if (n <= 0) {
                     lv_label_set_text(l, "--:--");
                     continue;
@@ -1233,7 +1380,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_t *lbl_title = lv_label_create(scr);
     lv_label_set_text(lbl_title, "HISTORICO BATERIA (24H)");
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28_es, 0);
     lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, 16);
 
     /* Totales: 2x2 con flex wrap */
@@ -1259,7 +1406,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         lv_obj_t *l = lv_label_create(totals_cont);
         lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 2);
         lv_obj_set_style_text_color(l, lv_color_hex(colors[i]), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
         lv_label_set_text_fmt(l, "%s\ncarga %.1f Ah  desc %.1f Ah",
                               battery_history_source_name((bh_source_t)i), ch, dis);
@@ -1275,7 +1422,15 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_border_color(chart, lv_color_hex(0x333333), 0);
     lv_chart_set_div_line_count(chart, 5, 8);
     lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
-    lv_chart_set_point_count(chart, BH_POINTS);
+    /* Limitar puntos del chart LVGL a un nº manejable; con BH_POINTS=8640
+     * y 4 series LVGL aloca demasiado y el render se cuelga. Hacemos
+     * downsample por step antes de meter los puntos. */
+    const int CHART_MAX_PTS = 1500;
+    int chart_pts = (BH_POINTS > CHART_MAX_PTS) ? CHART_MAX_PTS : BH_POINTS;
+    int chart_step = (BH_POINTS + chart_pts - 1) / chart_pts;
+    if (chart_step < 1) chart_step = 1;
+    chart_pts = (BH_POINTS + chart_step - 1) / chart_step;
+    lv_chart_set_point_count(chart, chart_pts);
     /* Rango Y: -50A..+50A en deciamperios -> -500..+500 deci o -50000..+50000 milli */
     /* Autoescala bateria: min/max de todas las fuentes con margen 10% */
     {
@@ -1304,11 +1459,11 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 50);
     lv_obj_set_style_pad_left(chart, 50, 0);
     lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
-    lv_obj_set_style_text_font(chart, &lv_font_montserrat_14, LV_PART_TICKS);
+    lv_obj_set_style_text_font(chart, &lv_font_montserrat_14_es, LV_PART_TICKS);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
     s_bh_chart = chart;
 
-    /* Series + datos */
+    /* Series + datos con downsample (step) */
     bh_point_t *pts = malloc(sizeof(bh_point_t) * BH_POINTS);
     if (pts) {
         for (int i = 0; i < BH_SRC_COUNT; ++i) {
@@ -1316,9 +1471,15 @@ void ui_show_battery_history_screen(ui_state_t *ui)
                 lv_color_hex(colors[i]), LV_CHART_AXIS_PRIMARY_Y);
             int32_t old_ts = 0, new_ts = 0;
             size_t n = battery_history_get_series((bh_source_t)i, pts, &old_ts, &new_ts);
-            for (size_t k = 0; k < n; ++k) {
-                if (pts[k].valid) {
-                    int32_t a = pts[k].milli_amps / 1000;
+            for (size_t k = 0; k < n; k += chart_step) {
+                /* Promedio del bin de chart_step puntos (ignora inválidos) */
+                int64_t sum = 0; int cnt = 0;
+                size_t end = (k + chart_step < n) ? k + chart_step : n;
+                for (size_t j = k; j < end; j++) {
+                    if (pts[j].valid) { sum += pts[j].milli_amps; cnt++; }
+                }
+                if (cnt > 0) {
+                    int32_t a = (int32_t)((sum / cnt) / 1000);
                     lv_chart_set_next_value(chart, ser, (lv_coord_t)a);
                 } else {
                     lv_chart_set_next_value(chart, ser, LV_CHART_POINT_NONE);
@@ -1355,7 +1516,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(xlabels_cont);
         lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
         if (span <= 0) {
             lv_label_set_text(l, "--:--");
             continue;

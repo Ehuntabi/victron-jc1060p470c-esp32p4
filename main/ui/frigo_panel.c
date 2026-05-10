@@ -1,3 +1,4 @@
+#include "fonts/fonts_es.h"
 #include "lv_font_thermometer.h"
 #include "ui/frigo_panel.h"
 #include "alerts.h"
@@ -133,7 +134,7 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
 
     /* Linea 1: Nombre */
     lv_obj_t *lbl_name = lv_label_create(row);
-    lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_name, lv_color_white(), 0);
     lv_label_set_text(lbl_name, nombre);
 
@@ -148,7 +149,7 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_set_flex_align(sub, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_val = lv_label_create(sub);
-    lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_width(lbl_val, 70);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
@@ -196,7 +197,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     /* Titulo */
     lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
-    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
 
@@ -238,7 +239,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_flow(row_fan_hdr, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_fan_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *lbl_fan_sec = lv_label_create(row_fan_hdr);
-    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     s_lbl_fan = lv_label_create(row_fan_hdr);
@@ -266,7 +267,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_size(col_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
     lv_obj_t *lbl_tmin = lv_label_create(col_min);
-    lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_tmin, "Min:");
 
@@ -276,12 +277,12 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_min_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_mm = lv_label_create(btn_min_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_mm);
     lv_obj_add_event_cb(btn_min_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_tmin_val = lv_label_create(col_min);
-    lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(s_lbl_tmin_val, lv_color_white(), 0);
     lv_obj_set_width(s_lbl_tmin_val, 80);
     lv_obj_set_style_text_align(s_lbl_tmin_val, LV_TEXT_ALIGN_CENTER, 0);
@@ -293,7 +294,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_min_p, lv_color_hex(0x4FC3F7), 0);
     lv_obj_t *lbl_mp = lv_label_create(btn_min_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_mp);
     lv_obj_add_event_cb(btn_min_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -307,7 +308,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_size(col_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
     lv_obj_t *lbl_tmax = lv_label_create(col_max);
-    lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(lbl_tmax, "Max:");
 
@@ -317,12 +318,12 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_max_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_xm = lv_label_create(btn_max_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_xm);
     lv_obj_add_event_cb(btn_max_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_tmax_val = lv_label_create(col_max);
-    lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(s_lbl_tmax_val, lv_color_white(), 0);
     lv_obj_set_width(s_lbl_tmax_val, 80);
     lv_obj_set_style_text_align(s_lbl_tmax_val, LV_TEXT_ALIGN_CENTER, 0);
@@ -334,7 +335,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_max_p, lv_color_hex(0xFFAA00), 0);
     lv_obj_t *lbl_xp = lv_label_create(btn_max_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(btn_max_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 

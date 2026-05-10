@@ -1,35 +1,27 @@
 #include "view_solar_charger.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ui_format.h"
-
-LV_FONT_DECLARE(font_awesome_solar_panel_40);
-LV_FONT_DECLARE(font_awesome_bolt_40);
-
-typedef enum {
-    SOLAR_LABEL_BATT_V = 0,
-    SOLAR_LABEL_BATT_A,
-    SOLAR_LABEL_LOAD_A,
-    SOLAR_LABEL_COUNT
-} solar_value_label_t;
-
-typedef enum {
-    SOLAR_BOTTOM_SOLAR_POWER = 0,
-    SOLAR_BOTTOM_YIELD,
-    SOLAR_BOTTOM_LOAD_POWER,
-    SOLAR_BOTTOM_COUNT
-} solar_bottom_label_t;
+#include "ui_card.h"
+#include "fonts/fonts_es.h"
+#include "icons/icons.h"
 
 typedef struct {
     ui_device_view_t base;
-    lv_obj_t *row_primary;
-    lv_obj_t *value_labels[SOLAR_LABEL_COUNT];
-    lv_obj_t *state_label;
-    lv_obj_t *icon_solar;
-    lv_obj_t *icon_bolt;
-    lv_obj_t *bottom_labels[SOLAR_BOTTOM_COUNT];
+    /* Card Solar */
+    lv_obj_t *card_solar;
+    lv_obj_t *pill_state;
+    lv_obj_t *m_pv_power;
+    lv_obj_t *m_yield;
+    /* Card Salida a batería */
+    lv_obj_t *card_out;
+    lv_obj_t *m_voltage;
+    lv_obj_t *m_current;
+    lv_obj_t *m_charge_w;
+    lv_obj_t *pill_error;  /* solo visible cuando charger_error != 0 */
 } ui_solar_view_t;
 
 static void solar_view_update(ui_device_view_t *view, const victron_data_t *data);
@@ -37,58 +29,8 @@ static void solar_view_show(ui_device_view_t *view);
 static void solar_view_hide(ui_device_view_t *view);
 static void solar_view_destroy(ui_device_view_t *view);
 
-static void format_battery_voltage(lv_obj_t *label, const victron_data_t *data);
-static void format_battery_current(lv_obj_t *label, const victron_data_t *data);
-static void format_load_current(lv_obj_t *label, const victron_data_t *data);
 static const char *solar_error_string(uint8_t code);
 static const char *solar_state_string(uint8_t state);
-
-static const ui_label_descriptor_t solar_primary_descriptors[SOLAR_LABEL_COUNT] = {
-    { "battery_voltage", "Voltaje",   format_battery_voltage },
-    { "battery_current", "Corriente", format_battery_current },
-    { "load_current",    "Carga",     format_load_current },
-};
-
-static lv_obj_t *create_label_box(ui_state_t *ui, lv_obj_t *parent,
-                                  const ui_label_descriptor_t *desc)
-{
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_set_size(box, lv_pct(30), 100);
-    lv_obj_set_style_pad_all(box, 8, 0);
-    lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(box, 0, 0);
-    lv_obj_set_style_outline_width(box, 0, 0);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *header = lv_label_create(box);
-    lv_label_set_text(header, desc->title ? desc->title : "");
-    lv_obj_add_style(header, &ui->styles.medium, 0);
-    lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 5);
-
-    lv_obj_t *value = lv_label_create(box);
-    lv_label_set_text(value, "--");
-    lv_obj_add_style(value, &ui->styles.value, 0);
-    lv_obj_align(value, LV_ALIGN_BOTTOM_MID, 0, -5);
-
-    return value;
-}
-
-typedef struct {
-    unsigned input_power_w;
-    unsigned long yield_wh;
-    unsigned long load_w;
-} solar_metrics_t;
-
-static void compute_metrics(const victron_record_solar_charger_t *s, solar_metrics_t *out)
-{
-    if (!out || !s) return;
-    out->input_power_w = s->pv_power_w;
-    out->yield_wh      = (unsigned long)s->yield_today_centikwh * 10UL;
-
-    /* Potencia carga con mayor precisión */
-    long product = (long)s->load_current_deci * (long)s->battery_voltage_centi;
-    out->load_w = (unsigned long)(product / 1000L);
-}
 
 ui_device_view_t *ui_solar_view_create(ui_state_t *ui, lv_obj_t *parent)
 {
@@ -102,59 +44,51 @@ ui_device_view_t *ui_solar_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_size(view->base.root, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(view->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(view->base.root, 0, 0);
-    lv_obj_set_style_outline_width(view->base.root, 0, 0);
-    lv_obj_set_style_pad_all(view->base.root, 0, 0);
+    lv_obj_set_style_pad_all(view->base.root, 12, 0);
+    lv_obj_set_style_pad_gap(view->base.root, 12, 0);
+    lv_obj_set_layout(view->base.root, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(view->base.root, LV_FLEX_FLOW_COLUMN);
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    view->row_primary = lv_obj_create(view->base.root);
-    lv_obj_set_size(view->row_primary, lv_pct(100), 100);
-    lv_obj_set_flex_flow(view->row_primary, LV_STYLE_PAD_ROW);
-    lv_obj_set_flex_align(view->row_primary,
-                          LV_FLEX_ALIGN_SPACE_EVENLY,
-                          LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(view->row_primary, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_width(view->row_primary, 0, 0);
-    lv_obj_set_style_outline_width(view->row_primary, 0, 0);
+    /* ── Card Solar (verde) ────────────────────────────────────── */
+    view->card_solar = ui_card_create(view->base.root, UI_COLOR_GREEN);
+    lv_obj_t *header_solar = ui_card_set_title_img(view->card_solar, &icon_solar,
+                                                   "Solar", UI_COLOR_GREEN);
+    view->pill_state = ui_pill_create(header_solar, "-", UI_COLOR_TEXT_DIM);
 
-    for (size_t i = 0; i < SOLAR_LABEL_COUNT; ++i) {
-        view->value_labels[i] = create_label_box(ui, view->row_primary,
-                                                 &solar_primary_descriptors[i]);
-    }
+    lv_obj_t *body_solar = lv_obj_create(view->card_solar);
+    lv_obj_remove_style_all(body_solar);
+    lv_obj_set_size(body_solar, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(body_solar, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body_solar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body_solar, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(body_solar, 16, 0);
 
-    view->state_label = lv_label_create(view->base.root);
-    lv_obj_add_style(view->state_label, &ui->styles.big, 0);
-    lv_label_set_text(view->state_label, "Estado");
-    lv_obj_align(view->state_label, LV_ALIGN_CENTER, 0, 50);
+    view->m_pv_power = ui_metric_create_large(body_solar, "Potencia PV");
+    view->m_yield    = ui_metric_create_large(body_solar, "Hoy");
 
-    view->icon_solar = lv_label_create(view->base.root);
-    lv_obj_set_style_text_font(view->icon_solar, &font_awesome_solar_panel_40, 0);
-    lv_obj_set_style_transform_zoom(view->icon_solar, 512, 0);
-    lv_label_set_text(view->icon_solar, "\xEF\x96\xBA");
-    lv_obj_align(view->icon_solar, LV_ALIGN_BOTTOM_LEFT, 25, -55);
+    /* ── Card Salida a batería (naranja) ───────────────────────── */
+    view->card_out = ui_card_create(view->base.root, UI_COLOR_ORANGE);
+    lv_obj_t *header_out = ui_card_set_title_img(view->card_out, &icon_battery,
+                                                 "Salida a batería",
+                                                 UI_COLOR_ORANGE);
+    view->pill_error = ui_pill_create(header_out, "OK", UI_COLOR_GREEN);
+    lv_obj_add_flag(view->pill_error, LV_OBJ_FLAG_HIDDEN);
 
-    view->icon_bolt = lv_label_create(view->base.root);
-    lv_obj_set_style_text_font(view->icon_bolt, &font_awesome_bolt_40, 0);
-    lv_obj_set_style_transform_zoom(view->icon_bolt, 512, 0);
-    lv_label_set_text(view->icon_bolt, "\xEF\x83\xA7");
-    lv_obj_align(view->icon_bolt, LV_ALIGN_BOTTOM_RIGHT, -28, -55);
+    lv_obj_t *body_out = lv_obj_create(view->card_out);
+    lv_obj_remove_style_all(body_out);
+    lv_obj_set_size(body_out, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(body_out, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body_out, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body_out, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(body_out, 16, 0);
 
-    /* Labels inferiores: PV power | Yield | Load power */
-    view->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER] = lv_label_create(view->base.root);
-    lv_obj_add_style(view->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER], &ui->styles.small, 0);
-    lv_label_set_text(view->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER], "");
-    lv_obj_align(view->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER], LV_ALIGN_BOTTOM_LEFT, 20, -8);
-
-    view->bottom_labels[SOLAR_BOTTOM_YIELD] = lv_label_create(view->base.root);
-    lv_obj_add_style(view->bottom_labels[SOLAR_BOTTOM_YIELD], &ui->styles.small, 0);
-    lv_label_set_text(view->bottom_labels[SOLAR_BOTTOM_YIELD], "");
-    lv_obj_align(view->bottom_labels[SOLAR_BOTTOM_YIELD], LV_ALIGN_BOTTOM_MID, 0, -8);
-
-    view->bottom_labels[SOLAR_BOTTOM_LOAD_POWER] = lv_label_create(view->base.root);
-    lv_obj_add_style(view->bottom_labels[SOLAR_BOTTOM_LOAD_POWER], &ui->styles.small, 0);
-    lv_label_set_text(view->bottom_labels[SOLAR_BOTTOM_LOAD_POWER], "");
-    lv_obj_align(view->bottom_labels[SOLAR_BOTTOM_LOAD_POWER], LV_ALIGN_BOTTOM_RIGHT, -20, -8);
+    view->m_voltage  = ui_metric_create_large(body_out, "Tensión");
+    view->m_current  = ui_metric_create_large(body_out, "Corriente");
+    view->m_charge_w = ui_metric_create_large(body_out, "Potencia carga");
 
     view->base.update  = solar_view_update;
     view->base.show    = solar_view_show;
@@ -174,47 +108,64 @@ static void solar_view_update(ui_device_view_t *view, const victron_data_t *data
     ui_solar_view_t *solar = solar_view_from_base(view);
     if (!solar || !data || data->type != VICTRON_BLE_RECORD_SOLAR_CHARGER) return;
 
-    for (size_t i = 0; i < SOLAR_LABEL_COUNT; ++i) {
-        if (solar->value_labels[i])
-            solar_primary_descriptors[i].formatter(solar->value_labels[i], data);
-    }
-
     const victron_record_solar_charger_t *s = &data->record.solar;
-    solar_metrics_t metrics = {0};
-    compute_metrics(s, &metrics);
+    char buf[24];
 
-    if (solar->state_label)
-        lv_label_set_text(solar->state_label, solar_state_string(s->device_state));
+    /* Pill estado del cargador */
+    uint8_t st = s->device_state;
+    lv_color_t pill_bg = UI_COLOR_TEXT_DIM;
+    if (st == 3) pill_bg = UI_COLOR_ORANGE;        /* Bulk */
+    else if (st == 4) pill_bg = UI_COLOR_YELLOW;   /* Absorción */
+    else if (st == 5) pill_bg = UI_COLOR_GREEN;    /* Float */
+    else if (st == 6) pill_bg = UI_COLOR_GREEN;    /* Storage */
+    else if (st == 2) pill_bg = UI_COLOR_RED;      /* Fault */
+    ui_pill_set(solar->pill_state, solar_state_string(st), pill_bg);
 
-    /* PV power — color verde si produce */
-    if (solar->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER]) {
-        lv_obj_set_style_text_color(solar->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER],
-            metrics.input_power_w > 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xAAAAAA), 0);
-        lv_label_set_text_fmt(solar->bottom_labels[SOLAR_BOTTOM_SOLAR_POWER],
-                              "PV: %u W", metrics.input_power_w);
+    /* Card Solar: PV W (grande, verde si > 0) */
+    snprintf(buf, sizeof(buf), "%u", (unsigned)s->pv_power_w);
+    ui_metric_set(solar->m_pv_power, buf, "W",
+                  s->pv_power_w > 0 ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
+
+    /* Yield hoy: en kWh si ≥ 1, en Wh si menor */
+    unsigned long yield_wh = (unsigned long)s->yield_today_centikwh * 10UL;
+    if (yield_wh >= 1000) {
+        snprintf(buf, sizeof(buf), "%lu.%01lu",
+                 yield_wh / 1000, (yield_wh % 1000) / 100);
+        ui_metric_set(solar->m_yield, buf, "kWh", UI_COLOR_TEXT);
+    } else {
+        snprintf(buf, sizeof(buf), "%lu", yield_wh);
+        ui_metric_set(solar->m_yield, buf, "Wh", UI_COLOR_TEXT);
     }
 
-    /* Yield — en Wh o kWh según el valor */
-    if (solar->bottom_labels[SOLAR_BOTTOM_YIELD]) {
-        if (metrics.yield_wh >= 1000) {
-            lv_label_set_text_fmt(solar->bottom_labels[SOLAR_BOTTOM_YIELD],
-                                  "Hoy: %lu.%01lu kWh",
-                                  metrics.yield_wh / 1000,
-                                  (metrics.yield_wh % 1000) / 100);
-        } else {
-            lv_label_set_text_fmt(solar->bottom_labels[SOLAR_BOTTOM_YIELD],
-                                  "Hoy: %lu Wh", metrics.yield_wh);
-        }
-    }
+    /* Card Salida: tensión batería */
+    snprintf(buf, sizeof(buf), "%u.%02u",
+             s->battery_voltage_centi / 100,
+             s->battery_voltage_centi % 100);
+    ui_metric_set(solar->m_voltage, buf, "V", UI_COLOR_TEXT);
 
-    /* Load power */
-    if (solar->bottom_labels[SOLAR_BOTTOM_LOAD_POWER]) {
-        lv_label_set_text_fmt(solar->bottom_labels[SOLAR_BOTTOM_LOAD_POWER],
-                              "Carga: %lu W", metrics.load_w);
-    }
+    /* Corriente — verde si carga */
+    int cur_deci = s->battery_current_deci;
+    int abs_c = cur_deci < 0 ? -cur_deci : cur_deci;
+    snprintf(buf, sizeof(buf), "%c%d.%d",
+             cur_deci >= 0 ? '+' : '-', abs_c / 10, abs_c % 10);
+    ui_metric_set(solar->m_current, buf, "A",
+                  cur_deci > 0 ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
 
-    if (view->ui && view->ui->lbl_error)
-        lv_label_set_text(view->ui->lbl_error, solar_error_string(s->charger_error));
+    /* Potencia de carga = V × I_bat */
+    long charge_w = ((long)s->battery_voltage_centi *
+                     (long)s->battery_current_deci) / 1000L;
+    snprintf(buf, sizeof(buf), "%ld", charge_w);
+    ui_metric_set(solar->m_charge_w, buf, "W",
+                  charge_w > 0 ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
+
+    /* Pill de error: visible solo si charger_error != 0 */
+    if (s->charger_error != 0) {
+        ui_pill_set(solar->pill_error, solar_error_string(s->charger_error),
+                    UI_COLOR_RED);
+        lv_obj_clear_flag(solar->pill_error, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(solar->pill_error, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static void solar_view_show(ui_device_view_t *view)
@@ -234,59 +185,35 @@ static void solar_view_destroy(ui_device_view_t *view)
     free(view);
 }
 
-/* ── Formatters ──────────────────────────────────────────────── */
-static void format_battery_voltage(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_SOLAR_CHARGER) return;
-    const victron_record_solar_charger_t *s = &data->record.solar;
-    ui_label_set_unsigned_fixed(label, (unsigned)s->battery_voltage_centi, 100, 2, " V");
-}
-
-static void format_battery_current(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_SOLAR_CHARGER) return;
-    const victron_record_solar_charger_t *s = &data->record.solar;
-    /* Color verde si está cargando */
-    lv_obj_set_style_text_color(label,
-        s->battery_current_deci > 0 ? lv_color_hex(0x00C851) : lv_color_hex(0xAAAAAA), 0);
-    ui_label_set_signed_fixed(label, s->battery_current_deci, 10, 1, " A");
-}
-
-static void format_load_current(lv_obj_t *label, const victron_data_t *data)
-{
-    if (!label || !data || data->type != VICTRON_BLE_RECORD_SOLAR_CHARGER) return;
-    const victron_record_solar_charger_t *s = &data->record.solar;
-    ui_label_set_signed_fixed(label, s->load_current_deci, 10, 1, " A");
-}
-
+/* ── Strings ─────────────────────────────────────────────────────── */
 static const char *solar_error_string(uint8_t e)
 {
     switch (e) {
-    case 0:   return "";
-    case 1:   return "Temp batería alta";
-    case 2:   return "Voltaje batería alto";
+    case 0:   return "OK";
+    case 1:   return "Temp bat. alta";
+    case 2:   return "V bat. alto";
     case 3:
-    case 4:   return "Fallo sensor temp remoto";
-    case 5:   return "Sensor temp remoto perdido";
+    case 4:   return "Sensor T remoto";
+    case 5:   return "Sensor T remoto perdido";
     case 6:
-    case 7:   return "Fallo sensor voltaje remoto";
-    case 8:   return "Sensor voltaje remoto perdido";
-    case 11:  return "Ripple de voltaje alto";
-    case 14:  return "Batería demasiado fría";
-    case 17:  return "Controlador sobrecalentado";
-    case 18:  return "Sobrecorriente controlador";
-    case 20:  return "Tiempo bulk máximo excedido";
-    case 21:  return "Sensor de corriente fuera de rango";
+    case 7:   return "Sensor V remoto";
+    case 8:   return "Sensor V remoto perdido";
+    case 11:  return "Ripple V alto";
+    case 14:  return "Batería fría";
+    case 17:  return "Sobrecal. controlador";
+    case 18:  return "Sobrecorriente";
+    case 20:  return "Bulk excedido";
+    case 21:  return "Sensor I rango";
     case 24:  return "Fallo ventilador";
-    case 26:  return "Terminal de potencia sobrecalentado";
-    case 27:  return "Cortocircuito lado batería";
-    case 28:  return "Problema hardware etapa potencia";
-    case 33:  return "Sobrevoltaje PV";
-    case 34:  return "Sobrecorriente PV";
-    case 35:  return "Sobrepotencia PV";
+    case 26:  return "Terminal sobrecal.";
+    case 27:  return "Cortocircuito bat.";
+    case 28:  return "HW etapa potencia";
+    case 33:  return "Sobre-V PV";
+    case 34:  return "Sobre-I PV";
+    case 35:  return "Sobre-P PV";
     case 38:
-    case 39:  return "Entrada PV cortocircuitada";
-    default:  return "Error desconocido";
+    case 39:  return "PV cortocircuito";
+    default:  return "Error";
     }
 }
 
@@ -299,12 +226,12 @@ static const char *solar_state_string(uint8_t s)
     case 3:  return "Bulk";
     case 4:  return "Absorción";
     case 5:  return "Float";
-    case 6:  return "Almacenamiento";
-    case 7:  return "Ecualización (Manual)";
-    case 8:  return "Ecualización (Auto)";
+    case 6:  return "Storage";
+    case 7:  return "Eq. manual";
+    case 8:  return "Eq. auto";
     case 9:  return "Inversor";
-    case 10: return "Fuente de alimentación";
+    case 10: return "Fuente";
     case 11: return "Iniciando";
-    default: return "Desconocido";
+    default: return "-";
     }
 }
