@@ -28,6 +28,10 @@ void ui_set_ble_mac(const uint8_t *mac);
  * This will reset the screensaver timer and restore brightness if active.
  */
 void ui_notify_user_activity(void);
+
+/* Forzar un refresco inmediato del label de la hora.
+ * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
+void ui_refresh_clock(void);
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 void ui_show_chart_screen(ui_state_t *ui);
 void ui_show_battery_history_screen(ui_state_t *ui);

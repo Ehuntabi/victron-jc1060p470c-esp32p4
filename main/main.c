@@ -26,6 +26,11 @@
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
+#include <time.h>
+
+/* Zona horaria de Madrid (CET/CEST con DST automático).
+ * Formato POSIX TZ: cambio último domingo de marzo (M3.5.0) y octubre (M10.5.0/3) */
+#define TZ_EUROPE_MADRID "CET-1CEST,M3.5.0,M10.5.0/3"
 
 static const char *TAG = "VICTRON_LVGL_APP";
 #define logSection(section) ESP_LOGI(TAG, "\n\n***** %s *****\n", section)
@@ -40,6 +45,19 @@ static void reboot_timer_cb(void *arg)
 {
     ESP_LOGI(TAG, "Rebooting after 24h uptime...");
     esp_restart();
+}
+
+/* ── Backup periódico de hora a NVS ──────────────────────────── */
+static void rtc_backup_timer_cb(void *arg)
+{
+    time_t now = time(NULL);
+    if (now < 1000000000L) return;  /* hora aún no válida */
+    nvs_handle_t nh;
+    if (nvs_open("rtc_backup", NVS_READWRITE, &nh) == ESP_OK) {
+        nvs_set_i64(nh, "epoch", (int64_t)now);
+        nvs_commit(nh);
+        nvs_close(nh);
+    }
 }
 
 /* ── Estado UI global ────────────────────────────────────────── */
@@ -188,10 +206,24 @@ void app_main(void)
     if (sd_err != ESP_OK)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
 
+    /* TZ Madrid antes de cualquier settimeofday/mktime/localtime */
+    setenv("TZ", TZ_EUROPE_MADRID, 1);
+    tzset();
+
     esp_err_t rtc_err = rtc_init(bsp_i2c_get_handle());
-/* Restaurar hora desde NVS si el RTC da año incorrecto */
+    /* El RTC almacena hora local (Madrid). mktime la interpreta con la TZ
+     * recién configurada y devuelve el epoch UTC correcto. */
     struct tm t_rtc;
-    if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year < 120) {
+    if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year >= 120) {
+        t_rtc.tm_isdst = -1;   /* dejar que mktime decida DST */
+        time_t epoch = mktime(&t_rtc);
+        struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        ESP_LOGI(TAG, "Hora del RTC (local): %04d-%02d-%02d %02d:%02d:%02d",
+                 t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
+                 t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
+    } else {
+        /* RTC sin hora válida — restaurar desde backup NVS */
         nvs_handle_t nh;
         if (nvs_open("rtc_backup", NVS_READONLY, &nh) == ESP_OK) {
             int64_t epoch = 0;
@@ -202,17 +234,12 @@ void app_main(void)
             }
             nvs_close(nh);
         }
-    } else if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year >= 120) {
-        /* RTC tiene hora válida — sincronizar el sistema */
-        time_t epoch = mktime(&t_rtc);
-        struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
-        settimeofday(&tv, NULL);
-        ESP_LOGI(TAG, "Hora del RTC: %04d-%02d-%02d %02d:%02d:%02d",
-                 t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
-                 t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
     }
     if (rtc_err != ESP_OK)
         ESP_LOGW(TAG, "rtc_init failed: %s", esp_err_to_name(rtc_err));
+
+    /* Refresco inmediato del label de la hora — sin esperar al timer de 30s */
+    ui_refresh_clock();
 
     esp_err_t frigo_err = frigo_init(frigo_update_cb);
     if (frigo_err != ESP_OK)
@@ -256,6 +283,17 @@ void app_main(void)
     };
     esp_timer_create(&reboot_timer_args, &reboot_timer);
     esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
+
+    /* Backup horario de la hora del sistema en NVS */
+    static esp_timer_handle_t rtc_backup_timer;
+    const esp_timer_create_args_t rtc_backup_args = {
+        .callback        = &rtc_backup_timer_cb,
+        .arg             = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name            = "rtc_backup",
+    };
+    esp_timer_create(&rtc_backup_args, &rtc_backup_timer);
+    esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
 
 
     

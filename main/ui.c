@@ -535,6 +535,14 @@ static void clock_timer_cb(lv_timer_t *timer)
     }
 }
 
+void ui_refresh_clock(void)
+{
+    if (lvgl_port_lock(50)) {
+        clock_timer_cb(NULL);
+        lvgl_port_unlock();
+    }
+}
+
 void ui_notify_user_activity(void)
 {
     ui_state_t *ui = &g_ui;

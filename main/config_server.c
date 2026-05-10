@@ -22,6 +22,7 @@
 #include <lwip/inet.h>
 #include "lvgl.h"
 #include "rtc_rx8025t.h"
+#include "ui.h"
 #include <sys/time.h>
 #include <time.h>
 #include "datalogger.h"
@@ -404,33 +405,44 @@ static esp_err_t handle_captive_redirect(httpd_req_t *req) {
 
 static esp_err_t handle_settime(httpd_req_t *req)
 {
-    char buf[64];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-
-    /* Esperar formato: "timestamp=1234567890" (Unix timestamp) */
     long ts = 0;
-    long offset = 0;
-    sscanf(buf, "timestamp=%ld", &ts);
-    ts += offset;
-    if (ts > 1000000000L) {
-        struct tm t;
-        time_t epoch = (time_t)ts;
-        gmtime_r(&epoch, &t);
-        if (rtc_is_ready()) {
-            rtc_set_time(&t);
-            struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
-            settimeofday(&tv, NULL);
-            
-            ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil: %04d-%02d-%02d %02d:%02d:%02d",
-                     t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                     t.tm_hour, t.tm_min, t.tm_sec);
+    char buf[128];
+
+    if (req->method == HTTP_GET) {
+        /* GET /settime?timestamp=... — leer query string */
+        size_t qlen = httpd_req_get_url_query_len(req);
+        if (qlen > 0 && qlen < sizeof(buf)) {
+            if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
+                char val[32];
+                if (httpd_query_key_value(buf, "timestamp", val, sizeof(val)) == ESP_OK) {
+                    ts = strtol(val, NULL, 10);
+                }
+            }
         }
-        /* Sincronizar también el reloj del sistema */
+    } else {
+        int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+        if (ret <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
+            return ESP_FAIL;
+        }
+        buf[ret] = '\0';
+        const char *p = strstr(buf, "timestamp=");
+        if (p) sscanf(p, "timestamp=%ld", &ts);
+    }
+    if (ts > 1000000000L) {
+        time_t epoch = (time_t)ts;
+        /* El epoch que envía el móvil es Unix UTC. Lo convertimos a hora LOCAL
+         * (Madrid, ya configurada en main.c) para guardarla en el RTC, de modo
+         * que coincida con cómo la leemos en arranque (mktime sobre hora local). */
+        struct tm t_local;
+        localtime_r(&epoch, &t_local);
+        if (rtc_is_ready()) {
+            rtc_set_time(&t_local);
+            ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil (local): %04d-%02d-%02d %02d:%02d:%02d",
+                     t_local.tm_year + 1900, t_local.tm_mon + 1, t_local.tm_mday,
+                     t_local.tm_hour, t_local.tm_min, t_local.tm_sec);
+        }
+        /* Sincronizar el reloj del sistema con el epoch UTC original */
         struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
         settimeofday(&tv, NULL);
        /* Backup de hora en NVS */
@@ -440,6 +452,8 @@ static esp_err_t handle_settime(httpd_req_t *req)
             nvs_commit(nh);
             nvs_close(nh);
         }
+        /* Refrescar el label del reloj inmediatamente */
+        ui_refresh_clock();
     }
 
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -925,8 +939,8 @@ static esp_err_t handle_data_index(httpd_req_t *req)
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>Datos</title>"
         "<script>"
-        "fetch('/settime',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
-        "body:'timestamp='+(Math.floor(Date.now()/1000)+new Date().getTimezoneOffset()*-60)}).catch(function(){});"
+        "(function(){try{var i=new Image();i.src='/settime?timestamp='"
+        "+Math.floor(Date.now()/1000)+'&_='+Math.random();}catch(e){}})();"
         "</script>"
         "<style>"
         "body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:20px;text-align:center}"
@@ -1146,6 +1160,8 @@ esp_err_t config_server_start(void) {
     // Now register the catch-all static handler LAST
     httpd_uri_t uri_settime = { .uri = "/settime", .method = HTTP_POST, .handler = handle_settime };
     httpd_register_uri_handler(server, &uri_settime);
+    httpd_uri_t uri_settime_get = { .uri = "/settime", .method = HTTP_GET, .handler = handle_settime };
+    httpd_register_uri_handler(server, &uri_settime_get);
     httpd_uri_t uri_screenshot = { .uri = "/screenshot", .method = HTTP_GET, .handler = handle_screenshot };
     httpd_register_uri_handler(server, &uri_screenshot);
     httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };

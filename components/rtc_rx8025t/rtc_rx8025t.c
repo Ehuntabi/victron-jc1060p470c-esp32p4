@@ -111,9 +111,8 @@ esp_err_t rtc_get_time(struct tm *tm_out)
     tm_out->tm_wday = regs[3] & 0x07;
     tm_out->tm_mday = bcd2dec(regs[4] & 0x3F);
     tm_out->tm_mon  = bcd2dec(regs[5] & 0x1F) - 1;
-    /* regs[6] = year, regs[5] bit7 = century */
-    tm_out->tm_year = bcd2dec(regs[6]) + ((regs[5] & 0x80) ? 100 : 0) + 100;
-    tm_out->tm_year = bcd2dec(regs[6]) + 100;
+    /* regs[6] = year (0-99 dentro del siglo), regs[5] bit7 = century (0=20xx, 1=21xx) */
+    tm_out->tm_year = bcd2dec(regs[6]) + ((regs[5] & 0x80) ? 200 : 100);
     return ESP_OK;
 }
 
