@@ -328,7 +328,10 @@ lv_color_t ui_color_for_soc(uint16_t soc_deci)
 
 lv_color_t ui_color_for_current(int32_t milli)
 {
-    if (milli > 50)  return UI_COLOR_GREEN;
-    if (milli < -50) return UI_COLOR_ORANGE;
+    /* Cualquier corriente positiva (entrando a batería) = verde (cargando).
+     * Cualquier negativa (saliendo) = naranja (descargando).
+     * Solo el cero exacto se queda gris. */
+    if (milli > 0) return UI_COLOR_GREEN;
+    if (milli < 0) return UI_COLOR_ORANGE;
     return UI_COLOR_TEXT_DIM;
 }
