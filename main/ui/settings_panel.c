@@ -301,6 +301,7 @@ static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_add
 
 /* --- Estilo botones del menu Settings --- */
 static lv_obj_t *s_settings_menu = NULL;
+static lv_obj_t *s_settings_main_page = NULL;
 static lv_style_t s_settings_btn_style;
 static lv_style_t s_settings_btn_pressed_style;
 static bool s_settings_styles_inited = false;
@@ -871,8 +872,9 @@ static void victron_warning_btn_cb(lv_event_t *e)
     if (txt && strcmp(txt, "Cancelar") == 0) {
         /* Cerrar el msgbox y volver al menu principal */
         if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
-        /* Volver al menu */
-        if (s_settings_menu) lv_menu_set_page(s_settings_menu, NULL);
+        if (s_settings_menu && s_settings_main_page) {
+            lv_menu_set_page(s_settings_menu, s_settings_main_page);
+        }
     } else {
         if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
     }
@@ -1300,6 +1302,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_bg_color(lv_menu_get_main_header(menu), lv_color_black(), 0);
     lv_obj_set_style_text_color(lv_menu_get_main_header(menu), lv_color_white(), 0);
     ui->settings_menu = menu;
+    s_settings_menu = menu;  /* referencia static para diálogos modales */
 
     lv_obj_t *main_header = lv_menu_get_main_header(menu);
     lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28_es, 0);
@@ -1326,6 +1329,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_size(header_spacer, 110, 1);
 
     lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
+    s_settings_main_page = main_page;
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
     lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
