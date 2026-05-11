@@ -636,7 +636,10 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         lv_label_set_text_fmt(lbl_val_b, "%d%%", b_init);
     }
     lv_slider_set_value(slider_brightness, b_init, LV_ANIM_OFF);
-    bsp_display_brightness_set(b_init);
+    /* No tocar el brillo del sistema al construir el panel: produce un
+     * parpadeo visible al cargar Settings (80% boot -> b_init -> 80% otra
+     * vez). El brillo se aplica una sola vez al final del boot via
+     * night_mode_timer_cb y luego cuando el usuario mueva el slider. */
     /* Helper: tag el label como user data secundaria via custom property */
     lv_obj_set_user_data(slider_brightness, lbl_val_b);
     lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
@@ -2008,12 +2011,20 @@ static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
 void ui_settings_screensaver_create_timer(ui_state_t *ui)
 {
     if (!ui || ui->screensaver.timer) return;
-    /* Crear timer pausado, screensaver_enable lo activara */
+    /* Crear timer pausado y, si esta habilitado, simplemente arrancarlo.
+     * No usamos screensaver_enable() aqui porque tocaba el brillo del
+     * sistema en boot -> aparecia un parpadeo (80% -> ui->brightness ->
+     * 80%) antes de mostrar el splash. El brillo se aplica una sola vez
+     * al final del boot via night_mode_timer_cb. */
     ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
                                              ui->screensaver.timeout * 1000U, ui);
-    lv_timer_pause(ui->screensaver.timer);
+    ui->screensaver.active = false;
     if (ui->screensaver.enabled) {
-        screensaver_enable(ui, true);
+        lv_timer_set_period(ui->screensaver.timer, ui->screensaver.timeout * 1000U);
+        lv_timer_reset(ui->screensaver.timer);
+        lv_timer_resume(ui->screensaver.timer);
+    } else {
+        lv_timer_pause(ui->screensaver.timer);
     }
 }
 

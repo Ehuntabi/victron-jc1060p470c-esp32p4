@@ -83,20 +83,28 @@ static bool night_hour_in_window(int now_h, uint8_t start_h, uint8_t end_h)
 static void night_mode_timer_cb(void *arg)
 {
     ui_state_t *ui = (ui_state_t *)arg;
-    if (!ui || !ui->night_mode.enabled) return;
+    if (!ui) return;
     /* El screensaver tiene precedencia: si está activo en modo Dim, no
      * pisamos su brillo atenuado. */
     if (ui->screensaver.active) return;
 
-    time_t now = time(NULL);
-    if (now < 1000000000L) return;  /* RTC sin sincronizar todavía */
-    struct tm tm_local;
-    localtime_r(&now, &tm_local);
-
-    bool in_night = night_hour_in_window(tm_local.tm_hour,
-                                         ui->night_mode.start_h,
-                                         ui->night_mode.end_h);
-    int target = in_night ? ui->night_mode.brightness : ui->brightness;
+    /* Brillo objetivo: el del usuario, salvo que estemos en la franja
+     * nocturna configurada -> usar el brillo nocturno. Antes solo se
+     * aplicaba si night_mode.enabled, lo que dejaba el brillo en el 80%
+     * de boot hasta que se abria Settings. */
+    int target = ui->brightness;
+    if (ui->night_mode.enabled) {
+        time_t now = time(NULL);
+        if (now >= 1000000000L) {
+            struct tm tm_local;
+            localtime_r(&now, &tm_local);
+            if (night_hour_in_window(tm_local.tm_hour,
+                                     ui->night_mode.start_h,
+                                     ui->night_mode.end_h)) {
+                target = ui->night_mode.brightness;
+            }
+        }
+    }
     /* Solo aplicar si cambia: bsp_display_brightness_set actualiza el duty
      * del LEDC; llamarlo cada minuto con el mismo valor es trabajo inutil. */
     static int s_last_target = -1;
@@ -244,7 +252,9 @@ void app_main(void)
         splash_show();
         lvgl_port_unlock();
     }
-    bsp_display_brightness_set(80);
+    /* No volvemos a tocar el brillo aqui: ya esta a 80% desde la linea de
+     * arriba, y night_mode_timer_cb al final del boot lo lleva al valor de
+     * usuario en una sola transicion visible. */
 
     /* --- Touch callback --- */
     lv_indev_t *indev = bsp_display_get_input_dev();
