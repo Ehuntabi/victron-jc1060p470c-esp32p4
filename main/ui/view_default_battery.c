@@ -26,6 +26,8 @@ typedef struct {
     lv_obj_t *m_current;
     lv_obj_t *bar_current;
     lv_obj_t *pill_bat_alarm;
+    lv_obj_t *spark_chart;
+    lv_chart_series_t *spark_ser;
     /* Solar */
     lv_obj_t *m_solar_power;
     lv_obj_t *m_solar_charge;
@@ -135,6 +137,24 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_style_radius(view->bar_current, 5, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
 
+    /* Sparkline de potencia (V * I) en los últimos ~90 samples (~1.5 min con
+     * advertisement BLE típico). Rango simétrico ±500 W con LINE chart. */
+    view->spark_chart = lv_chart_create(view->card_battery);
+    lv_obj_set_size(view->spark_chart, lv_pct(90), 50);
+    lv_chart_set_type(view->spark_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(view->spark_chart, 90);
+    lv_chart_set_range(view->spark_chart, LV_CHART_AXIS_PRIMARY_Y, -500, 500);
+    lv_chart_set_update_mode(view->spark_chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_div_line_count(view->spark_chart, 0, 0);
+    lv_obj_set_style_size(view->spark_chart, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(view->spark_chart, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(view->spark_chart, 0, 0);
+    lv_obj_set_style_pad_all(view->spark_chart, 0, 0);
+    lv_obj_clear_flag(view->spark_chart, LV_OBJ_FLAG_SCROLLABLE);
+    view->spark_ser = lv_chart_add_series(view->spark_chart,
+                                          lv_color_hex(0x4FC3F7),
+                                          LV_CHART_AXIS_PRIMARY_Y);
+
     /* ── Card Solar (verde) ─────────────────────────────────────── */
     view->card_solar = ui_card_create(view->base.root, UI_COLOR_GREEN);
     lv_obj_set_width(view->card_solar, lv_pct(31));
@@ -180,6 +200,15 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->battery_state.battery_current_milli = b->battery_current_milli;
                 bv->battery_state.alarm_reason = b->alarm_reason;
                 bv->battery_state.last_update_time = now;
+                /* Sparkline: P_W = V_centi * I_milli / 100000, recortado a ±500 */
+                int32_t p_w = (int32_t)((int64_t)b->battery_voltage_centi *
+                                        b->battery_current_milli / 100000LL);
+                if (p_w >  500) p_w =  500;
+                if (p_w < -500) p_w = -500;
+                if (bv->spark_chart && bv->spark_ser) {
+                    lv_chart_set_next_value(bv->spark_chart, bv->spark_ser,
+                                            (lv_coord_t)p_w);
+                }
                 ui_card_pulse(bv->card_battery);
                 break;
             }
