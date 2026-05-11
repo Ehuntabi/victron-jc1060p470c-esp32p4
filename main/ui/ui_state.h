@@ -112,6 +112,7 @@ typedef struct ui_state {
     lv_obj_t *lbl_volume;
     lv_obj_t *lbl_wifi;
     lv_obj_t *lbl_ac;             /* Indicador AC 220V (PZEM-004T) */
+    lv_obj_t *lbl_health;         /* Health score (verde/ambar/rojo) */
     lv_obj_t *bottom_bar;         // Indicador BLE
     lv_obj_t *btn_nav;            // Botón toggle Live↔Settings en bottom_bar
     lv_obj_t *sound_mute_switch;  // Switch "Silenciar avisos" del panel Settings/Sonido

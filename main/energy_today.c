@@ -13,6 +13,8 @@ static const char *NVS_NS = "energy";
 static struct {
     double pv_wh;            /* energía cargada hoy (mWh internamente) */
     double loads_wh;         /* energía consumida hoy */
+    double yesterday_pv_wh;  /* snapshot ayer (al rollover de medianoche) */
+    double yesterday_loads_wh;
     uint16_t solar_yield_centikwh;  /* último valor reportado por SmartSolar */
     int day_of_year;
     int year;
@@ -24,6 +26,8 @@ static struct {
 #define NVS_KEY_YEAR "year"
 #define NVS_KEY_PV   "pv_mwh"
 #define NVS_KEY_LD   "ld_mwh"
+#define NVS_KEY_YPV  "ypv_mwh"
+#define NVS_KEY_YLD  "yld_mwh"
 
 static void save_nvs(void)
 {
@@ -31,10 +35,10 @@ static void save_nvs(void)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_i32(h, NVS_KEY_DAY,  s.day_of_year);
     nvs_set_i32(h, NVS_KEY_YEAR, s.year);
-    int32_t pv_mwh = (int32_t)s.pv_wh;
-    int32_t ld_mwh = (int32_t)s.loads_wh;
-    nvs_set_i32(h, NVS_KEY_PV, pv_mwh);
-    nvs_set_i32(h, NVS_KEY_LD, ld_mwh);
+    nvs_set_i32(h, NVS_KEY_PV,  (int32_t)s.pv_wh);
+    nvs_set_i32(h, NVS_KEY_LD,  (int32_t)s.loads_wh);
+    nvs_set_i32(h, NVS_KEY_YPV, (int32_t)s.yesterday_pv_wh);
+    nvs_set_i32(h, NVS_KEY_YLD, (int32_t)s.yesterday_loads_wh);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -43,19 +47,28 @@ static void load_nvs(int today_yday, int today_year)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
-    int32_t day = -1, yr = -1, pv = 0, ld = 0;
+    int32_t day = -1, yr = -1, pv = 0, ld = 0, ypv = 0, yld = 0;
     nvs_get_i32(h, NVS_KEY_DAY,  &day);
     nvs_get_i32(h, NVS_KEY_YEAR, &yr);
     nvs_get_i32(h, NVS_KEY_PV,   &pv);
     nvs_get_i32(h, NVS_KEY_LD,   &ld);
+    nvs_get_i32(h, NVS_KEY_YPV,  &ypv);
+    nvs_get_i32(h, NVS_KEY_YLD,  &yld);
     nvs_close(h);
+    /* "Ayer" se carga siempre que exista, sea cual sea el dia */
+    s.yesterday_pv_wh    = (double)ypv;
+    s.yesterday_loads_wh = (double)yld;
     if (day == today_yday && yr == today_year) {
         s.pv_wh = (double)pv;
         s.loads_wh = (double)ld;
-        ESP_LOGI(TAG, "Restaurado del NVS: PV=%.2f Wh, Loads=%.2f Wh",
-                 s.pv_wh, s.loads_wh);
-    } else {
-        ESP_LOGI(TAG, "Dia nuevo: reset acumuladores");
+        ESP_LOGI(TAG, "Restaurado del NVS: PV=%.2f Wh, Loads=%.2f Wh (ayer PV=%.2f Loads=%.2f)",
+                 s.pv_wh, s.loads_wh, s.yesterday_pv_wh, s.yesterday_loads_wh);
+    } else if (day >= 0) {
+        /* El dispositivo arranca un dia distinto al ultimo guardado: el
+         * dia previo persistido pasa a ser "ayer" para visualizar tendencia. */
+        s.yesterday_pv_wh    = (double)pv;
+        s.yesterday_loads_wh = (double)ld;
+        ESP_LOGI(TAG, "Dia nuevo al boot: snapshot anterior pasa a 'ayer'");
     }
 }
 
@@ -66,8 +79,12 @@ static void check_day_rollover_locked(void)
     struct tm t;
     localtime_r(&now, &t);
     if (t.tm_yday != s.day_of_year || (t.tm_year + 1900) != s.year) {
-        ESP_LOGI(TAG, "Cambio de dia detectado, reset");
-        s.pv_wh = 0;
+        ESP_LOGI(TAG, "Cambio de dia detectado: hoy -> ayer (PV=%.2f Loads=%.2f Wh)",
+                 s.pv_wh, s.loads_wh);
+        /* Snapshot del dia que termina como "ayer" */
+        s.yesterday_pv_wh    = s.pv_wh;
+        s.yesterday_loads_wh = s.loads_wh;
+        s.pv_wh    = 0;
         s.loads_wh = 0;
         s.day_of_year = t.tm_yday;
         s.year = t.tm_year + 1900;
@@ -166,4 +183,22 @@ float energy_today_loads_kwh(void)
 bool energy_today_is_fresh(void)
 {
     return s.last_sample != 0;
+}
+
+float energy_yesterday_pv_kwh(void)
+{
+    if (!s.mtx) return 0;
+    xSemaphoreTake(s.mtx, portMAX_DELAY);
+    float v = (float)s.yesterday_pv_wh / 1000.0f;
+    xSemaphoreGive(s.mtx);
+    return v;
+}
+
+float energy_yesterday_loads_kwh(void)
+{
+    if (!s.mtx) return 0;
+    xSemaphoreTake(s.mtx, portMAX_DELAY);
+    float v = (float)s.yesterday_loads_wh / 1000.0f;
+    xSemaphoreGive(s.mtx);
+    return v;
 }

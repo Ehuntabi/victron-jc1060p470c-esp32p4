@@ -326,16 +326,26 @@ static void overview_render(ui_overview_view_t *ov)
         ui_metric_set(ov->m_ttg, "--", "", UI_COLOR_TEXT_DIM);
     }
 
-    /* ── Energía acumulada del día (PV + cargas) ──────────────── */
+    /* ── Energía acumulada del día (PV + cargas) + comparativa ayer ── */
     if (ov->lbl_energy) {
-        float pv = energy_today_pv_kwh();
-        float ld = energy_today_loads_kwh();
-        if (pv == 0.0f && ld == 0.0f && !energy_today_is_fresh()) {
+        float pv  = energy_today_pv_kwh();
+        float ld  = energy_today_loads_kwh();
+        float ypv = energy_yesterday_pv_kwh();
+        float yld = energy_yesterday_loads_kwh();
+        bool any_today = (pv != 0.0f || ld != 0.0f || energy_today_is_fresh());
+        bool any_yest  = (ypv != 0.0f || yld != 0.0f);
+        if (!any_today && !any_yest) {
             lv_label_set_text(ov->lbl_energy, "PV --   Cargas --");
-        } else {
-            char ebuf[64];
+        } else if (!any_yest) {
+            char ebuf[80];
             snprintf(ebuf, sizeof(ebuf),
-                     "PV %.2f kWh   Cargas %.2f kWh", pv, ld);
+                     "Hoy: PV %.2f kWh   Cargas %.2f kWh", pv, ld);
+            lv_label_set_text(ov->lbl_energy, ebuf);
+        } else {
+            char ebuf[120];
+            snprintf(ebuf, sizeof(ebuf),
+                     "Hoy: PV %.2f  Cargas %.2f kWh   |   Ayer: PV %.2f  Cargas %.2f",
+                     pv, ld, ypv, yld);
             lv_label_set_text(ov->lbl_energy, ebuf);
         }
     }

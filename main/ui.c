@@ -30,6 +30,7 @@
 #include "trip_computer.h"
 #include "pzem004t.h"
 #include "log_browser.h"
+#include "health_score.h"
 #include "esp_heap_caps.h"
 #include <math.h>
 #include <time.h>
@@ -66,6 +67,29 @@ static ui_state_t g_ui = {
 
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
+
+static void health_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_health) return;
+    char reason[28];
+    health_level_t lvl = health_score_evaluate(reason, sizeof(reason));
+    uint32_t bg, fg;
+    const char *txt;
+    if (lvl == HEALTH_ALARM) {
+        bg = 0xCC3333; fg = 0xFFFFFF; txt = reason;
+    } else if (lvl == HEALTH_WARN) {
+        bg = 0xFF9800; fg = 0x2A2A2A; txt = reason;
+    } else {
+        bg = 0x00C851; fg = 0xFFFFFF; txt = "OK";
+    }
+    lv_obj_set_style_bg_color(ui->lbl_health, lv_color_hex(bg), 0);
+    lv_obj_set_style_text_color(ui->lbl_health, lv_color_hex(fg), 0);
+    /* Ajustar ancho al texto cuando hay motivo (puede ser mas largo que "OK"). */
+    lv_obj_set_width(ui->lbl_health,
+                     (lvl == HEALTH_OK) ? 60 : LV_SIZE_CONTENT);
+    lv_label_set_text(ui->lbl_health, txt);
+}
 
 static void ac_indicator_timer_cb(lv_timer_t *t)
 {
@@ -358,6 +382,20 @@ void ui_init(void) {
         lv_obj_set_style_text_color(ui->lbl_wifi,
             en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
     }
+    /* Health score: pill compacto (verde/ambar/rojo) que combina alarmas
+     * Victron, SoC, freezer, PZEM, BLE timeout, etc. */
+    ui->lbl_health = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_health, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->lbl_health, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(ui->lbl_health, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(ui->lbl_health, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_hor(ui->lbl_health, 10, 0);
+    lv_obj_set_style_pad_ver(ui->lbl_health, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_health, LV_RADIUS_CIRCLE, 0);
+    lv_label_set_text(ui->lbl_health, "OK");
+    lv_obj_set_size(ui->lbl_health, 60, 38);
+    lv_obj_set_style_text_align(ui->lbl_health, LV_TEXT_ALIGN_CENTER, 0);
+
     /* Indicador AC 220V (PZEM-004T). Aparece solo cuando el modulo PZEM
      * esta presente: si hay tension AC muestra "AC <W>" en verde, si esta
      * conectado pero sin AC muestra "AC" en gris, oculto si no hay PZEM. */
@@ -390,6 +428,7 @@ void ui_init(void) {
 
     lv_timer_create(volume_icon_timer_cb, 500, ui);
     lv_timer_create(ac_indicator_timer_cb, 2000, ui);
+    lv_timer_create(health_timer_cb, 5000, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);

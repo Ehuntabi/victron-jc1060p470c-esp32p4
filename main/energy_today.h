@@ -25,6 +25,11 @@ void energy_today_on_solar_yield(uint16_t yield_centikwh);
 float energy_today_pv_kwh(void);       /* charge_kwh (BMV) o yield SmartSolar */
 float energy_today_loads_kwh(void);
 
+/* Devuelven los totales del dia anterior (snapshot tomado en el rollover
+ * de medianoche). Devuelven 0 si nunca hubo un cambio de dia con datos. */
+float energy_yesterday_pv_kwh(void);
+float energy_yesterday_loads_kwh(void);
+
 /* Devuelve true si hubo cambio de día desde última llamada (uso interno
  * principalmente). */
 bool  energy_today_is_fresh(void);
