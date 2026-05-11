@@ -311,18 +311,6 @@ static void ap_switch_cb(lv_event_t *e)
     ui_show_wifi_restart_dialog(ui);
 }
 
-static void portal_switch_cb(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-    bool checked = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
-    nvs_handle_t h;
-    if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_u8(h, "portal_page", checked ? 1 : 0);
-        nvs_commit(h);
-        nvs_close(h);
-    }
-}
-
 static void portal_page_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
@@ -482,36 +470,21 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_LIST "  Pagina inicial portal");
 
-    /* Switch: OFF = Keys, ON = Logs */
-    lv_obj_t *cont_sw = lv_obj_create(card2);
-    lv_obj_remove_style_all(cont_sw);
-    lv_obj_set_size(cont_sw, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(cont_sw, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(cont_sw, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(cont_sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(cont_sw, 12, 0);
-
-    lv_obj_t *lbl_keys = lv_label_create(cont_sw);
-    lv_obj_set_style_text_font(lbl_keys, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_keys, "Keys");
-
-    lv_obj_t *sw_portal = lv_switch_create(cont_sw);
-    lv_obj_set_style_bg_color(sw_portal, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
-    /* Cargar estado guardado */
+    /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
+    lv_obj_t *dd_portal = lv_dropdown_create(card2);
+    lv_obj_set_width(dd_portal, 200);
+    lv_dropdown_set_options(dd_portal, "Keys\nLogs\nDashboard");
     {
         nvs_handle_t h;
-        uint8_t v = 1; /* default: Logs */
+        uint8_t v = 2; /* default: Dashboard */
         if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
             nvs_get_u8(h, "portal_page", &v);
             nvs_close(h);
         }
-        if (v == 1) lv_obj_add_state(sw_portal, LV_STATE_CHECKED);
+        if (v > 2) v = 2;
+        lv_dropdown_set_selected(dd_portal, v);
     }
-    lv_obj_add_event_cb(sw_portal, portal_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    lv_obj_t *lbl_logs = lv_label_create(cont_sw);
-    lv_obj_set_style_text_font(lbl_logs, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_logs, "Logs");
+    lv_obj_add_event_cb(dd_portal, portal_page_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 /* ── Zona horaria: presets + callback dropdown ────────────────────────── */
@@ -2715,7 +2688,8 @@ static void portal_page_cb(lv_event_t *e)
         nvs_commit(h);
         nvs_close(h);
     }
-    ESP_LOGI(TAG_SETTINGS, "Portal page: %s", sel == 0 ? "Keys" : "Logs");
+    const char *name = sel == 0 ? "Keys" : (sel == 1 ? "Logs" : "Dashboard");
+    ESP_LOGI(TAG_SETTINGS, "Portal page: %s", name);
 }
 
 

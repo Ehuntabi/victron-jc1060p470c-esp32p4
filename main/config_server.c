@@ -257,29 +257,37 @@ static const char SETTIME_SCRIPT[] =
 
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET / -> serve index.html");
-    uint8_t portal_page = 1; /* default: Logs */
+    ESP_LOGI(TAG, "GET / -> portal landing");
+    uint8_t portal_page = 2; /* default ahora: Dashboard */
     nvs_handle_t h;
     if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
         nvs_get_u8(h, "portal_page", &portal_page);
         nvs_close(h);
     }
-    if (portal_page == 1) {
-        /* Devolver mini HTML que sincroniza la hora y luego redirige a /data.
-         * El 302 anterior no permitía ejecutar el script de sync. */
-        httpd_resp_set_type(req, "text/html; charset=utf-8");
-        httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
-        httpd_resp_send_chunk(req,
-            "<!DOCTYPE html><html><head><meta charset='utf-8'>", -1);
-        httpd_resp_send_chunk(req, SETTIME_SCRIPT, -1);
-        httpd_resp_send_chunk(req,
-            "<meta http-equiv='refresh' content='0;url=/data'>"
-            "</head><body></body></html>", -1);
-        httpd_resp_send_chunk(req, NULL, 0);
-        return ESP_OK;
-    }
-    /* Forzar al navegador a no cachear el index para que el script siempre
-     * llegue actualizado. */
+    const char *target = "/dashboard";
+    if      (portal_page == 0) target = "/keys";
+    else if (portal_page == 1) target = "/data";
+    else                       target = "/dashboard";
+
+    /* Mini HTML que sincroniza la hora del cliente y luego redirige al
+     * destino segun configuracion. */
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
+    httpd_resp_send_chunk(req,
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>", -1);
+    httpd_resp_send_chunk(req, SETTIME_SCRIPT, -1);
+    char meta[120];
+    snprintf(meta, sizeof(meta),
+             "<meta http-equiv='refresh' content='0;url=%s'>"
+             "</head><body></body></html>", target);
+    httpd_resp_send_chunk(req, meta, -1);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+/* /keys -> sirve el index.html de configuracion Victron desde SPIFFS */
+static esp_err_t handle_keys(httpd_req_t *req)
+{
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
     return serve_from_spiffs(req, "/index.html");
 }
@@ -416,6 +424,9 @@ static const char *DASHBOARD_HTML =
     "<title>Victron Dashboard</title><style>"
     "body{background:#06080C;color:#fff;font-family:system-ui,sans-serif;margin:0;padding:16px}"
     "h1{color:#FF9800;margin:0 0 12px}"
+    "nav{margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap}"
+    "nav a{color:#4FC3F7;text-decoration:none;padding:6px 12px;border:1px solid #2D3340;border-radius:8px;font-size:14px}"
+    "nav a:hover{background:#141821}"
     ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}"
     ".card{background:#141821;border:2px solid #2D3340;border-radius:14px;padding:16px}"
     ".card h2{margin:0 0 8px;font-size:18px}"
@@ -425,6 +436,11 @@ static const char *DASHBOARD_HTML =
     ".bat{border-color:#FF9800}.solar{border-color:#00C851}.dcdc{border-color:#4FC3F7}.en{border-color:#FFD54F}"
     ".alarm{color:#FF4444}"
     "</style></head><body>"
+    "<nav>"
+      "<a href='/dashboard'><b>Dashboard</b></a>"
+      "<a href='/data'>Logs</a>"
+      "<a href='/keys'>Keys</a>"
+    "</nav>"
     "<h1>Victron Dashboard</h1>"
     "<div class='grid'>"
       "<div class='card bat'><h2>Bateria</h2>"
@@ -1221,24 +1237,30 @@ static esp_err_t handle_data_index(httpd_req_t *req)
     const char *html =
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Datos</title>"
+        "<title>Logs</title>"
         "<script>"
         "(function(){try{var i=new Image();i.src='/settime?timestamp='"
         "+Math.floor(Date.now()/1000)+'&_='+Math.random();}catch(e){}})();"
         "</script>"
         "<style>"
-        "body{font-family:sans-serif;background:#111;color:#eee;margin:0;padding:20px;text-align:center}"
-        "h1{margin-bottom:30px}"
-        ".btn{display:block;margin:20px auto;padding:30px;font-size:24px;"
-        "background:#2A2A2A;color:#eee;border:1px solid #555;border-radius:12px;"
-        "text-decoration:none;max-width:400px}"
-        ".btn:active{background:#3D5A80}"
-        ".back{margin-top:40px;color:#888;text-decoration:none;font-size:16px}"
+        "body{background:#06080C;color:#fff;font-family:system-ui,sans-serif;margin:0;padding:16px}"
+        "h1{color:#FF9800;margin:0 0 12px}"
+        "nav{margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap}"
+        "nav a{color:#4FC3F7;text-decoration:none;padding:6px 12px;border:1px solid #2D3340;border-radius:8px;font-size:14px}"
+        "nav a:hover{background:#141821}"
+        ".btn{display:block;margin:14px auto;padding:24px;font-size:20px;"
+        "background:#141821;color:#eee;border:2px solid #2D3340;border-radius:14px;"
+        "text-decoration:none;max-width:420px;text-align:center}"
+        ".btn:active{background:#2D3340}"
         "</style></head><body>"
-        "<h1>Datos historicos</h1>"
+        "<nav>"
+          "<a href='/dashboard'>Dashboard</a>"
+          "<a href='/data'><b>Logs</b></a>"
+          "<a href='/keys'>Keys</a>"
+        "</nav>"
+        "<h1>Logs historicos</h1>"
         "<a class='btn' href='/data/frigo'>FRIGO</a>"
         "<a class='btn' href='/data/bateria'>BATERIA</a>"
-        "<a class='back' href='/'>&larr; Volver</a>"
         "</body></html>";
     httpd_resp_sendstr(req, html);
     return ESP_OK;
@@ -1452,6 +1474,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_logs);
     httpd_uri_t uri_dashboard = { .uri = "/dashboard", .method = HTTP_GET, .handler = handle_dashboard };
     httpd_register_uri_handler(server, &uri_dashboard);
+    httpd_uri_t uri_keys = { .uri = "/keys", .method = HTTP_GET, .handler = handle_keys };
+    httpd_register_uri_handler(server, &uri_keys);
     httpd_uri_t uri_api_state = { .uri = "/api/state", .method = HTTP_GET, .handler = handle_api_state };
     httpd_register_uri_handler(server, &uri_api_state);
 
