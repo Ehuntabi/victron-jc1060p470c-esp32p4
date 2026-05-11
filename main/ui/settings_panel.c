@@ -342,9 +342,12 @@ static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_add
 /* --- Estilo botones del menu Settings --- */
 static lv_obj_t *s_settings_menu = NULL;
 static lv_obj_t *s_settings_main_page = NULL;
+static lv_obj_t *s_settings_back_btn = NULL;
+static lv_obj_t *s_settings_main_header = NULL;
 static lv_style_t s_settings_btn_style;
 static lv_style_t s_settings_btn_pressed_style;
 static bool s_settings_styles_inited = false;
+#define SETTINGS_DEFAULT_ACCENT 0xFF9800   /* naranja Victron */
 
 void ui_settings_panel_go_to_main(void)
 {
@@ -356,7 +359,9 @@ void ui_settings_panel_go_to_main(void)
 static void settings_btn_styles_init(void);
 static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
                                     lv_obj_t *menu, lv_obj_t *target_page,
-                                    const char *text);
+                                    const char *title, const char *subtitle,
+                                    const char *icon, uint32_t accent);
+static void settings_menu_page_changed_cb(lv_event_t *e);
 
 static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                       const char *default_ssid,
@@ -1592,8 +1597,10 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *main_header = lv_menu_get_main_header(menu);
     lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28_es, 0);
     lv_obj_set_flex_align(main_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    s_settings_main_header = main_header;
 
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
+    s_settings_back_btn = back_btn;
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, 0);
     /* Botón naranja cálido con sombra naranja exterior */
     lv_obj_set_style_bg_color(back_btn, lv_color_hex(0xFF9800), 0);
@@ -1641,12 +1648,24 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    settings_menu_add_entry(ui, main_page, menu, page_frigo,   "Frigo");
-    settings_menu_add_entry(ui, main_page, menu, page_logs,    "Logs");
-    settings_menu_add_entry(ui, main_page, menu, page_wifi,    "Wi-Fi");
-    settings_menu_add_entry(ui, main_page, menu, page_display, "Display");
-    settings_menu_add_entry(ui, main_page, menu, page_sound,   "Sonido y avisos");
-    settings_menu_add_entry(ui, main_page, menu, page_victron, "Victron Keys");
+    settings_menu_add_entry(ui, main_page, menu, page_frigo,
+        "Frigo",         "Sensores, ventilador y umbrales",
+        LV_SYMBOL_REFRESH,    0x00C851);
+    settings_menu_add_entry(ui, main_page, menu, page_logs,
+        "Logs",          "Histórico SD: batería y nevera",
+        LV_SYMBOL_SAVE,       0xFFAA00);
+    settings_menu_add_entry(ui, main_page, menu, page_wifi,
+        "Wi-Fi",         "Modo AP y credenciales",
+        LV_SYMBOL_WIFI,       0x4FC3F7);
+    settings_menu_add_entry(ui, main_page, menu, page_display,
+        "Display",       "Brillo, salvapantallas, modo noche",
+        LV_SYMBOL_EYE_OPEN,   0xBA68C8);
+    settings_menu_add_entry(ui, main_page, menu, page_sound,
+        "Sonido y avisos","Volumen, jingles y alertas",
+        LV_SYMBOL_VOLUME_MAX, 0xFF7043);
+    settings_menu_add_entry(ui, main_page, menu, page_victron,
+        "Victron Keys",  "Dispositivos BLE y claves",
+        LV_SYMBOL_GPS,        0xE91E63);
     /* Mostrar warning al entrar en Victron Keys */
     {
         lv_obj_t *cont_vk = lv_obj_get_child(main_page, lv_obj_get_child_cnt(main_page) - 1);
@@ -1654,10 +1673,14 @@ void ui_settings_panel_init(ui_state_t *ui,
             lv_obj_add_event_cb(cont_vk, victron_keys_clicked_cb, LV_EVENT_CLICKED, ui);
         }
     }
-    settings_menu_add_entry(ui, main_page, menu, page_about,   "About");
+    settings_menu_add_entry(ui, main_page, menu, page_about,
+        "About",         "Sistema, uptime, IP y reinicio",
+        LV_SYMBOL_LIST,       0x90A4AE);
 
   
     lv_menu_set_page(menu, main_page);
+    /* Recolorea header + back btn al cambiar de pagina segun acento de seccion */
+    lv_obj_add_event_cb(menu, settings_menu_page_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     create_wifi_settings_page(ui, page_wifi, default_ssid, default_pass, ap_enabled);
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
@@ -2792,54 +2815,144 @@ static void portal_page_cb(lv_event_t *e)
 static void settings_btn_styles_init(void)
 {
     if (s_settings_styles_inited) return;
+    /* Cuerpo neutro: el color del rol sale a traves de la barra lateral y el
+     * icono coloreado, no del fondo de la card. */
     lv_style_init(&s_settings_btn_style);
     lv_style_set_bg_opa(&s_settings_btn_style, LV_OPA_COVER);
-    lv_style_set_bg_color(&s_settings_btn_style, lv_color_hex(0x2A2A2A));
-    lv_style_set_border_color(&s_settings_btn_style, lv_color_hex(0x555555));
+    lv_style_set_bg_color(&s_settings_btn_style, lv_color_hex(0x1A1A1A));
+    lv_style_set_border_color(&s_settings_btn_style, lv_color_hex(0x2A2A2A));
     lv_style_set_border_width(&s_settings_btn_style, 1);
-    lv_style_set_radius(&s_settings_btn_style, 10);
-    lv_style_set_pad_all(&s_settings_btn_style, 16);
-    lv_style_set_min_height(&s_settings_btn_style, 70);
+    lv_style_set_radius(&s_settings_btn_style, 12);
+    lv_style_set_pad_all(&s_settings_btn_style, 0);
+    lv_style_set_pad_column(&s_settings_btn_style, 12);
+    lv_style_set_min_height(&s_settings_btn_style, 88);
 
+    /* Pressed: simplemente un poco mas claro, sin pisar el color de rol. */
     lv_style_init(&s_settings_btn_pressed_style);
-    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x3D5A80));
+    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x2D2D2D));
     s_settings_styles_inited = true;
+}
+
+/* Construye el "look" de la card de Settings (barra de acento + icono +
+ * titulo + subtitulo) dentro del contenedor pasado. Lo usan tanto las
+ * entradas del menu principal como los botones de subpaginas que comparten
+ * la misma estetica. */
+static void settings_card_decor(lv_obj_t *cont, const char *title,
+                                const char *subtitle, const char *icon,
+                                uint32_t accent)
+{
+    lv_obj_add_style(cont, &s_settings_btn_style, 0);
+    lv_obj_add_style(cont, &s_settings_btn_pressed_style, LV_STATE_PRESSED);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Barra vertical de acento (4 px, altura completa). */
+    lv_obj_t *bar = lv_obj_create(cont);
+    lv_obj_remove_style_all(bar);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_CLICKABLE);  /* deja pasar el click al cont */
+    lv_obj_set_size(bar, 4, LV_PCT(100));
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(accent), 0);
+
+    /* Icono grande coloreado con el acento. */
+    lv_obj_t *ico = lv_label_create(cont);
+    lv_label_set_text(ico, icon);
+    lv_obj_set_style_text_font(ico, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(ico, lv_color_hex(accent), 0);
+    lv_obj_set_style_pad_left(ico, 12, 0);
+
+    /* Columna de texto: titulo en blanco + subtitulo en gris medio. */
+    lv_obj_t *txt = lv_obj_create(cont);
+    lv_obj_remove_style_all(txt);
+    lv_obj_clear_flag(txt, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_flex_grow(txt, 1);
+    lv_obj_set_height(txt, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(txt, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(txt, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_right(txt, 12, 0);
+    lv_obj_set_style_pad_row(txt, 4, 0);
+
+    lv_obj_t *t1 = lv_label_create(txt);
+    lv_label_set_text(t1, title);
+    lv_obj_set_style_text_font(t1, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(t1, lv_color_white(), 0);
+
+    if (subtitle && *subtitle) {
+        lv_obj_t *t2 = lv_label_create(txt);
+        lv_label_set_text(t2, subtitle);
+        lv_obj_set_style_text_font(t2, &lv_font_montserrat_14_es, 0);
+        lv_obj_set_style_text_color(t2, lv_color_hex(0x8A93A6), 0);
+    }
 }
 
 static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
                                     lv_obj_t *menu, lv_obj_t *target_page,
-                                    const char *text)
+                                    const char *title, const char *subtitle,
+                                    const char *icon, uint32_t accent)
 {
+    (void)ui;
     settings_btn_styles_init();
     lv_obj_t *cont = lv_menu_cont_create(main_page);
-    lv_obj_add_style(cont, &s_settings_btn_style, 0);
-    lv_obj_add_style(cont, &s_settings_btn_pressed_style, LV_STATE_PRESSED);
     lv_obj_set_width(cont, lv_pct(48));
-    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_height(cont, 88);
+    settings_card_decor(cont, title, subtitle, icon, accent);
 
-    /* Color por entrada */
-    uint32_t bg = 0x2A4A6A;     /* fondo por defecto */
-    uint32_t border = 0x4FC3F7; /* azul */
-    const char *icon = LV_SYMBOL_LIST;
-    if (strstr(text, "Frigo"))         { bg = 0x004D40; border = 0x00C851; icon = LV_SYMBOL_REFRESH; }
-    else if (strstr(text, "Logs"))     { bg = 0x4A3300; border = 0xFFAA00; icon = LV_SYMBOL_SAVE; }
-    else if (strstr(text, "Wi-Fi"))    { bg = 0x0D3B66; border = 0x4FC3F7; icon = LV_SYMBOL_WIFI; }
-    else if (strstr(text, "Display"))  { bg = 0x2D004D; border = 0xBA68C8; icon = LV_SYMBOL_EYE_OPEN; }
-    else if (strstr(text, "Sonido"))   { bg = 0x4A1A00; border = 0xFF7043; icon = LV_SYMBOL_VOLUME_MAX; }
-    else if (strstr(text, "Victron"))  { bg = 0x4A0033; border = 0xE91E63; icon = LV_SYMBOL_GPS; }
-    else if (strstr(text, "About"))    { bg = 0x1F3A4D; border = 0x90A4AE; icon = LV_SYMBOL_LIST; }
-    lv_obj_set_style_bg_color(cont, lv_color_hex(bg), 0);
-    lv_obj_set_style_border_color(cont, lv_color_hex(border), 0);
-    lv_obj_set_style_border_width(cont, 2, 0);
+    /* Guardamos el acento de esta seccion en la pagina destino: el handler
+     * de cambio de pagina del menu lo lee para tenir el header dinamicamente. */
+    lv_obj_set_user_data(target_page, (void *)(uintptr_t)accent);
 
-    lv_obj_t *label = lv_label_create(cont);
-    char full[40];
-    snprintf(full, sizeof(full), "%s  %s", icon, text);
-    lv_label_set_text(label, full);
-    lv_obj_add_style(label, &ui->styles.medium, 0);
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_menu_set_load_page_event(menu, cont, target_page);
+}
+
+/* Card clickable con la misma estetica que settings_menu_add_entry pero con
+ * callback en lugar de navegacion de menu. Para subpaginas que necesitan
+ * acciones (e.g. Logs -> Frigo/Bateria). */
+static lv_obj_t *settings_card_btn(lv_obj_t *parent,
+                                   const char *title, const char *subtitle,
+                                   const char *icon, uint32_t accent,
+                                   lv_event_cb_t cb, void *user_data)
+{
+    settings_btn_styles_init();
+    lv_obj_t *cont = lv_obj_create(parent);
+    lv_obj_remove_style_all(cont);
+    lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_width(cont, lv_pct(95));
+    lv_obj_set_height(cont, 88);
+    settings_card_decor(cont, title, subtitle, icon, accent);
+    if (cb) lv_obj_add_event_cb(cont, cb, LV_EVENT_CLICKED, user_data);
+    return cont;
+}
+
+/* Recolorea el back button y el titulo del header del menu segun el acento
+ * de la subpagina actual. Cuando volvemos a la pagina principal restauramos
+ * el naranja por defecto. */
+static void settings_menu_page_changed_cb(lv_event_t *e)
+{
+    lv_obj_t *menu = lv_event_get_target(e);
+    if (!menu) return;
+    lv_obj_t *cur = lv_menu_get_cur_main_page(menu);
+    uint32_t accent = SETTINGS_DEFAULT_ACCENT;
+    if (cur && cur != s_settings_main_page) {
+        uintptr_t v = (uintptr_t)lv_obj_get_user_data(cur);
+        if (v) accent = (uint32_t)v;
+    }
+    if (s_settings_back_btn) {
+        /* Variante mas oscura para el estado pulsado: ~60% de cada canal. */
+        uint8_t r = (accent >> 16) & 0xFF;
+        uint8_t g = (accent >>  8) & 0xFF;
+        uint8_t b =  accent        & 0xFF;
+        uint32_t darker = ((uint32_t)(r * 6 / 10) << 16) |
+                          ((uint32_t)(g * 6 / 10) << 8)  |
+                          ((uint32_t)(b * 6 / 10));
+        lv_obj_set_style_bg_color(s_settings_back_btn, lv_color_hex(accent), 0);
+        lv_obj_set_style_bg_color(s_settings_back_btn, lv_color_hex(darker), LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_color(s_settings_back_btn, lv_color_hex(accent), 0);
+    }
+    if (s_settings_main_header) {
+        /* text_color hereda hacia el label de titulo de la pagina. El back
+         * label tiene color explicito y no se ve afectado. */
+        lv_obj_set_style_text_color(s_settings_main_header, lv_color_hex(accent), 0);
+    }
 }
 
 
@@ -2960,29 +3073,18 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 24, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
 
-    lv_obj_t *btn_frigo = lv_btn_create(cont);
-    lv_obj_set_size(btn_frigo, lv_pct(50), 80);
-    lv_obj_set_style_bg_color(btn_frigo, lv_color_hex(0xFFAA00), 0);
-    lv_obj_set_style_radius(btn_frigo, 10, 0);
-    lv_obj_t *lbl_frigo = lv_label_create(btn_frigo);
-    lv_label_set_text(lbl_frigo, "FRIGO");
-    lv_obj_set_style_text_font(lbl_frigo, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(lbl_frigo, lv_color_hex(0x000000), 0);
-    lv_obj_center(lbl_frigo);
-    lv_obj_add_event_cb(btn_frigo, logs_btn_frigo_cb, LV_EVENT_CLICKED, ui);
-
-    lv_obj_t *btn_bat = lv_btn_create(cont);
-    lv_obj_set_size(btn_bat, lv_pct(50), 80);
-    lv_obj_set_style_bg_color(btn_bat, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_style_radius(btn_bat, 10, 0);
-    lv_obj_t *lbl_bat = lv_label_create(btn_bat);
-    lv_label_set_text(lbl_bat, "BATERIA");
-    lv_obj_set_style_text_font(lbl_bat, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(lbl_bat, lv_color_hex(0x000000), 0);
-    lv_obj_center(lbl_bat);
-    lv_obj_add_event_cb(btn_bat, logs_btn_bat_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_t *btn_frigo = settings_card_btn(cont,
+        "Nevera",  "Histórico de temperaturas y ventilador",
+        LV_SYMBOL_REFRESH,       0xFFAA00,
+        logs_btn_frigo_cb, ui);
+    lv_obj_set_width(btn_frigo, 500);
+    lv_obj_t *btn_bat = settings_card_btn(cont,
+        "Batería", "Histórico de SoC, V, I y potencia",
+        LV_SYMBOL_BATTERY_FULL,  0x4FC3F7,
+        logs_btn_bat_cb,   ui);
+    lv_obj_set_width(btn_bat, 500);
 }
 
 /* === Pagina Sonido === */
