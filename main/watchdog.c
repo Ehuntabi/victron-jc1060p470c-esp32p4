@@ -68,19 +68,25 @@ static const char *reason_to_str(esp_reset_reason_t r)
 static void wd_monitor_task(void *arg)
 {
     int consecutive_fail = 0;
+    /* Grace period inicial: ignorar fallos los primeros 30 s para que la
+     * inicializacion completa (display, BLE, audio, SD, BT...) no provoque
+     * resets espureos antes de que LVGL este realmente listo. */
+    int64_t start_us = esp_timer_get_time();
+    const int64_t GRACE_US = 30LL * 1000000LL;
+
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(WD_MONITOR_PERIOD_MS));
+        bool in_grace = (esp_timer_get_time() - start_us) < GRACE_US;
 
         if (lvgl_port_lock(WD_LVGL_LOCK_TIMEOUT)) {
             lvgl_port_unlock();
             consecutive_fail = 0;
-        } else {
+        } else if (!in_grace) {
             consecutive_fail++;
             ESP_LOGW(TAG, "LVGL lock timeout (%d/%d)",
                      consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
             if (consecutive_fail >= WD_LVGL_FAIL_THRESHOLD) {
                 ESP_LOGE(TAG, "UI congelada — flush SD y reset controlado");
-                /* Apaga backlight para evitar parpadeo durante el reset */
                 bsp_display_brightness_set(0);
                 datalogger_flush();
                 battery_history_flush();
