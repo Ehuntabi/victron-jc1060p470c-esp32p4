@@ -26,6 +26,7 @@
 #include "ui/view_overview.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
+#include "dashboard_state.h"
 #include <time.h>
 #include <sys/time.h>
 
@@ -428,6 +429,9 @@ void ui_on_panel_data(const victron_data_t *d) {
     if (d == NULL) {
         return;
     }
+
+    /* Snapshot global para el dashboard del portal web. */
+    dashboard_state_on_record(d);
 
     ui_state_t *ui = &g_ui;
 

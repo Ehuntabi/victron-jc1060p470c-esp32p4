@@ -2,6 +2,7 @@
 #include "config_server.h"
 #include "config_storage.h"
 #include "victron_ble.h"
+#include "dashboard_state.h"
 #include "esp_spiffs.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -396,6 +397,92 @@ static esp_err_t post_save(httpd_req_t *req) {
     httpd_resp_send(req, "<h3>Device added successfully!</h3><p>You can add more devices or close this page.</p>", HTTPD_RESP_USE_STRLEN);
     
     return ESP_OK;
+}
+
+// --- Dashboard handlers ---
+static esp_err_t handle_api_state(httpd_req_t *req)
+{
+    char buf[1024];
+    size_t n = dashboard_state_to_json(buf, sizeof(buf));
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (n == 0) return httpd_resp_sendstr(req, "{}");
+    return httpd_resp_send(req, buf, n);
+}
+
+static const char *DASHBOARD_HTML =
+    "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>Victron Dashboard</title><style>"
+    "body{background:#06080C;color:#fff;font-family:system-ui,sans-serif;margin:0;padding:16px}"
+    "h1{color:#FF9800;margin:0 0 12px}"
+    ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}"
+    ".card{background:#141821;border:2px solid #2D3340;border-radius:14px;padding:16px}"
+    ".card h2{margin:0 0 8px;font-size:18px}"
+    ".v{font-size:34px;font-weight:bold}"
+    ".u{font-size:18px;color:#8A93A6;margin-left:4px}"
+    ".sub{color:#8A93A6;font-size:14px;margin-top:4px}"
+    ".bat{border-color:#FF9800}.solar{border-color:#00C851}.dcdc{border-color:#4FC3F7}.en{border-color:#FFD54F}"
+    ".alarm{color:#FF4444}"
+    "</style></head><body>"
+    "<h1>Victron Dashboard</h1>"
+    "<div class='grid'>"
+      "<div class='card bat'><h2>Bateria</h2>"
+        "<div><span id='soc' class='v'>--</span><span class='u'>%</span></div>"
+        "<div class='sub'><span id='bv'>--</span> V &nbsp; <span id='bi'>--</span> A &nbsp; <span id='bw'>--</span> W</div>"
+        "<div class='sub'>TTG: <span id='ttg'>--</span></div>"
+        "<div id='bal' class='alarm'></div>"
+      "</div>"
+      "<div class='card solar'><h2>Solar</h2>"
+        "<div><span id='pv' class='v'>--</span><span class='u'>W</span></div>"
+        "<div class='sub'>Hoy: <span id='yld'>--</span> kWh</div>"
+        "<div id='sal' class='alarm'></div>"
+      "</div>"
+      "<div class='card dcdc'><h2>DC/DC</h2>"
+        "<div class='sub'>Entrada: <span id='dvin'>--</span> V</div>"
+        "<div class='sub'>Salida:  <span id='dvout'>--</span> V</div>"
+        "<div id='dal' class='alarm'></div>"
+      "</div>"
+      "<div class='card en'><h2>Energia hoy</h2>"
+        "<div class='sub'>PV: <span id='epv'>--</span> kWh</div>"
+        "<div class='sub'>Cargas: <span id='eld'>--</span> kWh</div>"
+      "</div>"
+    "</div>"
+    "<script>"
+    "function fmt(x,d){return (x===undefined||x===null)?'--':Number(x).toFixed(d);}"
+    "async function tick(){"
+    "  try{const r=await fetch('/api/state'); const j=await r.json();"
+    "  if(j.battery&&j.battery.has){"
+    "    document.getElementById('soc').textContent=fmt(j.battery.soc_pct,1);"
+    "    document.getElementById('bv').textContent=fmt(j.battery.voltage_v,2);"
+    "    document.getElementById('bi').textContent=fmt(j.battery.current_a,2);"
+    "    document.getElementById('bw').textContent=fmt(j.battery.power_w,0);"
+    "    document.getElementById('ttg').textContent=j.battery.ttg_min>0?(j.battery.ttg_min+'m'):'--';"
+    "    document.getElementById('bal').textContent=j.battery.alarm?('ALARMA #'+j.battery.alarm):'';"
+    "  }"
+    "  if(j.solar&&j.solar.has){"
+    "    document.getElementById('pv').textContent=j.solar.pv_w;"
+    "    document.getElementById('yld').textContent=fmt(j.solar.yield_today_kwh,2);"
+    "    document.getElementById('sal').textContent=j.solar.error?('ERROR #'+j.solar.error):'';"
+    "  }"
+    "  if(j.dcdc&&j.dcdc.has){"
+    "    document.getElementById('dvin').textContent=fmt(j.dcdc.in_v,2);"
+    "    document.getElementById('dvout').textContent=fmt(j.dcdc.out_v,2);"
+    "    document.getElementById('dal').textContent=j.dcdc.error?('ERROR #'+j.dcdc.error):'';"
+    "  }"
+    "  if(j.energy_today){"
+    "    document.getElementById('epv').textContent=fmt(j.energy_today.pv_kwh,2);"
+    "    document.getElementById('eld').textContent=fmt(j.energy_today.loads_kwh,2);"
+    "  }"
+    "  }catch(e){}"
+    "}"
+    "tick();setInterval(tick,2000);"
+    "</script></body></html>";
+
+static esp_err_t handle_dashboard(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html");
+    return httpd_resp_sendstr(req, DASHBOARD_HTML);
 }
 
 // Error handler for 404 - Not Found
@@ -1363,6 +1450,11 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_screenshot);
     httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };
     httpd_register_uri_handler(server, &uri_logs);
+    httpd_uri_t uri_dashboard = { .uri = "/dashboard", .method = HTTP_GET, .handler = handle_dashboard };
+    httpd_register_uri_handler(server, &uri_dashboard);
+    httpd_uri_t uri_api_state = { .uri = "/api/state", .method = HTTP_GET, .handler = handle_api_state };
+    httpd_register_uri_handler(server, &uri_api_state);
+
     httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
     httpd_register_uri_handler(server, &uri_data);
     httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };
