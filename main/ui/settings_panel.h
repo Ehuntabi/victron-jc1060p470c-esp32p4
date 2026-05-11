@@ -23,6 +23,11 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui);
 // Force view update when display mode changes
 void ui_force_view_update(void);
 
+/* Vuelve a la página principal del menu de Settings (la que muestra las
+ * entradas Display/Wi-Fi/Frigo/etc). Util al cerrar Settings desde el boton
+ * Home para que la proxima entrada empiece siempre arriba del todo. */
+void ui_settings_panel_go_to_main(void);
+
 /* Mostrar el diálogo modal "Cambio en Wi-Fi — requiere reiniciar".
  * El caller ya debe haber guardado el nuevo estado en NVS antes de llamar.
  * El botón Cancelar revierte el NVS al opuesto y sincroniza el checkbox

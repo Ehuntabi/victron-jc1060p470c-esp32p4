@@ -138,6 +138,20 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
 
+/* ── Scrollbar visible en cualquier pagina de Settings ────────── */
+/* Aplica scrollbar AUTO (visible cuando hay overflow) con estilo claro
+ * para indicar que se puede deslizar. Llamar tras crear la page. */
+static void style_settings_scrollbar(lv_obj_t *page)
+{
+    if (!page) return;
+    lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_bg_color(page, lv_color_hex(0xFF9800), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(page, LV_OPA_80, LV_PART_SCROLLBAR);
+    lv_obj_set_style_width(page, 8, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(page, 4, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_right(page, 6, LV_PART_SCROLLBAR);
+}
+
 /* === SoC umbrales (dropdowns) === */
 static const int s_soc_crit_options[] = { 10, 20, 30, 40 };
 static const int s_soc_warn_options[] = { 40, 50, 60, 70 };
@@ -335,6 +349,13 @@ static lv_style_t s_settings_btn_style;
 static lv_style_t s_settings_btn_pressed_style;
 static bool s_settings_styles_inited = false;
 
+void ui_settings_panel_go_to_main(void)
+{
+    if (s_settings_menu && s_settings_main_page) {
+        lv_menu_set_page(s_settings_menu, s_settings_main_page);
+    }
+}
+
 static void settings_btn_styles_init(void);
 static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
                                     lv_obj_t *menu, lv_obj_t *target_page,
@@ -346,6 +367,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                       uint8_t ap_enabled)
 {
     (void)ap_enabled;
+    style_settings_scrollbar(page_wifi);
     /* Root container */
     lv_obj_t *cont = lv_obj_create(page_wifi);
     lv_obj_set_width(cont, lv_pct(100));
@@ -538,6 +560,7 @@ static void splash_dropdown_cb(lv_event_t *e)
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 {
+    style_settings_scrollbar(page_display);
     /* Root container */
     lv_obj_t *cont = lv_obj_create(page_display);
     lv_obj_set_width(cont, lv_pct(100));
@@ -622,35 +645,81 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card_nm, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_nm, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_nm, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);  /* púrpura */
+    lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);
     lv_obj_set_style_border_width(card_nm, 1, 0);
     lv_obj_set_style_radius(card_nm, 12, 0);
-    lv_obj_set_style_pad_all(card_nm, 16, 0);
-    lv_obj_set_style_pad_gap(card_nm, 10, 0);
+    lv_obj_set_style_pad_all(card_nm, 12, 0);
+    lv_obj_set_style_pad_gap(card_nm, 8, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_COLUMN);
 
-    /* Header: título + switch */
-    lv_obj_t *nm_header = lv_obj_create(card_nm);
-    lv_obj_remove_style_all(nm_header);
-    lv_obj_set_size(nm_header, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_header, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_header, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* Row 1: titulo + switch + "Brillo nocturno" + valor + slider */
+    lv_obj_t *nm_top = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_top);
+    lv_obj_set_size(nm_top, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_top, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_top, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_top, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(nm_top, 10, 0);
 
-    lv_obj_t *nm_title = lv_label_create(nm_header);
+    /* Bloque izquierdo: titulo + switch */
+    lv_obj_t *nm_lhs = lv_obj_create(nm_top);
+    lv_obj_remove_style_all(nm_lhs);
+    lv_obj_set_size(nm_lhs, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_lhs, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_lhs, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_lhs, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(nm_lhs, 10, 0);
+
+    lv_obj_t *nm_title = lv_label_create(nm_lhs);
     lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
     lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
 
-    lv_obj_t *nm_sw = lv_switch_create(nm_header);
+    lv_obj_t *nm_sw = lv_switch_create(nm_lhs);
     lv_obj_set_style_bg_color(nm_sw, lv_color_hex(0x9C27B0),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* Row inicio/fin: dos selectores hora con [-] [valor] [+] */
+    /* Bloque derecho: Brillo nocturno (label + valor + slider) en la MISMA fila */
+    lv_obj_t *nm_bri_grp = lv_obj_create(nm_top);
+    lv_obj_remove_style_all(nm_bri_grp);
+    lv_obj_set_size(nm_bri_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_bri_grp, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_bri_grp, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_bri_grp, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(nm_bri_grp, 10, 0);
+
+    lv_obj_t *nm_bri_lbl = lv_label_create(nm_bri_grp);
+    lv_obj_set_style_text_font(nm_bri_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(nm_bri_lbl, lv_color_hex(0xBBBBBB), 0);
+    lv_label_set_text(nm_bri_lbl, "Brillo nocturno");
+
+    lv_obj_t *nm_bri_val = lv_label_create(nm_bri_grp);
+    lv_obj_set_style_text_font(nm_bri_val, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(nm_bri_val, lv_color_white(), 0);
+    lv_obj_set_width(nm_bri_val, 60);
+    lv_obj_set_style_text_align(nm_bri_val, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(nm_bri_val, "%d%%", ui->night_mode.brightness);
+
+    lv_obj_t *nm_bri_slider = lv_slider_create(nm_bri_grp);
+    lv_obj_set_width(nm_bri_slider, 200);
+    lv_obj_set_height(nm_bri_slider, 22);
+    lv_slider_set_range(nm_bri_slider, 5, 100);
+    lv_slider_set_value(nm_bri_slider, ui->night_mode.brightness, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0),
+                              LV_PART_INDICATOR);
+    lv_obj_set_style_radius(nm_bri_slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0), LV_PART_KNOB);
+    lv_obj_set_user_data(nm_bri_slider, nm_bri_val);
+    lv_obj_add_event_cb(nm_bri_slider, night_brightness_slider_cb,
+                        LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Row 2: selectores Inicio + Fin (inline) */
     lv_obj_t *nm_hours = lv_obj_create(card_nm);
     lv_obj_remove_style_all(nm_hours);
     lv_obj_set_size(nm_hours, lv_pct(100), LV_SIZE_CONTENT);
@@ -658,59 +727,51 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(nm_hours, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(nm_hours, LV_FLEX_ALIGN_SPACE_AROUND,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(nm_hours, 12, 0);
 
-    /* Helper inline: bloque con label "Inicio"/"Fin" + [-] valor [+] */
     for (int slot = 0; slot < 2; slot++) {
-        lv_obj_t *col = lv_obj_create(nm_hours);
-        lv_obj_remove_style_all(col);
-        lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_layout(col, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER,
+        lv_obj_t *grp = lv_obj_create(nm_hours);
+        lv_obj_remove_style_all(grp);
+        lv_obj_set_size(grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(grp, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(grp, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(grp, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(col, 4, 0);
+        lv_obj_set_style_pad_gap(grp, 6, 0);
 
-        lv_obj_t *cap = lv_label_create(col);
+        lv_obj_t *cap = lv_label_create(grp);
         lv_obj_set_style_text_font(cap, &lv_font_montserrat_20_es, 0);
         lv_obj_set_style_text_color(cap, lv_color_hex(0xBBBBBB), 0);
         lv_label_set_text(cap, slot == 0 ? "Inicio" : "Fin");
 
-        lv_obj_t *row = lv_obj_create(col);
-        lv_obj_remove_style_all(row);
-        lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(row, 8, 0);
-
-        lv_obj_t *btn_dec = lv_btn_create(row);
-        lv_obj_set_size(btn_dec, 42, 42);
+        lv_obj_t *btn_dec = lv_btn_create(grp);
+        lv_obj_set_size(btn_dec, 34, 34);
         lv_obj_set_style_bg_color(btn_dec, lv_color_hex(0x9C27B0), 0);
         lv_obj_set_style_radius(btn_dec, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_pad_all(btn_dec, 0, 0);
         lv_obj_t *bd = lv_label_create(btn_dec);
         lv_label_set_text(bd, "-");
         lv_obj_set_style_text_font(bd, &lv_font_montserrat_24_es, 0);
         lv_obj_center(bd);
 
-        lv_obj_t *val = lv_label_create(row);
+        lv_obj_t *val = lv_label_create(grp);
         lv_obj_set_style_text_font(val, &lv_font_montserrat_24_es, 0);
         lv_obj_set_style_text_color(val, lv_color_white(), 0);
         uint8_t h = slot == 0 ? ui->night_mode.start_h : ui->night_mode.end_h;
         lv_label_set_text_fmt(val, "%02u:00", h);
-        lv_obj_set_width(val, 78);
+        lv_obj_set_width(val, 70);
         lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
 
-        lv_obj_t *btn_inc = lv_btn_create(row);
-        lv_obj_set_size(btn_inc, 42, 42);
+        lv_obj_t *btn_inc = lv_btn_create(grp);
+        lv_obj_set_size(btn_inc, 34, 34);
         lv_obj_set_style_bg_color(btn_inc, lv_color_hex(0x9C27B0), 0);
         lv_obj_set_style_radius(btn_inc, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_pad_all(btn_inc, 0, 0);
         lv_obj_t *bi = lv_label_create(btn_inc);
         lv_label_set_text(bi, "+");
         lv_obj_set_style_text_font(bi, &lv_font_montserrat_24_es, 0);
         lv_obj_center(bi);
 
-        /* El label de valor se pasa como user_data a ambos botones */
         lv_obj_set_user_data(btn_dec, val);
         lv_obj_set_user_data(btn_inc, val);
         if (slot == 0) {
@@ -721,41 +782,6 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
             lv_obj_add_event_cb(btn_inc, night_end_inc_cb, LV_EVENT_CLICKED, ui);
         }
     }
-
-    /* Row brillo nocturno: label + slider */
-    lv_obj_t *nm_bri_row = lv_obj_create(card_nm);
-    lv_obj_remove_style_all(nm_bri_row);
-    lv_obj_set_size(nm_bri_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_bri_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_bri_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_bri_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(nm_bri_row, 10, 0);
-
-    lv_obj_t *nm_bri_lbl = lv_label_create(nm_bri_row);
-    lv_obj_set_style_text_font(nm_bri_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(nm_bri_lbl, lv_color_hex(0xBBBBBB), 0);
-    lv_label_set_text(nm_bri_lbl, "Brillo nocturno");
-
-    lv_obj_t *nm_bri_val = lv_label_create(nm_bri_row);
-    lv_obj_set_style_text_font(nm_bri_val, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(nm_bri_val, lv_color_white(), 0);
-    lv_obj_set_width(nm_bri_val, 70);
-    lv_obj_set_style_text_align(nm_bri_val, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_text_fmt(nm_bri_val, "%d%%", ui->night_mode.brightness);
-
-    lv_obj_t *nm_bri_slider = lv_slider_create(nm_bri_row);
-    lv_obj_set_width(nm_bri_slider, 200);
-    lv_obj_set_height(nm_bri_slider, 26);
-    lv_slider_set_range(nm_bri_slider, 5, 100);
-    lv_slider_set_value(nm_bri_slider, ui->night_mode.brightness, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0),
-                              LV_PART_INDICATOR);
-    lv_obj_set_style_radius(nm_bri_slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0), LV_PART_KNOB);
-    lv_obj_set_user_data(nm_bri_slider, nm_bri_val);
-    lv_obj_add_event_cb(nm_bri_slider, night_brightness_slider_cb,
-                        LV_EVENT_VALUE_CHANGED, ui);
 
     /* === Card Zona horaria === */
     lv_obj_t *card_tz = lv_obj_create(cont);
@@ -819,16 +845,19 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     }
     lv_obj_add_event_cb(sp_dd, splash_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* === Card 2: Screensaver === */
-    lv_obj_t *card2 = lv_obj_create(cont);
+    /* === Sub-bloque Salvapantallas dentro del mismo card === */
+    /* Separador fino sutil entre Brillo y Salvapantallas */
+    lv_obj_t *card1_sep = lv_obj_create(card1);
+    lv_obj_remove_style_all(card1_sep);
+    lv_obj_set_size(card1_sep, lv_pct(100), 1);
+    lv_obj_set_style_bg_color(card1_sep, lv_color_hex(0x2D3340), 0);
+    lv_obj_set_style_bg_opa(card1_sep, LV_OPA_COVER, 0);
+
+    /* Contenedor del sub-bloque Screensaver (sin estilo propio: hereda del card1) */
+    lv_obj_t *card2 = lv_obj_create(card1);
+    lv_obj_remove_style_all(card2);
     lv_obj_set_width(card2, lv_pct(100));
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_border_width(card2, 1, 0);
-    lv_obj_set_style_radius(card2, 12, 0);
-    lv_obj_set_style_pad_all(card2, 16, 0);
     lv_obj_set_style_pad_gap(card2, 12, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
@@ -1155,6 +1184,7 @@ static void victron_menu_clicked_cb(lv_event_t *e)
 
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
 {
+    style_settings_scrollbar(page_victron);
     /* Asignar evento al lv_obj para detectar cuando se carga */
     lv_obj_add_event_cb(page_victron, (lv_event_cb_t)NULL, LV_EVENT_SCREEN_LOADED, NULL);
     /* Root container — aprovecha todo el ancho del page */
@@ -2564,6 +2594,7 @@ static void backup_import_cb(lv_event_t *e)
 
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
+    style_settings_scrollbar(page);
     lv_obj_t *cont = lv_obj_create(page);
     lv_obj_set_width(cont, lv_pct(100));
     lv_obj_set_height(cont, LV_SIZE_CONTENT);
@@ -2981,6 +3012,7 @@ static void logs_btn_frigo_cb(lv_event_t *e)
 
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
+    style_settings_scrollbar(page);
     lv_obj_t *cont = lv_obj_create(page);
     lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
@@ -3038,6 +3070,7 @@ static void sound_mute_changed_cb(lv_event_t *e)
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
+    style_settings_scrollbar(page);
     /* Contenedor principal vertical */
     lv_obj_t *cont = lv_obj_create(page);
     lv_obj_set_size(cont, lv_pct(100), LV_SIZE_CONTENT);

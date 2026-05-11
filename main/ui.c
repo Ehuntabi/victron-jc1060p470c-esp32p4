@@ -703,6 +703,12 @@ static void nav_btn_event_cb(lv_event_t *e)
     if (!ui || !ui->tabview) return;
     uint16_t cur = lv_tabview_get_tab_act(ui->tabview);
     uint16_t next = (cur == 0) ? ui->tab_settings_index : 0;
+    /* Si estamos saliendo de Settings hacia Live, reseteamos el menu
+     * a la pagina principal para que la proxima entrada arranque ahi y
+     * no en la subpagina (Display, Wi-Fi, etc.) donde se quedo. */
+    if (cur == ui->tab_settings_index && next == 0) {
+        ui_settings_panel_go_to_main();
+    }
     lv_tabview_set_act(ui->tabview, next, LV_ANIM_OFF);
     /* Cambiar el icono según el destino: settings en Live, home en Settings */
     if (ui->btn_nav) {
