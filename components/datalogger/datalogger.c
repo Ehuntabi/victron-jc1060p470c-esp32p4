@@ -249,7 +249,11 @@ esp_err_t datalogger_init(void)
     s_mutex = xSemaphoreCreateMutex();
     if (!s_mutex) return ESP_ERR_NO_MEM;
     s_flush_mutex = xSemaphoreCreateMutex();
-    if (!s_flush_mutex) return ESP_ERR_NO_MEM;
+    if (!s_flush_mutex) {
+        vSemaphoreDelete(s_mutex);
+        s_mutex = NULL;
+        return ESP_ERR_NO_MEM;
+    }
     s_head  = 0;
     s_count = 0;
     s_pending_first = 0;

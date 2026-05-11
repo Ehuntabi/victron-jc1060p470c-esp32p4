@@ -2035,9 +2035,21 @@ static void bh_chart_load_day(void)
                 size_t n = battery_history_get_series((bh_source_t)s, pts, &ots, &nts);
                 if (ots > 0 && ots < old_ts_g) old_ts_g = ots;
                 if (nts > new_ts_g) new_ts_g = nts;
-                /* Recortar ventana al rango realmente lleno. */
-                int wa = win_a_i; if (wa >= (int)n) wa = (n > 0) ? (int)n - 1 : 0;
-                int wb = win_b_i; if (wb > (int)n) wb = (int)n;
+                /* Ventana per-source: fraccion sobre los puntos realmente
+                 * disponibles, no sobre BH_POINTS. Si usaramos win_*_i
+                 * (que escalan con la capacidad) y el ring esta solo medio
+                 * lleno, zooms cerca del extremo se colapsan a 1-2 puntos.
+                 * Reescalamos con el n real de la fuente. */
+                int wa, wb;
+                if (n == 0) {
+                    wa = 0; wb = 0;
+                } else {
+                    wa = (int)(s_bh_win_a * (float)n);
+                    wb = (int)(s_bh_win_b * (float)n);
+                    if (wb <= wa) wb = wa + 1;
+                    if (wb > (int)n) wb = (int)n;
+                    if (wa >= (int)n) wa = (int)n - 1;
+                }
                 int idx = 0;
                 for (int k = wa; k < wb && idx < chart_pts; k += chart_step) {
                     int64_t sum = 0; int cnt = 0;

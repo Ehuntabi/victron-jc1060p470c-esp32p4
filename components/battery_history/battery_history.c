@@ -244,7 +244,7 @@ static void bh_flush_to_sd_impl(void)
     if (total_pending == 0) return;
 
     /* === FASE 2: Escritura sin lock. === */
-    FILE *f = fopen(path, "ab");
+    FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));
         return;
