@@ -29,6 +29,7 @@
 #include "watchdog.h"
 #include "config_storage.h"
 #include "energy_today.h"
+#include "trip_computer.h"
 #include <time.h>
 
 /* Zona horaria de Madrid (CET/CEST con DST automático).
@@ -301,6 +302,7 @@ void app_main(void)
     log_cleanup_init(60); /* Borrar logs > 60 dias */
     alerts_init();
     energy_today_init();
+    trip_computer_init();
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();

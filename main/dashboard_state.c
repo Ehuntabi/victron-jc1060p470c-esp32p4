@@ -1,5 +1,6 @@
 #include "dashboard_state.h"
 #include "energy_today.h"
+#include "trip_computer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include <stdio.h>
@@ -100,6 +101,9 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
     float pv_kwh = energy_today_pv_kwh();
     float ld_kwh = energy_today_loads_kwh();
     int p_w = (int)((int64_t)s.bat_v_centi * s.bat_i_milli / 100000LL);
+    trip_computer_t trip; trip_computer_get(&trip);
+    int trip_hours = (int)(trip.seconds_running / 3600);
+    int trip_min   = (int)((trip.seconds_running % 3600) / 60);
     int n = snprintf(buf, maxlen,
         "{"
           "\"battery\":{"
@@ -128,6 +132,15 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
           "\"energy_today\":{"
             "\"pv_kwh\":%.2f,"
             "\"loads_kwh\":%.2f"
+          "},"
+          "\"trip\":{"
+            "\"reset_epoch\":%lld,"
+            "\"hours\":%d,"
+            "\"minutes\":%d,"
+            "\"charged_kwh\":%.2f,"
+            "\"discharged_kwh\":%.2f,"
+            "\"charged_ah\":%.1f,"
+            "\"discharged_ah\":%.1f"
           "}"
         "}",
         s.bat_has   ? "true" : "false",
@@ -148,7 +161,14 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
         (float)s.dc_out_v_centi / 100.0f,
         (unsigned)s.dc_state, (unsigned)s.dc_err,
 
-        pv_kwh, ld_kwh);
+        pv_kwh, ld_kwh,
+
+        (long long)trip.reset_epoch,
+        trip_hours, trip_min,
+        trip.wh_charged / 1000.0,
+        trip.wh_discharged / 1000.0,
+        trip.ah_charged,
+        trip.ah_discharged);
     unlock();
     return (n > 0 && (size_t)n < maxlen) ? (size_t)n : 0;
 }

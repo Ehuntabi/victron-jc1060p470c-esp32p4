@@ -32,6 +32,7 @@
 #include "esp_heap_caps.h"
 #include "watchdog.h"
 #include "config_backup.h"
+#include "trip_computer.h"
 #include <time.h>
 
 // Forward declaration for view update function
@@ -2443,6 +2444,55 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui)
     victron_config_refresh(ui);
 }
 
+/* ── Trip computer: refresco periodico y reset ─────────────────── */
+static lv_obj_t *s_trip_label = NULL;
+
+static void trip_label_refresh(void)
+{
+    if (!s_trip_label) return;
+    trip_computer_t t;
+    trip_computer_get(&t);
+    char start_str[24] = "--";
+    if (t.reset_epoch > 0) {
+        struct tm tm_l;
+        localtime_r((time_t *)&t.reset_epoch, &tm_l);
+        strftime(start_str, sizeof(start_str), "%d/%m %H:%M", &tm_l);
+    }
+    int hours = (int)(t.seconds_running / 3600);
+    int minutes = (int)((t.seconds_running % 3600) / 60);
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+        "Desde %s   |   %dh %02dm activo\n"
+        "Cargado: %.2f kWh  (%.1f Ah)\n"
+        "Consumido: %.2f kWh  (%.1f Ah)",
+        start_str, hours, minutes,
+        t.wh_charged / 1000.0, t.ah_charged,
+        t.wh_discharged / 1000.0, t.ah_discharged);
+    lv_label_set_text(s_trip_label, buf);
+}
+
+static void trip_reset_msgbox_cb(lv_event_t *e)
+{
+    lv_obj_t *mbox = lv_event_get_current_target(e);
+    uint16_t btn_id = lv_msgbox_get_active_btn(mbox);
+    if (btn_id == 0) {  /* "Si" */
+        trip_computer_reset();
+        trip_label_refresh();
+    }
+    lv_msgbox_close(mbox);
+}
+
+static void trip_reset_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    static const char *btns[] = {"Si", "Cancelar", ""};
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Trip computer",
+        "Resetear contadores del viaje? Esta accion no se puede deshacer.",
+        btns, false);
+    lv_obj_add_event_cb(mbox, trip_reset_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_center(mbox);
+}
+
 /* ── Callbacks Backup/Restore configuración ───────────────────── */
 static void backup_export_cb(lv_event_t *e)
 {
@@ -2605,6 +2655,50 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
     lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
+
+    /* === Card Trip computer (contadores reseteables del viaje) === */
+    lv_obj_t *card_trip = lv_obj_create(cont);
+    lv_obj_set_width(card_trip, lv_pct(100));
+    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card_trip, 1, 0);
+    lv_obj_set_style_radius(card_trip, 12, 0);
+    lv_obj_set_style_pad_all(card_trip, 16, 0);
+    lv_obj_set_style_pad_gap(card_trip, 10, 0);
+    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *trip_head = lv_obj_create(card_trip);
+    lv_obj_remove_style_all(trip_head);
+    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *trip_title = lv_label_create(trip_head);
+    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
+
+    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
+    lv_obj_set_size(btn_trip_rst, 140, 44);
+    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
+    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
+    lv_label_set_text(lbl_trip_rst, "Reset");
+    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_trip_rst);
+    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    s_trip_label = lv_label_create(card_trip);
+    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
+    lv_obj_set_width(s_trip_label, lv_pct(100));
+    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_WRAP);
+    trip_label_refresh();
 
     /* === Card 4: Backup/Restore configuracion === */
     lv_obj_t *card_bak = lv_obj_create(cont);
@@ -2802,6 +2896,7 @@ static void about_refresh_dynamic(ui_state_t *ui)
 static void about_timer_cb(lv_timer_t *t)
 {
     about_refresh_dynamic((ui_state_t *)t->user_data);
+    trip_label_refresh();
 }
 
 static void reboot_msgbox_cb(lv_event_t *e)
