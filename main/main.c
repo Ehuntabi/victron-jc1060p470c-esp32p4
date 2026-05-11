@@ -30,6 +30,7 @@
 #include "config_storage.h"
 #include "energy_today.h"
 #include "trip_computer.h"
+#include "pzem004t.h"
 #include <time.h>
 
 /* Zona horaria de Madrid (CET/CEST con DST automático).
@@ -303,6 +304,17 @@ void app_main(void)
     alerts_init();
     energy_today_init();
     trip_computer_init();
+
+    /* PZEM-004T v3 (AC 220 V) en UART2: TX=GPIO32, RX=GPIO33 del JP1.
+     * Si no hay modulo fisico, sigue funcionando: marca has_data=false. */
+    pzem_config_t pzem_cfg = {
+        .uart_num       = UART_NUM_2,
+        .tx_gpio        = GPIO_NUM_32,
+        .rx_gpio        = GPIO_NUM_33,
+        .slave_address  = 0x01,
+        .poll_period_ms = 2000,
+    };
+    pzem_init(&pzem_cfg);
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
