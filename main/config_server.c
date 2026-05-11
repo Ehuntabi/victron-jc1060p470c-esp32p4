@@ -1612,7 +1612,7 @@ esp_err_t config_server_start(void) {
     cfg.send_wait_timeout = 30;
     cfg.recv_wait_timeout = 30;
     cfg.max_open_sockets = 4;
-    cfg.max_uri_handlers = 20;
+    cfg.max_uri_handlers = 24;  /* 22 actuales + 2 de margen */
     cfg.max_resp_headers = 16;
     ESP_ERROR_CHECK(httpd_start(&server, &cfg));
 
