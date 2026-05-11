@@ -7,8 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_lvgl_port.h"
-#include "datalogger.h"
-#include "battery_history.h"
 #include "display.h"
 
 static const char *TAG = "WD";
@@ -86,11 +84,14 @@ static void wd_monitor_task(void *arg)
             ESP_LOGW(TAG, "LVGL lock timeout (%d/%d)",
                      consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
             if (consecutive_fail >= WD_LVGL_FAIL_THRESHOLD) {
-                ESP_LOGE(TAG, "UI congelada — flush SD y reset controlado");
+                ESP_LOGE(TAG, "UI congelada — reset controlado (sin flush SD)");
+                /* No hacemos flush a SD aqui: si el cuelgue lo causa el
+                 * propio subsistema de SD/FAT (mutex retenido por una task
+                 * muerta), datalogger_flush() / battery_history_flush()
+                 * deadlock-an y el reset nunca ocurre. Preferimos perder
+                 * el ultimo bloque de muestras antes que no reiniciar. */
                 bsp_display_brightness_set(0);
-                datalogger_flush();
-                battery_history_flush();
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(100));
                 esp_restart();
             }
         }

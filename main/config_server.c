@@ -1328,7 +1328,6 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
     }
     int src_w = disp->driver->hor_res;
     int src_h = disp->driver->ver_res;
-    const lv_color_t *src = (const lv_color_t *)disp->driver->draw_buf->buf1;
     const int factor = 2;
     int w = src_w / factor;
     int h = src_h / factor;
@@ -1365,7 +1364,11 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
     bmp[36] = (img_size >> 16) & 0xFF;
     bmp[37] = (img_size >> 24) & 0xFF;
 
-    /* Pixel data, BMP es bottom-up: la primera fila escrita es la inferior. */
+    /* Pixel data: BMP bottom-up. La copia del framebuffer debe ocurrir bajo
+     * lvgl_port_lock para evitar tearing (LVGL puede repintar buf1 a la vez)
+     * y referencia colgante si LVGL reasignara los buffers. */
+    bool got_lock = lvgl_port_lock(500);
+    const lv_color_t *src = (const lv_color_t *)disp->driver->draw_buf->buf1;
     for (int y = 0; y < h; y++) {
         uint8_t *row = bmp + 54 + (h - 1 - y) * row_size;
         int sy = y * factor;
@@ -1380,6 +1383,7 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
             row[x * 3 + 2] = (r5 << 3) | (r5 >> 2); /* R */
         }
     }
+    if (got_lock) lvgl_port_unlock();
 
     httpd_resp_set_type(req, "image/bmp");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");

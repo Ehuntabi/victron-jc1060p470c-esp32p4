@@ -299,7 +299,10 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     }
 
     int encr_size = fields.mfg_data_len - offsetof(victronManufacturerData, victronEncryptedData);
-    if (encr_size <= 0 || encr_size > 25) {
+    /* CRITICO: el bound debe ser el tamano real del buffer input/output (21),
+     * no 25, porque luego memcpy(input, ..., encr_size) escribe en stack y
+     * un adv malformado con 32 <= mfg_data_len <= 35 desborda 1..4 bytes. */
+    if (encr_size <= 0 || encr_size > VICTRON_ENCRYPTED_DATA_MAX_SIZE) {
         ESP_LOGW(TAG, "Invalid encrypted data size: %d", encr_size);
         return 0;
     }
@@ -346,6 +349,12 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     /* ---------------- Record Parsing ---------------- */
     switch (rec_type) {
         case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
+            /* Necesitamos al menos 12 bytes (output[0..11]). Sin esta guarda
+             * un payload corto se decodifica como ceros y publica V=0/SoC=0. */
+            if (encr_size < 12) {
+                ESP_LOGW(TAG, "Solar payload too short: %d", encr_size);
+                break;
+            }
             const victron_record_solar_charger_t *r = (const victron_record_solar_charger_t *)output;
 
             uint16_t load_raw = (uint16_t)output[10] | ((uint16_t)(output[11] & 0x01) << 8);
@@ -377,6 +386,12 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         }
 
         case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
+            /* Lee hasta b[14] (15 bytes); sin la guarda los bytes faltantes
+             * se interpretan como ceros y producen lecturas fabricadas. */
+            if (encr_size < 15) {
+                ESP_LOGW(TAG, "BMV payload too short: %d", encr_size);
+                break;
+            }
             const uint8_t *b = output;
 
             uint16_t ttg_raw     = b[0] | (b[1] << 8);

@@ -527,7 +527,13 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     ui_state_t *ui = &g_ui;
 
-    lvgl_port_lock(0);
+    /* BLE rx corre en la task NimBLE; con lvgl_port_lock(0) (= portMAX_DELAY)
+     * un cuelgue de LVGL bloquearia para siempre el rx BLE. Acotamos a 100 ms;
+     * si no se obtiene, abandonamos este frame y dejamos que el siguiente
+     * lo intente. */
+    if (!lvgl_port_lock(100)) {
+        return;
+    }
 
     if (ui->lbl_ble) {
         lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
@@ -676,13 +682,15 @@ void ui_on_panel_data(const victron_data_t *d) {
 void ui_force_view_update(void)
 {
     ui_state_t *ui = &g_ui;
-    lvgl_port_lock(0);
-    
-    // Force a layout update regardless of current device type
+    /* Llamado desde el dropdown de "vista por defecto"; timeout amplio. */
+    if (!lvgl_port_lock(500)) {
+        return;
+    }
+
     victron_record_type_t saved_type = ui->current_device_type;
-    ui->current_device_type = VICTRON_BLE_RECORD_TEST; // Reset to force update
+    ui->current_device_type = VICTRON_BLE_RECORD_TEST;
     ensure_device_layout(ui, saved_type);
-    
+
     lvgl_port_unlock();
 }
 
@@ -806,12 +814,12 @@ void ui_set_ble_mac(const uint8_t *mac) {
              "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
     ui_state_t *ui = &g_ui;
-    lvgl_port_lock(0);
-    
-    // Store current MAC address
+    /* Llamado desde NimBLE rx; acotamos para no bloquear si LVGL esta colgado. */
+    if (!lvgl_port_lock(100)) {
+        return;
+    }
+
     strcpy(ui->current_device_mac, mac_str);
-    
-    // Legacy MAC field update (if it exists)
     ui_settings_panel_set_mac(ui, mac_str);
     lvgl_port_unlock();
 }
@@ -1189,7 +1197,7 @@ void ui_refresh_victron_device_list(void)
 {
     ui_state_t *ui = &g_ui;
     ESP_LOGI("ui", "Refreshing Victron device list in settings panel");
-    if (lvgl_port_lock(0)) {
+    if (lvgl_port_lock(200)) {
         ui_settings_panel_refresh_victron_devices(ui);
         lvgl_port_unlock();
     }
