@@ -75,6 +75,11 @@ esp_err_t save_victron_debug(bool enabled);
 esp_err_t load_ui_view_mode(uint8_t *mode_out);
 esp_err_t save_ui_view_mode(uint8_t mode);
 
+// Splash screen al boot (NVS namespace: "display", key "splash")
+// 0 = sin splash, 1 = logo furgo embebido. Default 1.
+esp_err_t load_splash_mode(uint8_t *mode_out);
+esp_err_t save_splash_mode(uint8_t mode);
+
 // Zona horaria en formato POSIX TZ (NVS namespace: "display").
 // Default: Madrid ("CET-1CEST,M3.5.0,M10.5.0/3").
 esp_err_t load_timezone(char *tz_out, size_t maxlen);

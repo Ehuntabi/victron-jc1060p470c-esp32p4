@@ -592,6 +592,37 @@ esp_err_t save_ui_view_mode(uint8_t mode)
     return err;
 }
 
+/* ── Splash screen mode ─────────────────────────────────────────────────── */
+#define SPLASH_KEY "splash"
+
+esp_err_t load_splash_mode(uint8_t *mode_out)
+{
+    if (!mode_out) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) { *mode_out = 1; return ESP_OK; }
+    uint8_t v = 1;
+    if (nvs_get_u8(h, SPLASH_KEY, &v) != ESP_OK) {
+        nvs_set_u8(h, SPLASH_KEY, v);
+        nvs_commit(h);
+    }
+    nvs_close(h);
+    *mode_out = (v > 1) ? 1 : v;
+    return ESP_OK;
+}
+
+esp_err_t save_splash_mode(uint8_t mode)
+{
+    if (mode > 1) mode = 1;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_u8(h, SPLASH_KEY, mode);
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
 /* ── Zona horaria en POSIX TZ string ────────────────────────────────────── */
 #define TZ_KEY  "tz"
 #define TZ_DEFAULT "CET-1CEST,M3.5.0,M10.5.0/3"  /* Madrid */

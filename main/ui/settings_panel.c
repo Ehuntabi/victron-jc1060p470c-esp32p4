@@ -527,6 +527,15 @@ static void tz_dropdown_cb(lv_event_t *e)
     ESP_LOGI(TAG_SETTINGS, "TZ -> %s", posix);
 }
 
+/* ── Splash dropdown ──────────────────────────────────────────── */
+static void splash_dropdown_cb(lv_event_t *e)
+{
+    lv_obj_t *dd = lv_event_get_target(e);
+    uint16_t idx = lv_dropdown_get_selected(dd);
+    save_splash_mode((uint8_t)idx);
+    ESP_LOGI(TAG_SETTINGS, "Splash mode -> %u", (unsigned)idx);
+}
+
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 {
     /* Root container */
@@ -778,6 +787,37 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         lv_dropdown_set_selected(tz_dd, tz_index_from_posix(tz_now));
     }
     lv_obj_add_event_cb(tz_dd, tz_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* === Card Splash (logo de bienvenida al boot) === */
+    lv_obj_t *card_sp = lv_obj_create(cont);
+    lv_obj_set_width(card_sp, lv_pct(100));
+    lv_obj_set_height(card_sp, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_sp, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_sp, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_sp, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_border_width(card_sp, 1, 0);
+    lv_obj_set_style_radius(card_sp, 12, 0);
+    lv_obj_set_style_pad_all(card_sp, 16, 0);
+    lv_obj_set_style_pad_gap(card_sp, 10, 0);
+    lv_obj_set_layout(card_sp, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_sp, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card_sp, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *sp_title = lv_label_create(card_sp);
+    lv_obj_set_style_text_font(sp_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(sp_title, lv_color_hex(0xFF9800), 0);
+    lv_label_set_text(sp_title, LV_SYMBOL_IMAGE "  Pantalla de bienvenida");
+
+    lv_obj_t *sp_dd = lv_dropdown_create(card_sp);
+    lv_obj_set_width(sp_dd, 220);
+    lv_dropdown_set_options(sp_dd, "Sin splash\nLogo furgo");
+    {
+        uint8_t m = 1;
+        load_splash_mode(&m);
+        lv_dropdown_set_selected(sp_dd, m > 1 ? 1 : m);
+    }
+    lv_obj_add_event_cb(sp_dd, splash_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     /* === Card 2: Screensaver === */
     lv_obj_t *card2 = lv_obj_create(cont);

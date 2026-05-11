@@ -31,6 +31,7 @@
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "pzem004t.h"
+#include "splash.h"
 #include <time.h>
 
 /* Zona horaria de Madrid (CET/CEST con DST automático).
@@ -233,6 +234,9 @@ void app_main(void)
     if (lvgl_port_lock(0)) {
         s_ui = ui_get_state();
         ui_init();
+        /* Splash inmediatamente despues de ui_init para tapar la pantalla
+         * mientras dura el resto del setup (BLE, audio, datalogger...). */
+        splash_show();
         lvgl_port_unlock();
     }
     bsp_display_brightness_set(80);
@@ -367,6 +371,12 @@ void app_main(void)
     esp_timer_start_periodic(night_timer, 60ULL * 1000000ULL);
     /* Aplicación inmediata para no esperar 1 min al arrancar */
     night_mode_timer_cb(s_ui);
+
+    /* Splash visible al menos 1.5 s desde su creacion, luego ocultar. */
+    if (lvgl_port_lock(0)) {
+        splash_hide();
+        lvgl_port_unlock();
+    }
 
     logSection("Setup complete");
 }
