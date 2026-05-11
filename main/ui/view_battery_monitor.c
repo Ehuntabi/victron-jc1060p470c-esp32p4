@@ -4,6 +4,7 @@
 #include <string.h>
 #include "ui_format.h"
 #include "ui_card.h"
+#include "victron_alarms.h"
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "esp_log.h"
@@ -186,8 +187,14 @@ static void battery_view_update(ui_device_view_t *view, const victron_data_t *da
     ui_metric_set(bat->m_power, buf, "W",
                   ui_color_for_current((int32_t)b->battery_current_milli));
 
-    /* Pill de estado con magnitud: "Cargando 5.5 A" / "Descargando 3.2 A" */
-    char pill_buf[32];
+    /* Pill: si hay alarma activa, pill rojo con la razon; si no, estado normal */
+    char pill_buf[40];
+    const char *alarm = victron_alarm_reason_string(b->alarm_reason);
+    if (alarm) {
+        snprintf(pill_buf, sizeof(pill_buf), "FALLO: %s", alarm);
+        ui_pill_set(bat->pill_state, pill_buf, UI_COLOR_RED);
+        goto skip_state_pill;
+    }
     int abs_a_pill = abs_c;  /* en centiamperios */
     if (b->battery_current_milli > 50) {
         snprintf(pill_buf, sizeof(pill_buf), "Cargando %d.%d A",
@@ -200,6 +207,7 @@ static void battery_view_update(ui_device_view_t *view, const victron_data_t *da
     } else {
         ui_pill_set(bat->pill_state, "Reposo", UI_COLOR_TEXT_DIM);
     }
+skip_state_pill:
 
     /* Barra bipolar de corriente: valor en A, color según signo */
     if (bat->bar_current) {

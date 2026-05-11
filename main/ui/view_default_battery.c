@@ -1,6 +1,7 @@
 #include "view_default_battery.h"
 #include "ui.h"
 #include "ui_card.h"
+#include "victron_alarms.h"
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "esp_log.h"
@@ -18,11 +19,13 @@ typedef struct {
     lv_obj_t *m_dc_in_v;
     lv_obj_t *m_dc_out_v;
     lv_obj_t *m_dc_status;   /* DC In A para Orion XS, o Status para DCDC */
+    lv_obj_t *pill_dc_alarm;
     /* Battery (centro) */
     lv_obj_t *arc_soc;
     lv_obj_t *m_ttg;
     lv_obj_t *m_current;
     lv_obj_t *bar_current;
+    lv_obj_t *pill_bat_alarm;
     /* Solar */
     lv_obj_t *m_solar_power;
     lv_obj_t *m_solar_charge;
@@ -35,6 +38,7 @@ typedef struct {
         uint16_t battery_voltage_cv;
         uint32_t ttg_minutes;
         int32_t  battery_current_milli;
+        uint16_t alarm_reason;
         uint32_t last_update_time;
     } battery_state;
 
@@ -44,6 +48,7 @@ typedef struct {
         uint16_t output_voltage_centi;
         uint16_t input_current_deci;
         uint8_t  device_state;
+        uint8_t  charger_error;
         victron_record_type_t device_type;
         uint32_t last_update_time;
     } dcdc_state;
@@ -53,6 +58,7 @@ typedef struct {
         uint16_t pv_power_w;
         uint16_t battery_voltage_centi;
         int16_t  battery_current_deci;
+        uint8_t  charger_error;
         uint32_t last_update_time;
     } solar_state;
 } ui_default_battery_view_t;
@@ -94,7 +100,10 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_height(view->card_dcdc, lv_pct(100));
     lv_obj_set_flex_align(view->card_dcdc, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    ui_card_set_title_img(view->card_dcdc, &icon_dcdc, "DC/DC", UI_COLOR_CYAN);
+    lv_obj_t *header_dcdc = ui_card_set_title_img(view->card_dcdc, &icon_dcdc,
+                                                  "DC/DC", UI_COLOR_CYAN);
+    view->pill_dc_alarm = ui_pill_create(header_dcdc, "", UI_COLOR_RED);
+    lv_obj_add_flag(view->pill_dc_alarm, LV_OBJ_FLAG_HIDDEN);
     view->m_dc_in_v   = ui_metric_create_compact(view->card_dcdc,
                                                  LV_SYMBOL_BATTERY_FULL " Bat. motor");
     view->m_dc_out_v  = ui_metric_create_compact(view->card_dcdc, "Salida");
@@ -106,8 +115,10 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_height(view->card_battery, lv_pct(100));
     lv_obj_set_flex_align(view->card_battery, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    ui_card_set_title_img(view->card_battery, &icon_battery,
-                          "Batería", UI_COLOR_ORANGE);
+    lv_obj_t *header_bat = ui_card_set_title_img(view->card_battery, &icon_battery,
+                                                 "Batería", UI_COLOR_ORANGE);
+    view->pill_bat_alarm = ui_pill_create(header_bat, "", UI_COLOR_RED);
+    lv_obj_add_flag(view->pill_bat_alarm, LV_OBJ_FLAG_HIDDEN);
     view->arc_soc = ui_arc_soc_create(view->card_battery, 180);
     view->m_ttg     = ui_metric_create_compact(view->card_battery, "Autonomía");
     view->m_current = ui_metric_create_compact(view->card_battery, "Corriente");
@@ -167,6 +178,7 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->battery_state.battery_voltage_cv = b->battery_voltage_centi;
                 bv->battery_state.ttg_minutes = b->time_to_go_minutes;
                 bv->battery_state.battery_current_milli = b->battery_current_milli;
+                bv->battery_state.alarm_reason = b->alarm_reason;
                 bv->battery_state.last_update_time = now;
                 ui_card_pulse(bv->card_battery);
                 break;
@@ -196,6 +208,7 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->dcdc_state.output_voltage_centi = d->output_voltage_centi;
                 bv->dcdc_state.input_current_deci   = 0;
                 bv->dcdc_state.device_state         = d->device_state;
+                bv->dcdc_state.charger_error        = d->charger_error;
                 bv->dcdc_state.device_type          = VICTRON_BLE_RECORD_DCDC_CONVERTER;
                 bv->dcdc_state.last_update_time     = now;
                 ui_card_pulse(bv->card_dcdc);
@@ -208,6 +221,7 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->dcdc_state.output_voltage_centi = o->output_voltage_centi;
                 bv->dcdc_state.input_current_deci   = o->input_current_deci;
                 bv->dcdc_state.device_state         = o->device_state;
+                bv->dcdc_state.charger_error        = o->charger_error;
                 bv->dcdc_state.device_type          = VICTRON_BLE_RECORD_ORION_XS;
                 bv->dcdc_state.last_update_time     = now;
                 ui_card_pulse(bv->card_dcdc);
@@ -219,6 +233,7 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->solar_state.pv_power_w = s->pv_power_w;
                 bv->solar_state.battery_voltage_centi = s->battery_voltage_centi;
                 bv->solar_state.battery_current_deci = s->battery_current_deci;
+                bv->solar_state.charger_error = s->charger_error;
                 bv->solar_state.last_update_time = now;
                 ui_card_pulse(bv->card_solar);
                 break;
@@ -366,7 +381,13 @@ static void update_display_elements(ui_default_battery_view_t *bv)
         } else {
             ui_metric_set(bv->m_solar_charge, "0.0", "A", UI_COLOR_TEXT_DIM);
         }
-        if (bv->solar_state.pv_power_w > 0 || bv->solar_state.battery_current_deci > 0) {
+        /* Pill estado / fallo solar */
+        const char *solar_err = victron_charger_error_string(bv->solar_state.charger_error);
+        if (solar_err) {
+            char pbuf[40];
+            snprintf(pbuf, sizeof(pbuf), "FALLO: %s", solar_err);
+            ui_pill_set(bv->pill_solar_state, pbuf, UI_COLOR_RED);
+        } else if (bv->solar_state.pv_power_w > 0 || bv->solar_state.battery_current_deci > 0) {
             ui_pill_set(bv->pill_solar_state, "Cargando", UI_COLOR_GREEN);
         } else {
             ui_pill_set(bv->pill_solar_state, "Reposo", UI_COLOR_TEXT_DIM);
@@ -375,5 +396,29 @@ static void update_display_elements(ui_default_battery_view_t *bv)
         ui_metric_set(bv->m_solar_power,  "--", "", UI_COLOR_TEXT);
         ui_metric_set(bv->m_solar_charge, "--", "", UI_COLOR_TEXT);
         ui_pill_set(bv->pill_solar_state, "-", UI_COLOR_TEXT_DIM);
+    }
+
+    /* ── Pills de fallo en cards Bateria y DCDC ────────────────── */
+    char pill_buf[40];
+    const char *bat_alarm = bat_fresh
+        ? victron_alarm_reason_string(bv->battery_state.alarm_reason)
+        : NULL;
+    if (bat_alarm) {
+        snprintf(pill_buf, sizeof(pill_buf), "FALLO: %s", bat_alarm);
+        ui_pill_set(bv->pill_bat_alarm, pill_buf, UI_COLOR_RED);
+        lv_obj_clear_flag(bv->pill_bat_alarm, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bv->pill_bat_alarm, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    const char *dc_err = dc_fresh
+        ? victron_charger_error_string(bv->dcdc_state.charger_error)
+        : NULL;
+    if (dc_err) {
+        snprintf(pill_buf, sizeof(pill_buf), "FALLO: %s", dc_err);
+        ui_pill_set(bv->pill_dc_alarm, pill_buf, UI_COLOR_RED);
+        lv_obj_clear_flag(bv->pill_dc_alarm, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bv->pill_dc_alarm, LV_OBJ_FLAG_HIDDEN);
     }
 }
