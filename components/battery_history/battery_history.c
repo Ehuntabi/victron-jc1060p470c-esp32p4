@@ -197,13 +197,15 @@ static void bh_flush_to_sd_impl(void)
      * ms. Copiamos los puntos nuevos a un buffer transitorio y soltamos
      * el lock antes de tocar la SD. */
     int32_t max_ts_seen[BH_SRC_COUNT] = {0};
+    bool   snapshot_capped[BH_SRC_COUNT] = {false};
     BH_LOCK();
     for (int s = 0; s < BH_SRC_COUNT; ++s) {
         s_flush_snapshot[s].n = 0;
         bh_buffer_t *b = &s_bufs[s];
         size_t total = b->wrapped ? BH_POINTS : b->write_idx;
-        for (size_t i = 0; i < total &&
-                          s_flush_snapshot[s].n < BH_FLUSH_SNAPSHOT_MAX; ++i) {
+        size_t i;
+        for (i = 0; i < total &&
+                    s_flush_snapshot[s].n < BH_FLUSH_SNAPSHOT_MAX; ++i) {
             size_t idx = b->wrapped ? (b->write_idx + i) % BH_POINTS : i;
             if (!b->points[idx].valid) continue;
             if (b->points[idx].ts <= s_last_flushed_ts[s]) continue;
@@ -212,10 +214,30 @@ static void bh_flush_to_sd_impl(void)
                 max_ts_seen[s] = b->points[idx].ts;
             }
         }
+        /* Si llenamos el snapshot Y aun quedaba al menos 1 punto pendiente
+         * en el buffer (con ts > umbral), avisamos para diagnostico. La
+         * proxima iteracion del flush timer recoge el backlog. */
+        if (s_flush_snapshot[s].n >= BH_FLUSH_SNAPSHOT_MAX) {
+            for (; i < total; ++i) {
+                size_t idx = b->wrapped ? (b->write_idx + i) % BH_POINTS : i;
+                if (b->points[idx].valid &&
+                    b->points[idx].ts > s_last_flushed_ts[s]) {
+                    snapshot_capped[s] = true;
+                    break;
+                }
+            }
+        }
         s_bh_last_flushed_idx[s] = b->write_idx;
         s_bh_last_flushed_wrapped[s] = b->wrapped;
     }
     BH_UNLOCK();
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (snapshot_capped[s]) {
+            ESP_LOGW(TAG, "%s: backlog > %d puntos; reintentaremos en proximo flush",
+                     battery_history_source_name((bh_source_t)s),
+                     BH_FLUSH_SNAPSHOT_MAX);
+        }
+    }
 
     int total_pending = 0;
     for (int s = 0; s < BH_SRC_COUNT; ++s) total_pending += s_flush_snapshot[s].n;

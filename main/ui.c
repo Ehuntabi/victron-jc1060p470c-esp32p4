@@ -1552,9 +1552,12 @@ static void frigo_chart_load_day(void)
             lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_percent);
         }
         frigo_apply_temp_range(t_min, t_max);
-        update_frigo_xlabels_today(count);
+        /* Pasamos `valid` (entradas realmente accesibles) y no `count`
+         * (el raw, posiblemente clamp a 2): asi evitamos etiquetas
+         * "--:--" mezcladas con horas reales tras un boot fresco con
+         * datalogger casi vacio. */
+        update_frigo_xlabels_today(valid > 0 ? valid : count);
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
-        (void)valid;
     } else {
         const char *date = s_frigo_dates[s_frigo_day_idx];
         char path[64];

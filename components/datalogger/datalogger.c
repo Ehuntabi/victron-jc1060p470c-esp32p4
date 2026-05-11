@@ -150,10 +150,23 @@ static void flush_pending_to_sd_impl(void)
     char path[64];
     get_day_filename(path, sizeof path);
 
-    /* === FASE 1: snapshot bajo s_mutex, sin I/O. ===
-     * Antes el lock se mantenia durante todo el bucle fprintf — la SD
-     * podia bloquear cientos de ms a los productores. Copiamos las
-     * entradas pendientes a un buffer transitorio y soltamos s_mutex. */
+    /* === FASE 0: fopen ANTES de tocar el estado pendiente. ===
+     * Si fopen falla (SD desmontada, EROFS, espacio agotado...) preservamos
+     * las entradas para el proximo intento. Antes snapshot+advance se
+     * hacian primero y la perdida era permanente al fopen-fail. */
+    struct stat st;
+    bool need_header = (stat(path, &st) != 0);
+    FILE *f = fopen(path, "a");
+    if (!f) {
+        ESP_LOGW(TAG, "fopen %s failed", path);
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return;
+    }
+
+    /* === FASE 1: snapshot bajo s_mutex sin avanzar punteros. ===
+     * Copiamos las entradas pendientes a un buffer transitorio y soltamos
+     * el lock antes de tocar SD. El avance del cursor pendiente se hace
+     * solo si la escritura va limpia (fase 3). */
     int snapshot_count = 0;
     int snapshot_first = 0;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
@@ -163,31 +176,20 @@ static void flush_pending_to_sd_impl(void)
             int idx = (snapshot_first + i) % DATALOGGER_MAX_ENTRIES;
             s_flush_snapshot[i] = s_buf[idx];
         }
-        /* Adelantamos los pendientes ya: si el write falla parcialmente
-         * perdemos las entradas vs. duplicar — preferible para no
-         * recargar muestras de un mismo segundo. */
-        s_pending_first = (s_pending_first + snapshot_count) % DATALOGGER_MAX_ENTRIES;
-        s_pending_count = 0;
         xSemaphoreGive(s_mutex);
     } else {
+        fclose(f);
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
 
     if (snapshot_count <= 0) {
+        fclose(f);
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
 
     /* === FASE 2: escritura sin s_mutex. === */
-    struct stat st;
-    bool need_header = (stat(path, &st) != 0);
-    FILE *f = fopen(path, "a");
-    if (!f) {
-        ESP_LOGW(TAG, "fopen %s failed", path);
-        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
-        return;
-    }
     bool io_error = false;
     if (need_header) {
         if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n") < 0) {
@@ -208,11 +210,31 @@ static void flush_pending_to_sd_impl(void)
     }
     fclose(f);
 
-    if (io_error) {
-        ESP_LOGW(TAG, "I/O error en %s: perdidas %d entradas",
-                 path, snapshot_count - written);
-    } else if (written > 0) {
-        ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
+    /* === FASE 3: avanzar el cursor pendiente solo si todo OK. ===
+     * Si hubo I/O error las entradas siguen pendientes y se reintentaran
+     * en el proximo ciclo. */
+    if (!io_error) {
+        if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            /* En el (raro) caso de que el ring hubiera overflow-ado
+             * mientras escribiamos, s_pending_count < snapshot_count y
+             * el snapshot ya no es coherente. Saltamos el avance; la
+             * proxima iteracion reescribira (puede dejar duplicados pero
+             * eso es mejor que perder datos). */
+            if (s_pending_count >= snapshot_count) {
+                s_pending_first = (s_pending_first + snapshot_count)
+                                    % DATALOGGER_MAX_ENTRIES;
+                s_pending_count -= snapshot_count;
+            } else {
+                ESP_LOGW(TAG, "Ring overflow durante flush; no avanzo cursor");
+            }
+            xSemaphoreGive(s_mutex);
+        }
+        if (written > 0) {
+            ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
+        }
+    } else {
+        ESP_LOGW(TAG, "I/O error en %s tras %d/%d entradas; reintento proximo flush",
+                 path, written, snapshot_count);
     }
     if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
 }

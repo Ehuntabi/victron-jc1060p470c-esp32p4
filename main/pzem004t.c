@@ -84,16 +84,18 @@ static esp_err_t pzem_poll_once(void)
 
     /* Plausibilidad: aunque la trama tenga CRC valido, una corrupcion
      * cambia ~1/65536. Rechazamos rangos imposibles para PZEM-004T v3.
-     * 80-300 V, 0-100 A, 0-25 kW, 45-65 Hz, factor 0..1. */
+     * Limites laxos para no perder brown-outs reales (UE: 230 V nominal
+     * pero un grupo electrogeno arrancando puede caer a 50 V) ni 110 V
+     * single-phase en sag (~70 V). */
     float v_v   = voltage / 10.0f;
     float c_a   = current / 1000.0f;
     float p_w   = power   / 10.0f;
     float f_hz  = freq    / 10.0f;
     float pf_v  = pf      / 100.0f;
-    bool plausible = (v_v >= 80.0f && v_v <= 300.0f) &&
+    bool plausible = (v_v >= 0.0f  && v_v <= 300.0f) &&
                      (c_a >= 0.0f  && c_a <= 100.0f) &&
                      (p_w >= 0.0f  && p_w <= 25000.0f) &&
-                     (f_hz >= 45.0f && f_hz <= 65.0f) &&
+                     (f_hz == 0.0f || (f_hz >= 40.0f && f_hz <= 70.0f)) &&
                      (pf_v >= 0.0f && pf_v <= 1.0f);
     if (!plausible) {
         ESP_LOGW(TAG, "Frame fuera de rango: V=%.1f C=%.3f P=%.1f F=%.1f PF=%.2f",
