@@ -184,6 +184,9 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ov->bat.current_milli = b->battery_current_milli;
                 ov->bat.ttg_min = b->time_to_go_minutes;
                 ov->bat.last_update_ms = now;
+                ui_card_pulse(ov->card_bat);
+                /* Si la batería descarga, también pulsa Loads (consumo activo) */
+                if (b->battery_current_milli < -50) ui_card_pulse(ov->card_loads);
                 break;
             }
             case VICTRON_BLE_RECORD_LYNX_SMART_BMS: {
@@ -194,6 +197,7 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ov->bat.current_milli = (int32_t)b->battery_current_deci * 100;
                 ov->bat.ttg_min = b->time_to_go_min;
                 ov->bat.last_update_ms = now;
+                ui_card_pulse(ov->card_bat);
                 break;
             }
             case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
@@ -203,6 +207,9 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ov->solar.load_current_deci = s->load_current_deci;
                 ov->solar.voltage_centi = s->battery_voltage_centi;
                 ov->solar.last_update_ms = now;
+                ui_card_pulse(ov->card_solar);
+                /* Si SmartSolar reporta carga, también pulsa Loads */
+                if (s->load_current_deci > 0) ui_card_pulse(ov->card_loads);
                 /* Si no hay BMV, también usamos los datos de batería del Solar */
                 if (!ov->bat.has_data) {
                     ov->bat.voltage_centi = s->battery_voltage_centi;

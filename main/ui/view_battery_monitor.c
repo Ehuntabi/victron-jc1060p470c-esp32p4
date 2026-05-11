@@ -160,6 +160,8 @@ static void battery_view_update(ui_device_view_t *view, const victron_data_t *da
     if (bat == NULL || data == NULL ||
         data->type != VICTRON_BLE_RECORD_BATTERY_MONITOR) return;
 
+    ui_card_pulse(bat->card);
+
     const victron_record_battery_monitor_t *b = &data->record.battery;
     char buf[24];
 
