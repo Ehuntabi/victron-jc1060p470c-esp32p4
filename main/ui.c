@@ -1524,17 +1524,27 @@ static void frigo_chart_gesture_cb(lv_event_t *e)
 static lv_obj_t *s_bh_screen = NULL;
 static lv_obj_t *s_bh_lbl_date = NULL;
 static lv_obj_t *s_bh_xlabels  = NULL;
+static lv_obj_t *s_bh_lbl_zoom = NULL;
 static lv_obj_t *s_bh_totals[BH_SRC_COUNT] = {NULL};
 static lv_chart_series_t *s_bh_series[BH_SRC_COUNT] = {NULL};
 static int  s_bh_day_idx = -1;
 static int  s_bh_n_dates = 0;
 static char s_bh_dates[LOG_BROWSER_MAX_DATES][LOG_BROWSER_DATE_LEN];
+/* Ventana de visualizacion sobre los datos del dia (fraccion 0..1). */
+static float s_bh_win_a = 0.0f;
+static float s_bh_win_b = 1.0f;
 
 #define BH_LOG_MAX_ENTRIES   2200   /* ~24h cada ~10s + margen */
 static battery_log_entry_t s_bh_buf[BH_LOG_MAX_ENTRIES];
 
 static void bh_chart_load_day(void);
 static void bh_chart_gesture_cb(lv_event_t *e);
+static void bh_zoom_in_cb(lv_event_t *e);
+static void bh_zoom_out_cb(lv_event_t *e);
+static void bh_pan_left_cb(lv_event_t *e);
+static void bh_pan_right_cb(lv_event_t *e);
+static void bh_reset_view_cb(lv_event_t *e);
+static void bh_update_zoom_label(void);
 
 /* Cerrar overlays para rotacion del salvapantallas */
 void ui_close_chart_screen(void)
@@ -1618,15 +1628,15 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_label_set_text(bh_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(bh_arr_r, LV_ALIGN_TOP_MID, 150, 18);
 
-    /* Totales: 2x2 con flex wrap */
+    /* Totales: 2 filas x 2 columnas, una linea por celda */
     lv_obj_t *totals_cont = lv_obj_create(scr);
     lv_obj_remove_style_all(totals_cont);
-    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 110);
+    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 70);
     lv_obj_align(totals_cont, LV_ALIGN_TOP_LEFT, 16, 70);
     lv_obj_set_layout(totals_cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(totals_cont, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(totals_cont, 24, 0);
-    lv_obj_set_style_pad_row(totals_cont, 6, 0);
+    lv_obj_set_style_pad_row(totals_cont, 4, 0);
 
     static const uint32_t colors[BH_SRC_COUNT] = {
         0x4FC3F7, /* BM cyan */
@@ -1637,16 +1647,52 @@ void ui_show_battery_history_screen(ui_state_t *ui)
 
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         lv_obj_t *l = lv_label_create(totals_cont);
-        lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 2);
+        lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 2 - 4);
         lv_obj_set_style_text_color(l, lv_color_hex(colors[i]), 0);
         lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-        lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
-        lv_label_set_text_fmt(l, "%s\ncarga 0.0 Ah  desc 0.0 Ah",
+        lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+        lv_label_set_text_fmt(l, "%s  +0.0 / -0.0 Ah",
                               battery_history_source_name((bh_source_t)i));
         s_bh_totals[i] = l;
     }
 
     /* Chart */
+    /* Fila de controles: pan izq, zoom -, etiqueta nivel, zoom +, pan dcha, reset */
+    s_bh_win_a = 0.0f;
+    s_bh_win_b = 1.0f;
+    {
+        struct { const char *txt; lv_event_cb_t cb; } btns[] = {
+            { LV_SYMBOL_LEFT,    bh_pan_left_cb  },
+            { LV_SYMBOL_MINUS,   bh_zoom_out_cb  },
+            { LV_SYMBOL_PLUS,    bh_zoom_in_cb   },
+            { LV_SYMBOL_RIGHT,   bh_pan_right_cb },
+            { LV_SYMBOL_REFRESH, bh_reset_view_cb},
+        };
+        int x = -((int)(sizeof(btns)/sizeof(btns[0])) * 56 + 80) / 2;
+        for (size_t i = 0; i < sizeof(btns)/sizeof(btns[0]); ++i) {
+            lv_obj_t *b = lv_btn_create(scr);
+            lv_obj_set_size(b, 48, 44);
+            lv_obj_set_style_bg_color(b, lv_color_hex(0x2A3340), 0);
+            lv_obj_set_style_radius(b, 8, 0);
+            lv_obj_align(b, LV_ALIGN_TOP_MID, x, 152);
+            lv_obj_t *l = lv_label_create(b);
+            lv_label_set_text(l, btns[i].txt);
+            lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
+            lv_obj_center(l);
+            lv_obj_add_event_cb(b, btns[i].cb, LV_EVENT_CLICKED, NULL);
+            x += 56;
+            /* Hueco para la etiqueta de zoom entre el boton "−" y el "+" */
+            if (i == 1) {
+                s_bh_lbl_zoom = lv_label_create(scr);
+                lv_obj_set_style_text_color(s_bh_lbl_zoom, lv_color_white(), 0);
+                lv_obj_set_style_text_font(s_bh_lbl_zoom, &lv_font_montserrat_20_es, 0);
+                lv_label_set_text(s_bh_lbl_zoom, "1x");
+                lv_obj_align(s_bh_lbl_zoom, LV_ALIGN_TOP_MID, x + 28, 162);
+                x += 70;
+            }
+        }
+    }
+
     lv_obj_t *chart = lv_chart_create(scr);
     lv_obj_set_size(chart, LV_HOR_RES - 40, LV_VER_RES - 250);
     lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -40);
@@ -1718,14 +1764,17 @@ static void bh_clear_chart_series(void)
 static void bh_update_xlabels_today(int32_t old_ts, int32_t new_ts)
 {
     if (!s_bh_xlabels) return;
-    int32_t span = new_ts - old_ts;
-    if (span < 0) span = 0;
+    int32_t full_span = new_ts - old_ts;
+    if (full_span < 0) full_span = 0;
+    int32_t t_a = old_ts + (int32_t)((int64_t)full_span * (int64_t)(s_bh_win_a * 1000.0f) / 1000);
+    int32_t t_b = old_ts + (int32_t)((int64_t)full_span * (int64_t)(s_bh_win_b * 1000.0f) / 1000);
+    int32_t span = t_b - t_a;
     bool have_real_time = (new_ts > 1704067200);
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_obj_get_child(s_bh_xlabels, i);
         if (!l) continue;
         if (span <= 0) { lv_label_set_text(l, "--:--"); continue; }
-        int32_t ts_at = old_ts + (int32_t)((int64_t)span * i / 4);
+        int32_t ts_at = t_a + (int32_t)((int64_t)span * i / 4);
         if (have_real_time) {
             time_t t = ts_at;
             struct tm tm_local;
@@ -1741,11 +1790,22 @@ static void bh_update_xlabels_today(int32_t old_ts, int32_t new_ts)
 static void bh_update_xlabels_from_buf(int n)
 {
     if (!s_bh_xlabels) return;
+    if (n <= 0) {
+        for (int i = 0; i < 5; ++i) {
+            lv_obj_t *l = lv_obj_get_child(s_bh_xlabels, i);
+            if (l) lv_label_set_text(l, "--:--");
+        }
+        return;
+    }
+    int a = (int)(s_bh_win_a * n);
+    int b = (int)(s_bh_win_b * n);
+    if (b <= a) b = a + 1;
+    if (b > n) b = n;
+    int wn = b - a;
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_obj_get_child(s_bh_xlabels, i);
         if (!l) continue;
-        if (n <= 0) { lv_label_set_text(l, "--:--"); continue; }
-        int idx = (n - 1) * i / 4;
+        int idx = a + (wn - 1) * i / 4;
         if (idx < 0) idx = 0;
         if (idx >= n) idx = n - 1;
         lv_label_set_text_fmt(l, "%02d:%02d",
@@ -1759,12 +1819,18 @@ static void bh_chart_load_day(void)
     bh_clear_chart_series();
 
     if (s_bh_day_idx < 0) {
-        /* HOY: usa el ring buffer en RAM (4 fuentes) */
+        /* HOY: usa el ring buffer en RAM (4 fuentes). Aplica ventana [a, b). */
         const int CHART_MAX_PTS = 1500;
-        int chart_pts = (BH_POINTS > CHART_MAX_PTS) ? CHART_MAX_PTS : BH_POINTS;
-        int chart_step = (BH_POINTS + chart_pts - 1) / chart_pts;
+        int win_a_i = (int)(s_bh_win_a * BH_POINTS);
+        int win_b_i = (int)(s_bh_win_b * BH_POINTS);
+        if (win_b_i <= win_a_i) win_b_i = win_a_i + 1;
+        if (win_b_i > BH_POINTS) win_b_i = BH_POINTS;
+        int win_count = win_b_i - win_a_i;
+        int chart_pts = (win_count > CHART_MAX_PTS) ? CHART_MAX_PTS : win_count;
+        int chart_step = (win_count + chart_pts - 1) / chart_pts;
         if (chart_step < 1) chart_step = 1;
-        chart_pts = (BH_POINTS + chart_step - 1) / chart_step;
+        chart_pts = (win_count + chart_step - 1) / chart_step;
+        if (chart_pts < 2) chart_pts = 2;
         lv_chart_set_point_count(s_bh_chart, chart_pts);
 
         /* Buffer estatico en PSRAM para no fragmentar al cambiar de dia. */
@@ -1781,11 +1847,14 @@ static void bh_chart_load_day(void)
                 size_t n = battery_history_get_series((bh_source_t)s, pts, &ots, &nts);
                 if (ots > 0 && ots < old_ts_g) old_ts_g = ots;
                 if (nts > new_ts_g) new_ts_g = nts;
+                /* Recortar ventana al rango realmente lleno. */
+                int wa = win_a_i; if (wa >= (int)n) wa = (n > 0) ? (int)n - 1 : 0;
+                int wb = win_b_i; if (wb > (int)n) wb = (int)n;
                 int idx = 0;
-                for (size_t k = 0; k < n && idx < chart_pts; k += chart_step) {
+                for (int k = wa; k < wb && idx < chart_pts; k += chart_step) {
                     int64_t sum = 0; int cnt = 0;
-                    size_t end = (k + chart_step < n) ? k + chart_step : n;
-                    for (size_t j = k; j < end; j++) {
+                    int end = (k + chart_step < wb) ? k + chart_step : wb;
+                    for (int j = k; j < end; j++) {
                         if (pts[j].valid) { sum += pts[j].milli_amps; cnt++; }
                     }
                     if (cnt > 0) {
@@ -1798,11 +1867,12 @@ static void bh_chart_load_day(void)
                     }
                     idx++;
                 }
+                /* Totales: siempre del dia completo (no de la ventana visible) */
                 float ch = 0, dis = 0;
                 battery_history_get_totals((bh_source_t)s, &ch, &dis);
                 if (s_bh_totals[s]) {
                     lv_label_set_text_fmt(s_bh_totals[s],
-                        "%s\ncarga %.1f Ah  desc %.1f Ah",
+                        "%s  +%.1f / -%.1f Ah",
                         battery_history_source_name((bh_source_t)s), ch, dis);
                 }
             }
@@ -1822,22 +1892,35 @@ static void bh_chart_load_day(void)
         char path[64];
         snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
         int n = log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES);
-        int pts_cnt = n > 0 ? n : 2;
-        if (pts_cnt > 1500) pts_cnt = 1500;
-        lv_chart_set_point_count(s_bh_chart, pts_cnt);
-        int step = (n > 1500) ? (n + 1499) / 1500 : 1;
-        int32_t bmin = INT32_MAX, bmax = INT32_MIN;
+
+        /* Totales calculados sobre el dia completo (no afectados por la ventana). */
         int64_t total_ch_ma_s = 0, total_dis_ma_s = 0;
+        for (int i = 0; i < n; i++) {
+            int32_t ma = s_bh_buf[i].milli_amps;
+            if (ma > 0) total_ch_ma_s += ma;
+            else        total_dis_ma_s += -ma;
+        }
+
+        /* Ventana */
+        int wa = (int)(s_bh_win_a * n);
+        int wb = (int)(s_bh_win_b * n);
+        if (wb <= wa) wb = wa + 1;
+        if (wb > n) wb = n;
+        int wn = wb - wa;
+        int pts_cnt = wn > 0 ? wn : 2;
+        if (pts_cnt > 1500) pts_cnt = 1500;
+        if (pts_cnt < 2) pts_cnt = 2;
+        lv_chart_set_point_count(s_bh_chart, pts_cnt);
+        int step = (wn > 1500) ? (wn + 1499) / 1500 : 1;
+        int32_t bmin = INT32_MAX, bmax = INT32_MIN;
         int idx = 0;
-        for (int i = 0; i < n; i += step) {
+        for (int i = wa; i < wb; i += step) {
             int32_t ma = s_bh_buf[i].milli_amps;
             int a = ma / 1000;
             if (a < bmin) bmin = a;
             if (a > bmax) bmax = a;
             lv_chart_set_value_by_id(s_bh_chart, s_bh_series[0], idx, (lv_coord_t)a);
             idx++;
-            if (ma > 0) total_ch_ma_s += ma;
-            else        total_dis_ma_s += -ma;
         }
         /* Las otras 3 series quedan en LV_CHART_POINT_NONE */
         if (bmin == INT32_MAX) { bmin = -40; bmax = 40; }
@@ -1852,11 +1935,11 @@ static void bh_chart_load_day(void)
             if (!s_bh_totals[s]) continue;
             if (s == BH_SRC_BATTERY_MONITOR) {
                 lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s\ncarga %.1f Ah  desc %.1f Ah",
+                    "%s  +%.1f / -%.1f Ah",
                     battery_history_source_name((bh_source_t)s), ch, ds);
             } else {
                 lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s\n(sin datos en SD)",
+                    "%s  (sin datos en SD)",
                     battery_history_source_name((bh_source_t)s));
             }
         }
@@ -1868,7 +1951,12 @@ static void bh_chart_load_day(void)
 static void bh_chart_gesture_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    /* Si estamos zoomeados, el swipe horizontal se interpreta como pan
+     * dentro del dia actual, no como cambio de dia. */
+    bool zoomed = (s_bh_win_a > 0.0001f) || (s_bh_win_b < 0.9999f);
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (zoomed && dir == LV_DIR_LEFT)  { bh_pan_right_cb(NULL); return; }
+    if (zoomed && dir == LV_DIR_RIGHT) { bh_pan_left_cb(NULL);  return; }
     if (dir == LV_DIR_RIGHT) {
         if (s_bh_day_idx == -1) {
             if (s_bh_n_dates > 0) s_bh_day_idx = s_bh_n_dates - 1;
@@ -1878,13 +1966,101 @@ static void bh_chart_gesture_cb(lv_event_t *e)
         } else {
             return;
         }
+        s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
+        bh_update_zoom_label();
         bh_chart_load_day();
     } else if (dir == LV_DIR_LEFT) {
         if (s_bh_day_idx < 0) return;
         if (s_bh_day_idx < s_bh_n_dates - 1) s_bh_day_idx++;
         else                                 s_bh_day_idx = -1;
+        s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
+        bh_update_zoom_label();
         bh_chart_load_day();
     }
+}
+
+static void bh_update_zoom_label(void)
+{
+    if (!s_bh_lbl_zoom) return;
+    float w = s_bh_win_b - s_bh_win_a;
+    if (w <= 0.0f) w = 1.0f;
+    float z = 1.0f / w;
+    if (z < 1.05f) lv_label_set_text(s_bh_lbl_zoom, "1x");
+    else if (z < 9.5f) lv_label_set_text_fmt(s_bh_lbl_zoom, "%.1fx", z);
+    else               lv_label_set_text_fmt(s_bh_lbl_zoom, "%dx", (int)(z + 0.5f));
+}
+
+static void bh_apply_window(void)
+{
+    /* Clamp + sanidad */
+    if (s_bh_win_a < 0.0f) s_bh_win_a = 0.0f;
+    if (s_bh_win_b > 1.0f) s_bh_win_b = 1.0f;
+    if (s_bh_win_b - s_bh_win_a < 0.005f) {  /* zoom max ~200x */
+        float c = (s_bh_win_a + s_bh_win_b) * 0.5f;
+        s_bh_win_a = c - 0.0025f;
+        s_bh_win_b = c + 0.0025f;
+        if (s_bh_win_a < 0) { s_bh_win_b -= s_bh_win_a; s_bh_win_a = 0; }
+        if (s_bh_win_b > 1) { s_bh_win_a -= (s_bh_win_b - 1); s_bh_win_b = 1; }
+    }
+    bh_update_zoom_label();
+    bh_chart_load_day();
+}
+
+static void bh_zoom_in_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_bh_win_b - s_bh_win_a;
+    float c = (s_bh_win_a + s_bh_win_b) * 0.5f;
+    w *= 0.5f;
+    s_bh_win_a = c - w * 0.5f;
+    s_bh_win_b = c + w * 0.5f;
+    bh_apply_window();
+}
+
+static void bh_zoom_out_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_bh_win_b - s_bh_win_a;
+    float c = (s_bh_win_a + s_bh_win_b) * 0.5f;
+    w *= 2.0f;
+    if (w >= 1.0f) { s_bh_win_a = 0.0f; s_bh_win_b = 1.0f; }
+    else {
+        s_bh_win_a = c - w * 0.5f;
+        s_bh_win_b = c + w * 0.5f;
+        if (s_bh_win_a < 0.0f) { s_bh_win_b -= s_bh_win_a; s_bh_win_a = 0.0f; }
+        if (s_bh_win_b > 1.0f) { s_bh_win_a -= (s_bh_win_b - 1.0f); s_bh_win_b = 1.0f; }
+    }
+    bh_apply_window();
+}
+
+static void bh_pan_left_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_bh_win_b - s_bh_win_a;
+    float d = w * 0.25f;
+    if (s_bh_win_a - d < 0.0f) d = s_bh_win_a;
+    s_bh_win_a -= d;
+    s_bh_win_b -= d;
+    bh_apply_window();
+}
+
+static void bh_pan_right_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_bh_win_b - s_bh_win_a;
+    float d = w * 0.25f;
+    if (s_bh_win_b + d > 1.0f) d = 1.0f - s_bh_win_b;
+    s_bh_win_a += d;
+    s_bh_win_b += d;
+    bh_apply_window();
+}
+
+static void bh_reset_view_cb(lv_event_t *e)
+{
+    (void)e;
+    s_bh_win_a = 0.0f;
+    s_bh_win_b = 1.0f;
+    bh_apply_window();
 }
 
 static void ble_indicator_timer_cb(lv_timer_t *t)
