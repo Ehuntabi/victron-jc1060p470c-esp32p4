@@ -1,5 +1,6 @@
 #include "view_overview.h"
 #include "ui_card.h"
+#include "energy_today.h"
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "ui.h"
@@ -27,6 +28,7 @@ typedef struct {
     lv_obj_t *m_loads_w;
     /* Footer */
     lv_obj_t *m_ttg;
+    lv_obj_t *lbl_energy;   /* "PV X.X kWh   Loads Y.Y kWh" */
 
     /* State-store consolidado por tipo */
     struct {
@@ -156,6 +158,12 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     /* Footer: TTG (compacto, fuera de la fila) */
     ov->m_ttg = ui_metric_create_compact(ov->base.root, "Autonomía");
 
+    /* Sub-footer: energía acumulada del día (PV + cargas) */
+    ov->lbl_energy = lv_label_create(ov->base.root);
+    lv_obj_set_style_text_font(ov->lbl_energy, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ov->lbl_energy, UI_COLOR_TEXT_DIM, 0);
+    lv_label_set_text(ov->lbl_energy, "PV --   Cargas --");
+
     /* Defaults */
     ov->bat.ttg_min = 0xFFFFFFFF;
 
@@ -184,6 +192,8 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ov->bat.current_milli = b->battery_current_milli;
                 ov->bat.ttg_min = b->time_to_go_minutes;
                 ov->bat.last_update_ms = now;
+                energy_today_on_battery(b->battery_current_milli,
+                                        b->battery_voltage_centi);
                 ui_card_pulse(ov->card_bat);
                 /* Si la batería descarga, también pulsa Loads (consumo activo) */
                 if (b->battery_current_milli < -50) ui_card_pulse(ov->card_loads);
@@ -207,6 +217,7 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ov->solar.load_current_deci = s->load_current_deci;
                 ov->solar.voltage_centi = s->battery_voltage_centi;
                 ov->solar.last_update_ms = now;
+                energy_today_on_solar_yield(s->yield_today_centikwh);
                 ui_card_pulse(ov->card_solar);
                 /* Si SmartSolar reporta carga, también pulsa Loads */
                 if (s->load_current_deci > 0) ui_card_pulse(ov->card_loads);
@@ -313,6 +324,20 @@ static void overview_render(ui_overview_view_t *ov)
         ui_metric_set(ov->m_ttg, buf, "", UI_COLOR_TEXT);
     } else {
         ui_metric_set(ov->m_ttg, "--", "", UI_COLOR_TEXT_DIM);
+    }
+
+    /* ── Energía acumulada del día (PV + cargas) ──────────────── */
+    if (ov->lbl_energy) {
+        float pv = energy_today_pv_kwh();
+        float ld = energy_today_loads_kwh();
+        if (pv == 0.0f && ld == 0.0f && !energy_today_is_fresh()) {
+            lv_label_set_text(ov->lbl_energy, "PV --   Cargas --");
+        } else {
+            char ebuf[64];
+            snprintf(ebuf, sizeof(ebuf),
+                     "PV %.2f kWh   Cargas %.2f kWh", pv, ld);
+            lv_label_set_text(ov->lbl_energy, ebuf);
+        }
     }
 }
 
