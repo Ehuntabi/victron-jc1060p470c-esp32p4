@@ -75,6 +75,11 @@ esp_err_t save_victron_debug(bool enabled);
 esp_err_t load_ui_view_mode(uint8_t *mode_out);
 esp_err_t save_ui_view_mode(uint8_t mode);
 
+// Zona horaria en formato POSIX TZ (NVS namespace: "display").
+// Default: Madrid ("CET-1CEST,M3.5.0,M10.5.0/3").
+esp_err_t load_timezone(char *tz_out, size_t maxlen);
+esp_err_t save_timezone(const char *tz_str);
+
 // Night mode (auto brightness by RTC hour). NVS namespace: "display"
 // start_h / end_h en formato 0..23. Si start==end, la ventana es vacía.
 // Si start>end, la ventana cruza la medianoche (ej. 22 → 7).

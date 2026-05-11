@@ -27,6 +27,7 @@
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
 #include "watchdog.h"
+#include "config_storage.h"
 #include <time.h>
 
 /* Zona horaria de Madrid (CET/CEST con DST automático).
@@ -244,9 +245,14 @@ void app_main(void)
     if (sd_err != ESP_OK)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
 
-    /* TZ Madrid antes de cualquier settimeofday/mktime/localtime */
-    setenv("TZ", TZ_EUROPE_MADRID, 1);
-    tzset();
+    /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
+    {
+        char tz_buf[48];
+        load_timezone(tz_buf, sizeof(tz_buf));
+        setenv("TZ", tz_buf, 1);
+        tzset();
+        ESP_LOGI(TAG, "TZ: %s", tz_buf);
+    }
 
     esp_err_t rtc_err = rtc_init(bsp_i2c_get_handle());
     /* El RTC almacena hora local (Madrid). mktime la interpreta con la TZ

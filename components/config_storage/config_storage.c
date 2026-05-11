@@ -592,6 +592,42 @@ esp_err_t save_ui_view_mode(uint8_t mode)
     return err;
 }
 
+/* ── Zona horaria en POSIX TZ string ────────────────────────────────────── */
+#define TZ_KEY  "tz"
+#define TZ_DEFAULT "CET-1CEST,M3.5.0,M10.5.0/3"  /* Madrid */
+
+esp_err_t load_timezone(char *tz_out, size_t maxlen)
+{
+    if (!tz_out || maxlen == 0) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK) {
+        strncpy(tz_out, TZ_DEFAULT, maxlen - 1);
+        tz_out[maxlen - 1] = 0;
+        return ESP_OK;
+    }
+    size_t sz = maxlen;
+    err = nvs_get_str(h, TZ_KEY, tz_out, &sz);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        strncpy(tz_out, TZ_DEFAULT, maxlen - 1);
+        tz_out[maxlen - 1] = 0;
+    }
+    return ESP_OK;
+}
+
+esp_err_t save_timezone(const char *tz_str)
+{
+    if (!tz_str) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(h, TZ_KEY, tz_str);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
 /* ── Night mode (auto brightness por hora del RTC) ─────────────────────── */
 #define NIGHT_EN_KEY     "nm_en"
 #define NIGHT_START_KEY  "nm_start"
