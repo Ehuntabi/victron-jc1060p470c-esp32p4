@@ -31,6 +31,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "watchdog.h"
+#include "config_backup.h"
 #include <time.h>
 
 // Forward declaration for view update function
@@ -2469,6 +2470,35 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui)
     victron_config_refresh(ui);
 }
 
+/* ── Callbacks Backup/Restore configuración ───────────────────── */
+static void backup_export_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *status = (lv_obj_t *)lv_obj_get_user_data(btn);
+    esp_err_t err = config_backup_export(CONFIG_BACKUP_PATH);
+    if (status) {
+        lv_label_set_text(status, err == ESP_OK
+            ? "Exportado a " CONFIG_BACKUP_PATH
+            : "ERROR exportando (¿SD montada?)");
+        lv_obj_set_style_text_color(status,
+            err == ESP_OK ? lv_color_hex(0x00C851) : lv_color_hex(0xCC3333), 0);
+    }
+}
+
+static void backup_import_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *status = (lv_obj_t *)lv_obj_get_user_data(btn);
+    esp_err_t err = config_backup_import(CONFIG_BACKUP_PATH);
+    if (status) {
+        lv_label_set_text(status, err == ESP_OK
+            ? "Importado. Reinicia para aplicar todos los cambios."
+            : "ERROR importando (¿fichero existe?)");
+        lv_obj_set_style_text_color(status,
+            err == ESP_OK ? lv_color_hex(0x00C851) : lv_color_hex(0xCC3333), 0);
+    }
+}
+
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     lv_obj_t *cont = lv_obj_create(page);
@@ -2602,6 +2632,72 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
     lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
+
+    /* === Card 4: Backup/Restore configuracion === */
+    lv_obj_t *card_bak = lv_obj_create(cont);
+    lv_obj_set_width(card_bak, lv_pct(100));
+    lv_obj_set_height(card_bak, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_bak, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_border_width(card_bak, 1, 0);
+    lv_obj_set_style_radius(card_bak, 12, 0);
+    lv_obj_set_style_pad_all(card_bak, 16, 0);
+    lv_obj_set_style_pad_gap(card_bak, 12, 0);
+    lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *bak_title = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
+    lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Backup configuracion");
+
+    lv_obj_t *bak_desc = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
+    lv_obj_set_width(bak_desc, lv_pct(100));
+    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(bak_desc,
+        "Exporta toda la configuracion (claves Victron, alertas, brillo, "
+        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json. "
+        "El password Wi-Fi no se exporta por seguridad.");
+
+    lv_obj_t *bak_row = lv_obj_create(card_bak);
+    lv_obj_remove_style_all(bak_row);
+    lv_obj_set_size(bak_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(bak_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(bak_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bak_row, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_exp = lv_btn_create(bak_row);
+    lv_obj_set_size(btn_exp, 200, 50);
+    lv_obj_set_style_bg_color(btn_exp, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_radius(btn_exp, 10, 0);
+    lv_obj_t *lbl_exp = lv_label_create(btn_exp);
+    lv_label_set_text(lbl_exp, LV_SYMBOL_UPLOAD "  Exportar");
+    lv_obj_set_style_text_font(lbl_exp, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_exp);
+
+    lv_obj_t *btn_imp = lv_btn_create(bak_row);
+    lv_obj_set_size(btn_imp, 200, 50);
+    lv_obj_set_style_bg_color(btn_imp, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_radius(btn_imp, 10, 0);
+    lv_obj_t *lbl_imp = lv_label_create(btn_imp);
+    lv_label_set_text(lbl_imp, LV_SYMBOL_DOWNLOAD "  Importar");
+    lv_obj_set_style_text_font(lbl_imp, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_imp);
+
+    /* Status label */
+    lv_obj_t *bak_status = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_status, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(bak_status, lv_color_hex(0xFFD54F), 0);
+    lv_label_set_text(bak_status, "");
+
+    lv_obj_set_user_data(btn_exp, bak_status);
+    lv_obj_set_user_data(btn_imp, bak_status);
+    lv_obj_add_event_cb(btn_exp, backup_export_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_add_event_cb(btn_imp, backup_import_cb, LV_EVENT_CLICKED, ui);
 
     /* Refrescar y crear timer */
     about_refresh_dynamic(ui);

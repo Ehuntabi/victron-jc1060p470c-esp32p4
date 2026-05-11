@@ -31,6 +31,7 @@ idf_component_register(
     log_cleanup          # Limpieza automatica de logs antiguos
     audio_es8311         # Codec audio ES8311 + amplificador NS4150
     alerts               # Umbrales configurables de alarmas
+    json                 # cJSON para backup/restore de configuracion
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
