@@ -74,3 +74,15 @@ esp_err_t save_victron_debug(bool enabled);
 // UI view mode selection (NVS namespace: "display")
 esp_err_t load_ui_view_mode(uint8_t *mode_out);
 esp_err_t save_ui_view_mode(uint8_t mode);
+
+// Night mode (auto brightness by RTC hour). NVS namespace: "display"
+// start_h / end_h en formato 0..23. Si start==end, la ventana es vacía.
+// Si start>end, la ventana cruza la medianoche (ej. 22 → 7).
+esp_err_t load_night_mode(bool *enabled_out,
+                          uint8_t *start_h_out,
+                          uint8_t *end_h_out,
+                          uint8_t *brightness_out);
+esp_err_t save_night_mode(bool enabled,
+                          uint8_t start_h,
+                          uint8_t end_h,
+                          uint8_t brightness);

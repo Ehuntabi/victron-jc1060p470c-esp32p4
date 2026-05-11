@@ -123,6 +123,10 @@ void ui_init(void) {
     ui_state_t *ui = &g_ui;
 
     load_brightness(&ui->brightness);
+    load_night_mode(&ui->night_mode.enabled,
+                    &ui->night_mode.start_h,
+                    &ui->night_mode.end_h,
+                    &ui->night_mode.brightness);
 
     ui->active_view = NULL;
     ui->default_view = NULL;

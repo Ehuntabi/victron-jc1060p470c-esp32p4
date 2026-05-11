@@ -587,7 +587,62 @@ esp_err_t save_ui_view_mode(uint8_t mode)
     if (err == ESP_OK) {
         err = nvs_commit(h);
     }
-    
+
+    nvs_close(h);
+    return err;
+}
+
+/* ── Night mode (auto brightness por hora del RTC) ─────────────────────── */
+#define NIGHT_EN_KEY     "nm_en"
+#define NIGHT_START_KEY  "nm_start"
+#define NIGHT_END_KEY    "nm_end"
+#define NIGHT_BRI_KEY    "nm_bri"
+
+esp_err_t load_night_mode(bool *enabled_out,
+                          uint8_t *start_h_out,
+                          uint8_t *end_h_out,
+                          uint8_t *brightness_out)
+{
+    if (!enabled_out || !start_h_out || !end_h_out || !brightness_out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+
+    uint8_t en = 0, sh = 22, eh = 7, bri = 15;
+    if (nvs_get_u8(h, NIGHT_EN_KEY,    &en)  != ESP_OK) nvs_set_u8(h, NIGHT_EN_KEY,    en);
+    if (nvs_get_u8(h, NIGHT_START_KEY, &sh)  != ESP_OK) nvs_set_u8(h, NIGHT_START_KEY, sh);
+    if (nvs_get_u8(h, NIGHT_END_KEY,   &eh)  != ESP_OK) nvs_set_u8(h, NIGHT_END_KEY,   eh);
+    if (nvs_get_u8(h, NIGHT_BRI_KEY,   &bri) != ESP_OK) nvs_set_u8(h, NIGHT_BRI_KEY,   bri);
+    nvs_commit(h);
+    nvs_close(h);
+
+    *enabled_out    = (en != 0);
+    *start_h_out    = sh > 23 ? 22 : sh;
+    *end_h_out      = eh > 23 ? 7  : eh;
+    *brightness_out = (bri < 5)  ? 5  : (bri > 100 ? 100 : bri);
+    return ESP_OK;
+}
+
+esp_err_t save_night_mode(bool enabled,
+                          uint8_t start_h,
+                          uint8_t end_h,
+                          uint8_t brightness)
+{
+    if (start_h > 23) start_h = 22;
+    if (end_h   > 23) end_h   = 7;
+    if (brightness < 5)   brightness = 5;
+    if (brightness > 100) brightness = 100;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_u8(h, NIGHT_EN_KEY,    enabled ? 1 : 0);
+    nvs_set_u8(h, NIGHT_START_KEY, start_h);
+    nvs_set_u8(h, NIGHT_END_KEY,   end_h);
+    nvs_set_u8(h, NIGHT_BRI_KEY,   brightness);
+    err = nvs_commit(h);
     nvs_close(h);
     return err;
 }

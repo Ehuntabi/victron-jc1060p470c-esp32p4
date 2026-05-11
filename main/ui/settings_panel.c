@@ -30,6 +30,8 @@
 #include "ff.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "watchdog.h"
+#include <time.h>
 
 // Forward declaration for view update function
 extern void ui_force_view_update(void);
@@ -91,6 +93,42 @@ static void view_selection_dropdown_event_cb(lv_event_t *e);
 
 static void screensaver_enable(ui_state_t *ui, bool enable);
 static void screensaver_wake(ui_state_t *ui);
+
+/* ── Modo nocturno (auto brillo por hora del RTC) ─────────────── */
+static void night_switch_cb(lv_event_t *e);
+static void night_start_dec_cb(lv_event_t *e);
+static void night_start_inc_cb(lv_event_t *e);
+static void night_end_dec_cb(lv_event_t *e);
+static void night_end_inc_cb(lv_event_t *e);
+static void night_brightness_slider_cb(lv_event_t *e);
+
+/* Aplica inmediatamente el brillo correcto según hora actual + config. */
+static bool night_in_window(int h, uint8_t s, uint8_t e)
+{
+    if (s == e) return false;
+    if (s < e)  return h >= s && h < e;
+    return h >= s || h < e;     /* cruza medianoche */
+}
+
+static void apply_brightness_for_now(ui_state_t *ui)
+{
+    if (!ui) return;
+    if (ui->screensaver.active) return;       /* el SS gestiona su brillo */
+    int target = ui->brightness;
+    if (ui->night_mode.enabled) {
+        time_t now = time(NULL);
+        if (now >= 1000000000L) {
+            struct tm tm_local;
+            localtime_r(&now, &tm_local);
+            if (night_in_window(tm_local.tm_hour,
+                                ui->night_mode.start_h,
+                                ui->night_mode.end_h)) {
+                target = ui->night_mode.brightness;
+            }
+        }
+    }
+    bsp_display_brightness_set(target);
+}
 
 
 // Victron devices configuration functions
@@ -554,6 +592,147 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* Helper: tag el label como user data secundaria via custom property */
     lv_obj_set_user_data(slider_brightness, lbl_val_b);
     lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* === Card Modo nocturno (auto brillo por hora del RTC) === */
+    lv_obj_t *card_nm = lv_obj_create(cont);
+    lv_obj_set_width(card_nm, lv_pct(100));
+    lv_obj_set_height(card_nm, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_nm, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_nm, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);  /* púrpura */
+    lv_obj_set_style_border_width(card_nm, 1, 0);
+    lv_obj_set_style_radius(card_nm, 12, 0);
+    lv_obj_set_style_pad_all(card_nm, 16, 0);
+    lv_obj_set_style_pad_gap(card_nm, 10, 0);
+    lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_COLUMN);
+
+    /* Header: título + switch */
+    lv_obj_t *nm_header = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_header);
+    lv_obj_set_size(nm_header, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_header, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_header, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *nm_title = lv_label_create(nm_header);
+    lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
+    lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
+
+    lv_obj_t *nm_sw = lv_switch_create(nm_header);
+    lv_obj_set_style_bg_color(nm_sw, lv_color_hex(0x9C27B0),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Row inicio/fin: dos selectores hora con [-] [valor] [+] */
+    lv_obj_t *nm_hours = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_hours);
+    lv_obj_set_size(nm_hours, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_hours, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_hours, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_hours, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Helper inline: bloque con label "Inicio"/"Fin" + [-] valor [+] */
+    for (int slot = 0; slot < 2; slot++) {
+        lv_obj_t *col = lv_obj_create(nm_hours);
+        lv_obj_remove_style_all(col);
+        lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(col, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(col, 4, 0);
+
+        lv_obj_t *cap = lv_label_create(col);
+        lv_obj_set_style_text_font(cap, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(cap, lv_color_hex(0xBBBBBB), 0);
+        lv_label_set_text(cap, slot == 0 ? "Inicio" : "Fin");
+
+        lv_obj_t *row = lv_obj_create(col);
+        lv_obj_remove_style_all(row);
+        lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(row, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(row, 8, 0);
+
+        lv_obj_t *btn_dec = lv_btn_create(row);
+        lv_obj_set_size(btn_dec, 42, 42);
+        lv_obj_set_style_bg_color(btn_dec, lv_color_hex(0x9C27B0), 0);
+        lv_obj_set_style_radius(btn_dec, LV_RADIUS_CIRCLE, 0);
+        lv_obj_t *bd = lv_label_create(btn_dec);
+        lv_label_set_text(bd, "-");
+        lv_obj_set_style_text_font(bd, &lv_font_montserrat_24_es, 0);
+        lv_obj_center(bd);
+
+        lv_obj_t *val = lv_label_create(row);
+        lv_obj_set_style_text_font(val, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(val, lv_color_white(), 0);
+        uint8_t h = slot == 0 ? ui->night_mode.start_h : ui->night_mode.end_h;
+        lv_label_set_text_fmt(val, "%02u:00", h);
+        lv_obj_set_width(val, 78);
+        lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
+
+        lv_obj_t *btn_inc = lv_btn_create(row);
+        lv_obj_set_size(btn_inc, 42, 42);
+        lv_obj_set_style_bg_color(btn_inc, lv_color_hex(0x9C27B0), 0);
+        lv_obj_set_style_radius(btn_inc, LV_RADIUS_CIRCLE, 0);
+        lv_obj_t *bi = lv_label_create(btn_inc);
+        lv_label_set_text(bi, "+");
+        lv_obj_set_style_text_font(bi, &lv_font_montserrat_24_es, 0);
+        lv_obj_center(bi);
+
+        /* El label de valor se pasa como user_data a ambos botones */
+        lv_obj_set_user_data(btn_dec, val);
+        lv_obj_set_user_data(btn_inc, val);
+        if (slot == 0) {
+            lv_obj_add_event_cb(btn_dec, night_start_dec_cb, LV_EVENT_CLICKED, ui);
+            lv_obj_add_event_cb(btn_inc, night_start_inc_cb, LV_EVENT_CLICKED, ui);
+        } else {
+            lv_obj_add_event_cb(btn_dec, night_end_dec_cb, LV_EVENT_CLICKED, ui);
+            lv_obj_add_event_cb(btn_inc, night_end_inc_cb, LV_EVENT_CLICKED, ui);
+        }
+    }
+
+    /* Row brillo nocturno: label + slider */
+    lv_obj_t *nm_bri_row = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_bri_row);
+    lv_obj_set_size(nm_bri_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_bri_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_bri_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_bri_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(nm_bri_row, 10, 0);
+
+    lv_obj_t *nm_bri_lbl = lv_label_create(nm_bri_row);
+    lv_obj_set_style_text_font(nm_bri_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(nm_bri_lbl, lv_color_hex(0xBBBBBB), 0);
+    lv_label_set_text(nm_bri_lbl, "Brillo nocturno");
+
+    lv_obj_t *nm_bri_val = lv_label_create(nm_bri_row);
+    lv_obj_set_style_text_font(nm_bri_val, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(nm_bri_val, lv_color_white(), 0);
+    lv_obj_set_width(nm_bri_val, 70);
+    lv_obj_set_style_text_align(nm_bri_val, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(nm_bri_val, "%d%%", ui->night_mode.brightness);
+
+    lv_obj_t *nm_bri_slider = lv_slider_create(nm_bri_row);
+    lv_obj_set_width(nm_bri_slider, 200);
+    lv_obj_set_height(nm_bri_slider, 26);
+    lv_slider_set_range(nm_bri_slider, 5, 100);
+    lv_slider_set_value(nm_bri_slider, ui->night_mode.brightness, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0),
+                              LV_PART_INDICATOR);
+    lv_obj_set_style_radius(nm_bri_slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0), LV_PART_KNOB);
+    lv_obj_set_user_data(nm_bri_slider, nm_bri_val);
+    lv_obj_add_event_cb(nm_bri_slider, night_brightness_slider_cb,
+                        LV_EVENT_VALUE_CHANGED, ui);
 
     /* === Card 2: Screensaver === */
     lv_obj_t *card2 = lv_obj_create(cont);
@@ -1567,8 +1746,8 @@ static void brightness_slider_event_cb(lv_event_t *e)
         val = snapped;
     }
     ui->brightness = (uint8_t)val;
-    bsp_display_brightness_set(val);
     save_brightness(ui->brightness);
+    apply_brightness_for_now(ui);   /* respeta noche si estamos en franja */
     /* Update label */
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(slider);
     if (lbl) lv_label_set_text_fmt(lbl, "%d%%", val);
@@ -1584,6 +1763,84 @@ static void brightness_slider_event_cb(lv_event_t *e)
             save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
         }
     }
+}
+
+/* ── Callbacks Modo nocturno ───────────────────────────────────── */
+static void night_save_and_apply(ui_state_t *ui)
+{
+    save_night_mode(ui->night_mode.enabled,
+                    ui->night_mode.start_h,
+                    ui->night_mode.end_h,
+                    ui->night_mode.brightness);
+    apply_brightness_for_now(ui);
+}
+
+static void night_switch_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    lv_obj_t *sw = lv_event_get_target(e);
+    ui->night_mode.enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    night_save_and_apply(ui);
+}
+
+static void night_start_dec_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    ui->night_mode.start_h = (ui->night_mode.start_h + 23) % 24;
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(lv_event_get_target(e));
+    if (lbl) lv_label_set_text_fmt(lbl, "%02u:00", ui->night_mode.start_h);
+    night_save_and_apply(ui);
+}
+
+static void night_start_inc_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    ui->night_mode.start_h = (ui->night_mode.start_h + 1) % 24;
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(lv_event_get_target(e));
+    if (lbl) lv_label_set_text_fmt(lbl, "%02u:00", ui->night_mode.start_h);
+    night_save_and_apply(ui);
+}
+
+static void night_end_dec_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    ui->night_mode.end_h = (ui->night_mode.end_h + 23) % 24;
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(lv_event_get_target(e));
+    if (lbl) lv_label_set_text_fmt(lbl, "%02u:00", ui->night_mode.end_h);
+    night_save_and_apply(ui);
+}
+
+static void night_end_inc_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    ui->night_mode.end_h = (ui->night_mode.end_h + 1) % 24;
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(lv_event_get_target(e));
+    if (lbl) lv_label_set_text_fmt(lbl, "%02u:00", ui->night_mode.end_h);
+    night_save_and_apply(ui);
+}
+
+static void night_brightness_slider_cb(lv_event_t *e)
+{
+    ui_state_t *ui = lv_event_get_user_data(e);
+    if (!ui) return;
+    lv_obj_t *slider = lv_event_get_target(e);
+    int val = lv_slider_get_value(slider);
+    int snapped = ((val + 2) / 5) * 5;
+    if (snapped < 5) snapped = 5;
+    if (snapped > 100) snapped = 100;
+    if (snapped != val) {
+        lv_slider_set_value(slider, snapped, LV_ANIM_OFF);
+        val = snapped;
+    }
+    ui->night_mode.brightness = (uint8_t)val;
+    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(slider);
+    if (lbl) lv_label_set_text_fmt(lbl, "%d%%", val);
+    night_save_and_apply(ui);
 }
 
 static void cb_screensaver_event_cb(lv_event_t *e)
@@ -2199,6 +2456,14 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     ui->lbl_about_ip = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
+
+    /* Diagnostico de salud: causa del ultimo reset + total de resets WDT/panic */
+    lv_obj_t *lbl_wd = lv_label_create(card2);
+    lv_obj_set_style_text_font(lbl_wd, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_wd, lv_color_hex(0xFFD54F), 0);
+    lv_label_set_text_fmt(lbl_wd, "Ultimo reset: %s   |   Resets WDT/panic: %lu",
+                          watchdog_last_reset_reason(),
+                          (unsigned long)watchdog_get_reset_count());
 
     /* === Card 3: Credits === */
     lv_obj_t *card3 = lv_obj_create(cont);

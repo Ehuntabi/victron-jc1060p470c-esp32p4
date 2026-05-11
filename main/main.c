@@ -26,6 +26,7 @@
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
+#include "watchdog.h"
 #include <time.h>
 
 /* Zona horaria de Madrid (CET/CEST con DST automático).
@@ -61,6 +62,37 @@ static void rtc_backup_timer_cb(void *arg)
         nvs_commit(nh);
         nvs_close(nh);
     }
+}
+
+/* ── Modo nocturno: aplica brillo según hora local del RTC ─────── */
+extern ui_state_t *ui_get_state(void);
+
+static bool night_hour_in_window(int now_h, uint8_t start_h, uint8_t end_h)
+{
+    if (start_h == end_h) return false;
+    if (start_h < end_h)  return now_h >= start_h && now_h < end_h;
+    /* Cruza medianoche (p. ej. 22 → 7) */
+    return now_h >= start_h || now_h < end_h;
+}
+
+static void night_mode_timer_cb(void *arg)
+{
+    ui_state_t *ui = (ui_state_t *)arg;
+    if (!ui || !ui->night_mode.enabled) return;
+    /* El screensaver tiene precedencia: si está activo en modo Dim, no
+     * pisamos su brillo atenuado. */
+    if (ui->screensaver.active) return;
+
+    time_t now = time(NULL);
+    if (now < 1000000000L) return;  /* RTC sin sincronizar todavía */
+    struct tm tm_local;
+    localtime_r(&now, &tm_local);
+
+    bool in_night = night_hour_in_window(tm_local.tm_hour,
+                                         ui->night_mode.start_h,
+                                         ui->night_mode.end_h);
+    int target = in_night ? ui->night_mode.brightness : ui->brightness;
+    bsp_display_brightness_set(target);
 }
 
 /* ── Estado UI global ────────────────────────────────────────── */
@@ -171,6 +203,9 @@ void app_main(void)
         nvs_err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(nvs_err);
+
+    /* --- Watchdog: registra causa del ultimo reset y arranca task monitor LVGL --- */
+    watchdog_init();
 
     /* --- Display --- */
     logSection("Display init");
@@ -298,8 +333,18 @@ void app_main(void)
     esp_timer_create(&rtc_backup_args, &rtc_backup_timer);
     esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
 
-
-    
+    /* Modo nocturno: re-evalúa cada 60 s y aplica brillo segun la hora. */
+    static esp_timer_handle_t night_timer;
+    const esp_timer_create_args_t night_args = {
+        .callback        = &night_mode_timer_cb,
+        .arg             = s_ui,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name            = "night_mode",
+    };
+    esp_timer_create(&night_args, &night_timer);
+    esp_timer_start_periodic(night_timer, 60ULL * 1000000ULL);
+    /* Aplicación inmediata para no esperar 1 min al arrancar */
+    night_mode_timer_cb(s_ui);
 
     logSection("Setup complete");
 }
