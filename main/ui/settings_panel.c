@@ -580,7 +580,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_color(card1, lv_color_hex(0xBA68C8), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
     lv_obj_set_style_pad_all(card1, 16, 0);
@@ -598,7 +598,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *card1_title = lv_label_create(card1_row);
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(card1_title, lv_color_hex(0xBA68C8), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
 
     /* Sub-row: valor + slider */
@@ -623,9 +623,9 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_width(slider_brightness, 165);
     lv_obj_set_height(slider_brightness, 26);
     lv_obj_set_style_pad_right(card1_sub, 12, 0);
-    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0xBA68C8), LV_PART_INDICATOR);
     lv_obj_set_style_radius(slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0x4FC3F7), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0xBA68C8), LV_PART_KNOB);
     lv_slider_set_range(slider_brightness, 5, 100);
     /* Pasos de 5: snap del valor inicial al múltiplo más cercano (mínimo 5) */
     int b_init = ((ui->brightness + 2) / 5) * 5;
@@ -1192,10 +1192,11 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
     lv_obj_set_style_pad_gap(victron_container, 16, 0);
     lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
 
-    /* === Card de controles (border rosa) — header + botones add/remove === */
-    lv_obj_t *card_ctrl = ui_card_create(victron_container, UI_COLOR_RED);
+    /* === Card de controles — border magenta de la seccion Victron Keys === */
+    lv_obj_t *card_ctrl = ui_card_create(victron_container, lv_color_hex(0xE91E63));
     lv_obj_t *header = ui_card_set_title(card_ctrl, LV_SYMBOL_LIST,
-                                         "Dispositivos Victron", UI_COLOR_RED);
+                                         "Dispositivos Victron",
+                                         lv_color_hex(0xE91E63));
 
     /* Botones +/- a la derecha del header */
     lv_obj_t *controls_row = lv_obj_create(header);
@@ -2673,7 +2674,7 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *lbl_gh = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
 
     lv_obj_t *lbl_cred = lv_label_create(card3);
@@ -2687,7 +2688,7 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
     lv_obj_set_style_border_width(card_trip, 1, 0);
     lv_obj_set_style_radius(card_trip, 12, 0);
     lv_obj_set_style_pad_all(card_trip, 16, 0);
@@ -2705,7 +2706,7 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *trip_title = lv_label_create(trip_head);
     lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
 
     lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
@@ -3128,7 +3129,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_color(card1, lv_color_hex(0xFF7043), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
     lv_obj_set_style_pad_all(card1, 16, 0);
@@ -3138,7 +3139,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card1_title = lv_label_create(card1);
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 
     /* Volumen */
@@ -3149,8 +3150,8 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *slider = lv_slider_create(card1);
     lv_obj_set_width(slider, lv_pct(95));
     lv_obj_set_height(slider, 26);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x4FC3F7), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_KNOB);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
@@ -3169,7 +3170,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
     lv_obj_t *sw = lv_switch_create(row_mute);
-    lv_obj_set_style_bg_color(sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0xFF7043), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     ui->sound_mute_switch = sw;
