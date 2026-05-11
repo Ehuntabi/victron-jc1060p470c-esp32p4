@@ -2897,7 +2897,15 @@ static void about_refresh_dynamic(ui_state_t *ui)
 
 static void about_timer_cb(lv_timer_t *t)
 {
-    about_refresh_dynamic((ui_state_t *)t->user_data);
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    /* Skip si la pagina About no esta visible: refrescar uptime + RAM + SD
+     * + IP cada segundo es costoso (heap_caps_get_free_size, statvfs SD)
+     * y solo tiene sentido si el usuario esta mirando. */
+    if (!ui || !ui->lbl_about_uptime ||
+        !lv_obj_is_visible(ui->lbl_about_uptime)) {
+        return;
+    }
+    about_refresh_dynamic(ui);
     trip_label_refresh();
 }
 

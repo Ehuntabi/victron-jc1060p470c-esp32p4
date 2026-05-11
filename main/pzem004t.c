@@ -142,7 +142,7 @@ esp_err_t pzem_init(const pzem_config_t *cfg)
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     ESP_ERROR_CHECK(uart_driver_install(s.cfg.uart_num, 256, 0, 0, NULL, 0));
 
-    BaseType_t ok = xTaskCreate(pzem_task, "pzem", 3072, NULL, 4, &s.task);
+    BaseType_t ok = xTaskCreate(pzem_task, "pzem", 2048, NULL, 4, &s.task);
     if (ok != pdPASS) return ESP_FAIL;
     s.installed = true;
     ESP_LOGI(TAG, "Init UART%d TX=%d RX=%d addr=0x%02x period=%lums",

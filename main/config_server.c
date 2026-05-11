@@ -418,7 +418,7 @@ static esp_err_t handle_api_state(httpd_req_t *req)
     return httpd_resp_send(req, buf, n);
 }
 
-static const char *DASHBOARD_HTML =
+static const char DASHBOARD_HTML[] =
     "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<title>Victron Dashboard</title><style>"
@@ -1387,7 +1387,7 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
 
 static esp_err_t handle_mirror(httpd_req_t *req)
 {
-    static const char *MIRROR_HTML =
+    static const char MIRROR_HTML[] =
         "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>Mirror Victron</title><style>"

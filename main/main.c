@@ -97,6 +97,11 @@ static void night_mode_timer_cb(void *arg)
                                          ui->night_mode.start_h,
                                          ui->night_mode.end_h);
     int target = in_night ? ui->night_mode.brightness : ui->brightness;
+    /* Solo aplicar si cambia: bsp_display_brightness_set actualiza el duty
+     * del LEDC; llamarlo cada minuto con el mismo valor es trabajo inutil. */
+    static int s_last_target = -1;
+    if (target == s_last_target) return;
+    s_last_target = target;
     bsp_display_brightness_set(target);
 }
 
