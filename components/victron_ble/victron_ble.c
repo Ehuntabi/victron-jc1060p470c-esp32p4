@@ -90,16 +90,9 @@ static const victron_device_config_t* find_device_config_by_mac(const uint8_t ma
 
 void victron_ble_init(void)
 {
-    ESP_LOGI(TAG, "Initializing NVS for Victron BLE");
-
-    // Keep any pre-registered data_cb
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "NVS partition issue, erasing and reinitializing");
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
+    /* NVS ya viene inicializado por main.c; no repetimos. Si esa
+     * inicializacion fallara aqui haria ESP_ERROR_CHECK -> panic loop
+     * infinito sin oportunidad de recuperacion. */
 
     // Load multiple device configurations
     if (load_victron_devices(device_configs, &device_count, VICTRON_MAX_DEVICES) == ESP_OK) {
@@ -129,7 +122,12 @@ void victron_ble_init(void)
     }
 
     ESP_LOGI(TAG, "Initializing NimBLE stack");
-    nimble_port_init();
+    esp_err_t ble_err = nimble_port_init();
+    if (ble_err != ESP_OK) {
+        ESP_LOGE(TAG, "nimble_port_init failed: %s (0x%x); BLE deshabilitado",
+                 esp_err_to_name(ble_err), ble_err);
+        return;
+    }
     ble_hs_cfg.sync_cb = ble_app_on_sync;
     nimble_port_freertos_init(ble_host_task);
 }

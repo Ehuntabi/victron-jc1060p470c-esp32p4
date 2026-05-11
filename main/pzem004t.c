@@ -82,13 +82,32 @@ static esp_err_t pzem_poll_once(void)
     uint16_t alarm_st   = R16(9);            /* 0xFFFF = alarma */
     #undef R16
 
+    /* Plausibilidad: aunque la trama tenga CRC valido, una corrupcion
+     * cambia ~1/65536. Rechazamos rangos imposibles para PZEM-004T v3.
+     * 80-300 V, 0-100 A, 0-25 kW, 45-65 Hz, factor 0..1. */
+    float v_v   = voltage / 10.0f;
+    float c_a   = current / 1000.0f;
+    float p_w   = power   / 10.0f;
+    float f_hz  = freq    / 10.0f;
+    float pf_v  = pf      / 100.0f;
+    bool plausible = (v_v >= 80.0f && v_v <= 300.0f) &&
+                     (c_a >= 0.0f  && c_a <= 100.0f) &&
+                     (p_w >= 0.0f  && p_w <= 25000.0f) &&
+                     (f_hz >= 45.0f && f_hz <= 65.0f) &&
+                     (pf_v >= 0.0f && pf_v <= 1.0f);
+    if (!plausible) {
+        ESP_LOGW(TAG, "Frame fuera de rango: V=%.1f C=%.3f P=%.1f F=%.1f PF=%.2f",
+                 v_v, c_a, p_w, f_hz, pf_v);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
     xSemaphoreTake(s.mtx, portMAX_DELAY);
-    s.data.voltage_v    = voltage / 10.0f;
-    s.data.current_a    = current / 1000.0f;
-    s.data.power_w      = power   / 10.0f;
+    s.data.voltage_v    = v_v;
+    s.data.current_a    = c_a;
+    s.data.power_w      = p_w;
     s.data.energy_wh    = energy;
-    s.data.freq_hz      = freq    / 10.0f;
-    s.data.power_factor = pf      / 100.0f;
+    s.data.freq_hz      = f_hz;
+    s.data.power_factor = pf_v;
     s.data.alarm        = (alarm_st == 0xFFFF);
     s.data.has_data     = true;
     s.last_ok_us        = esp_timer_get_time();

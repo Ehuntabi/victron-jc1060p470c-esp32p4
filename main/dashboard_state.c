@@ -98,10 +98,34 @@ void dashboard_state_on_record(const victron_data_t *data)
 size_t dashboard_state_to_json(char *buf, size_t maxlen)
 {
     if (!buf || maxlen < 256) return 0;
+
+    /* Snapshot bajo nuestro mutex. Las llamadas a otros modulos
+     * (energy_today, trip_computer, pzem_get) toman sus propios mutex —
+     * llamarlas con el nuestro retenido crea un orden de adquisicion que
+     * podria deadlock-ear si algun cambio futuro hace que esos modulos
+     * llamen a dashboard_state_on_record bajo su lock. */
     lock();
+    bool     bat_has = s.bat_has;
+    uint16_t soc_deci = s.soc_deci;
+    uint16_t bat_v_centi = s.bat_v_centi;
+    int32_t  bat_i_milli = s.bat_i_milli;
+    uint16_t ttg_min = s.ttg_min;
+    uint16_t bat_alarm = s.bat_alarm;
+    bool     solar_has = s.solar_has;
+    uint16_t pv_w = s.pv_w;
+    uint16_t solar_yield_centikwh = s.solar_yield_centikwh;
+    uint8_t  solar_state = s.solar_state;
+    uint8_t  solar_err = s.solar_err;
+    bool     dcdc_has = s.dcdc_has;
+    uint16_t dc_in_v_centi = s.dc_in_v_centi;
+    uint16_t dc_out_v_centi = s.dc_out_v_centi;
+    uint8_t  dc_state = s.dc_state;
+    uint8_t  dc_err = s.dc_err;
+    unlock();
+
     float pv_kwh = energy_today_pv_kwh();
     float ld_kwh = energy_today_loads_kwh();
-    int p_w = (int)((int64_t)s.bat_v_centi * s.bat_i_milli / 100000LL);
+    int p_w = (int)((int64_t)bat_v_centi * bat_i_milli / 100000LL);
     trip_computer_t trip; trip_computer_get(&trip);
     int trip_hours = (int)(trip.seconds_running / 3600);
     int trip_min   = (int)((trip.seconds_running % 3600) / 60);
@@ -155,23 +179,23 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
             "\"alarm\":%s"
           "}"
         "}",
-        s.bat_has   ? "true" : "false",
-        (float)s.soc_deci / 10.0f,
-        (float)s.bat_v_centi / 100.0f,
-        (float)s.bat_i_milli / 1000.0f,
+        bat_has   ? "true" : "false",
+        (float)soc_deci / 10.0f,
+        (float)bat_v_centi / 100.0f,
+        (float)bat_i_milli / 1000.0f,
         p_w,
-        (unsigned)s.ttg_min,
-        (unsigned)s.bat_alarm,
+        (unsigned)ttg_min,
+        (unsigned)bat_alarm,
 
-        s.solar_has ? "true" : "false",
-        (unsigned)s.pv_w,
-        (float)s.solar_yield_centikwh / 100.0f,
-        (unsigned)s.solar_state, (unsigned)s.solar_err,
+        solar_has ? "true" : "false",
+        (unsigned)pv_w,
+        (float)solar_yield_centikwh / 100.0f,
+        (unsigned)solar_state, (unsigned)solar_err,
 
-        s.dcdc_has  ? "true" : "false",
-        (float)s.dc_in_v_centi  / 100.0f,
-        (float)s.dc_out_v_centi / 100.0f,
-        (unsigned)s.dc_state, (unsigned)s.dc_err,
+        dcdc_has  ? "true" : "false",
+        (float)dc_in_v_centi  / 100.0f,
+        (float)dc_out_v_centi / 100.0f,
+        (unsigned)dc_state, (unsigned)dc_err,
 
         pv_kwh, ld_kwh,
 
@@ -186,6 +210,5 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
         pz.voltage_v, pz.current_a, pz.power_w,
         (unsigned)pz.energy_wh, pz.freq_hz, pz.power_factor,
         pz.alarm ? "true" : "false");
-    unlock();
     return (n > 0 && (size_t)n < maxlen) ? (size_t)n : 0;
 }

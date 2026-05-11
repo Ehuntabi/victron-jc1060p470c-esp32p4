@@ -36,6 +36,11 @@ static sdmmc_card_t *s_card = NULL;
 static esp_ldo_channel_handle_t s_sd_ldo = NULL;
 static bool          s_sd_mounted = false;
 static esp_timer_handle_t s_flush_timer = NULL;
+/* Serializa los flushes (timer + main + shutdown) para que dos fprintf
+ * concurrentes al mismo CSV no interleaven bytes. */
+static SemaphoreHandle_t s_flush_mutex = NULL;
+/* Snapshot transitorio para evitar mantener s_mutex durante la I/O a SD. */
+static datalogger_entry_t s_flush_snapshot[DATALOGGER_MAX_ENTRIES];
 
 static void get_timestamp(char *buf, size_t len)
 {
@@ -135,42 +140,81 @@ static void flush_pending_to_sd_impl(void)
     if (!s_sd_mounted || !s_mutex) return;
     if (s_pending_count <= 0) return;
 
+    /* Serializa flushes concurrentes (timer + main thread); si otro flush
+     * esta en curso, salimos y dejamos que el actual termine — la proxima
+     * iteracion del timer cogera lo pendiente. */
+    if (s_flush_mutex && xSemaphoreTake(s_flush_mutex, 0) != pdTRUE) {
+        return;
+    }
+
     char path[64];
     get_day_filename(path, sizeof path);
 
-    /* Comprobar si el fichero existe para decidir si escribir header */
+    /* === FASE 1: snapshot bajo s_mutex, sin I/O. ===
+     * Antes el lock se mantenia durante todo el bucle fprintf — la SD
+     * podia bloquear cientos de ms a los productores. Copiamos las
+     * entradas pendientes a un buffer transitorio y soltamos s_mutex. */
+    int snapshot_count = 0;
+    int snapshot_first = 0;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        snapshot_count = s_pending_count;
+        snapshot_first = s_pending_first;
+        for (int i = 0; i < snapshot_count; ++i) {
+            int idx = (snapshot_first + i) % DATALOGGER_MAX_ENTRIES;
+            s_flush_snapshot[i] = s_buf[idx];
+        }
+        /* Adelantamos los pendientes ya: si el write falla parcialmente
+         * perdemos las entradas vs. duplicar — preferible para no
+         * recargar muestras de un mismo segundo. */
+        s_pending_first = (s_pending_first + snapshot_count) % DATALOGGER_MAX_ENTRIES;
+        s_pending_count = 0;
+        xSemaphoreGive(s_mutex);
+    } else {
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return;
+    }
+
+    if (snapshot_count <= 0) {
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return;
+    }
+
+    /* === FASE 2: escritura sin s_mutex. === */
     struct stat st;
     bool need_header = (stat(path, &st) != 0);
-
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed", path);
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
+    bool io_error = false;
     if (need_header) {
-        fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
-    }
-
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-        /* Recorrer pendientes en orden cronologico */
-        int written = 0;
-        for (int i = 0; i < s_pending_count; ++i) {
-            int idx = (s_pending_first + i) % DATALOGGER_MAX_ENTRIES;
-            const datalogger_entry_t *e = &s_buf[idx];
-            char ta[10], tc[10], te[10];
-            format_temp(ta, sizeof ta, e->T_Aletas);
-            format_temp(tc, sizeof tc, e->T_Congelador);
-            format_temp(te, sizeof te, e->T_Exterior);
-            fprintf(f, "%s,%s,%s,%s,%d\n",
-                    e->timestamp, ta, tc, te, e->fan_percent);
-            written++;
+        if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n") < 0) {
+            io_error = true;
         }
-        s_pending_first = (s_pending_first + s_pending_count) % DATALOGGER_MAX_ENTRIES;
-        s_pending_count = 0;
-        xSemaphoreGive(s_mutex);
-        ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
+    }
+    int written = 0;
+    for (int i = 0; i < snapshot_count && !io_error; ++i) {
+        const datalogger_entry_t *e = &s_flush_snapshot[i];
+        char ta[10], tc[10], te[10];
+        format_temp(ta, sizeof ta, e->T_Aletas);
+        format_temp(tc, sizeof tc, e->T_Congelador);
+        format_temp(te, sizeof te, e->T_Exterior);
+        int r = fprintf(f, "%s,%s,%s,%s,%d\n",
+                        e->timestamp, ta, tc, te, e->fan_percent);
+        if (r < 0 || ferror(f)) { io_error = true; break; }
+        written++;
     }
     fclose(f);
+
+    if (io_error) {
+        ESP_LOGW(TAG, "I/O error en %s: perdidas %d entradas",
+                 path, snapshot_count - written);
+    } else if (written > 0) {
+        ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
+    }
+    if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
 }
 
 static void flush_timer_cb(void *arg)
@@ -182,6 +226,8 @@ esp_err_t datalogger_init(void)
 {
     s_mutex = xSemaphoreCreateMutex();
     if (!s_mutex) return ESP_ERR_NO_MEM;
+    s_flush_mutex = xSemaphoreCreateMutex();
+    if (!s_flush_mutex) return ESP_ERR_NO_MEM;
     s_head  = 0;
     s_count = 0;
     s_pending_first = 0;

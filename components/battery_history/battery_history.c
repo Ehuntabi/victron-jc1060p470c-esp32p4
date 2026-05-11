@@ -45,6 +45,20 @@ static bool s_bh_dir_ok = false;
 static size_t s_bh_last_flushed_idx[BH_SRC_COUNT] = {0};
 static bool   s_bh_last_flushed_wrapped[BH_SRC_COUNT] = {false};
 
+/* Filtro anti-duplicados: solo se escriben puntos con ts > este umbral.
+ * En fichero scope (no static dentro de la funcion) para que sea reutilizable
+ * y reseteable cuando time() pasa a estar sincronizado. */
+static int32_t s_last_flushed_ts[BH_SRC_COUNT] = {0};
+
+/* Snapshot por flush para evitar mantener BH_LOCK durante la I/O a SD.
+ * Capacidad por fuente generosa frente a las 6 muestras tipicas (60 s / 10 s). */
+#define BH_FLUSH_SNAPSHOT_MAX  128
+typedef struct {
+    bh_point_t pts[BH_FLUSH_SNAPSHOT_MAX];
+    size_t     n;
+} bh_flush_slot_t;
+static bh_flush_slot_t s_flush_snapshot[BH_SRC_COUNT];
+
 static const char *s_source_names[BH_SRC_COUNT] = {
     "BatteryMonitor",
     "SolarCharger",
@@ -168,7 +182,6 @@ static void bh_flush_to_sd_impl(void)
                 s_bh_dir_ok = true;
             } else {
                 ESP_LOGW(TAG, "mkdir %s falló (errno=%d)", BH_LOG_DIR, errno);
-                /* No marcamos como ok, reintentamos en el siguiente ciclo */
                 return;
             }
         }
@@ -178,35 +191,53 @@ static void bh_flush_to_sd_impl(void)
     bh_get_day_filename(path, sizeof path);
     bool need_header = (stat(path, &st) != 0);
 
+    /* === FASE 1: Snapshot bajo lock, sin I/O. ===
+     * Mantener BH_LOCK durante fprintf a SD bloquea sample_timer_cb y
+     * battery_history_update_latest (llamado desde BLE rx) por cientos de
+     * ms. Copiamos los puntos nuevos a un buffer transitorio y soltamos
+     * el lock antes de tocar la SD. */
+    int32_t max_ts_seen[BH_SRC_COUNT] = {0};
+    BH_LOCK();
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        s_flush_snapshot[s].n = 0;
+        bh_buffer_t *b = &s_bufs[s];
+        size_t total = b->wrapped ? BH_POINTS : b->write_idx;
+        for (size_t i = 0; i < total &&
+                          s_flush_snapshot[s].n < BH_FLUSH_SNAPSHOT_MAX; ++i) {
+            size_t idx = b->wrapped ? (b->write_idx + i) % BH_POINTS : i;
+            if (!b->points[idx].valid) continue;
+            if (b->points[idx].ts <= s_last_flushed_ts[s]) continue;
+            s_flush_snapshot[s].pts[s_flush_snapshot[s].n++] = b->points[idx];
+            if (b->points[idx].ts > max_ts_seen[s]) {
+                max_ts_seen[s] = b->points[idx].ts;
+            }
+        }
+        s_bh_last_flushed_idx[s] = b->write_idx;
+        s_bh_last_flushed_wrapped[s] = b->wrapped;
+    }
+    BH_UNLOCK();
+
+    int total_pending = 0;
+    for (int s = 0; s < BH_SRC_COUNT; ++s) total_pending += s_flush_snapshot[s].n;
+    if (total_pending == 0) return;
+
+    /* === FASE 2: Escritura sin lock. === */
     FILE *f = fopen(path, "ab");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));
         return;
     }
+    bool io_error = false;
     if (need_header) {
-        fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min\n");
+        if (fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min\n") < 0) {
+            io_error = true;
+        }
     }
-
     int total_written = 0;
-    BH_LOCK();
-    for (int s = 0; s < BH_SRC_COUNT; ++s) {
-        bh_buffer_t *b = &s_bufs[s];
-        size_t total = b->wrapped ? BH_POINTS : b->write_idx;
-        if (total == 0) continue;
-        /* Determinar el rango de puntos nuevos desde el ultimo flush */
-        size_t since_idx = s_bh_last_flushed_idx[s];
-        bool since_wrapped = s_bh_last_flushed_wrapped[s];
-        for (size_t i = 0; i < total; ++i) {
-            size_t idx = b->wrapped ? (b->write_idx + i) % BH_POINTS : i;
-            /* Saltar lo ya escrito antes:
-               como simplificacion, si ts <= last_ts del source ignoramos */
-            if (!b->points[idx].valid) continue;
-            /* Comparar contra el ts del ultimo flush */
-            (void)since_idx; (void)since_wrapped;
-            /* Para evitar duplicados: solo escribimos puntos cuyo ts > umbral */
-            static int32_t last_ts_per_src[BH_SRC_COUNT] = {0};
-            if (b->points[idx].ts <= last_ts_per_src[s]) continue;
-            time_t pt = b->points[idx].ts;
+    for (int s = 0; s < BH_SRC_COUNT && !io_error; ++s) {
+        for (size_t i = 0; i < s_flush_snapshot[s].n && !io_error; ++i) {
+            const bh_point_t *p = &s_flush_snapshot[s].pts[i];
+            time_t pt = p->ts;
             struct tm tmp;
             localtime_r(&pt, &tmp);
             char ts_str[32];
@@ -221,19 +252,29 @@ static void bh_flush_to_sd_impl(void)
             } else {
                 snprintf(ts_str, sizeof ts_str, "BOOT+%ld", (long)pt);
             }
-            fprintf(f, "%s,%s,%ld,%ld,%ld\n",
-                    ts_str, battery_history_source_name((bh_source_t)s),
-                    (long)b->points[idx].milli_amps,
-                    (long)b->points[idx].milli_amps_max,
-                    (long)b->points[idx].milli_amps_min);
-            last_ts_per_src[s] = b->points[idx].ts;
+            int r = fprintf(f, "%s,%s,%ld,%ld,%ld\n",
+                            ts_str,
+                            battery_history_source_name((bh_source_t)s),
+                            (long)p->milli_amps,
+                            (long)p->milli_amps_max,
+                            (long)p->milli_amps_min);
+            if (r < 0 || ferror(f)) { io_error = true; break; }
             total_written++;
         }
-        s_bh_last_flushed_idx[s] = b->write_idx;
-        s_bh_last_flushed_wrapped[s] = b->wrapped;
     }
-    BH_UNLOCK();
     fclose(f);
+
+    if (io_error) {
+        ESP_LOGW(TAG, "I/O error escribiendo %s; reintentaremos en proximo flush", path);
+        return;
+    }
+    /* Solo si la escritura fue limpia avanzamos el umbral anti-duplicados,
+     * para que un fallo de SD se reintegre en el proximo ciclo. */
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (max_ts_seen[s] > s_last_flushed_ts[s]) {
+            s_last_flushed_ts[s] = max_ts_seen[s];
+        }
+    }
     if (total_written > 0) {
         ESP_LOGI(TAG, "Volcadas %d entradas a %s", total_written, path);
     }
