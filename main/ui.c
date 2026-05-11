@@ -1244,9 +1244,13 @@ static lv_chart_series_t *s_ser_exterior   = NULL;
 static lv_chart_series_t *s_ser_fan        = NULL;
 static lv_obj_t *s_frigo_lbl_date = NULL;    /* header con la fecha */
 static lv_obj_t *s_frigo_xlabels = NULL;     /* contenedor de etiquetas hora */
+static lv_obj_t *s_frigo_lbl_zoom = NULL;
 static int  s_frigo_day_idx = -1;            /* -1 = "hoy" buffer RAM */
 static int  s_frigo_n_dates = 0;
 static char s_frigo_dates[LOG_BROWSER_MAX_DATES][LOG_BROWSER_DATE_LEN];
+/* Ventana [a, b) en fraccion 0..1 sobre los datos del dia */
+static float s_frigo_win_a = 0.0f;
+static float s_frigo_win_b = 1.0f;
 
 /* Buffer estatico para parsear CSV de un dia. 1440 muestras = 1 min cada una. */
 #define FRIGO_LOG_MAX_ENTRIES   1500
@@ -1254,6 +1258,12 @@ static frigo_log_entry_t s_frigo_buf[FRIGO_LOG_MAX_ENTRIES];
 
 static void frigo_chart_load_day(void);
 static void frigo_chart_gesture_cb(lv_event_t *e);
+static void frigo_zoom_in_cb(lv_event_t *e);
+static void frigo_zoom_out_cb(lv_event_t *e);
+static void frigo_pan_left_cb(lv_event_t *e);
+static void frigo_pan_right_cb(lv_event_t *e);
+static void frigo_reset_view_cb(lv_event_t *e);
+static void frigo_update_zoom_label(void);
 
 static void chart_screen_close_cb(lv_event_t *e)
 {
@@ -1338,9 +1348,44 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_obj_set_pos(lbl, 30 + i * 120, 50);
     }
 
+    /* Fila de controles: pan izq, zoom -, etiqueta, zoom +, pan dcha, reset */
+    s_frigo_win_a = 0.0f;
+    s_frigo_win_b = 1.0f;
+    {
+        struct { const char *txt; lv_event_cb_t cb; } btns[] = {
+            { LV_SYMBOL_LEFT,    frigo_pan_left_cb  },
+            { LV_SYMBOL_MINUS,   frigo_zoom_out_cb  },
+            { LV_SYMBOL_PLUS,    frigo_zoom_in_cb   },
+            { LV_SYMBOL_RIGHT,   frigo_pan_right_cb },
+            { LV_SYMBOL_REFRESH, frigo_reset_view_cb},
+        };
+        int x = -((int)(sizeof(btns)/sizeof(btns[0])) * 56 + 80) / 2;
+        for (size_t i = 0; i < sizeof(btns)/sizeof(btns[0]); ++i) {
+            lv_obj_t *b = lv_btn_create(scr);
+            lv_obj_set_size(b, 48, 44);
+            lv_obj_set_style_bg_color(b, lv_color_hex(0x2A3340), 0);
+            lv_obj_set_style_radius(b, 8, 0);
+            lv_obj_align(b, LV_ALIGN_TOP_MID, x, 92);
+            lv_obj_t *l = lv_label_create(b);
+            lv_label_set_text(l, btns[i].txt);
+            lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
+            lv_obj_center(l);
+            lv_obj_add_event_cb(b, btns[i].cb, LV_EVENT_CLICKED, NULL);
+            x += 56;
+            if (i == 1) {
+                s_frigo_lbl_zoom = lv_label_create(scr);
+                lv_obj_set_style_text_color(s_frigo_lbl_zoom, lv_color_white(), 0);
+                lv_obj_set_style_text_font(s_frigo_lbl_zoom, &lv_font_montserrat_20_es, 0);
+                lv_label_set_text(s_frigo_lbl_zoom, "1x");
+                lv_obj_align(s_frigo_lbl_zoom, LV_ALIGN_TOP_MID, x + 28, 102);
+                x += 70;
+            }
+        }
+    }
+
     /* Gráfica */
     s_chart = lv_chart_create(scr);
-    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 130);
+    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 180);
     lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -30);
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(s_chart, lv_color_hex(0x111111), 0);
@@ -1391,11 +1436,24 @@ void ui_show_chart_screen(ui_state_t *ui)
 static void update_frigo_xlabels_today(int n)
 {
     if (!s_frigo_xlabels) return;
+    if (n <= 0) {
+        for (int i = 0; i < 5; ++i) {
+            lv_obj_t *l = lv_obj_get_child(s_frigo_xlabels, i);
+            if (l) lv_label_set_text(l, "--:--");
+        }
+        return;
+    }
+    int a = (int)(s_frigo_win_a * n);
+    int b = (int)(s_frigo_win_b * n);
+    if (b <= a) b = a + 1;
+    if (b > n) b = n;
+    int wn = b - a;
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_obj_get_child(s_frigo_xlabels, i);
         if (!l) continue;
-        if (n <= 0) { lv_label_set_text(l, "--:--"); continue; }
-        int idx = (n - 1) * i / 4;
+        int idx = a + (wn - 1) * i / 4;
+        if (idx < 0) idx = 0;
+        if (idx >= n) idx = n - 1;
         const datalogger_entry_t *e = datalogger_get_entry(idx);
         if (!e) { lv_label_set_text(l, "--:--"); continue; }
         const char *ts = e->timestamp;
@@ -1414,11 +1472,22 @@ static void update_frigo_xlabels_today(int n)
 static void update_frigo_xlabels_from_buf(int n)
 {
     if (!s_frigo_xlabels) return;
+    if (n <= 0) {
+        for (int i = 0; i < 5; ++i) {
+            lv_obj_t *l = lv_obj_get_child(s_frigo_xlabels, i);
+            if (l) lv_label_set_text(l, "--:--");
+        }
+        return;
+    }
+    int a = (int)(s_frigo_win_a * n);
+    int b = (int)(s_frigo_win_b * n);
+    if (b <= a) b = a + 1;
+    if (b > n) b = n;
+    int wn = b - a;
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_obj_get_child(s_frigo_xlabels, i);
         if (!l) continue;
-        if (n <= 0) { lv_label_set_text(l, "--:--"); continue; }
-        int idx = (n - 1) * i / 4;
+        int idx = a + (wn - 1) * i / 4;
         if (idx < 0) idx = 0;
         if (idx >= n) idx = n - 1;
         lv_label_set_text_fmt(l, "%02d:%02d",
@@ -1449,47 +1518,61 @@ static void frigo_chart_load_day(void)
     if (s_frigo_day_idx < 0) {
         int count = datalogger_get_count();
         if (count < 2) count = 2;
-        lv_chart_set_point_count(s_chart, count);
+        int wa = (int)(s_frigo_win_a * count);
+        int wb = (int)(s_frigo_win_b * count);
+        if (wb <= wa) wb = wa + 1;
+        if (wb > count) wb = count;
+        int wn = wb - wa;
+        if (wn < 2) wn = 2;
+        lv_chart_set_point_count(s_chart, wn);
         float t_min = 9999.0f, t_max = -9999.0f;
         int valid = 0;
-        for (int i = 0; i < count; i++) {
+        for (int i = wa; i < wb; i++) {
             const datalogger_entry_t *e = datalogger_get_entry(i);
             if (!e) continue;
             valid++;
+            int idx = i - wa;
             if (e->T_Aletas     > -120.0f) { if (e->T_Aletas     < t_min) t_min = e->T_Aletas;     if (e->T_Aletas     > t_max) t_max = e->T_Aletas; }
             if (e->T_Congelador > -120.0f) { if (e->T_Congelador < t_min) t_min = e->T_Congelador; if (e->T_Congelador > t_max) t_max = e->T_Congelador; }
             if (e->T_Exterior   > -120.0f) { if (e->T_Exterior   < t_min) t_min = e->T_Exterior;   if (e->T_Exterior   > t_max) t_max = e->T_Exterior; }
-            lv_chart_set_value_by_id(s_chart, s_ser_aletas, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_aletas, idx,
                 e->T_Aletas > -120.0f ? (int16_t)e->T_Aletas : LV_CHART_POINT_NONE);
-            lv_chart_set_value_by_id(s_chart, s_ser_congelador, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_congelador, idx,
                 e->T_Congelador > -120.0f ? (int16_t)e->T_Congelador : LV_CHART_POINT_NONE);
-            lv_chart_set_value_by_id(s_chart, s_ser_exterior, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
                 e->T_Exterior > -120.0f ? (int16_t)e->T_Exterior : LV_CHART_POINT_NONE);
-            lv_chart_set_value_by_id(s_chart, s_ser_fan, i, e->fan_percent);
+            lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_percent);
         }
         frigo_apply_temp_range(t_min, t_max);
-        update_frigo_xlabels_today(valid);
+        update_frigo_xlabels_today(count);
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
+        (void)valid;
     } else {
         const char *date = s_frigo_dates[s_frigo_day_idx];
         char path[64];
         snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
         int n = log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES);
-        int pts = n > 0 ? n : 2;
+        int wa = (int)(s_frigo_win_a * n);
+        int wb = (int)(s_frigo_win_b * n);
+        if (wb <= wa) wb = wa + 1;
+        if (wb > n) wb = n;
+        int wn = wb - wa;
+        int pts = wn > 0 ? wn : 2;
         lv_chart_set_point_count(s_chart, pts);
         float t_min = 9999.0f, t_max = -9999.0f;
-        for (int i = 0; i < n; i++) {
+        for (int i = wa; i < wb; i++) {
             const frigo_log_entry_t *e = &s_frigo_buf[i];
+            int idx = i - wa;
             if (!isnan(e->t_aletas))  { if (e->t_aletas  < t_min) t_min = e->t_aletas;  if (e->t_aletas  > t_max) t_max = e->t_aletas; }
             if (!isnan(e->t_congel))  { if (e->t_congel  < t_min) t_min = e->t_congel;  if (e->t_congel  > t_max) t_max = e->t_congel; }
             if (!isnan(e->t_exter))   { if (e->t_exter   < t_min) t_min = e->t_exter;   if (e->t_exter   > t_max) t_max = e->t_exter; }
-            lv_chart_set_value_by_id(s_chart, s_ser_aletas, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_aletas, idx,
                 isnan(e->t_aletas) ? LV_CHART_POINT_NONE : (int16_t)e->t_aletas);
-            lv_chart_set_value_by_id(s_chart, s_ser_congelador, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_congelador, idx,
                 isnan(e->t_congel) ? LV_CHART_POINT_NONE : (int16_t)e->t_congel);
-            lv_chart_set_value_by_id(s_chart, s_ser_exterior, i,
+            lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
                 isnan(e->t_exter)  ? LV_CHART_POINT_NONE : (int16_t)e->t_exter);
-            lv_chart_set_value_by_id(s_chart, s_ser_fan, i, e->fan_pct);
+            lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_pct);
         }
         frigo_apply_temp_range(t_min, t_max);
         update_frigo_xlabels_from_buf(n);
@@ -1498,10 +1581,96 @@ static void frigo_chart_load_day(void)
     lv_chart_refresh(s_chart);
 }
 
+static void frigo_update_zoom_label(void)
+{
+    if (!s_frigo_lbl_zoom) return;
+    float w = s_frigo_win_b - s_frigo_win_a;
+    if (w <= 0.0f) w = 1.0f;
+    float z = 1.0f / w;
+    if (z < 1.05f) lv_label_set_text(s_frigo_lbl_zoom, "1x");
+    else if (z < 9.5f) lv_label_set_text_fmt(s_frigo_lbl_zoom, "%.1fx", z);
+    else               lv_label_set_text_fmt(s_frigo_lbl_zoom, "%dx", (int)(z + 0.5f));
+}
+
+static void frigo_apply_window(void)
+{
+    if (s_frigo_win_a < 0.0f) s_frigo_win_a = 0.0f;
+    if (s_frigo_win_b > 1.0f) s_frigo_win_b = 1.0f;
+    if (s_frigo_win_b - s_frigo_win_a < 0.01f) {
+        float c = (s_frigo_win_a + s_frigo_win_b) * 0.5f;
+        s_frigo_win_a = c - 0.005f;
+        s_frigo_win_b = c + 0.005f;
+        if (s_frigo_win_a < 0) { s_frigo_win_b -= s_frigo_win_a; s_frigo_win_a = 0; }
+        if (s_frigo_win_b > 1) { s_frigo_win_a -= (s_frigo_win_b - 1); s_frigo_win_b = 1; }
+    }
+    frigo_update_zoom_label();
+    frigo_chart_load_day();
+}
+
+static void frigo_zoom_in_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_frigo_win_b - s_frigo_win_a;
+    float c = (s_frigo_win_a + s_frigo_win_b) * 0.5f;
+    w *= 0.5f;
+    s_frigo_win_a = c - w * 0.5f;
+    s_frigo_win_b = c + w * 0.5f;
+    frigo_apply_window();
+}
+
+static void frigo_zoom_out_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_frigo_win_b - s_frigo_win_a;
+    float c = (s_frigo_win_a + s_frigo_win_b) * 0.5f;
+    w *= 2.0f;
+    if (w >= 1.0f) { s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f; }
+    else {
+        s_frigo_win_a = c - w * 0.5f;
+        s_frigo_win_b = c + w * 0.5f;
+        if (s_frigo_win_a < 0.0f) { s_frigo_win_b -= s_frigo_win_a; s_frigo_win_a = 0.0f; }
+        if (s_frigo_win_b > 1.0f) { s_frigo_win_a -= (s_frigo_win_b - 1.0f); s_frigo_win_b = 1.0f; }
+    }
+    frigo_apply_window();
+}
+
+static void frigo_pan_left_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_frigo_win_b - s_frigo_win_a;
+    float d = w * 0.25f;
+    if (s_frigo_win_a - d < 0.0f) d = s_frigo_win_a;
+    s_frigo_win_a -= d;
+    s_frigo_win_b -= d;
+    frigo_apply_window();
+}
+
+static void frigo_pan_right_cb(lv_event_t *e)
+{
+    (void)e;
+    float w = s_frigo_win_b - s_frigo_win_a;
+    float d = w * 0.25f;
+    if (s_frigo_win_b + d > 1.0f) d = 1.0f - s_frigo_win_b;
+    s_frigo_win_a += d;
+    s_frigo_win_b += d;
+    frigo_apply_window();
+}
+
+static void frigo_reset_view_cb(lv_event_t *e)
+{
+    (void)e;
+    s_frigo_win_a = 0.0f;
+    s_frigo_win_b = 1.0f;
+    frigo_apply_window();
+}
+
 static void frigo_chart_gesture_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    bool zoomed = (s_frigo_win_a > 0.0001f) || (s_frigo_win_b < 0.9999f);
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (zoomed && dir == LV_DIR_LEFT)  { frigo_pan_right_cb(NULL); return; }
+    if (zoomed && dir == LV_DIR_RIGHT) { frigo_pan_left_cb(NULL);  return; }
     if (dir == LV_DIR_RIGHT) {
         if (s_frigo_day_idx == -1) {
             if (s_frigo_n_dates > 0) s_frigo_day_idx = s_frigo_n_dates - 1;
@@ -1511,11 +1680,15 @@ static void frigo_chart_gesture_cb(lv_event_t *e)
         } else {
             return;
         }
+        s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
+        frigo_update_zoom_label();
         frigo_chart_load_day();
     } else if (dir == LV_DIR_LEFT) {
         if (s_frigo_day_idx < 0) return;
         if (s_frigo_day_idx < s_frigo_n_dates - 1) s_frigo_day_idx++;
         else                                       s_frigo_day_idx = -1;
+        s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
+        frigo_update_zoom_label();
         frigo_chart_load_day();
     }
 }
