@@ -5,6 +5,7 @@
 #include "dashboard_state.h"
 #include "esp_spiffs.h"
 #include "esp_log.h"
+#include "esp_lvgl_port.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_netif.h"
@@ -1315,112 +1316,6 @@ static esp_err_t handle_logs(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* BMP a partir del framebuffer LVGL. factor=1 = resolucion nativa, 2 = mitad. */
-static esp_err_t serve_fb_as_bmp(httpd_req_t *req, int factor)
-{
-    lv_disp_t *disp = lv_disp_get_default();
-    if (!disp || !disp->driver || !disp->driver->draw_buf ||
-        !disp->driver->draw_buf->buf1) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No fb");
-        return ESP_FAIL;
-    }
-    int src_w = disp->driver->hor_res;
-    int src_h = disp->driver->ver_res;
-    const lv_color_t *src = (const lv_color_t *)disp->driver->draw_buf->buf1;
-    if (factor < 1) factor = 1;
-    int w = src_w / factor;
-    int h = src_h / factor;
-    int row_size = (w * 3 + 3) & ~3;
-    int img_size = row_size * h;
-    int file_size = 54 + img_size;
-
-    static uint8_t *bmp_cache[2] = {NULL, NULL};   /* [0]=factor1, [1]=factor2 */
-    static int      cap_cache[2] = {0, 0};
-    int slot = (factor == 1) ? 0 : 1;
-    if (bmp_cache[slot] == NULL || cap_cache[slot] < file_size) {
-        if (bmp_cache[slot]) heap_caps_free(bmp_cache[slot]);
-        bmp_cache[slot] = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
-        cap_cache[slot] = bmp_cache[slot] ? file_size : 0;
-    }
-    uint8_t *bmp = bmp_cache[slot];
-    if (!bmp) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ENOMEM");
-        return ESP_FAIL;
-    }
-
-    memset(bmp, 0, 54);
-    bmp[0] = 'B'; bmp[1] = 'M';
-    bmp[2] = file_size & 0xFF;
-    bmp[3] = (file_size >>  8) & 0xFF;
-    bmp[4] = (file_size >> 16) & 0xFF;
-    bmp[5] = (file_size >> 24) & 0xFF;
-    bmp[10] = 54;
-    bmp[14] = 40;
-    bmp[18] = w & 0xFF;  bmp[19] = (w >> 8) & 0xFF;
-    bmp[22] = h & 0xFF;  bmp[23] = (h >> 8) & 0xFF;
-    bmp[26] = 1;
-    bmp[28] = 24;
-    bmp[34] = img_size & 0xFF;
-    bmp[35] = (img_size >>  8) & 0xFF;
-    bmp[36] = (img_size >> 16) & 0xFF;
-    bmp[37] = (img_size >> 24) & 0xFF;
-
-    for (int y = 0; y < h; y++) {
-        uint8_t *row = bmp + 54 + (h - 1 - y) * row_size;
-        int sy = y * factor;
-        for (int x = 0; x < w; x++) {
-            int sx = x * factor;
-            uint16_t v = src[sy * src_w + sx].full;
-            uint8_t r5 = (v >> 11) & 0x1F;
-            uint8_t g6 = (v >>  5) & 0x3F;
-            uint8_t b5 =  v        & 0x1F;
-            row[x * 3 + 0] = (b5 << 3) | (b5 >> 2);
-            row[x * 3 + 1] = (g6 << 2) | (g6 >> 4);
-            row[x * 3 + 2] = (r5 << 3) | (r5 >> 2);
-        }
-    }
-
-    httpd_resp_set_type(req, "image/bmp");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, (const char *)bmp, file_size);
-}
-
-static esp_err_t handle_screenshot_bmp(httpd_req_t *req)
-{
-    return serve_fb_as_bmp(req, 1);
-}
-
-/* POST /api/view?mode=N -> cambia ui->view_selection.mode al instante.
- * Solo para automatizar capturas; se puede eliminar despues. */
-extern void ui_force_view_update(void);
-#include "ui/ui_state.h"
-extern ui_state_t *ui_get_state(void);
-
-static esp_err_t handle_api_set_view(httpd_req_t *req)
-{
-    char query[64];
-    int mode = -1;
-    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-        char val[8];
-        if (httpd_query_key_value(query, "mode", val, sizeof(val)) == ESP_OK) {
-            mode = atoi(val);
-        }
-    }
-    if (mode < 0 || mode >= UI_VIEW_MODE_COUNT) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad mode");
-        return ESP_FAIL;
-    }
-    ui_state_t *ui = ui_get_state();
-    if (ui) {
-        ui->view_selection.mode = (ui_view_mode_t)mode;
-        ui_force_view_update();
-    }
-    char buf[64];
-    int n = snprintf(buf, sizeof(buf), "{\"ok\":true,\"mode\":%d}", mode);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, buf, n);
-}
-
 /* /mirror.bmp -> snapshot del framebuffer downsampleado 2x como BMP 24-bit.
  * Resolucion fuente 1024x600 RGB565 -> 512x300 BMP RGB24 (~460 KB). */
 static esp_err_t handle_mirror_bmp(httpd_req_t *req)
@@ -1728,12 +1623,6 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_mirror);
     httpd_uri_t uri_mirror_bmp = { .uri = "/mirror.bmp", .method = HTTP_GET, .handler = handle_mirror_bmp };
     httpd_register_uri_handler(server, &uri_mirror_bmp);
-    /* --- Capturas para documentacion (se pueden eliminar tras generar el PDF) --- */
-    httpd_uri_t uri_screenshot_bmp = { .uri = "/screenshot.bmp", .method = HTTP_GET, .handler = handle_screenshot_bmp };
-    httpd_register_uri_handler(server, &uri_screenshot_bmp);
-    httpd_uri_t uri_api_set_view = { .uri = "/api/view", .method = HTTP_POST, .handler = handle_api_set_view };
-    httpd_register_uri_handler(server, &uri_api_set_view);
-
     httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
     httpd_register_uri_handler(server, &uri_data);
     httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };
