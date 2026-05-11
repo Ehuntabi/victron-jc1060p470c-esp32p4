@@ -39,8 +39,6 @@ static esp_timer_handle_t s_flush_timer = NULL;
 /* Serializa los flushes (timer + main + shutdown) para que dos fprintf
  * concurrentes al mismo CSV no interleaven bytes. */
 static SemaphoreHandle_t s_flush_mutex = NULL;
-/* Snapshot transitorio para evitar mantener s_mutex durante la I/O a SD. */
-static datalogger_entry_t s_flush_snapshot[DATALOGGER_MAX_ENTRIES];
 
 static void get_timestamp(char *buf, size_t len)
 {
@@ -140,9 +138,7 @@ static void flush_pending_to_sd_impl(void)
     if (!s_sd_mounted || !s_mutex) return;
     if (s_pending_count <= 0) return;
 
-    /* Serializa flushes concurrentes (timer + main thread); si otro flush
-     * esta en curso, salimos y dejamos que el actual termine — la proxima
-     * iteracion del timer cogera lo pendiente. */
+    /* Serializa flushes concurrentes (timer + main thread). */
     if (s_flush_mutex && xSemaphoreTake(s_flush_mutex, 0) != pdTRUE) {
         return;
     }
@@ -150,10 +146,8 @@ static void flush_pending_to_sd_impl(void)
     char path[64];
     get_day_filename(path, sizeof path);
 
-    /* === FASE 0: fopen ANTES de tocar el estado pendiente. ===
-     * Si fopen falla (SD desmontada, EROFS, espacio agotado...) preservamos
-     * las entradas para el proximo intento. Antes snapshot+advance se
-     * hacian primero y la perdida era permanente al fopen-fail. */
+    /* fopen ANTES de tocar el estado pendiente: si falla preservamos las
+     * entradas para el proximo intento. */
     struct stat st;
     bool need_header = (stat(path, &st) != 0);
     FILE *f = fopen(path, "a");
@@ -163,42 +157,29 @@ static void flush_pending_to_sd_impl(void)
         return;
     }
 
-    /* === FASE 1: snapshot bajo s_mutex sin avanzar punteros. ===
-     * Copiamos las entradas pendientes a un buffer transitorio y soltamos
-     * el lock antes de tocar SD. El avance del cursor pendiente se hace
-     * solo si la escritura va limpia (fase 3). */
-    int snapshot_count = 0;
-    int snapshot_first = 0;
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-        snapshot_count = s_pending_count;
-        snapshot_first = s_pending_first;
-        for (int i = 0; i < snapshot_count; ++i) {
-            int idx = (snapshot_first + i) % DATALOGGER_MAX_ENTRIES;
-            s_flush_snapshot[i] = s_buf[idx];
-        }
-        xSemaphoreGive(s_mutex);
-    } else {
+    /* Mantenemos s_mutex durante toda la escritura. La alternativa "2 fases
+     * con snapshot" no se puede aplicar aqui porque s_pending_count nunca
+     * decrementa (datalogger_log lo satura en MAX) y por tanto un overflow
+     * del ring durante un fprintf prolongado provoca perdida silenciosa.
+     * datalogger_log se llama cada ~5 min (frigo update); bloquearlo unos
+     * cientos de ms en el flush es ~0.1% del tiempo. */
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
         fclose(f);
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
 
-    if (snapshot_count <= 0) {
-        fclose(f);
-        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
-        return;
-    }
-
-    /* === FASE 2: escritura sin s_mutex. === */
     bool io_error = false;
     if (need_header) {
         if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n") < 0) {
             io_error = true;
         }
     }
+    int snapshot_count = s_pending_count;
     int written = 0;
     for (int i = 0; i < snapshot_count && !io_error; ++i) {
-        const datalogger_entry_t *e = &s_flush_snapshot[i];
+        int idx = (s_pending_first + i) % DATALOGGER_MAX_ENTRIES;
+        const datalogger_entry_t *e = &s_buf[idx];
         char ta[10], tc[10], te[10];
         format_temp(ta, sizeof ta, e->T_Aletas);
         format_temp(tc, sizeof tc, e->T_Congelador);
@@ -208,33 +189,20 @@ static void flush_pending_to_sd_impl(void)
         if (r < 0 || ferror(f)) { io_error = true; break; }
         written++;
     }
+
+    /* Solo avanzamos el cursor si la escritura fue limpia. */
+    if (!io_error) {
+        s_pending_first = (s_pending_first + written) % DATALOGGER_MAX_ENTRIES;
+        s_pending_count -= written;
+    }
+    xSemaphoreGive(s_mutex);
     fclose(f);
 
-    /* === FASE 3: avanzar el cursor pendiente solo si todo OK. ===
-     * Si hubo I/O error las entradas siguen pendientes y se reintentaran
-     * en el proximo ciclo. */
-    if (!io_error) {
-        if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            /* En el (raro) caso de que el ring hubiera overflow-ado
-             * mientras escribiamos, s_pending_count < snapshot_count y
-             * el snapshot ya no es coherente. Saltamos el avance; la
-             * proxima iteracion reescribira (puede dejar duplicados pero
-             * eso es mejor que perder datos). */
-            if (s_pending_count >= snapshot_count) {
-                s_pending_first = (s_pending_first + snapshot_count)
-                                    % DATALOGGER_MAX_ENTRIES;
-                s_pending_count -= snapshot_count;
-            } else {
-                ESP_LOGW(TAG, "Ring overflow durante flush; no avanzo cursor");
-            }
-            xSemaphoreGive(s_mutex);
-        }
-        if (written > 0) {
-            ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
-        }
-    } else {
+    if (io_error) {
         ESP_LOGW(TAG, "I/O error en %s tras %d/%d entradas; reintento proximo flush",
                  path, written, snapshot_count);
+    } else if (written > 0) {
+        ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
     }
     if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
 }

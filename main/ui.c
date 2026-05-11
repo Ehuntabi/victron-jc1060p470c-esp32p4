@@ -1552,12 +1552,15 @@ static void frigo_chart_load_day(void)
             lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_percent);
         }
         frigo_apply_temp_range(t_min, t_max);
-        /* Pasamos `valid` (entradas realmente accesibles) y no `count`
-         * (el raw, posiblemente clamp a 2): asi evitamos etiquetas
-         * "--:--" mezcladas con horas reales tras un boot fresco con
-         * datalogger casi vacio. */
-        update_frigo_xlabels_today(valid > 0 ? valid : count);
+        /* Pasamos `count` (el raw del datalogger), no `valid`: las
+         * funciones de xlabels indexan en datalogger_get_entry(idx) que
+         * usa el espacio global de indices; pasar `valid` desincroniza
+         * los timestamps del rango visible (zoom al 50-100% mostraba
+         * etiquetas del 0-50%). El "--:--" ocasional con datalogger
+         * vacio es un bug menor que las etiquetas con la hora incorrecta. */
+        update_frigo_xlabels_today(count);
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
+        (void)valid;
     } else {
         const char *date = s_frigo_dates[s_frigo_day_idx];
         char path[64];
