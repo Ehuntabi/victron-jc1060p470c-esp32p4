@@ -45,9 +45,7 @@ static const char *APP_VERSION = "1.3.0";
 
 static void ta_event_cb(lv_event_t *e);
 static void wifi_event_cb(lv_event_t *e);
-static void ap_checkbox_event_cb(lv_event_t *e);
 static void password_toggle_btn_event_cb(lv_event_t *e);
-static void reboot_btn_event_cb(lv_event_t *e);
 static void about_refresh_dynamic(ui_state_t *ui);
 static void about_timer_cb(lv_timer_t *t);
 static void reboot_msgbox_cb(lv_event_t *e);
@@ -86,7 +84,6 @@ static void ss_period_inc_cb(lv_event_t *e)
 }
 
 static void cb_screensaver_event_cb(lv_event_t *e);
-static void victron_debug_event_cb(lv_event_t *e);
 static void slider_ss_brightness_event_cb(lv_event_t *e);
 static void spinbox_ss_time_increment_event_cb(lv_event_t *e);
 static void spinbox_ss_time_decrement_event_cb(lv_event_t *e);
@@ -1175,13 +1172,6 @@ static void victron_warning_btn_cb(lv_event_t *e)
 }
 
 /* Callback en el boton del menu principal para mostrar warning antes */
-static void victron_menu_clicked_cb(lv_event_t *e)
-{
-    (void)e;
-    extern void victron_keys_show_warning(ui_state_t *ui);
-    /* Diferimos para que el menu cargue primero */
-}
-
 static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
 {
     style_settings_scrollbar(page_victron);
@@ -1798,51 +1788,6 @@ static void password_toggle_btn_event_cb(lv_event_t *e)
     }
 }
 
-static void ap_checkbox_event_cb(lv_event_t *e)
-{
-    ui_state_t *ui = lv_event_get_user_data(e);
-    lv_obj_t *checkbox = lv_event_get_target(e);
-    if (ui == NULL || checkbox == NULL) {
-        return;
-    }
-    bool en = lv_obj_has_state(checkbox, LV_STATE_CHECKED);
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
-    if (err == ESP_OK) {
-        nvs_set_u8(h, "enabled", en);
-        nvs_commit(h);
-        nvs_close(h);
-        ESP_LOGI(TAG_SETTINGS, "AP %s", en ? "enabled" : "disabled");
-    } else {
-        ESP_LOGE(TAG_SETTINGS, "nvs_open failed: %s", esp_err_to_name(err));
-    }
-
-    if (en) {
-        wifi_ap_init();
-    } else {
-        esp_err_t stop_err = esp_wifi_stop();
-        if (stop_err == ESP_OK) {
-            ESP_LOGI(TAG_SETTINGS, "Soft-AP stopped");
-        } else {
-            ESP_LOGE(TAG_SETTINGS, "Failed to stop AP: %s", esp_err_to_name(stop_err));
-        }
-    }
-}
-
-
-
-
-
-static void reboot_btn_event_cb(lv_event_t *e)
-{
-    ESP_LOGI(TAG_SETTINGS, "Reboot requested via UI");
-    /* Flush datos antes de reiniciar */
-    ESP_LOGI("UI", "Flushing data before restart...");
-    datalogger_flush();
-    battery_history_flush();
-    vTaskDelay(pdMS_TO_TICKS(200));
-    esp_restart();
-}
 
 static void brightness_slider_event_cb(lv_event_t *e)
 {
@@ -1971,20 +1916,6 @@ static void cb_screensaver_event_cb(lv_event_t *e)
     screensaver_enable(ui, ui->screensaver.enabled);
 }
 
-static void victron_debug_event_cb(lv_event_t *e)
-{
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (ui == NULL || ui->victron_debug_checkbox == NULL) return;
-    bool enabled = lv_obj_has_state(ui->victron_debug_checkbox, LV_STATE_CHECKED);
-    ui->victron_debug_enabled = enabled;
-    if (save_victron_debug(enabled) == ESP_OK) {
-        ESP_LOGI(TAG_SETTINGS, "Victron BLE debug %s", enabled ? "enabled" : "disabled");
-    } else {
-        ESP_LOGE(TAG_SETTINGS, "Failed to persist Victron BLE debug setting");
-    }
-    // Apply immediately to BLE module
-    victron_ble_set_debug(enabled);
-}
 
 static void slider_ss_brightness_event_cb(lv_event_t *e)
 {

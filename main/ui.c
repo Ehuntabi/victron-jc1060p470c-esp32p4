@@ -30,6 +30,7 @@
 #include "trip_computer.h"
 #include "pzem004t.h"
 #include "log_browser.h"
+#include "esp_heap_caps.h"
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
@@ -65,7 +66,6 @@ static ui_state_t g_ui = {
 
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
-static void frigo_swipe_cb(lv_event_t *e);
 
 static void ac_indicator_timer_cb(lv_timer_t *t)
 {
@@ -120,7 +120,6 @@ static void volume_icon_timer_cb(lv_timer_t *t)
         }
     }
 }
-static void clock_click_cb(lv_event_t *e);
 static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
 static const char *device_type_name(victron_record_type_t type);
 static void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size);
@@ -1482,17 +1481,6 @@ static void frigo_chart_gesture_cb(lv_event_t *e)
     }
 }
 
-static void frigo_swipe_cb(lv_event_t *e)
-{
-    ESP_LOGI("SWIPE", "Evento gesture detectado");
-    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
-    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (dir != LV_DIR_RIGHT) return;
-    ui_state_t *ui = lv_event_get_user_data(e);
-    ui_show_chart_screen(ui);
-}
-
-
 /* --- Pantalla historico bateria --- */
 static lv_obj_t *s_bh_screen = NULL;
 static lv_obj_t *s_bh_lbl_date = NULL;
@@ -1740,7 +1728,12 @@ static void bh_chart_load_day(void)
         chart_pts = (BH_POINTS + chart_step - 1) / chart_step;
         lv_chart_set_point_count(s_bh_chart, chart_pts);
 
-        bh_point_t *pts = malloc(sizeof(bh_point_t) * BH_POINTS);
+        /* Buffer estatico en PSRAM para no fragmentar al cambiar de dia. */
+        static bh_point_t *pts = NULL;
+        if (pts == NULL) {
+            pts = heap_caps_malloc(sizeof(bh_point_t) * BH_POINTS,
+                                   MALLOC_CAP_SPIRAM);
+        }
         int32_t bmin = INT32_MAX, bmax = INT32_MIN;
         int32_t old_ts_g = INT32_MAX, new_ts_g = INT32_MIN;
         if (pts) {
@@ -1774,7 +1767,7 @@ static void bh_chart_load_day(void)
                         battery_history_source_name((bh_source_t)s), ch, dis);
                 }
             }
-            free(pts);
+            /* pts es estatico: no liberar */
         }
         if (bmin == INT32_MAX) { bmin = -40; bmax = 40; }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
@@ -1854,17 +1847,6 @@ static void bh_chart_gesture_cb(lv_event_t *e)
         bh_chart_load_day();
     }
 }
-
-static void clock_click_cb(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (lvgl_port_lock(50)) {
-        ui_show_chart_screen(ui);
-        lvgl_port_unlock();
-    }
-}
-
 
 static void ble_indicator_timer_cb(lv_timer_t *t)
 {

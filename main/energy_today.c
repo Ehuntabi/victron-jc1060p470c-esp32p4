@@ -118,9 +118,9 @@ void energy_today_on_battery(int32_t i_milli, uint16_t v_centi)
             } else {
                 s.loads_wh += -energy_wh;    /* descarga */
             }
-            /* Persiste cada ~60 s aprox */
+            /* Persistencia cada 5 min para no degradar la flash (NVS) */
             static time_t last_save = 0;
-            if (now - last_save >= 60) {
+            if (now - last_save >= 300) {
                 save_nvs();
                 last_save = now;
             }

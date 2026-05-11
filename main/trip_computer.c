@@ -97,8 +97,9 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
                 s.ah_discharged += -charge_ah;
             }
             s.seconds_running += (int64_t)dt_s;
+            /* Persistencia cada 5 min para no degradar la flash (NVS) */
             static time_t s_last_save = 0;
-            if (now - s_last_save >= 120) {
+            if (now - s_last_save >= 300) {
                 persist_locked();
                 s_last_save = now;
             }

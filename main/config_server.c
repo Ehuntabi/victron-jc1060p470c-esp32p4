@@ -1335,7 +1335,15 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
     int img_size = row_size * h;
     int file_size = 54 + img_size;
 
-    uint8_t *bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
+    /* Buffer estatico en PSRAM: 1 sola asignacion para todos los refresh
+     * del navegador. Tamano fijo (1024x600 RGB565 -> 512x300 RGB24 + header). */
+    static uint8_t *bmp = NULL;
+    static int bmp_capacity = 0;
+    if (bmp == NULL || bmp_capacity < file_size) {
+        if (bmp) heap_caps_free(bmp);
+        bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
+        bmp_capacity = bmp ? file_size : 0;
+    }
     if (!bmp) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ENOMEM"); return ESP_FAIL; }
 
     /* BMP header (54 bytes, BITMAPINFOHEADER) */
@@ -1374,9 +1382,7 @@ static esp_err_t handle_mirror_bmp(httpd_req_t *req)
 
     httpd_resp_set_type(req, "image/bmp");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    esp_err_t err = httpd_resp_send(req, (const char *)bmp, file_size);
-    free(bmp);
-    return err;
+    return httpd_resp_send(req, (const char *)bmp, file_size);
 }
 
 static esp_err_t handle_mirror(httpd_req_t *req)
