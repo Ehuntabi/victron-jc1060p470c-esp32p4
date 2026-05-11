@@ -39,8 +39,11 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
         ESP_LOGW(TAG, "RTC sin fecha valida, abortando limpieza");
         return 0;
     }
-    time_t cutoff_delete = now - (time_t)max_days * 86400;
-    time_t cutoff_warn   = now - (time_t)(max_days - 1) * 86400;
+    /* Proteccion: hoy y ayer NUNCA se borran aunque max_days sea 1,
+     * para evitar carreras con datalogger_flush / bh_flush en curso. */
+    int effective_max = (max_days < 2) ? 2 : max_days;
+    time_t cutoff_delete = now - (time_t)effective_max * 86400;
+    time_t cutoff_warn   = now - (time_t)(effective_max - 1) * 86400;
 
     DIR *dp = opendir(dir);
     if (!dp) {

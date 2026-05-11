@@ -225,6 +225,30 @@ static const char* get_content_type(const char* path) {
 
 // Serve a file from SPIFFS at the given URI
 static esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri) {
+    /* Defensa en profundidad: SPIFFS tiene namespace plano y .. no escala,
+     * pero rechazamos URIs sospechosas igualmente (caracteres de control,
+     * '..', '//', NULs) por si mañana se cambia a un VFS jerarquico. */
+    if (!uri || uri[0] != '/') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+        return ESP_FAIL;
+    }
+    size_t ulen = strlen(uri);
+    if (ulen == 0 || ulen > 200) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+        return ESP_FAIL;
+    }
+    if (strstr(uri, "..") || strstr(uri, "//")) {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
+        return ESP_FAIL;
+    }
+    for (size_t i = 0; i < ulen; ++i) {
+        unsigned char c = (unsigned char)uri[i];
+        if (c < 0x20 || c == 0x7F) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
+            return ESP_FAIL;
+        }
+    }
+
     char filepath[256];
     snprintf(filepath, sizeof(filepath), "/spiffs%s", uri);
     ESP_LOGI(TAG, "Serving %s", filepath);
