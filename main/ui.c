@@ -1999,6 +1999,10 @@ static void bh_chart_load_day(void)
         if (win_b_i <= win_a_i) win_b_i = win_a_i + 1;
         if (win_b_i > BH_POINTS) win_b_i = BH_POINTS;
         int win_count = win_b_i - win_a_i;
+        /* Guardia defensiva: con apply_window el minimo es 0.005*BH_POINTS=43,
+         * pero si BH_POINTS bajara mucho podriamos llegar a 0 y dividir por 0
+         * en el calculo de chart_step. */
+        if (win_count < 2) win_count = 2;
         int chart_pts = (win_count > CHART_MAX_PTS) ? CHART_MAX_PTS : win_count;
         int chart_step = (win_count + chart_pts - 1) / chart_pts;
         if (chart_step < 1) chart_step = 1;
