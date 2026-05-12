@@ -105,25 +105,44 @@ def draw_solar(color):
 
 
 def draw_dcdc(color):
+    """Solo la CABINA conductor de un Fiat Ducato 2007 (perfil lateral)."""
     img = make_canvas()
     d = ImageDraw.Draw(img)
-    # Dos rectángulos (in/out) conectados con flecha
-    d.rounded_rectangle((4, 18, 26, 46), radius=4, outline=color, width=4)
-    d.rounded_rectangle((38, 18, 60, 46), radius=4, outline=color, width=4)
-    # Flecha del primero al segundo
-    d.line((28, 32, 36, 32), fill=color, width=4)
-    d.polygon([(36, 28), (40, 32), (36, 36)], fill=color)
-    # "DC" pequeñito en cada caja
-    # Onda en el primero (rectificada / continua)
-    d.line((9, 32, 13, 32), fill=color, width=3)
-    d.line((13, 32, 13, 28), fill=color, width=3)
-    d.line((13, 32, 17, 32), fill=color, width=3)
-    d.line((17, 32, 17, 36), fill=color, width=3)
-    d.line((17, 32, 21, 32), fill=color, width=3)
-    # Línea continua en el segundo
-    d.line((43, 32, 55, 32), fill=color, width=3)
-    d.line((43, 28, 43, 36), fill=color, width=2)
-    d.line((55, 28, 55, 36), fill=color, width=2)
+
+    # Perfil de la cabina (sentido horario desde esquina inf-izq):
+    # parachoques -> capo (subida) -> parabrisas inclinado -> techo ->
+    # pilar B (donde corta con la celula del camper) -> suelo
+    cabin = [
+        (10, 48),   # parachoques delantero abajo
+        (10, 38),   # parachoques delantero arriba
+        (16, 34),   # subida del capo
+        (24, 30),   # final capo / base parabrisas
+        (32, 14),   # cumbre pilar A / inicio techo
+        (54, 14),   # final techo / pilar B arriba
+        (54, 48),   # pilar B abajo (corte con celula)
+    ]
+    d.polygon(cabin, outline=color, width=4)
+    # Suelo
+    d.line((10, 48, 54, 48), fill=color, width=4)
+
+    # Ventana lateral conductor (grande, casi cuadrada)
+    d.rectangle((28, 18, 50, 32), outline=color, width=2)
+    # Divisor entre ventana fija y ventanilla (puerta)
+    d.line((40, 18, 40, 32), fill=color, width=1)
+
+    # Tirador puerta conductor
+    d.line((42, 38, 48, 38), fill=color, width=2)
+
+    # Rueda delantera (centrada en x=22, y=50)
+    d.ellipse((16, 44, 28, 56), outline=color, width=3)
+    d.ellipse((20, 48, 24, 52), fill=color)
+
+    # Faro delantero rectangular (caracteristico del Ducato)
+    d.rectangle((10, 39, 14, 43), fill=color)
+
+    # Espejo retrovisor lateral (encima de la ventana)
+    d.rectangle((48, 18, 56, 22), fill=color)
+
     return img
 
 

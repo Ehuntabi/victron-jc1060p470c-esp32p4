@@ -351,6 +351,204 @@ void ui_arc_soc_set(lv_obj_t *arc_box, uint16_t soc_deci, uint16_t voltage_centi
     }
 }
 
+/* ── Gauge SOC tipo "bateria de coche con bornes" ────────────────── */
+/* Estructura del contenedor:
+ *   child 0: terminals_row (fila con 2 bornes con simbolos + / -)
+ *   child 1: body (carcasa oscura con 6 celdas separadas)
+ *     child 0:        fill (rectangulo que sube de abajo)
+ *     child 1..N-2:   separadores verticales decorativos (5)
+ *     child ULTIMO:   soc_lbl (% en el centro)
+ *   child 2: volt_lbl (voltaje debajo)
+ *
+ * ui_battery_soc_set toma fill = body.child(0) y soc_lbl = last child,
+ * asi es robusto si anaden mas hijos decorativos a body. */
+lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
+                                lv_coord_t width, lv_coord_t height)
+{
+    const lv_coord_t term_h   = 14;
+    const lv_coord_t term_w   = width / 4;
+    const lv_coord_t volt_h   = 24;
+    const lv_coord_t body_h   = height - term_h - volt_h - 4;
+
+    /* Paleta realista: subida para contrastar con el card (0x141821) */
+    const lv_color_t COL_CASING    = lv_color_hex(0x4a4a55); /* gris medio carcasa */
+    const lv_color_t COL_CASING_HI = lv_color_hex(0x70707c); /* separadores celdas */
+    const lv_color_t COL_BORDER    = lv_color_hex(0x2a2a30); /* borde oscuro casing */
+    const lv_color_t COL_TOP_PLATE = lv_color_hex(0x2e2e36); /* franja superior */
+    const lv_color_t COL_TERM_NEG  = lv_color_hex(0x9e9e9e); /* metalico gris claro */
+
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, width, height);
+    lv_obj_set_layout(box, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(box, 0, 0);
+    lv_obj_set_style_pad_gap(box, 0, 0);
+
+    /* Fila de los dos bornes con simbolo + / - */
+    lv_obj_t *terms = lv_obj_create(box);
+    lv_obj_remove_style_all(terms);
+    lv_obj_set_size(terms, width, term_h);
+    lv_obj_set_layout(terms, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(terms, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(terms, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
+    lv_obj_set_style_pad_left(terms,  width / 8, 0);
+    lv_obj_set_style_pad_right(terms, width / 8, 0);
+
+    /* Borne + (rojo) */
+    lv_obj_t *plus = lv_obj_create(terms);
+    lv_obj_remove_style_all(plus);
+    lv_obj_set_size(plus, term_w, term_h);
+    lv_obj_set_style_bg_color(plus, UI_COLOR_RED, 0);
+    lv_obj_set_style_bg_opa(plus, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(plus, 3, 0);
+    lv_obj_set_style_border_width(plus, 1, 0);
+    lv_obj_set_style_border_color(plus, lv_color_hex(0x801010), 0);
+    lv_obj_clear_flag(plus, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *lp = lv_label_create(plus);
+    lv_obj_set_style_text_font(lp, &lv_font_montserrat_14_es, 0);
+    lv_obj_set_style_text_color(lp, UI_COLOR_TEXT, 0);
+    lv_label_set_text(lp, "+");
+    lv_obj_center(lp);
+
+    /* Borne - (gris metalico) */
+    lv_obj_t *minus = lv_obj_create(terms);
+    lv_obj_remove_style_all(minus);
+    lv_obj_set_size(minus, term_w, term_h);
+    lv_obj_set_style_bg_color(minus, COL_TERM_NEG, 0);
+    lv_obj_set_style_bg_opa(minus, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(minus, 3, 0);
+    lv_obj_set_style_border_width(minus, 1, 0);
+    lv_obj_set_style_border_color(minus, lv_color_hex(0x2a2a30), 0);
+    lv_obj_clear_flag(minus, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *lm = lv_label_create(minus);
+    lv_obj_set_style_text_font(lm, &lv_font_montserrat_14_es, 0);
+    lv_obj_set_style_text_color(lm, UI_COLOR_TEXT, 0);
+    lv_label_set_text(lm, "-");
+    lv_obj_center(lm);
+
+    /* Body — casing oscuro tipo polipropileno */
+    lv_obj_t *body = lv_obj_create(box);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, width, body_h);
+    lv_obj_set_style_radius(body, 4, 0);
+    lv_obj_set_style_border_width(body, 2, 0);
+    lv_obj_set_style_border_color(body, COL_BORDER, 0);
+    lv_obj_set_style_bg_color(body, COL_CASING, 0);
+    lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(body, 4, 0);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Fill (sube de abajo arriba con el SOC%) — CHILD 0 de body */
+    lv_obj_t *fill = lv_obj_create(body);
+    lv_obj_remove_style_all(fill);
+    lv_obj_set_size(fill, width - 12, 0);
+    lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_radius(fill, 2, 0);
+    lv_obj_set_style_bg_color(fill, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
+
+    /* Franja oscura superior (simula la "tapa" donde van los tapones de celda) */
+    lv_obj_t *top_plate = lv_obj_create(body);
+    lv_obj_remove_style_all(top_plate);
+    lv_obj_set_size(top_plate, width - 12, 7);
+    lv_obj_align(top_plate, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(top_plate, COL_TOP_PLATE, 0);
+    lv_obj_set_style_bg_opa(top_plate, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(top_plate, 1, 0);
+
+    /* 5 separadores verticales para visualizar las 6 celdas internas */
+    lv_coord_t inner_w = width - 8;
+    for (int i = 1; i < 6; i++) {
+        lv_obj_t *sep = lv_obj_create(body);
+        lv_obj_remove_style_all(sep);
+        lv_obj_set_size(sep, 2, body_h - 8);
+        lv_coord_t x = (inner_w * i / 6) - 1;
+        lv_obj_align(sep, LV_ALIGN_TOP_LEFT, x, 0);
+        lv_obj_set_style_bg_color(sep, COL_CASING_HI, 0);
+        lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+    }
+
+    /* 6 tapones de celda en la franja superior (puntitos oscuros) */
+    for (int i = 0; i < 6; i++) {
+        lv_obj_t *cap = lv_obj_create(body);
+        lv_obj_remove_style_all(cap);
+        lv_obj_set_size(cap, 6, 4);
+        lv_coord_t cx = (inner_w * (2*i + 1) / 12) - 3;
+        lv_obj_align(cap, LV_ALIGN_TOP_LEFT, cx, 1);
+        lv_obj_set_style_bg_color(cap, lv_color_hex(0x1c1c20), 0);
+        lv_obj_set_style_bg_opa(cap, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(cap, 2, 0);
+    }
+
+    /* SOC% sobre el cuerpo — ULTIMO hijo de body (mas al frente) */
+    lv_obj_t *soc_lbl = lv_label_create(body);
+    lv_obj_set_style_text_font(soc_lbl, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(soc_lbl, UI_COLOR_TEXT, 0);
+    lv_obj_set_style_text_color(soc_lbl, lv_color_hex(0xffffff), 0);
+    lv_label_set_text(soc_lbl, "--");
+    lv_obj_align(soc_lbl, LV_ALIGN_CENTER, 0, 0);
+
+    /* Voltage debajo con separacion del cuerpo */
+    lv_obj_t *volt_lbl = lv_label_create(box);
+    lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(volt_lbl, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_pad_top(volt_lbl, 8, 0);
+    lv_label_set_text(volt_lbl, "--");
+
+    return box;
+}
+
+void ui_battery_soc_set(lv_obj_t *bat_box,
+                        uint16_t soc_deci, uint16_t voltage_centi)
+{
+    if (!bat_box) return;
+    /* Estructura: bat_box.child(1)=body, bat_box.child(2)=volt_lbl.
+     * body.child(0)=fill (siempre), body.last_child=soc_lbl.
+     * En medio hay separadores y tapones decorativos. Usar last_child es
+     * robusto a la cantidad de decoraciones. */
+    lv_obj_t *body     = lv_obj_get_child(bat_box, 1);
+    lv_obj_t *volt_lbl = lv_obj_get_child(bat_box, 2);
+    if (!body || !volt_lbl) return;
+    lv_obj_t *fill = lv_obj_get_child(body, 0);
+    uint32_t nch = lv_obj_get_child_cnt(body);
+    lv_obj_t *soc_lbl = (nch > 0) ? lv_obj_get_child(body, nch - 1) : NULL;
+    if (!fill || !soc_lbl) return;
+
+    /* Altura interna utilizable del body (sin paddings ni border) */
+    lv_coord_t body_h = lv_obj_get_height(body);
+    if (body_h <= 0) body_h = 100;
+    lv_coord_t inner_h = body_h - 8;  /* 4 padding + 4 border approx */
+    if (inner_h < 1) inner_h = 1;
+
+    char buf[16];
+    if (soc_deci > 1000) {
+        lv_label_set_text(soc_lbl, "--");
+        lv_obj_set_height(fill, 0);
+    } else {
+        unsigned int_part = soc_deci / 10;
+        unsigned dec_part = soc_deci % 10;
+        snprintf(buf, sizeof(buf), "%u.%u%%", int_part, dec_part);
+        lv_label_set_text(soc_lbl, buf);
+        lv_coord_t h = (lv_coord_t)((long)inner_h * (long)soc_deci / 1000L);
+        if (h < 1) h = 1;
+        lv_obj_set_height(fill, h);
+        lv_obj_set_style_bg_color(fill, ui_color_for_soc(soc_deci), 0);
+        lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
+    if (voltage_centi == 0) {
+        lv_label_set_text(volt_lbl, "--");
+    } else {
+        snprintf(buf, sizeof(buf), "%u.%02u V",
+                 voltage_centi / 100, voltage_centi % 100);
+        lv_label_set_text(volt_lbl, buf);
+    }
+}
+
 /* ── Helpers de color por rango ──────────────────────────────────── */
 lv_color_t ui_color_for_soc(uint16_t soc_deci)
 {

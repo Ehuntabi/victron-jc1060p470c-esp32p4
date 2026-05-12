@@ -31,6 +31,7 @@
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "pzem004t.h"
+#include "camper/camper.h"
 #include "splash.h"
 #include <time.h>
 
@@ -334,6 +335,11 @@ void app_main(void)
         .poll_period_ms = 2000,
     };
     pzem_init(&pzem_cfg);
+
+    /* Camper (NE185 vía ESP32-RS485 externo por UART1). Si el ESP no esta
+     * conectado, simplemente no llegan tramas; nada peta. */
+    camper_init();
+
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();

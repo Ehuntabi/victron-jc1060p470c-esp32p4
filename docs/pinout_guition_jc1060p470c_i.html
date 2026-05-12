@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Pinout y conexiones — Guition JC1060P470C_I</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  body {
+    font-family: "DejaVu Sans", "Helvetica", sans-serif;
+    font-size: 10pt;
+    line-height: 1.35;
+    color: #222;
+  }
+  h1 {
+    font-size: 20pt;
+    text-align: center;
+    color: #0d47a1;
+    margin: 0;
+  }
+  h1 + p { text-align: center; font-size: 11pt; color: #555; margin: 4px 0 0 0; }
+  h2 {
+    font-size: 13pt;
+    color: #1565c0;
+    border-bottom: 1px solid #bbdefb;
+    padding-bottom: 2px;
+    margin: 16px 0 6px 0;
+    page-break-after: avoid;
+    break-after: avoid-page;
+  }
+  h3 {
+    font-size: 11pt;
+    color: #1976d2;
+    margin: 10px 0 4px 0;
+    page-break-after: avoid;
+    break-after: avoid-page;
+  }
+  code {
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 9pt;
+    background: #f0f3f7;
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+  table {
+    border-collapse: collapse;
+    margin: 5px 0;
+    width: 100%;
+    font-size: 9.5pt;
+  }
+  th, td {
+    border: 1px solid #cfd8dc;
+    padding: 3px 7px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #e3f2fd;
+    color: #0d47a1;
+    font-weight: 600;
+  }
+  .nota, .ok, .new {
+    padding: 6px 10px;
+    margin: 6px 0;
+    border-radius: 3px;
+    font-size: 9.5pt;
+  }
+  .keep { page-break-inside: avoid; }
+  .jp1-grid {
+    display: grid;
+    grid-template-columns: 35% 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+  .jp1-grid img.jp1 { max-width: 100%; margin: 0; }
+  .jp1-grid table { font-size: 8.5pt; margin: 0; }
+  .jp1-grid th, .jp1-grid td { padding: 2px 5px; }
+  .reco-compact { font-size: 9pt; }
+  .reco-compact li { margin: 0; }
+  .nota { background: #fff8e1; border-left: 3px solid #ffa726; }
+  .ok   { background: #e8f5e9; border-left: 3px solid #2e7d32; }
+  .new  { background: #e3f2fd; border-left: 3px solid #1976d2; }
+  ul, ol { margin: 4px 0; padding-left: 22px; }
+  ul li, ol li { margin: 1px 0; }
+  .meta { text-align: center; font-size: 9pt; color: #666; }
+  .footer-page { font-size: 8.5pt; color: #888; margin-top: 12px; text-align: center; }
+  img.jp1 { max-width: 56%; display: block; margin: 6px auto; }
+  .small { font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<h1>Pinout y conexiones</h1>
+<p><strong>Guition JC1060P470C_I</strong> · ESP32-P4 + ESP32-C6 (Wi-Fi/BT) · DSI 1024×600 · touch GT911</p>
+<div class="meta">
+Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / Guition JC1060P470C_I).<br>
+Última revisión: 12 mayo 2026 · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
+</div>
+
+<h2>1. Resumen del módulo</h2>
+<ul>
+<li>SoC principal <strong>ESP32-P4</strong> (RISC-V dual-core 400 MHz, 32 MB PSRAM, 16 MB Flash).</li>
+<li>SoC de radio <strong>ESP32-C6</strong> conectado por SDIO (Wi-Fi 2.4 GHz + BT 5 LE) gestionado por <code>esp_hosted</code>.</li>
+<li>Display IPS 7" 1024×600 con controlador JD9165BA, interfaz MIPI-DSI 2 lanes.</li>
+<li>Touch capacitivo GT911 (I2C compartido con el RTC y el codec).</li>
+<li>RTC RX8025T (I2C 0x32) con pila CR1220.</li>
+<li>microSD slot 0 con SDMMC IOMUX dedicado.</li>
+<li>Codec audio ES8311 + amplificador NS4150.</li>
+<li>UART2 cableable al PZEM-004T (medidor de red 230 V).</li>
+<li><strong>UART1 cableable al ESP32 RS485 externo (puente camper NE185)</strong>.</li>
+<li>Cabeceras GPIO libres para sensores DS18B20 (frigo) y PWM (ventilador).</li>
+</ul>
+
+<h2>2. Display MIPI-DSI (panel JD9165BA)</h2>
+<table>
+<tr><th>Función</th><th>Pin ESP32-P4</th><th>Notas</th></tr>
+<tr><td>Backlight (PWM)</td><td>GPIO 23</td><td>LEDC timer 1 / canal 1</td></tr>
+<tr><td>Reset panel</td><td>GPIO 27</td><td>Activo bajo</td></tr>
+<tr><td>MIPI-DSI clk + data</td><td>PHY interno</td><td>2 lanes, bitrate 750 Mbps, dotclk 52 MHz</td></tr>
+<tr><td>LDO PHY DSI</td><td>LDO ch 3</td><td>2500 mV → VDD_MIPI_DPHY</td></tr>
+</table>
+<p class="small">Resolución 1024×600, RGB565. Buffer LVGL: 50 líneas en PSRAM. Conector físico #15 (FPC 30P 0.5 mm).</p>
+
+<h2>3. Touch capacitivo GT911 (I2C)</h2>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
+<tr><td>I2C SDA</td><td>GPIO 7</td><td>Bus I2C_NUM_1, 400 kHz, compartido</td></tr>
+<tr><td>I2C SCL</td><td>GPIO 8</td><td></td></tr>
+<tr><td>TOUCH INT</td><td>GPIO 47</td><td>Interrupción</td></tr>
+<tr><td>TOUCH RST</td><td>GPIO 48</td><td>Activo bajo</td></tr>
+<tr><td>Dirección</td><td>0x14 / 0x5D</td><td>Detección automática</td></tr>
+</table>
+
+<h2>4. RTC RX8025T (I2C, addr 0x32)</h2>
+<table>
+<tr><th>Función</th><th>Pin / Reg</th><th>Notas</th></tr>
+<tr><td>I2C SDA / SCL</td><td>GPIO 7 / 8</td><td>Bus compartido</td></tr>
+<tr><td>Vcc</td><td>3.3 V</td><td>Backup CR1220</td></tr>
+<tr><td>Reg. tiempo</td><td>0x00–0x06</td><td>BCD: SEC, MIN, HOUR, WEEK, DAY, MONTH, YEAR</td></tr>
+<tr><td>Reg. CONTROL</td><td>0x0F</td><td>bit 6 = STOP oscilador</td></tr>
+<tr><td>Reg. FLAG</td><td>0x0E</td><td>bit 1 = VLF (Voltage Low Flag)</td></tr>
+</table>
+
+<h2 style="page-break-before: always; break-before: page;">5. microSD (SDMMC slot 0, IOMUX)</h2>
+<table>
+<tr><th>Función</th><th>Pin</th></tr>
+<tr><td>CLK / CMD</td><td>GPIO 43 / 44</td></tr>
+<tr><td>D0..D3</td><td>GPIO 39 / 40 / 41 / 42</td></tr>
+<tr><td>TF_VCC</td><td>LDO ch 4 (3.3 V) — <code>esp_ldo_acquire_channel(4)</code> antes del mount</td></tr>
+<tr><td>Pull-ups</td><td>Internos (SDMMC_SLOT_FLAG_INTERNAL_PULLUP)</td></tr>
+</table>
+<p class="small">FATFS con LFN heap mode. Montado en <code>/sdcard</code>. Logs en <code>/sdcard/frigo/</code> y <code>/sdcard/bateria/</code>.</p>
+
+<h2>6. ESP32-C6 — Wi-Fi/BT vía SDIO (slot 1)</h2>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
+<tr><td>CLK / CMD</td><td>GPIO 18 / 19</td><td>40 MHz</td></tr>
+<tr><td>D0..D3</td><td>GPIO 14 / 15 / 16 / 17</td><td></td></tr>
+<tr><td>Slave RESET</td><td>GPIO 54</td><td>esp_hosted reset al ESP32-C6</td></tr>
+</table>
+<div class="nota">
+<strong>NO usar GPIO 14–19 ni 54 para otros fines.</strong> Son la conexión SDIO al radio.
+</div>
+
+<h2>7. Audio — codec ES8311 + amp NS4150</h2>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
+<tr><td>I2S MCLK / BCLK / LRCK / DOUT</td><td>GPIO 13 / 12 / 10 / 9</td><td></td></tr>
+<tr><td>PA_CTRL (NS4150)</td><td>GPIO 11</td><td>Activar amp (active high)</td></tr>
+<tr><td>I2C codec</td><td>GPIO 7 / 8</td><td>Misma I2C que touch + RTC, addr 0x18</td></tr>
+</table>
+
+<h2>8. Frigorífico — sensores y ventilador</h2>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
+<tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup 4.7 kΩ a 3.3 V</td></tr>
+<tr><td>Ventilador PWM</td><td>GPIO 5</td><td>JP1 pin 15</td><td>LEDC 25 kHz, control por T_Aletas</td></tr>
+</table>
+
+<h2>9. PZEM-004T v3 — medidor red 230 V (UART2)</h2>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
+<tr><td>UART2 TX</td><td>GPIO 32</td><td>JP1 pin 19</td><td>9600 baud 8N1, addr 0x01</td></tr>
+<tr><td>UART2 RX</td><td>GPIO 33</td><td>JP1 pin 21</td><td>Polling 2000 ms</td></tr>
+</table>
+
+<h2 style="page-break-before: always; break-before: page;">10. Camper NE185 (UART1) — puente RS485 externo</h2>
+<div class="new">
+<strong>Nuevo componente <code>main/camper/</code>.</strong> Un ESP32 externo con MAX485 escucha
+el bus RS485 del derivador Nordelettronica NE185 (sustituyendo al panel NE187) y envía
+JSON al P4 por UART1.
+</div>
+<table>
+<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
+<tr><td>UART1 RX</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Recibe JSON del ESP32 sniffer (115200 8N1)</td></tr>
+<tr><td>UART1 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Envía 'i'/'o'/'p' al ESP32 sniffer</td></tr>
+<tr><td>GND común</td><td>—</td><td>JP1 pin 5/6/16</td><td>Necesario para nivel TTL fiable</td></tr>
+</table>
+<p class="small">
+Protocolo de la línea: una línea JSON por segundo del estilo
+<code>{"s1":3,"r1":2,"lin":1,"lout":0,"pump":0,"shore":1}\n</code> con los niveles de tanques
+S1 (limpia) y R1 (grises) en sondas 0..3, estados de luz interior/exterior/bomba y presencia 230 V.
+Comandos hacia el sniffer: 1 byte por toggle ('i' luz INT, 'o' luz EXT, 'p' bomba).
+</p>
+
+<h2>11. Mapa global de pines GPIO</h2>
+<table>
+<tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
+<tr><td>1</td><td>UART1 RX</td><td><strong>Camper</strong> — recibe JSON del ESP32 RS485 (JP1 pin 7)</td></tr>
+<tr><td>2</td><td>UART1 TX</td><td><strong>Camper</strong> — envía comandos al ESP32 RS485 (JP1 pin 9)</td></tr>
+<tr><td>4</td><td>1-Wire</td><td>DS18B20 (JP1 pin 13, pullup 4.7 kΩ)</td></tr>
+<tr><td>5</td><td>LEDC PWM</td><td>Ventilador frigo (JP1 pin 15, 25 kHz)</td></tr>
+<tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
+<tr><td>8</td><td>I2C SCL</td><td></td></tr>
+<tr><td>9</td><td>I2S DOUT</td><td>Codec ES8311</td></tr>
+<tr><td>10</td><td>I2S LRCK</td><td></td></tr>
+<tr><td>11</td><td>PA_CTRL</td><td>NS4150 amp</td></tr>
+<tr><td>12</td><td>I2S BCLK</td><td></td></tr>
+<tr><td>13</td><td>I2S MCLK</td><td></td></tr>
+<tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr>
+<tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
+<tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
+<tr><td>27</td><td>GPIO out</td><td>Reset panel JD9165BA</td></tr>
+<tr><td>32</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 19)</td></tr>
+<tr><td>33</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 21)</td></tr>
+<tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
+<tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr>
+<tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
+<tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
+</table>
+<p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 3, 20, 45, 46).</p>
+
+<h2>12. LDO internos del ESP32-P4</h2>
+<table>
+<tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr>
+<tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr>
+<tr><td>LDO ch 4</td><td>3300 mV</td><td>TF_VCC microSD</td><td>Activado por <code>datalogger_init()</code> antes del mount</td></tr>
+</table>
+
+<h2>13. Buses compartidos / consideraciones</h2>
+<ul>
+<li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
+<li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 camper (GPIO 1/2). UART2 PZEM-004T (GPIO 32/33).</li>
+<li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
+</ul>
+
+<h2>14. Conectores físicos del módulo</h2>
+<table>
+<tr><th>#</th><th>Conector</th><th>Función</th></tr>
+<tr><td>1</td><td>BOOT button</td><td>Pulsador BOOT del ESP32-P4</td></tr>
+<tr><td>2</td><td>Reset button</td><td>EN/RESET del ESP32-P4</td></tr>
+<tr><td>3</td><td>MX 1.25 2P</td><td>Salida altavoz</td></tr>
+<tr><td>4</td><td>TF card slot</td><td>microSD slot 0 IOMUX</td></tr>
+<tr><td>5</td><td>MX 1.25 2P</td><td>Entrada batería Li-ion 3.7 V</td></tr>
+<tr><td>6</td><td>Battery button</td><td>On/off batería</td></tr>
+<tr><td>7</td><td>USB-C FS</td><td>Programación + 5 V</td></tr>
+<tr><td>8</td><td>MX 1.25 4P (CN2)</td><td>UART consola + 5 V</td></tr>
+<tr><td>9</td><td>USB-C HS</td><td>USB 2.0 HS + 5 V</td></tr>
+<tr><td>10</td><td>MX 1.25 4P</td><td>UART externo</td></tr>
+<tr><td>11</td><td>MX 1.25 4P</td><td>RS-485 con MAX485 onboard</td></tr>
+<tr><td>12</td><td>SH 1.0 4P (CN5)</td><td>I2C externo</td></tr>
+<tr><td>13</td><td>RJ45</td><td>Ethernet 100 Mbps</td></tr>
+<tr><td>14</td><td>Battery holder</td><td>CR1220 del RTC</td></tr>
+<tr><td>15</td><td>FPC 30P 0.5</td><td>MIPI-DSI 2 lanes</td></tr>
+<tr><td>16</td><td>JC-ESP32P4-M3</td><td>Módulo SoC principal</td></tr>
+<tr><td>17</td><td>FPC 6P 0.5</td><td>Touch GT911</td></tr>
+<tr><td>18</td><td>Pin Header 2×13 (JP1)</td><td>Expansión GPIO 2.54 mm</td></tr>
+</table>
+
+<div class="keep">
+<h2>15. JP1 — pines disponibles para periféricos externos</h2>
+
+<div class="jp1-grid">
+  <img class="jp1" src="jp1_pinout.png" alt="JP1 pinout">
+  <table>
+  <tr><th>Pin</th><th>Señal</th><th>Estado</th></tr>
+  <tr><td>1, 18</td><td>VCC3V3</td><td>Alim 3.3 V</td></tr>
+  <tr><td>2</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr>
+  <tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr>
+  <tr><td>3, 4, 8</td><td>NC</td><td>No conectado</td></tr>
+  <tr><td>7</td><td>GPIO 1</td><td><strong>Camper UART1 RX</strong></td></tr>
+  <tr><td>9</td><td>GPIO 2</td><td><strong>Camper UART1 TX</strong></td></tr>
+  <tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr>
+  <tr><td>11</td><td>GPIO 3</td><td>Libre</td></tr>
+  <tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr>
+  <tr><td>13</td><td>GPIO 4</td><td>Frigo DS18B20</td></tr>
+  <tr><td>14</td><td>GPIO 45</td><td>Libre</td></tr>
+  <tr><td>15</td><td>GPIO 5</td><td>Frigo PWM</td></tr>
+  <tr><td>17</td><td>GPIO 20</td><td>Libre (ADC1 CH4)</td></tr>
+  <tr><td>19</td><td>GPIO 32</td><td><strong>PZEM UART2 TX</strong></td></tr>
+  <tr><td>21</td><td>GPIO 33</td><td><strong>PZEM UART2 RX</strong></td></tr>
+  <tr><td>20, 22, 24, 26</td><td>—</td><td>Radio ESP32-C6</td></tr>
+  <tr><td>23, 25</td><td>—</td><td>I²C externo (ES I²C)</td></tr>
+  </table>
+</div>
+
+<ul class="reco-compact">
+<li><strong>Alimentación:</strong> 3.3 V en pin 1/18, 5 V en pin 2. GND en 5/6/16.</li>
+<li><strong>UART libre extra:</strong> ninguno completo; quedan GPIOs 3, 20, 45, 46 sueltos.</li>
+<li><strong>ADC:</strong> solo GPIO 20 (pin 17) tiene ADC1 CH4. <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
+<li><strong>Reasignables si no usas el frigo:</strong> GPIO 4 (pin 13) y GPIO 5 (pin 15).</li>
+<li><strong>Niveles:</strong> 3.3 V TTL. Para 5 V o RS-232/RS-485 usar level-shifter/transceiver externo.</li>
+</ul>
+</div>
+
+<div class="keep">
+<h2>16. CN2 — UART consola / entrada 5 V (MX 1.25 4P)</h2>
+<p>
+Conector secundario para alimentación 5 V y/o consola UART0. Frontend protegido con MOSFET AO3401
+(polaridad inversa) + TVS SMBJ6.0CA.
+</p>
+<ul>
+<li><strong>Identificar pin 1:</strong> CN2 está pegado al USB-C #7. El pin 1 (VIN) es el extremo más cercano al USB-C. Pin 4 = GND.</li>
+<li>Alimentar la placa con 5 V externos: +5 V al pin 1, GND al pin 4. 5 V ±5 %, hasta ~1 A pico con backlight.</li>
+<li>Solo UNA fuente 5 V activa a la vez (no mezclar USB-C con CN2 VIN).</li>
+</ul>
+</div>
+
+<h2>17. CN5 — I²C externo (SH 1.0 4P)</h2>
+<table>
+<tr><th>Pin</th><th>Señal</th></tr>
+<tr><td>1</td><td>GND</td></tr>
+<tr><td>2</td><td>ESP_3V3</td></tr>
+<tr><td>3</td><td>ES_I2C_SCL</td></tr>
+<tr><td>4</td><td>ES_I2C_SDA</td></tr>
+</table>
+
+<h2>18. Alimentación</h2>
+<p>
+Tensión nominal: 5 V DC. Consumo ~600 mA (pico ~1 A con backlight máximo).<br>
+Cadena: USB-C / CN2 VIN → IP5306 (cargador Li + booster) → VOUT-BAT (5 V regulado) →
+TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5 V.
+</p>
+
+<h2>19. Notas de hardware y estado</h2>
+<div class="ok">
+<strong>[OK]</strong> Funcionando en producción:
+<ul>
+<li>Display MIPI-DSI + touch GT911</li>
+<li>microSD (LDO ch 4, slot 0 IOMUX)</li>
+<li>Wi-Fi/BT vía ESP32-C6 (esp_hosted)</li>
+<li>RTC RX8025T (backup CR1220 + NVS)</li>
+<li>Audio ES8311 + NS4150</li>
+<li>LDO interno PHY MIPI-DSI</li>
+<li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
+<li><strong>Camper NE185 UART1</strong> (componente <code>main/camper/</code> compilado y
+flasheado; widgets visibles en vista Overview en gris hasta conectar el ESP32 RS485 externo)</li>
+</ul>
+</div>
+<div class="nota">
+<strong>[!]</strong> Pendiente conexión física desde JP1:
+<ul>
+<li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V)</li>
+<li>Ventilador PWM en GPIO 5 → JP1 pin 15</li>
+<li>PZEM-004T → JP1 pin 19 (GPIO 32) y pin 21 (GPIO 33)</li>
+<li>ESP32 RS485 externo → JP1 pin 7 (GPIO 1, RX) y pin 9 (GPIO 2, TX) — GND en pin 5/6/16</li>
+</ul>
+</div>
+<p class="small">
+<strong>Bug del fabricante:</strong> el esquemático Guition indica RX8130CE como RTC pero la
+placa real lleva RX8025T (mapa de registros distinto). El firmware ya maneja correctamente el
+RX8025T.
+</p>
+
+</body>
+</html>

@@ -90,6 +90,17 @@ lv_obj_t *ui_arc_soc_create(lv_obj_t *parent, lv_coord_t size);
  * soc_deci > 1000 se trata como "sin dato" y se muestra "--". */
 void ui_arc_soc_set(lv_obj_t *arc_box, uint16_t soc_deci, uint16_t voltage_centi);
 
+/* ── Gauge SOC tipo "pila vertical con relleno" ─────────────────── */
+/* Widget con forma de pila: cuerpo rectangular + tapa superior. El
+ * relleno crece de abajo arriba segun el SOC% y se colorea con los
+ * mismos umbrales (verde/naranja/rojo). Encima del cuerpo aparece el
+ * %; debajo del contenedor, el voltaje. Tamanos sugeridos: w=70 h=160.
+ */
+lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
+                                lv_coord_t width, lv_coord_t height);
+void      ui_battery_soc_set(lv_obj_t *bat_box,
+                             uint16_t soc_deci, uint16_t voltage_centi);
+
 /* ── Helpers de color por rango ─────────────────────────────────── */
 lv_color_t ui_color_for_soc(uint16_t soc_deci);
 lv_color_t ui_color_for_current(int32_t milli);
