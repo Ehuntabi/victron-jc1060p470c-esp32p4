@@ -2,6 +2,9 @@
 #include "ui.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "config_server.h"
 #include <stdlib.h>
 #include <stdbool.h>
@@ -68,14 +71,35 @@ static ui_state_t g_ui = {
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
 
-/* Beep corto al pulsar cualquier widget clicable. Se registra una unica vez
- * en la pantalla activa; LV_EVENT_CLICKED burbujea desde el widget hijo.
- * Usa el jingle CONFIRM (1319 Hz x 80 ms) — se sabe que funciona porque
- * el BOOT_OK al arranque tambien usa este mismo path. */
+/* Tarea aparte para los beeps de click. Asi el handler del click NO bloquea
+ * el thread LVGL durante los ~300 ms que tarda audio_play_jingle (que entre
+ * tono + padding de silencio del codec bloquea el llamante). Si el usuario
+ * pulsa varios botones rapido, los beeps adicionales se descartan (cola de
+ * tamaño 1 con xQueueOverwrite no es necesario — basta xQueueSend con
+ * timeout 0 que devuelve fail si la cola esta llena). */
+static QueueHandle_t s_beep_queue = NULL;
+
+static void ui_beep_task(void *arg)
+{
+    (void)arg;
+    uint8_t dummy;
+    while (1) {
+        if (xQueueReceive(s_beep_queue, &dummy, portMAX_DELAY) == pdTRUE) {
+            audio_play_jingle(AUDIO_JINGLE_CONFIRM);
+        }
+    }
+}
+
+/* Beep corto al pulsar cualquier widget clicable. Encola y vuelve
+ * inmediatamente (no bloquea el thread LVGL). */
 static void ui_global_click_beep_cb(lv_event_t *e)
 {
     (void)e;
-    audio_play_jingle(AUDIO_JINGLE_CONFIRM);
+    if (!s_beep_queue) return;
+    uint8_t v = 1;
+    /* timeout 0 → si la cola esta llena (beep en curso), se descarta el
+     * nuevo beep. Evita acumulacion de beeps por clicks rapidos. */
+    xQueueSend(s_beep_queue, &v, 0);
 }
 
 static void health_timer_cb(lv_timer_t *t)
@@ -277,6 +301,15 @@ void ui_init(void) {
     ui->tabview   = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 60);
     lv_obj_add_flag(ui->tabview, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_clear_flag(ui->tabview, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Tarea de beeps (lanzada antes de instalar el handler) para que el
+     * click no bloquee el thread LVGL durante los ~300 ms del jingle. */
+    if (!s_beep_queue) {
+        s_beep_queue = xQueueCreate(1, sizeof(uint8_t));
+        if (s_beep_queue) {
+            xTaskCreate(ui_beep_task, "ui_beep", 3072, NULL, 4, NULL);
+        }
+    }
 
     /* Beep global al pulsar cualquier widget clicable. LV_EVENT_CLICKED
      * burbujea desde el hijo hasta el screen, asi un solo handler en la
