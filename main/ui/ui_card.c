@@ -549,6 +549,119 @@ void ui_battery_soc_set(lv_obj_t *bat_box,
     }
 }
 
+/* ── Tanque visual estilo "depósito" ─────────────────────────────── */
+/* Estructura del contenedor:
+ *   user_data: kind (cast a intptr_t para alarma)
+ *   child 0: title_lbl (etiqueta arriba)
+ *   child 1: tank (rectángulo del depósito, flex_grow 1 para llenar)
+ *     child 0: fill (rectángulo que sube con el nivel)
+ *     child 1: level_lbl (label grande con %)
+ *
+ * El tanque interno usa flex_grow 1 para resize automatico cuando el
+ * caller cambia la altura del box (p.ej. via flex_grow del padre). */
+lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
+                         const char *label_text, lv_color_t accent_color,
+                         ui_tank_kind_t kind)
+{
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, width, height);
+    lv_obj_set_layout(box, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(box, 0, 0);
+    lv_obj_set_style_pad_gap(box, 4, 0);
+    lv_obj_set_user_data(box, (void *)(intptr_t)kind);
+
+    /* Etiqueta arriba (altura content), color claro accent para destacar */
+    lv_obj_t *title = lv_label_create(box);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(title, accent_color, 0);
+    lv_label_set_text(title, label_text ? label_text : "");
+
+    /* Cuerpo del depósito: borde grueso brillante en color accent + fondo
+     * oscuro azulado para que el relleno de agua resalte. */
+    lv_obj_t *tank = lv_obj_create(box);
+    lv_obj_remove_style_all(tank);
+    lv_obj_set_width(tank, lv_pct(100));
+    lv_obj_set_flex_grow(tank, 1);
+    lv_obj_set_style_radius(tank, 10, 0);
+    lv_obj_set_style_border_width(tank, 4, 0);
+    lv_obj_set_style_border_color(tank, accent_color, 0);
+    lv_obj_set_style_bg_color(tank, lv_color_hex(0x0a1620), 0);
+    lv_obj_set_style_bg_opa(tank, LV_OPA_COVER, 0);
+    /* Sombra interior sutil para dar sensacion de profundidad */
+    lv_obj_set_style_shadow_width(tank, 8, 0);
+    lv_obj_set_style_shadow_color(tank, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_shadow_opa(tank, LV_OPA_50, 0);
+    lv_obj_set_style_shadow_spread(tank, -2, 0);
+    lv_obj_set_style_pad_all(tank, 4, 0);
+    lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Fill (sube de abajo arriba con el nivel) */
+    lv_obj_t *fill = lv_obj_create(tank);
+    lv_obj_remove_style_all(fill);
+    lv_obj_set_width(fill, lv_pct(100));
+    lv_obj_set_height(fill, 0);
+    lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_radius(fill, 6, 0);
+    lv_obj_set_style_bg_color(fill, accent_color, 0);
+    lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
+
+    /* Label grande con el % - blanco brillante con sombra para legibilidad
+     * sobre cualquier nivel de relleno (vacio o lleno). */
+    lv_obj_t *lbl = lv_label_create(tank);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_label_set_text(lbl, "--");
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+
+    return box;
+}
+
+void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
+{
+    if (!tank_box) return;
+    /* tank_box.child(0) = title, child(1) = tank.
+     * tank.child(0) = fill, child(1) = level_lbl. */
+    lv_obj_t *tank = lv_obj_get_child(tank_box, 1);
+    if (!tank) return;
+    lv_obj_t *fill = lv_obj_get_child(tank, 0);
+    lv_obj_t *lbl  = lv_obj_get_child(tank, 1);
+    if (!fill || !lbl) return;
+
+    ui_tank_kind_t kind = (ui_tank_kind_t)(intptr_t)lv_obj_get_user_data(tank_box);
+
+    /* Altura util interna (descontando padding+borde aprox) */
+    lv_coord_t tank_h = lv_obj_get_content_height(tank);
+    if (tank_h < 1) tank_h = lv_obj_get_height(tank) - 14;
+    if (tank_h < 1) tank_h = 30;
+
+    if (level_0_to_3 > 3) {
+        lv_label_set_text(lbl, "--");
+        lv_obj_set_height(fill, 0);
+        return;
+    }
+
+    int pct = level_0_to_3 * 100 / 3;
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%d %%", pct);
+    lv_label_set_text(lbl, buf);
+
+    lv_coord_t h = (lv_coord_t)((long)tank_h * (long)level_0_to_3 / 3L);
+    if (h < 1) h = 1;
+    lv_obj_set_height(fill, h);
+    lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    /* Color por alarma */
+    bool alarm = false;
+    if (kind == UI_TANK_CLEAN && level_0_to_3 == 0) alarm = true;
+    if (kind == UI_TANK_GREY  && level_0_to_3 == 3) alarm = true;
+    lv_obj_set_style_bg_color(fill, alarm ? UI_COLOR_RED : UI_COLOR_CYAN, 0);
+}
+
 /* ── Helpers de color por rango ──────────────────────────────────── */
 lv_color_t ui_color_for_soc(uint16_t soc_deci)
 {

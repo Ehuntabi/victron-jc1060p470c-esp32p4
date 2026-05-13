@@ -101,6 +101,25 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 void      ui_battery_soc_set(lv_obj_t *bat_box,
                              uint16_t soc_deci, uint16_t voltage_centi);
 
+/* ── Tanque visual estilo "depósito" para niveles de agua ──────── */
+/* Widget rectangular grande con relleno que sube de abajo arriba.
+ * El nivel se da en sondas 0..3 (sumatorio del bitmask del NE185).
+ * accent_color es el color del relleno cuando está en estado normal;
+ * cuando se acerca a alarma (lleno para grises o vacío para limpia)
+ * se torna rojo automáticamente.
+ *
+ * label_text aparece arriba del widget (ej. "Agua limpia").
+ * El % grande se muestra dentro del depósito.                        */
+typedef enum {
+    UI_TANK_CLEAN  = 0,   /* alerta cuando vacio (level == 0) */
+    UI_TANK_GREY   = 1,   /* alerta cuando lleno (level == 3) */
+} ui_tank_kind_t;
+
+lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
+                         const char *label_text, lv_color_t accent_color,
+                         ui_tank_kind_t kind);
+void      ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3);
+
 /* ── Helpers de color por rango ─────────────────────────────────── */
 lv_color_t ui_color_for_soc(uint16_t soc_deci);
 lv_color_t ui_color_for_current(int32_t milli);

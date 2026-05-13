@@ -5,6 +5,7 @@
 #include "icons/icons.h"
 #include "ui.h"
 #include "ne185/ne185.h"
+#include "frigo.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,16 +15,10 @@ typedef struct {
     /* Cards */
     lv_obj_t *card_solar;
     lv_obj_t *m_solar_w;
-    /* Flecha + label de potencia Solar→Bat */
-    lv_obj_t *arrow_solar;
-    lv_obj_t *flow_solar;
     /* Card central Bateria */
     lv_obj_t *card_bat;
     lv_obj_t *arc_soc;
     lv_obj_t *m_bat_current;
-    /* Flecha + label DC/DC→Bat (entrada desde bateria motor) */
-    lv_obj_t *arrow_loads;     /* reaprovechado para DC/DC */
-    lv_obj_t *flow_loads;
     /* Card DC/DC (Orion-Tr Smart, carga desde batería motor) */
     lv_obj_t *card_loads;      /* nombre mantenido por compatibilidad */
     lv_obj_t *m_loads_w;       /* V_in: tensión batería motor */
@@ -59,12 +54,13 @@ typedef struct {
     } solar;
 
     /* ── Widgets camper (NE185 via UART) ─────────────────────── */
-    lv_obj_t *camper_top;        /* contenedor de barras + pill */
-    lv_obj_t *bar_s1;
-    lv_obj_t *lbl_s1;
-    lv_obj_t *bar_r1;
-    lv_obj_t *lbl_r1;
-    lv_obj_t *pill_shore;        /* etiqueta "230 V" */
+    lv_obj_t *tank_s1;           /* tanque agua limpia (debajo de Solar) */
+    lv_obj_t *tank_r1;           /* tanque aguas grises (debajo de DC/DC) */
+    lv_obj_t *pill_shore;        /* indicador 230 V (debajo de Bateria) */
+    lv_obj_t *pill_shore_lbl;    /* texto interno del pill (ON/OFF) */
+    /* ── Widgets frigo (DS18B20 + ventilador PWM) ─────────────── */
+    lv_obj_t *lbl_freezer_temp;  /* T_Congelador (junto a tank limpia) */
+    lv_obj_t *lbl_fan_pct;       /* % ventilador (junto a tank grises) */
     lv_obj_t *camper_bottom;     /* contenedor de los 3 botones */
     lv_obj_t *btn_lin;
     lv_obj_t *btn_lout;
@@ -91,32 +87,6 @@ static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
     return card;
 }
 
-/* Columna vertical (flecha derecha + label de potencia debajo) que se inserta
- * como separador entre las cards en el layout horizontal del Overview. */
-static lv_obj_t *create_arrow_label(lv_obj_t *parent, lv_obj_t **out_flow)
-{
-    lv_obj_t *col = lv_obj_create(parent);
-    lv_obj_remove_style_all(col);
-    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col, 4, 0);
-
-    lv_obj_t *arrow = lv_label_create(col);
-    lv_obj_set_style_text_font(arrow, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(arrow, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
-
-    lv_obj_t *flow = lv_label_create(col);
-    lv_obj_set_style_text_font(flow, &lv_font_montserrat_14_es, 0);
-    lv_obj_set_style_text_color(flow, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(flow, "--");
-    if (out_flow) *out_flow = flow;
-    return arrow;
-}
-
 /* ───────────────────────────────────────────────────────────────
  * Widgets camper (NE185): barra superior con tanques + 230V,
  * fila inferior con 3 botones (luz int, luz ext, bomba).
@@ -135,41 +105,8 @@ static void camper_btn_event_cb(lv_event_t *e)
     ne185_send_cmd(cmd);
 }
 
-static lv_obj_t *camper_make_tank(lv_obj_t *parent, const char *title,
-                                  lv_obj_t **out_bar, lv_obj_t **out_lbl)
-{
-    lv_obj_t *col = lv_obj_create(parent);
-    lv_obj_remove_style_all(col);
-    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col, 4, 0);
-
-    lv_obj_t *t = lv_label_create(col);
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_14_es, 0);
-    lv_obj_set_style_text_color(t, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(t, title);
-
-    lv_obj_t *bar = lv_bar_create(col);
-    lv_obj_set_size(bar, 180, 14);
-    lv_bar_set_range(bar, 0, 100);
-    lv_bar_set_value(bar, 0, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar, UI_COLOR_TEXT_DIM, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(bar, UI_COLOR_CYAN, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(bar, 7, LV_PART_MAIN);
-    lv_obj_set_style_radius(bar, 7, LV_PART_INDICATOR);
-
-    lv_obj_t *lbl = lv_label_create(col);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl, UI_COLOR_TEXT, 0);
-    lv_label_set_text(lbl, "--");
-
-    if (out_bar) *out_bar = bar;
-    if (out_lbl) *out_lbl = lbl;
-    return col;
-}
+/* (helper camper_make_tank antiguo eliminado: ahora se usa
+ *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
 static lv_obj_t *camper_make_button(lv_obj_t *parent, const char *text,
                                     char cmd_char)
@@ -208,42 +145,63 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_clear_flag(ov->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    /* ── Fila principal: Solar | flow | Bat | flow | Loads ───────── */
-    lv_obj_t *row = lv_obj_create(ov->base.root);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_width(row, lv_pct(100));
-    lv_obj_set_flex_grow(row, 1);
-    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    /* ── Grid principal: 3 columnas verticales ──────────────── */
+    lv_obj_t *grid = lv_obj_create(ov->base.root);
+    lv_obj_remove_style_all(grid);
+    lv_obj_set_width(grid, lv_pct(100));
+    lv_obj_set_flex_grow(grid, 1);
+    lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(grid, 8, 0);
+    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Card Solar (verde) lateral */
-    ov->card_solar = create_node_card(row, &icon_solar,
-                                      "Solar", UI_COLOR_GREEN, &ov->m_solar_w);
-    lv_obj_set_height(ov->card_solar, lv_pct(100));
-    lv_obj_set_flex_grow(ov->card_solar, 2);
-    lv_obj_set_flex_align(ov->card_solar, LV_FLEX_ALIGN_SPACE_AROUND,
+    /* ── Columna izquierda: card Solar arriba + tanque limpia abajo ── */
+    lv_obj_t *col_left = lv_obj_create(grid);
+    lv_obj_remove_style_all(col_left);
+    lv_obj_set_height(col_left, lv_pct(100));
+    lv_obj_set_flex_grow(col_left, 3);
+    lv_obj_set_layout(col_left, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_left, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_left, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_left, 8, 0);
+    lv_obj_clear_flag(col_left, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->card_solar = create_node_card(col_left, &icon_solar,
+                                      "Solar", UI_COLOR_GREEN, &ov->m_solar_w);
+    lv_obj_set_width(ov->card_solar, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_solar, 8);
+    /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
     ui_metric_set_label(ov->m_solar_w, "Actual", UI_COLOR_TEXT_DIM);
     ui_metric_set(ov->m_solar_w, "--", "A", UI_COLOR_TEXT);
     ov->m_solar_kwh = ui_metric_create_compact(ov->card_solar, "Hoy");
     ui_metric_set(ov->m_solar_kwh, "--", "kWh", UI_COLOR_TEXT_DIM);
 
-    /* Flecha Solar→Bat */
-    ov->arrow_solar = create_arrow_label(row, &ov->flow_solar);
+    ov->tank_s1 = ui_tank_create(col_left, lv_pct(75), 1,
+                                 "Agua limpia", UI_COLOR_CYAN, UI_TANK_CLEAN);
+    lv_obj_set_flex_grow(ov->tank_s1, 3);
 
-    /* Card Bateria (naranja, central, más grande) */
-    ov->card_bat = ui_card_create(row, UI_COLOR_ORANGE);
-    lv_obj_set_height(ov->card_bat, lv_pct(100));
-    lv_obj_set_flex_grow(ov->card_bat, 3);
+    /* ── Columna central: card Bateria arriba + indicador 230V abajo ── */
+    lv_obj_t *col_center = lv_obj_create(grid);
+    lv_obj_remove_style_all(col_center);
+    lv_obj_set_height(col_center, lv_pct(100));
+    lv_obj_set_flex_grow(col_center, 5);
+    lv_obj_set_layout(col_center, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_center, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_center, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_center, 8, 0);
+    lv_obj_clear_flag(col_center, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->card_bat = ui_card_create(col_center, UI_COLOR_ORANGE);
+    lv_obj_set_width(ov->card_bat, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_bat, 6);
     ui_card_set_title_img(ov->card_bat, &icon_battery,
                           "Batería", UI_COLOR_ORANGE);
-    ov->arc_soc = ui_battery_soc_create(ov->card_bat, 150, 140);
-
-    /* Fila horizontal con Corriente (izda) + Autonomía (dcha) */
+    ov->arc_soc = ui_battery_soc_create(ov->card_bat, 120, 112);
+    /* Fila horizontal con Corriente + Autonomía */
     lv_obj_t *bat_row = lv_obj_create(ov->card_bat);
     lv_obj_remove_style_all(bat_row);
     lv_obj_set_width(bat_row, lv_pct(100));
@@ -256,52 +214,100 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->m_bat_current = ui_metric_create_compact(bat_row, "Corriente");
     ov->m_ttg         = ui_metric_create_compact(bat_row, "Autonomía");
 
-    /* Flecha Bat→Loads */
-    ov->arrow_loads = create_arrow_label(row, &ov->flow_loads);
+    /* Bottom de col_center: fila horizontal con [Congelador, 230V, Ventilador] */
+    {
+        lv_obj_t *bottom_row = lv_obj_create(col_center);
+        lv_obj_remove_style_all(bottom_row);
+        lv_obj_set_width(bottom_row, lv_pct(100));
+        lv_obj_set_flex_grow(bottom_row, 1);
+        lv_obj_set_layout(bottom_row, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(bottom_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(bottom_row, LV_FLEX_ALIGN_SPACE_AROUND,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(bottom_row, 6, 0);
+        lv_obj_clear_flag(bottom_row, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Card DC/DC (cyan) lateral — Orion-Tr Smart: muestra V_in y V_out */
-    ov->card_loads = create_node_card(row, &icon_dcdc,
-                                      "DC/DC", UI_COLOR_CYAN, &ov->m_loads_w);
-    lv_obj_set_height(ov->card_loads, lv_pct(100));
-    lv_obj_set_flex_grow(ov->card_loads, 2);
-    lv_obj_set_flex_align(ov->card_loads, LV_FLEX_ALIGN_SPACE_AROUND,
+        /* Congelador (izquierda) */
+        lv_obj_t *col_freezer = lv_obj_create(bottom_row);
+        lv_obj_remove_style_all(col_freezer);
+        lv_obj_set_size(col_freezer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(col_freezer, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(col_freezer, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col_freezer, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(col_freezer, 2, 0);
+        lv_obj_t *t_lbl = lv_label_create(col_freezer);
+        lv_obj_set_style_text_font(t_lbl, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(t_lbl, UI_COLOR_CYAN, 0);
+        lv_label_set_text(t_lbl, "Congelador");
+        ov->lbl_freezer_temp = lv_label_create(col_freezer);
+        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->lbl_freezer_temp, "-- \xc2\xb0""C");
+
+        /* Pill 230 V (centro) */
+        lv_obj_t *pill = lv_obj_create(bottom_row);
+        lv_obj_remove_style_all(pill);
+        lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_radius(pill, 14, 0);
+        lv_obj_set_style_border_width(pill, 2, 0);
+        lv_obj_set_style_border_color(pill, UI_COLOR_CARD_BORDER, 0);
+        lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
+        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_hor(pill, 16, 0);
+        lv_obj_set_style_pad_ver(pill, 8, 0);
+        lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+        ov->pill_shore_lbl = lv_label_create(pill);
+        lv_obj_set_style_text_font(ov->pill_shore_lbl, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(ov->pill_shore_lbl, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->pill_shore_lbl, "230 V");
+        lv_obj_center(ov->pill_shore_lbl);
+        ov->pill_shore = pill;
+
+        /* Ventilador (derecha) */
+        lv_obj_t *col_fan = lv_obj_create(bottom_row);
+        lv_obj_remove_style_all(col_fan);
+        lv_obj_set_size(col_fan, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(col_fan, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(col_fan, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col_fan, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(col_fan, 2, 0);
+        lv_obj_t *f_lbl = lv_label_create(col_fan);
+        lv_obj_set_style_text_font(f_lbl, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(f_lbl, UI_COLOR_CYAN, 0);
+        lv_label_set_text(f_lbl, "Ventilador");
+        ov->lbl_fan_pct = lv_label_create(col_fan);
+        lv_obj_set_style_text_font(ov->lbl_fan_pct, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(ov->lbl_fan_pct, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->lbl_fan_pct, "-- %");
+    }
+
+    /* ── Columna derecha: card DC/DC arriba + tanque grises abajo ── */
+    lv_obj_t *col_right = lv_obj_create(grid);
+    lv_obj_remove_style_all(col_right);
+    lv_obj_set_height(col_right, lv_pct(100));
+    lv_obj_set_flex_grow(col_right, 3);
+    lv_obj_set_layout(col_right, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_right, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_right, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_right, 8, 0);
+    lv_obj_clear_flag(col_right, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->card_loads = create_node_card(col_right, &icon_dcdc,
+                                      "DC/DC", UI_COLOR_CYAN, &ov->m_loads_w);
+    lv_obj_set_width(ov->card_loads, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_loads, 8);
+    /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
     ui_metric_set_label(ov->m_loads_w, "Motor", UI_COLOR_TEXT_DIM);
     ui_metric_set(ov->m_loads_w, "--", "V", UI_COLOR_TEXT);
     ov->m_loads_kwh = ui_metric_create_compact(ov->card_loads, "Servicio");
     ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
 
-    /* ── Camper top bar: tanques S1, R1 + pill 230 V ─────────── */
-    ov->camper_top = lv_obj_create(ov->base.root);
-    lv_obj_remove_style_all(ov->camper_top);
-    lv_obj_set_width(ov->camper_top, lv_pct(100));
-    lv_obj_set_height(ov->camper_top, LV_SIZE_CONTENT);
-    lv_obj_set_layout(ov->camper_top, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(ov->camper_top, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(ov->camper_top, LV_FLEX_ALIGN_SPACE_AROUND,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(ov->camper_top, LV_OBJ_FLAG_SCROLLABLE);
-
-    camper_make_tank(ov->camper_top, "Agua limpia", &ov->bar_s1, &ov->lbl_s1);
-    camper_make_tank(ov->camper_top, "Aguas grises", &ov->bar_r1, &ov->lbl_r1);
-
-    /* Pill 230 V */
-    {
-        lv_obj_t *pill = lv_obj_create(ov->camper_top);
-        lv_obj_remove_style_all(pill);
-        lv_obj_set_size(pill, 110, 40);
-        lv_obj_set_style_radius(pill, 20, 0);
-        lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
-        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-        lv_obj_set_layout(pill, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_align(pill, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_t *l = lv_label_create(pill);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-        lv_obj_set_style_text_color(l, UI_COLOR_TEXT, 0);
-        lv_label_set_text(l, "230 V");
-        ov->pill_shore = pill;
-    }
+    ov->tank_r1 = ui_tank_create(col_right, lv_pct(75), 1,
+                                 "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY);
+    lv_obj_set_flex_grow(ov->tank_r1, 3);
 
     /* ── Camper bottom: 3 botones grandes ────────────────────── */
     ov->camper_bottom = lv_obj_create(ov->base.root);
@@ -432,18 +438,8 @@ static void overview_render(ui_overview_view_t *ov)
         ui_metric_set(ov->m_solar_w, "--", "A", UI_COLOR_TEXT_DIM);
     }
 
-    /* ── Flecha Solar→Bat (A de carga) ─────────────────────────── */
-    if (solar_centi_a > 0) {
-        snprintf(buf, sizeof(buf), "%ld.%02ldA",
-                 solar_centi_a / 100, solar_centi_a % 100);
-        lv_label_set_text(ov->flow_solar, buf);
-        lv_obj_set_style_text_color(ov->flow_solar, UI_COLOR_GREEN, 0);
-        lv_obj_set_style_text_color(ov->arrow_solar, UI_COLOR_GREEN, 0);
-    } else {
-        lv_label_set_text(ov->flow_solar, "--");
-        lv_obj_set_style_text_color(ov->flow_solar, UI_COLOR_TEXT_DIM, 0);
-        lv_obj_set_style_text_color(ov->arrow_solar, UI_COLOR_TEXT_DIM, 0);
-    }
+    /* (Las flechas Solar→Bat / Bat→DC se eliminaron al pasar a layout
+     * de 3 columnas verticales. El flujo se infiere de los colores.) */
 
     /* ── Batería: SOC + corriente ──────────────────────────────── */
     if (bat_fresh) {
@@ -473,18 +469,9 @@ static void overview_render(ui_overview_view_t *ov)
                  ov->dcdc.vout_centi / 100, ov->dcdc.vout_centi % 100);
         ui_metric_set(ov->m_loads_kwh, buf, "V",
                       active ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
-        /* Flecha del flujo: cantidad de transferencia aproximada via V_out
-         * (no hay corriente reportada en el record BLE de Orion) */
-        lv_label_set_text(ov->flow_loads, active ? "DC/DC" : "--");
-        lv_color_t flow_col = active ? UI_COLOR_CYAN : UI_COLOR_TEXT_DIM;
-        lv_obj_set_style_text_color(ov->flow_loads, flow_col, 0);
-        lv_obj_set_style_text_color(ov->arrow_loads, flow_col, 0);
     } else {
         ui_metric_set(ov->m_loads_w,   "--", "V", UI_COLOR_TEXT_DIM);
         ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
-        lv_label_set_text(ov->flow_loads, "--");
-        lv_obj_set_style_text_color(ov->flow_loads, UI_COLOR_TEXT_DIM, 0);
-        lv_obj_set_style_text_color(ov->arrow_loads, UI_COLOR_TEXT_DIM, 0);
     }
 
     /* ── TTG ──────────────────────────────────────────────────── */
@@ -506,32 +493,16 @@ static void overview_render(ui_overview_view_t *ov)
         ne185_data_t cd;
         ne185_get(&cd);
 
-        /* Tanques: nivel 0..3 → %  */
-        if (ov->bar_s1) {
-            int pct = (cd.s1 * 100) / 3;
-            lv_bar_set_value(ov->bar_s1, pct, LV_ANIM_ON);
-            lv_obj_set_style_bg_color(ov->bar_s1,
-                cd.fresh && cd.s1 == 0 ? UI_COLOR_RED : UI_COLOR_CYAN,
-                LV_PART_INDICATOR);
-            char b[8];
-            snprintf(b, sizeof(b), cd.fresh ? "%d %%" : "--", pct);
-            lv_label_set_text(ov->lbl_s1, b);
-        }
-        if (ov->bar_r1) {
-            int pct = (cd.r1 * 100) / 3;
-            lv_bar_set_value(ov->bar_r1, pct, LV_ANIM_ON);
-            lv_obj_set_style_bg_color(ov->bar_r1,
-                cd.fresh && cd.r1 == 3 ? UI_COLOR_RED : UI_COLOR_CYAN,
-                LV_PART_INDICATOR);
-            char b[8];
-            snprintf(b, sizeof(b), cd.fresh ? "%d %%" : "--", pct);
-            lv_label_set_text(ov->lbl_r1, b);
-        }
-        /* Pill 230 V */
+        /* Tanques visuales: nivel 0..3 (ui_tank_set ignora valores > 3) */
+        if (ov->tank_s1) ui_tank_set(ov->tank_s1, cd.fresh ? cd.s1 : 0xFF);
+        if (ov->tank_r1) ui_tank_set(ov->tank_r1, cd.fresh ? cd.r1 : 0xFF);
+
+        /* Indicador 230 V grande */
         if (ov->pill_shore) {
             lv_obj_set_style_bg_color(ov->pill_shore,
                 cd.fresh && cd.shore ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM, 0);
         }
+        /* El texto "230 V" se mantiene fijo; solo cambia el color del pill */
         /* Botones: color verde si la salida está activa */
         if (ov->btn_lin) {
             lv_obj_set_style_bg_color(ov->btn_lin,
@@ -544,6 +515,33 @@ static void overview_render(ui_overview_view_t *ov)
         if (ov->btn_pump) {
             lv_obj_set_style_bg_color(ov->btn_pump,
                 cd.fresh && cd.pump ? UI_COLOR_CYAN : UI_COLOR_TEXT_DIM, 0);
+        }
+    }
+
+    /* ── Frigo: T_Congelador y % ventilador ─────────────────── */
+    {
+        const frigo_state_t *fs = frigo_get_state();
+        if (fs && ov->lbl_freezer_temp) {
+            char fbuf[16];
+            if (fs->T_Congelador > -120.0f) {
+                snprintf(fbuf, sizeof(fbuf), "%.1f \xc2\xb0""C",
+                         fs->T_Congelador);
+                lv_obj_set_style_text_color(ov->lbl_freezer_temp,
+                    fs->T_Congelador > -2.0f ? UI_COLOR_RED
+                                             : UI_COLOR_TEXT, 0);
+            } else {
+                snprintf(fbuf, sizeof(fbuf), "-- \xc2\xb0""C");
+                lv_obj_set_style_text_color(ov->lbl_freezer_temp,
+                                            UI_COLOR_TEXT_DIM, 0);
+            }
+            lv_label_set_text(ov->lbl_freezer_temp, fbuf);
+        }
+        if (fs && ov->lbl_fan_pct) {
+            char fbuf[8];
+            snprintf(fbuf, sizeof(fbuf), "%u %%", (unsigned)fs->fan_percent);
+            lv_label_set_text(ov->lbl_fan_pct, fbuf);
+            lv_obj_set_style_text_color(ov->lbl_fan_pct,
+                fs->fan_percent > 0 ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM, 0);
         }
     }
 

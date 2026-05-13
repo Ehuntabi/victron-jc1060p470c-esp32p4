@@ -68,6 +68,16 @@ static ui_state_t g_ui = {
 // Forward declarations
 static void tabview_touch_event_cb(lv_event_t *e);
 
+/* Beep corto al pulsar cualquier widget clicable. Se registra una unica vez
+ * en la pantalla activa; LV_EVENT_CLICKED burbujea desde el widget hijo.
+ * Usa el jingle CONFIRM (1319 Hz x 80 ms) — se sabe que funciona porque
+ * el BOOT_OK al arranque tambien usa este mismo path. */
+static void ui_global_click_beep_cb(lv_event_t *e)
+{
+    (void)e;
+    audio_play_jingle(AUDIO_JINGLE_CONFIRM);
+}
+
 static void health_timer_cb(lv_timer_t *t)
 {
     ui_state_t *ui = (ui_state_t *)t->user_data;
@@ -267,6 +277,12 @@ void ui_init(void) {
     ui->tabview   = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 60);
     lv_obj_add_flag(ui->tabview, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_clear_flag(ui->tabview, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Beep global al pulsar cualquier widget clicable. LV_EVENT_CLICKED
+     * burbujea desde el hijo hasta el screen, asi un solo handler en la
+     * pantalla activa cubre toda la UI sin tener que tocar cada boton. */
+    lv_obj_add_event_cb(lv_scr_act(), ui_global_click_beep_cb,
+                        LV_EVENT_CLICKED, NULL);
     /* Estilo de los tabs: fondo oscuro, fuente grande, indicador azul */
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28_es, 0);
@@ -1777,6 +1793,9 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     s_bh_screen = scr;
     s_bh_prev_screen = prev;
+
+    /* Beep al pulsar cualquier widget tambien en esta pantalla aparte */
+    lv_obj_add_event_cb(scr, ui_global_click_beep_cb, LV_EVENT_CLICKED, NULL);
 
     /* Boton cerrar */
     lv_obj_t *btn_close = lv_btn_create(scr);

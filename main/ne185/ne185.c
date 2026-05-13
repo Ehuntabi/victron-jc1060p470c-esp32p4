@@ -30,6 +30,9 @@ static ne185_data_t       s_data;
 static SemaphoreHandle_t  s_mutex;
 static QueueHandle_t      s_cmd_queue;
 static bool               s_inited;
+/* Marcado a true tras la primera trama valida; se usa para encolar
+ * automaticamente las acciones de auto-encendido (Luz INT + Bomba) */
+static bool               s_initial_actions_done;
 
 static uint32_t now_ms(void)
 {
@@ -89,6 +92,23 @@ static void parse_frame(const uint8_t *b)
 
     ESP_LOGD(TAG, "rx s1=%u r1=%u lin=%d lout=%d pump=%d shore=%d",
              tmp.s1, tmp.r1, tmp.light_in, tmp.light_out, tmp.pump, tmp.shore);
+
+    /* Acciones de auto-encendido al establecer conexion por primera vez:
+     * Luz Interior y Bomba a ON si no lo estan. Los comandos son TOGGLE,
+     * asi que solo se mandan si el estado actual es OFF. */
+    if (!s_initial_actions_done) {
+        s_initial_actions_done = true;
+        if (!tmp.light_in) {
+            char c = 'i';
+            xQueueSend(s_cmd_queue, &c, 0);
+            ESP_LOGI(TAG, "auto-init: Luz Interior -> ON");
+        }
+        if (!tmp.pump) {
+            char c = 'p';
+            xQueueSend(s_cmd_queue, &c, 0);
+            ESP_LOGI(TAG, "auto-init: Bomba -> ON");
+        }
+    }
 }
 
 static void rs485_task(void *arg)
