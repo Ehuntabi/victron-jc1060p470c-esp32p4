@@ -37,13 +37,17 @@ static uint32_t now_ms(void)
 }
 
 /* Suma bytes 0..17 mod 128, comparada con (b[18..19] mod 128) - 2.
- * Heuristica del repo class142/ne-rs485 (ingenieria inversa NE334). */
+ * Heuristica del repo class142/ne-rs485 (ingenieria inversa NE334).
+ *
+ * Reescrita como (s+2) % 128 == recv % 128 para evitar underflow cuando
+ * recv % 128 < 2 (que con la formula original rechazaria el ~1.6% de
+ * tramas validas debido a aritmetica unsigned). Equivalente matematica. */
 static bool checksum_ok(const uint8_t *b)
 {
     uint16_t s = 0;
     for (int i = 0; i < FRAME_LEN - 2; i++) s += b[i];
     uint16_t recv = ((uint16_t)b[FRAME_LEN - 2] << 8) | b[FRAME_LEN - 1];
-    return ((s % 128) == ((recv % 128) - 2));
+    return (((s + 2) % 128) == (recv % 128));
 }
 
 static int popcount3bit(uint8_t v)

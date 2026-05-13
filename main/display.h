@@ -81,11 +81,20 @@
 #define BSP_LCD_BACKLIGHT   (GPIO_NUM_23)
 
 /* Reset del panel (activo bajo, 0 ms mínimo según JD9165BA datasheet).
- * Segun el esquematico real (bloque DSI_LCD: "GPIO0 LCD_RST"), el pin
- * fisico es GPIO 0. Antes se usaba GPIO 27 erroneamente; resulta que
- * GPIO 27 es RX1 del MAX485 onboard (componente ne185). El display
- * funcionaba sin reset real porque el JD9165BA arranca por defecto. */
-#define BSP_LCD_RST         (GPIO_NUM_0)
+ *
+ * El esquematico real conecta LCD_RST a GPIO 0, pero GPIO 0 es strapping
+ * pin del ESP32-P4 (selecciona modo boot UART/JTAG vs SPI Flash). Si por
+ * cualquier razón se pulsa GPIO 0 a LOW durante un reset del SoC, el
+ * bootloader podria entrar en modo download.
+ *
+ * Solucion segura: dejar el reset NO conectado (GPIO_NUM_NC). El JD9165BA
+ * arranca correctamente con su power-on reset interno — verificado en
+ * produccion durante meses (cuando estaba mal asignado a GPIO 27, que es
+ * en realidad RX1 del MAX485 onboard, la pantalla funcionaba igual).
+ *
+ * Si en el futuro se necesita reset por software, usar GPIO 0 con cuidado
+ * o mover a un GPIO libre que no sea strapping pin. */
+#define BSP_LCD_RST         (GPIO_NUM_NC)
 
 /* I2C — Touch GT911 */
 #define BSP_I2C_SDA         (GPIO_NUM_7)
