@@ -236,6 +236,16 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
 
 const frigo_state_t *frigo_get_state(void) { return &s_state; }
 
+void frigo_sim_inject(float t_aletas, float t_congelador,
+                      float t_exterior, uint8_t fan_percent)
+{
+    s_state.T_Aletas     = t_aletas;
+    s_state.T_Congelador = t_congelador;
+    s_state.T_Exterior   = t_exterior;
+    s_state.fan_percent  = fan_percent;
+    if (s_cb) s_cb(&s_state);
+}
+
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx)
 {
     if (slot >= FRIGO_MAX_SENSORS || sensor_idx >= s_state.n_sensors)

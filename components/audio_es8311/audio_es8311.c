@@ -31,6 +31,11 @@ static esp_codec_dev_handle_t     s_codec   = NULL;
 
 static int  s_volume = 50;     /* 0..100 */
 static bool s_muted  = false;
+/* Generation counter para cancelacion: cada llamada a audio_beep /
+ * audio_play_tones captura su propia generacion al entrar y aborta su
+ * loop cuando audio_cancel_playback la incrementa. Asi una llamada nueva
+ * no resetea la cancelacion de otra anterior aun en curso. */
+static volatile uint32_t s_audio_gen = 0;
 
 static void load_audio_prefs(void)
 {
@@ -183,6 +188,7 @@ esp_err_t audio_beep(int freq_hz, int duration_ms)
 {
     if (!s_codec) return ESP_ERR_INVALID_STATE;
     if (s_muted) return ESP_OK;
+    uint32_t my_gen = s_audio_gen;
     /* Asegurar PA encendido */
     gpio_set_level(PA_CTRL, 1);
     if (freq_hz < 50) freq_hz = 50;
@@ -202,6 +208,7 @@ esp_err_t audio_beep(int freq_hz, int duration_ms)
     int amp = 2000;
 
     for (int c = 0; c < chunks_total; ++c) {
+        if (s_audio_gen != my_gen) break;   /* cancelacion instantanea */
         for (size_t i = 0; i < samples_per_chunk; ++i) {
             int16_t s = (int16_t)(amp * sinf(phase));
             phase += step;
@@ -225,9 +232,11 @@ esp_err_t audio_beep(int freq_hz, int duration_ms)
         }
         esp_codec_dev_write(s_codec, buf, buf_bytes);
     }
-    /* Enviar un buffer de silencio para vaciar el DMA y no dejar que repita */
+    /* Enviar un buffer de silencio para vaciar el DMA. Si fue cancelado
+     * solo metemos 1 buffer en lugar de 4 para minimizar la latencia. */
     memset(buf, 0, buf_bytes);
-    for (int i = 0; i < 4; ++i) {
+    int silence_chunks = (s_audio_gen != my_gen) ? 1 : 4;
+    for (int i = 0; i < silence_chunks; ++i) {
         esp_codec_dev_write(s_codec, buf, buf_bytes);
     }
     /* Apagar el PA para no consumir corriente */
@@ -241,6 +250,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
     if (!s_codec) return ESP_ERR_INVALID_STATE;
     if (s_muted) return ESP_OK;
     if (!notes || count == 0) return ESP_ERR_INVALID_ARG;
+    uint32_t my_gen = s_audio_gen;
 
     /* Asegurar PA encendido durante toda la secuencia */
     gpio_set_level(PA_CTRL, 1);
@@ -255,6 +265,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
     }
 
     for (size_t n = 0; n < count; ++n) {
+        if (s_audio_gen != my_gen) break;
         int freq = notes[n].freq_hz;
         int dur  = notes[n].duration_ms;
         if (dur < 5) dur = 5;
@@ -265,6 +276,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
             /* Silencio */
             memset(buf, 0, buf_bytes);
             for (int c = 0; c < chunks; ++c) {
+                if (s_audio_gen != my_gen) break;
                 esp_codec_dev_write(s_codec, buf, buf_bytes);
             }
             continue;
@@ -278,6 +290,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
         int amp = 2500; /* moderado para evitar brownout */
 
         for (int c = 0; c < chunks; ++c) {
+            if (s_audio_gen != my_gen) break;
             for (size_t i = 0; i < samples_per_chunk; ++i) {
                 int16_t s = (int16_t)(amp * sinf(phase));
                 phase += step;
@@ -344,3 +357,5 @@ esp_err_t audio_play_jingle(audio_jingle_t j)
     return ESP_ERR_INVALID_ARG;
 }
 
+
+void audio_cancel_playback(void) { s_audio_gen++; }

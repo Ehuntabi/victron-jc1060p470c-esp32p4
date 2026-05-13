@@ -229,3 +229,20 @@ void ne185_send_cmd(char cmd)
     if (cmd != 'i' && cmd != 'o' && cmd != 'p') return;
     xQueueSend(s_cmd_queue, &cmd, 0);
 }
+
+void ne185_sim_inject(uint8_t s1, uint8_t r1,
+                      bool light_in, bool light_out,
+                      bool pump, bool shore)
+{
+    if (!s_inited) return;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s_data.s1 = s1;
+    s_data.r1 = r1;
+    s_data.light_in = light_in;
+    s_data.light_out = light_out;
+    s_data.pump = pump;
+    s_data.shore = shore;
+    s_data.fresh = true;
+    s_data.last_update_ms = now_ms();
+    xSemaphoreGive(s_mutex);
+}

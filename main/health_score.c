@@ -41,43 +41,9 @@ health_level_t health_score_evaluate(char *reason_out, size_t maxlen)
     const char *r = NULL;
     if (any_victron_alarm(&r)) { reason = r ? r : "Alarma"; level = HEALTH_ALARM; goto out; }
 
-    /* 2. Freezer fuera de rango (alta) -> ALARM */
-    const frigo_state_t *fs = frigo_get_state();
-    if (fs && fs->T_Congelador > -120.0f) {
-        float thr = alerts_get_freezer_temp_c();
-        if (fs->T_Congelador > thr) {
-            reason = "Freezer alto"; level = HEALTH_ALARM; goto out;
-        }
-    }
-
-    /* 3. PZEM presente con tension AC valida pero SIN consumo cuando esperaba?
-     * No tenemos suficiente contexto. Lo dejamos.
-     */
-
-    /* 4. SoC critico -> ALARM, SoC warning -> WARN.
-     * Lectura del dashboard_state (snapshot atomico). */
-    char tmp[1024];
-    if (dashboard_state_to_json(tmp, sizeof(tmp)) > 0) {
-        /* Parser rapido del valor soc_pct: busca el campo. */
-        const char *p = strstr(tmp, "\"soc_pct\":");
-        if (p) {
-            float soc = -1.0f;
-            sscanf(p + 10, "%f", &soc);
-            if (soc >= 0.0f) {
-                int crit = alerts_get_soc_critical();
-                int warn = alerts_get_soc_warning();
-                if (soc < (float)crit) {
-                    reason = "SoC critico"; level = HEALTH_ALARM; goto out;
-                } else if (soc < (float)warn) {
-                    reason = "SoC bajo"; level = HEALTH_WARN;
-                }
-            }
-        }
-        /* Si battery.has=false durante un rato, podemos marcar WARN */
-        if (strstr(tmp, "\"battery\":{\"has\":false") != NULL && level == HEALTH_OK) {
-            reason = "Sin BLE"; level = HEALTH_WARN;
-        }
-    }
+    /* La alarma del congelador no se duplica en la barra inferior:
+     * el propio overview parpadea la temperatura T_Congelador en rojo y
+     * dispara la alarma sonora (con mute al pulsar). */
 
 out:
     if (reason_out && maxlen > 0) {

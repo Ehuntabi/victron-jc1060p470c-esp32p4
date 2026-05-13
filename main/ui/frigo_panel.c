@@ -350,6 +350,9 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_opa(overlay_cont, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(overlay_cont, lv_color_hex(0x000000), 0);
     lv_obj_set_style_radius(overlay_cont, 4, 0);
+    /* LV_SIZE_CONTENT en ancho: el texto ya tiene longitud fija
+     * (formato "%+6.1f" en update) asi que el cont mide siempre lo mismo
+     * y la barra inferior no se reflowea. */
     lv_obj_set_size(overlay_cont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 /* alineacion gestionada por flex padre */
 
@@ -363,7 +366,15 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_lbl_exterior_overlay = lv_label_create(overlay_cont);
     lv_obj_add_style(s_lbl_exterior_overlay, &ui->styles.small, 0);
     lv_obj_set_style_text_color(s_lbl_exterior_overlay, lv_color_hex(0x00BFFF), 0);
-    lv_label_set_text(s_lbl_exterior_overlay, "Exterior: -- \xc2\xb0""C");
+    /* Ancho fijo del label + alineacion izquierda + clip: como la fuente
+     * Montserrat es proporcional, "+22.4" y "+5.4" no ocupan exactamente lo
+     * mismo aunque ambos sean 6 caracteres. Fijar el ancho del label hace
+     * que el container y la barra inferior no se reflowee al cambiar valor.
+     * Caso peor: "Exterior: -120.5 \xc2\xb0""C" en montserrat 28. */
+    lv_obj_set_width(s_lbl_exterior_overlay, 290);
+    lv_label_set_long_mode(s_lbl_exterior_overlay, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_text(s_lbl_exterior_overlay, "Exterior:   --.- \xc2\xb0""C");
 
     ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
 }
@@ -402,10 +413,12 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
     }
     if (s_lbl_exterior_overlay) {
         char buf[32];
+        /* Ancho del numero fijo (%+6.1f -> 6 chars: " +22.4", "-120.5") para
+         * que el label no cambie de tamano y la barra inferior no se desplace. */
         if (state->T_Exterior < -120.0f)
-            snprintf(buf, sizeof(buf), "Exterior: -- \xc2\xb0""C");
+            snprintf(buf, sizeof(buf), "Exterior:   --.- \xc2\xb0""C");
         else
-            snprintf(buf, sizeof(buf), "Exterior: %.1f \xc2\xb0""C", state->T_Exterior);
+            snprintf(buf, sizeof(buf), "Exterior: %+6.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior_overlay, buf);
     }
 }

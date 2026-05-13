@@ -1258,38 +1258,12 @@ ui_state_t *ui_get_state(void) { return &g_ui; }
 
 void ui_set_freezer_alarm(ui_state_t *ui, bool active)
 {
-    if (!ui) return;
-
-    /* Crear borde la primera vez */
-    if (!ui->alarm_border) {
-        ui->alarm_border = lv_obj_create(lv_scr_act());
-        lv_obj_remove_style_all(ui->alarm_border);
-        lv_obj_set_size(ui->alarm_border, LV_HOR_RES, LV_VER_RES);
-        lv_obj_align(ui->alarm_border, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_set_style_border_width(ui->alarm_border, 8, 0);
-        lv_obj_set_style_border_color(ui->alarm_border, lv_color_hex(0xFF0000), 0);
-        lv_obj_set_style_bg_opa(ui->alarm_border, LV_OPA_TRANSP, 0);
-        lv_obj_clear_flag(ui->alarm_border, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_flag(ui->alarm_border, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    if (active) {
-        lv_obj_clear_flag(ui->alarm_border, LV_OBJ_FLAG_HIDDEN);
-        /* Parpadeo con animacion de opacidad */
-        lv_anim_t a;
-        lv_anim_init(&a);
-        lv_anim_set_var(&a, ui->alarm_border);
-        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_style_border_opa);
-        lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
-        lv_anim_set_time(&a, 600);
-        lv_anim_set_playback_time(&a, 600);
-        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-        lv_anim_start(&a);
-        ESP_LOGW("UI", "ALARMA CONGELADOR activa");
-    } else {
-        lv_anim_del(ui->alarm_border, NULL);
-        lv_obj_add_flag(ui->alarm_border, LV_OBJ_FLAG_HIDDEN);
-    }
+    /* La alarma del congelador ya se senaliza dentro de la vista Overview:
+     * la temperatura T_Congelador parpadea en rojo y dispara el patron
+     * sonoro (con mute al pulsar). No usamos borde a pantalla completa
+     * para no tapar el resto de la UI. */
+    (void)ui;
+    if (active) ESP_LOGW("UI", "ALARMA CONGELADOR activa");
 }
 
 /* ── Pantalla gráfica temperaturas ─────────────────────────── */

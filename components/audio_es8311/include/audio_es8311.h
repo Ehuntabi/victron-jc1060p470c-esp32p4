@@ -33,6 +33,13 @@ int       audio_get_volume(void);
 esp_err_t audio_set_mute(bool mute);
 bool      audio_is_muted(void);
 
+/* Cancelar la reproduccion en curso (audio_beep / audio_play_tones).
+ * El playback en progreso saldra del bucle interno en < 50 ms y devolvera.
+ * El flag se autorresetea al inicio de la siguiente llamada a audio_beep
+ * o audio_play_tones. Util para alarmas que el usuario quiere silenciar
+ * instantaneamente. */
+void      audio_cancel_playback(void);
+
 #ifdef __cplusplus
 }
 #endif

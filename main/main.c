@@ -32,6 +32,7 @@
 #include "trip_computer.h"
 #include "pzem004t.h"
 #include "ne185/ne185.h"
+#include "sim_overview.h"
 #include "splash.h"
 #include <time.h>
 
@@ -358,6 +359,10 @@ void app_main(void)
     }
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
+
+    /* Modo simulacion: inyecta datos ficticios cambiantes para previsualizar
+     * la vista Overview. Toggle desde sim_overview.h. */
+    sim_overview_start();
 
     /* --- Timer reboot 24h --- */
     static esp_timer_handle_t reboot_timer;

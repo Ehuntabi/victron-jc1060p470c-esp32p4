@@ -57,6 +57,12 @@ void ne185_init(void);
 void ne185_get(ne185_data_t *out);
 void ne185_send_cmd(char cmd);   /* 'i', 'o', 'p' */
 
+/* Inyectar estado simulado (para demos / debug visual). Marca fresh=true
+ * automaticamente. Reemplaza por completo el contenido actual. */
+void ne185_sim_inject(uint8_t s1, uint8_t r1,
+                      bool light_in, bool light_out,
+                      bool pump, bool shore);
+
 #ifdef __cplusplus
 }
 #endif

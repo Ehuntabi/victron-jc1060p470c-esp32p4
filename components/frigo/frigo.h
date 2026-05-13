@@ -38,6 +38,10 @@ typedef void (*frigo_update_cb_t)(const frigo_state_t *state);
 
 esp_err_t frigo_init(frigo_update_cb_t cb);
 const frigo_state_t *frigo_get_state(void);
+
+/* Inyeccion para modo simulacion: sobreescribe temperaturas y % fan. */
+void frigo_sim_inject(float t_aletas, float t_congelador,
+                      float t_exterior, uint8_t fan_percent);
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx);
 esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max);
 void frigo_addr_to_str(const frigo_sensor_addr_t *addr, char *buf, size_t len);
