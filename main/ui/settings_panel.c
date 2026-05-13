@@ -2103,16 +2103,14 @@ static void screensaver_timer_cb(lv_timer_t *timer)
     ESP_LOGI("SAVER", "timer fired mode=%d period=%d", ui->screensaver.mode, ui->screensaver.rotate_period_min);
 
     if (ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) {
-        /* Modo rotar: brillo bajo + iniciar rotacion */
+        /* TODO: Modo Rotar deshabilitado temporalmente — abrir/cerrar
+         * los overlays chart_screen + battery_history_screen cada N min
+         * fragmenta el heap LVGL (128 KB) hasta agotarse y disparar el
+         * watchdog en el siguiente lv_mem_buf_get. Cae a modo Dim hasta
+         * que se cierre la fuga del chart. La preferencia NVS se respeta. */
+        ESP_LOGW("SAVER", "Modo Rotar temporalmente deshabilitado; usando Dim");
         bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);
         ui->screensaver.active = true;
-        ui->screensaver.rotate_index = 0;
-        /* Crear timer de rotacion si no existe */
-        if (ui->screensaver.rotate_timer) {
-            lv_timer_del(ui->screensaver.rotate_timer);
-        }
-        uint32_t period_ms = (uint32_t)ui->screensaver.rotate_period_min * 60U * 1000U;
-        ui->screensaver.rotate_timer = lv_timer_create(screensaver_rotate_timer_cb, period_ms, ui);
     } else {
         /* Modo atenuar (default) */
         bsp_display_brightness_set(ui->screensaver.brightness > ui->brightness ? ui->brightness : ui->screensaver.brightness);

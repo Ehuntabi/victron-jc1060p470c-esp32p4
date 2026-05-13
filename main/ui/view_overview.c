@@ -190,6 +190,9 @@ static void overview_camper_tick_cb(lv_timer_t *t)
     ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
     if (!ov || !ov->base.root) return;
     if (lv_obj_has_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN)) return;
+    /* No renderizar mientras el screensaver esta activo (overlays encima
+     * o brillo bajo); evita consumir heap LVGL haciendo redraws invisibles. */
+    if (ov->base.ui && ov->base.ui->screensaver.active) return;
     overview_render(ov);
 }
 
@@ -202,6 +205,9 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
     if (!ov || !ov->img_fan) return;
     if (lv_obj_has_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN)) return;
+    /* Igual que en camper_tick_cb: si el screensaver esta activo no rotamos
+     * la imagen para no agotar el heap LVGL con buffers de rotacion. */
+    if (ov->base.ui && ov->base.ui->screensaver.active) return;
     const frigo_state_t *fs = frigo_get_state();
     if (!fs) return;
     uint8_t p = fs->fan_percent;
@@ -209,7 +215,9 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     /* delta_deci en decimas de grado por cada 50 ms. A 100 % giramos
      * 90 deci/tick = 9 deg/tick = 180 deg/s = una vuelta cada 2 segundos.
      * A 50 % seria 4.5 deg/tick = 90 deg/s = 4 segundos por vuelta. */
-    int delta = (p * 90) / 100;
+    /* delta_deci en decimas de grado por tick (150 ms).
+     * A 100 % -> 270 deci/tick = 27 deg/tick = 180 deg/s (mismo que antes). */
+    int delta = (p * 270) / 100;
     ov->fan_angle_deci += delta;
     if (ov->fan_angle_deci >= 3600) ov->fan_angle_deci -= 3600;
     lv_img_set_angle(ov->img_fan, ov->fan_angle_deci);
@@ -493,7 +501,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
     lv_timer_create(overview_camper_tick_cb, 500, ov);
-    lv_timer_create(overview_fan_rotate_cb,   50, ov);
+    lv_timer_create(overview_fan_rotate_cb,  150, ov);
 
     /* Cola y tarea para la alarma sonora de 5 s (no bloquea LVGL). */
     if (!s_alarm_queue) {

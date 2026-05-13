@@ -5,7 +5,9 @@ dependencies:
   lvgl/lvgl: '>=8.4.0,<9.0.0'
   espressif/esp_lvgl_port:
     version: '>=2.3.0,<3.0.0'
-  esp_lcd_jd9165: '*'
+  # v2.x exige ESP-IDF v6 (DPI/DMA2D API renombrada). Pin a la
+  # ultima version compatible con IDF 5.4.x.
+  esp_lcd_jd9165: '~1.0.3'
   espressif/esp_lcd_touch_gt911:
     version: ^1
   espressif/esp_lcd_touch:
