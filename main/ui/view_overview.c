@@ -4,7 +4,7 @@
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "ui.h"
-#include "camper/camper.h"
+#include "ne185/ne185.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -132,7 +132,7 @@ static void overview_camper_tick_cb(lv_timer_t *t)
 static void camper_btn_event_cb(lv_event_t *e)
 {
     char cmd = (char)(intptr_t)lv_event_get_user_data(e);
-    camper_send_cmd(cmd);
+    ne185_send_cmd(cmd);
 }
 
 static lv_obj_t *camper_make_tank(lv_obj_t *parent, const char *title,
@@ -503,8 +503,8 @@ static void overview_render(ui_overview_view_t *ov)
 
     /* ── Camper (NE185 vía UART) ─────────────────────────────── */
     {
-        camper_data_t cd;
-        camper_get(&cd);
+        ne185_data_t cd;
+        ne185_get(&cd);
 
         /* Tanques: nivel 0..3 → %  */
         if (ov->bar_s1) {

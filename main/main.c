@@ -31,7 +31,7 @@
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "pzem004t.h"
-#include "camper/camper.h"
+#include "ne185/ne185.h"
 #include "splash.h"
 #include <time.h>
 
@@ -336,9 +336,10 @@ void app_main(void)
     };
     pzem_init(&pzem_cfg);
 
-    /* Camper (NE185 vía ESP32-RS485 externo por UART1). Si el ESP no esta
-     * conectado, simplemente no llegan tramas; nada peta. */
-    camper_init();
+    /* NE185 (RS-485 directo via MAX485 onboard, UART1 GPIO 26/27).
+     * Habla con el derivador Nordelettronica NE185 que sustituye al
+     * panel NE187 retirado. Conector J5 expone el bus en MX 1.25 4P. */
+    ne185_init();
 
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {

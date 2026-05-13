@@ -106,7 +106,7 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <li>microSD slot 0 con SDMMC IOMUX dedicado.</li>
 <li>Codec audio ES8311 + amplificador NS4150.</li>
 <li>UART2 cableable al PZEM-004T (medidor de red 230 V).</li>
-<li><strong>UART1 cableable al ESP32 RS485 externo (puente camper NE185)</strong>.</li>
+<li><strong>RS-485 onboard via MAX485 (U8) en UART1, conector J5 — para hablar con el derivador NE185</strong>.</li>
 <li>Cabeceras GPIO libres para sensores DS18B20 (frigo) y PWM (ventilador).</li>
 </ul>
 
@@ -183,30 +183,34 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <tr><td>UART2 RX</td><td>GPIO 33</td><td>JP1 pin 21</td><td>Polling 2000 ms</td></tr>
 </table>
 
-<h2 style="page-break-before: always; break-before: page;">10. Camper NE185 (UART1) — puente RS485 externo</h2>
+<h2 style="page-break-before: always; break-before: page;">10. NE185 RS-485 directo (UART1, MAX485 onboard)</h2>
 <div class="new">
-<strong>Nuevo componente <code>main/camper/</code>.</strong> Un ESP32 externo con MAX485 escucha
-el bus RS485 del derivador Nordelettronica NE185 (sustituyendo al panel NE187) y envía
-JSON al P4 por UART1.
+<strong>Componente <code>main/ne185/</code>.</strong> El P4 habla RS-485 directamente con el
+derivador Nordelettronica NE185 a través del transceptor <strong>MAX485 (U8) integrado en
+la placa Guition</strong>. Sustituye al panel NE187 retirado. <strong>No hace falta caja
+ni hardware externo</strong>: solo un cable de 4 hilos del NE185 al conector J5.
 </div>
 <table>
-<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>UART1 RX</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Recibe JSON del ESP32 sniffer (115200 8N1)</td></tr>
-<tr><td>UART1 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Envía 'i'/'o'/'p' al ESP32 sniffer</td></tr>
-<tr><td>GND común</td><td>—</td><td>JP1 pin 5/6/16</td><td>Necesario para nivel TTL fiable</td></tr>
+<tr><th>Función</th><th>Pin P4</th><th>Conexión</th><th>Notas</th></tr>
+<tr><td>UART1 TX</td><td>GPIO 26</td><td>pin D del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
+<tr><td>UART1 RX</td><td>GPIO 27</td><td>pin R del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
+<tr><td>DE/RE</td><td>—</td><td>controlados por NAND (U7) auto-direccion</td><td>NO hace falta GPIO extra</td></tr>
+<tr><td>Bus RS-485</td><td>—</td><td>Conector J5 (MX 1.25 4P, conector #11)</td><td>Pines A, B, GND, +5V</td></tr>
 </table>
 <p class="small">
-Protocolo de la línea: una línea JSON por segundo del estilo
-<code>{"s1":3,"r1":2,"lin":1,"lout":0,"pump":0,"shore":1}\n</code> con los niveles de tanques
-S1 (limpia) y R1 (grises) en sondas 0..3, estados de luz interior/exterior/bomba y presencia 230 V.
-Comandos hacia el sniffer: 1 byte por toggle ('i' luz INT, 'o' luz EXT, 'p' bomba).
+Protocolo (38400 8N1, master): comando init <code>FF 40 00 80 BF</code>, idle
+<code>FF 40 00 C0 BF</code> cada 5 s, toggle luz interior <code>FF 01 00 C0 C0</code>,
+luz exterior <code>FF 02 00 C0 C1</code>, bomba <code>FF 04 00 C0 C3</code>. Trama de
+respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
+<code>(sum bytes 0..17) mod 128 == ((b[18..19]) mod 128) - 2</code>. API publica:
+<code>ne185_init</code>, <code>ne185_get(ne185_data_t *)</code>,
+<code>ne185_send_cmd('i'/'o'/'p')</code>.
 </p>
 
 <h2>11. Mapa global de pines GPIO</h2>
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
-<tr><td>1</td><td>UART1 RX</td><td><strong>Camper</strong> — recibe JSON del ESP32 RS485 (JP1 pin 7)</td></tr>
-<tr><td>2</td><td>UART1 TX</td><td><strong>Camper</strong> — envía comandos al ESP32 RS485 (JP1 pin 9)</td></tr>
+<tr><td>0</td><td>GPIO out</td><td>Reset panel JD9165BA (LCD_RST según esquemático real)</td></tr>
 <tr><td>4</td><td>1-Wire</td><td>DS18B20 (JP1 pin 13, pullup 4.7 kΩ)</td></tr>
 <tr><td>5</td><td>LEDC PWM</td><td>Ventilador frigo (JP1 pin 15, 25 kHz)</td></tr>
 <tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
@@ -219,7 +223,8 @@ Comandos hacia el sniffer: 1 byte por toggle ('i' luz INT, 'o' luz EXT, 'p' bomb
 <tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr>
 <tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
-<tr><td>27</td><td>GPIO out</td><td>Reset panel JD9165BA</td></tr>
+<tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J5</td></tr>
+<tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J5</td></tr>
 <tr><td>32</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 19)</td></tr>
 <tr><td>33</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 21)</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
@@ -240,7 +245,7 @@ Comandos hacia el sniffer: 1 byte por toggle ('i' luz INT, 'o' luz EXT, 'p' bomb
 <ul>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 camper (GPIO 1/2). UART2 PZEM-004T (GPIO 32/33).</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J5). UART2 PZEM-004T (GPIO 32/33 → JP1).</li>
 <li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
 </ul>
 
@@ -278,8 +283,8 @@ Comandos hacia el sniffer: 1 byte por toggle ('i' luz INT, 'o' luz EXT, 'p' bomb
   <tr><td>2</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr>
   <tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr>
   <tr><td>3, 4, 8</td><td>NC</td><td>No conectado</td></tr>
-  <tr><td>7</td><td>GPIO 1</td><td><strong>Camper UART1 RX</strong></td></tr>
-  <tr><td>9</td><td>GPIO 2</td><td><strong>Camper UART1 TX</strong></td></tr>
+  <tr><td>7</td><td>GPIO 1</td><td>Libre</td></tr>
+  <tr><td>9</td><td>GPIO 2</td><td>Libre</td></tr>
   <tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr>
   <tr><td>11</td><td>GPIO 3</td><td>Libre</td></tr>
   <tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr>
@@ -343,17 +348,18 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>Audio ES8311 + NS4150</li>
 <li>LDO interno PHY MIPI-DSI</li>
 <li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
-<li><strong>Camper NE185 UART1</strong> (componente <code>main/camper/</code> compilado y
-flasheado; widgets visibles en vista Overview en gris hasta conectar el ESP32 RS485 externo)</li>
+<li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
+compilado y flasheado; UART1 GPIO 26/27, conector J5; widgets visibles en vista Overview
+en gris hasta conectar el cable del NE185 al J5)</li>
 </ul>
 </div>
 <div class="nota">
-<strong>[!]</strong> Pendiente conexión física desde JP1:
+<strong>[!]</strong> Pendiente conexión física:
 <ul>
 <li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V)</li>
 <li>Ventilador PWM en GPIO 5 → JP1 pin 15</li>
 <li>PZEM-004T → JP1 pin 19 (GPIO 32) y pin 21 (GPIO 33)</li>
-<li>ESP32 RS485 externo → JP1 pin 7 (GPIO 1, RX) y pin 9 (GPIO 2, TX) — GND en pin 5/6/16</li>
+<li><strong>NE185 RS-485 → conector J5</strong> (MX 1.25 4P, conector #11). Cable 4 hilos del derivador NE185: A, B, GND, +5V. NO se necesita caja ni hardware externo.</li>
 </ul>
 </div>
 <p class="small">

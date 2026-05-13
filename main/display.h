@@ -81,8 +81,11 @@
 #define BSP_LCD_BACKLIGHT   (GPIO_NUM_23)
 
 /* Reset del panel (activo bajo, 0 ms mínimo según JD9165BA datasheet).
-   Usa GPIO_NUM_NC si el reset va conectado al reset global del módulo. */
-#define BSP_LCD_RST         (GPIO_NUM_27)
+ * Segun el esquematico real (bloque DSI_LCD: "GPIO0 LCD_RST"), el pin
+ * fisico es GPIO 0. Antes se usaba GPIO 27 erroneamente; resulta que
+ * GPIO 27 es RX1 del MAX485 onboard (componente ne185). El display
+ * funcionaba sin reset real porque el JD9165BA arranca por defecto. */
+#define BSP_LCD_RST         (GPIO_NUM_0)
 
 /* I2C — Touch GT911 */
 #define BSP_I2C_SDA         (GPIO_NUM_7)
