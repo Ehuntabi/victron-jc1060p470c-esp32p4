@@ -9,8 +9,12 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_netif.h"
+#include "esp_netif_defaults.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
+#include "esp_wifi_default.h"
+#include "esp_wifi_netif.h"
+#include "esp_private/wifi.h"
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -36,6 +40,87 @@ static const char *TAG = "cfg_srv";
 
 // NVS namespace for Wi-Fi AP settings
 #define WIFI_NAMESPACE    "wifi"
+
+/* Handlers idempotentes para WIFI_EVENT_AP_START/STOP — workaround del bug
+ * de esp_hosted que dispara cada evento dos veces (esp_wifi_start local +
+ * repost desde el slave C6 vía rpc_wrap). Adicionalmente esp_wifi_set_config
+ * en modo AP reinicia el AP (STOP+START) y eso tambien duplica eventos.
+ *
+ * El handler default de esp_wifi (wifi_default_action_ap_start) hace netif_add
+ * cada vez -> assert "netif already added". Como wifi_default_action_ap_start
+ * es estatica en wifi_default.c, no se puede desregistrar. Solucion: hacemos
+ * el setup manual sin esp_netif_create_default_wifi_ap (ver wifi_ap_init) y
+ * registramos solo estos handlers como state machine simetrica:
+ *   - start solo si !started, luego started=true, action_start
+ *   - stop  solo si  started, luego started=false, action_stop (remueve netif)
+ * Asi el siguiente start vuelve a tener un netif fresco que añadir.
+ */
+static volatile bool s_ap_started = false;
+static void cfg_srv_ap_start_idempotent(void *arg, esp_event_base_t base,
+                                          int32_t id, void *data)
+{
+    if (s_ap_started) {
+        ESP_LOGD(TAG, "WIFI_EVENT_AP_START duplicado, ignorado");
+        return;
+    }
+    s_ap_started = true;
+    /* arg = el esp_netif_t* que registramos al hacer event_handler_register */
+    esp_netif_t *netif = (esp_netif_t *)arg;
+
+    /* Replicar lo que hace wifi_default_action_ap_start internamente (lo que
+     * nos saltamos al no usar esp_netif_create_default_wifi_ap): registrar el
+     * rxcb que pasa los paquetes WiFi al stack lwip. Sin esto el AP asocia
+     * clientes pero ningun paquete llega al netif -> el DHCP server jamas
+     * recibe los DISCOVER y los clientes quedan "conectando..." sin IP. */
+    wifi_netif_driver_t driver = esp_netif_get_io_driver(netif);
+    uint8_t mac[6] = {0};
+    if (esp_wifi_get_mac(WIFI_IF_AP, mac) == ESP_OK) {
+        esp_netif_set_mac(netif, mac);
+    }
+    esp_wifi_register_if_rxcb(driver, esp_netif_receive, netif);
+    esp_wifi_internal_reg_netstack_buf_cb(esp_netif_netstack_buf_ref,
+                                           esp_netif_netstack_buf_free);
+
+    esp_netif_action_start(netif, base, id, data);
+}
+static void cfg_srv_ap_stop_idempotent(void *arg, esp_event_base_t base,
+                                         int32_t id, void *data)
+{
+    if (!s_ap_started) {
+        ESP_LOGD(TAG, "WIFI_EVENT_AP_STOP duplicado, ignorado");
+        return;
+    }
+    s_ap_started = false;
+    /* Sin esto el lwip netif queda colgado y el siguiente AP_START crashea. */
+    esp_netif_action_stop(arg, base, id, data);
+}
+
+/* Logs visibles cuando un cliente intenta asociarse / desconectarse. En
+ * esp_hosted rpc_wrap loggea estos eventos solo a nivel VERBOSE, por eso sin
+ * estos handlers los intentos del movil son invisibles en monitor.  */
+static void cfg_srv_ap_sta_connected(void *arg, esp_event_base_t base,
+                                       int32_t id, void *data)
+{
+    wifi_event_ap_staconnected_t *e = (wifi_event_ap_staconnected_t *)data;
+    ESP_LOGI(TAG, "Cliente CONECTADO: MAC=%02x:%02x:%02x:%02x:%02x:%02x aid=%d",
+             e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
+             e->aid);
+}
+static void cfg_srv_ap_sta_disconnected(void *arg, esp_event_base_t base,
+                                          int32_t id, void *data)
+{
+    wifi_event_ap_stadisconnected_t *e = (wifi_event_ap_stadisconnected_t *)data;
+    ESP_LOGI(TAG, "Cliente DESCONECTADO: MAC=%02x:%02x:%02x:%02x:%02x:%02x aid=%d",
+             e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
+             e->aid);
+}
+static void cfg_srv_ap_probe_req(void *arg, esp_event_base_t base,
+                                   int32_t id, void *data)
+{
+    wifi_event_ap_probe_req_rx_t *e = (wifi_event_ap_probe_req_rx_t *)data;
+    ESP_LOGI(TAG, "Probe REQ rssi=%d MAC=%02x:%02x:%02x:%02x:%02x:%02x",
+             e->rssi, e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5]);
+}
 
 static void dhcp_set_captiveportal_url(void)
 {
@@ -143,35 +228,75 @@ esp_err_t wifi_ap_init(void)
     // 4) Start or restart Soft-AP
     ESP_LOGI(TAG, "Starting Soft-AP, SSID='%s'", ssid);
 
-    // This returns a pointer, not an esp_err_t
-    esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
-    if (!ap_netif) {
-        ESP_LOGE(TAG, "esp_netif_create_default_wifi_ap() failed");
-        return ESP_FAIL;
+    /* WORKAROUND bug esp_hosted: cuando se usa Wi-Fi via esp_hosted (C6 como
+     * slave SDIO), el evento WIFI_EVENT_AP_START se dispara DOS veces (una
+     * por esp_wifi_start local y otra reposted por rpc_wrap al recibirlo del
+     * C6). El handler default de esp_wifi (wifi_default_action_ap_start) hace
+     * netif_add cada vez -> assert "netif already added" en la segunda.
+     *
+     * No se puede desregistrar wifi_default_action_ap_start (es static en
+     * wifi_default.c, no exportada). Solucion: hacemos el setup MANUALMENTE,
+     * sin pasar por esp_netif_create_default_wifi_ap() ni esp_wifi_set_default_
+     * wifi_ap_handlers(), y registramos nuestro propio handler idempotente.
+     */
+    static esp_netif_t *s_ap_netif = NULL;
+    if (!s_ap_netif) {
+        esp_netif_inherent_config_t base_cfg = ESP_NETIF_INHERENT_DEFAULT_WIFI_AP();
+        esp_netif_config_t cfg = {
+            .base   = &base_cfg,
+            .driver = NULL,
+            .stack  = ESP_NETIF_NETSTACK_DEFAULT_WIFI_AP,
+        };
+        s_ap_netif = esp_netif_new(&cfg);
+        if (!s_ap_netif) {
+            ESP_LOGE(TAG, "esp_netif_new(WIFI_AP) failed");
+            return ESP_FAIL;
+        }
+        ESP_ERROR_CHECK(esp_netif_attach_wifi_ap(s_ap_netif));
+        /* Handler nuestro, idempotente. No registramos los default handlers
+         * de esp_wifi para AP_START / AP_STOP. */
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_START,
+                                    cfg_srv_ap_start_idempotent, s_ap_netif);
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STOP,
+                                    cfg_srv_ap_stop_idempotent, s_ap_netif);
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED,
+                                    cfg_srv_ap_sta_connected, NULL);
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED,
+                                    cfg_srv_ap_sta_disconnected, NULL);
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_PROBEREQRECVED,
+                                    cfg_srv_ap_probe_req, NULL);
     }
+    esp_netif_t *ap_netif = s_ap_netif;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+
+    /* Forzar password minima 8 chars (requisito WPA2) y por defecto. */
+    if (strlen(pass) < 8) {
+        strcpy(pass, "victron123");
+    }
 
     wifi_config_t ap_cfg = {
         .ap = {
             .ssid_len       = strlen(ssid),
             .max_connection = 4,
-            .channel        = 1,
+            .channel        = 6,
+            .authmode       = WIFI_AUTH_WPA_WPA2_PSK,
+            .pmf_cfg        = { .required = false },
         }
     };
     strncpy((char*)ap_cfg.ap.ssid, ssid, sizeof(ap_cfg.ap.ssid));
-    /* Forzar contraseña para que el AP sea visible en todos los dispositivos */
-    if (!pass[0]) {
-        strcpy(pass, "victron123");
-    }
     strncpy((char*)ap_cfg.ap.password, pass, sizeof(ap_cfg.ap.password));
-    ap_cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    ap_cfg.ap.channel = 6;
 
-    ESP_ERROR_CHECK(esp_wifi_start());
-    vTaskDelay(pdMS_TO_TICKS(500));
+    ESP_LOGI(TAG, "AP cfg: ssid='%s' pass='%s' ch=%d auth=WPA_WPA2_PSK",
+             ssid, pass, ap_cfg.ap.channel);
+
+    /* IMPORTANTE: set_config ANTES de start. Si invertimos el orden, en
+     * esp_hosted el slave dispara un ciclo STOP+START al recibir set_config
+     * y la propagacion de SSID/pass queda en un estado raro -> el AP
+     * transmite pero los clientes no pueden asociarse. */
     esp_err_t wifi_cfg_err = esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
     ESP_LOGI(TAG, "esp_wifi_set_config result: 0x%x (%s)", wifi_cfg_err, esp_err_to_name(wifi_cfg_err));
+    ESP_ERROR_CHECK(esp_wifi_start());
 
     dhcp_set_captiveportal_url();
     

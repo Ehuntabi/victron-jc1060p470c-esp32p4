@@ -32,6 +32,7 @@
 #include "trip_computer.h"
 #include "pzem004t.h"
 #include "ne185/ne185.h"
+#include "net/udp_tx.h"
 #include "sim_overview.h"
 #include "splash.h"
 #include <time.h>
@@ -318,6 +319,9 @@ void app_main(void)
     config_server_start();
     /* Actualizar SSID real del AP en el UI */
     if (s_ui) ui_update_wifi_ssid(s_ui);
+
+    /* --- Publisher UDP hacia el mini (1 Hz broadcast 192.168.4.255:4242) --- */
+    udp_tx_start();
 
     /* --- BLE Victron --- */
     battery_history_init();

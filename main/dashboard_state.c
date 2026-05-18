@@ -95,6 +95,21 @@ void dashboard_state_on_record(const victron_data_t *data)
     unlock();
 }
 
+void dashboard_state_snapshot(dashboard_snapshot_t *out)
+{
+    if (!out) return;
+    lock();
+    out->bat_has        = s.bat_has;
+    out->soc_deci       = s.soc_deci;
+    out->bat_v_centi    = s.bat_v_centi;
+    out->bat_i_milli    = s.bat_i_milli;
+    out->dcdc_has       = s.dcdc_has;
+    out->dc_in_v_centi  = s.dc_in_v_centi;
+    out->dc_out_v_centi = s.dc_out_v_centi;
+    out->dc_state       = s.dc_state;
+    unlock();
+}
+
 size_t dashboard_state_to_json(char *buf, size_t maxlen)
 {
     if (!buf || maxlen < 256) return 0;
