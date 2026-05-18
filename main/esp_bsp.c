@@ -24,8 +24,22 @@
 #include "esp_ldo_regulator.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_mipi_dsi.h"
+#include "hal/mipi_dsi_hal.h"
+#include "hal/mipi_dsi_host_ll.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
+
+/* Copia LOCAL del layout privado de esp_lcd_dsi_bus_t (esp-idf 5.4.4,
+ * components/esp_lcd/dsi/mipi_dsi_priv.h). La necesitamos para acceder al
+ * mipi_dsi_hal_context_t y deshabilitar el cmd_ack del DBI IO — IDF activa
+ * cmd_ack=true por defecto y el panel JD9165 no responde con BTA, lo que
+ * llena el FIFO TX tras 17 comandos y cuelga el host. Si esta struct
+ * cambia en una versión futura del IDF, hay que sincronizar este typedef. */
+typedef struct {
+    int bus_id;
+    mipi_dsi_hal_context_t hal;
+    /* el resto no nos importa */
+} bsp_priv_dsi_bus_t;
 
 /* Controlador JD9165BA */
 #include "esp_lcd_jd9165.h"
@@ -249,6 +263,21 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config,
     };
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_cfg, &io),
                       err, TAG, "esp_lcd_new_panel_io_dbi");
+
+    /* WORKAROUND BTA hang en panel JD9165.
+     *
+     * esp_lcd_new_panel_io_dbi() activa cmd_ack=true por defecto: cada cmd
+     * que mandamos al panel espera Bus Turn Around (ACK) del display. Si el
+     * panel no soporta/responde BTA, los comandos se acumulan en el TX FIFO
+     * (capacidad ~17) y el cmd 18 hace busy-wait sin timeout en
+     * mipi_dsi_host_ll_gen_is_cmd_fifo_full -> WDT IDLE0 a los 5 s. Lo
+     * deshabilitamos accediendo al hal por la copia local de la struct
+     * privada del bus DSI (ver typedef arriba). */
+    {
+        bsp_priv_dsi_bus_t *priv = (bsp_priv_dsi_bus_t *)mipi_dsi_bus;
+        mipi_dsi_host_ll_enable_cmd_ack(priv->hal.host, false);
+        ESP_LOGI(TAG, "DBI cmd_ack disabled (workaround JD9165 sin BTA)");
+    }
 
     /* ── 3. Configuración DPI (timing de vídeo) ──────────────────────────── */
     /*

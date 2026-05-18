@@ -58,8 +58,11 @@
 #define BSP_LCD_MIPI_DSI_LANE_NUM           (2)
 #define BSP_LCD_MIPI_DSI_LANE_BITRATE_MBPS  (750)
 
-/* Pixel clock: DOTCLK = 51.2 MHz → 52 MHz (redondeo estándar IDF) */
-#define BSP_LCD_MIPI_DPI_CLK_MHZ            (52)
+/* Pixel clock: DOTCLK = 51.2 MHz. Probamos 51 (redondeo a la BAJA) tras
+ * descubrir que 52 cuelga el init del JD9165 en mipi_dsi_hal_host_gen_read_
+ * short_packet (5 s WDT). El repo cheops/JC1060P470C_I_W usa 51.2 MHz y
+ * funciona, y el header del componente recomienda 50 como default. */
+#define BSP_LCD_MIPI_DPI_CLK_MHZ            (51)
 
 /* Horizontal — fuente: dtsi oficial (HS=24, HBP=136, HFP=160) */
 #define BSP_LCD_MIPI_HSYNC_PULSE_WIDTH      (24)
