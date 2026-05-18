@@ -366,7 +366,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_clear_flag(spacer, LV_OBJ_FLAG_CLICKABLE);
     }
 
-    /* Bottom de col_center: fila horizontal con [Congelador, 230V, Ventilador] */
+    /* Bottom de col_center: solo el pill 230 V alineado a la izquierda.
+     * La card frigo (Congelador + temp + ventilador) la creamos en
+     * camper_bottom (la fila de los botones) más abajo, donde hay altura
+     * suficiente para que el borde se vea entero. */
     {
         lv_obj_t *bottom_row = lv_obj_create(col_center);
         lv_obj_remove_style_all(bottom_row);
@@ -374,55 +377,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_flex_grow(bottom_row, 1);
         lv_obj_set_layout(bottom_row, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(bottom_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(bottom_row, LV_FLEX_ALIGN_SPACE_AROUND,
+        lv_obj_set_flex_align(bottom_row, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(bottom_row, 6, 0);
         lv_obj_clear_flag(bottom_row, LV_OBJ_FLAG_SCROLLABLE);
-        /* Subir 5 px visualmente la fila [Congelador, 230V, Ventilador].
-         * translate_y no afecta al layout; no se sale del col_center
-         * porque bottom_row queda al final del slot. */
-        lv_obj_set_style_translate_y(bottom_row, -5, 0);
 
-        /* Congelador (izquierda) — clickable para silenciar la alarma */
-        lv_obj_t *col_freezer = lv_obj_create(bottom_row);
-        lv_obj_remove_style_all(col_freezer);
-        lv_obj_set_size(col_freezer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_layout(col_freezer, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(col_freezer, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(col_freezer, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(col_freezer, 2, 0);
-        lv_obj_add_flag(col_freezer, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(col_freezer, alarm_mute_freezer_cb,
-                            LV_EVENT_CLICKED, ov);
-        /* Fila horizontal: [icono termometro] [Congelador] */
-        lv_obj_t *t_row = lv_obj_create(col_freezer);
-        lv_obj_remove_style_all(t_row);
-        lv_obj_set_size(t_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_layout(t_row, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(t_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(t_row, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(t_row, 4, 0);
-
-        static lv_font_t s_font_thermo_no_fb;
-        s_font_thermo_no_fb = lv_font_thermometer;
-        s_font_thermo_no_fb.fallback = NULL;
-        lv_obj_t *t_icon = lv_label_create(t_row);
-        lv_obj_set_style_text_font(t_icon, &s_font_thermo_no_fb, 0);
-        lv_obj_set_style_text_color(t_icon, UI_COLOR_CYAN, 0);
-        lv_label_set_text(t_icon, "\xef\x8b\x89");
-
-        lv_obj_t *t_lbl = lv_label_create(t_row);
-        lv_obj_set_style_text_font(t_lbl, &lv_font_montserrat_24_es, 0);
-        lv_obj_set_style_text_color(t_lbl, UI_COLOR_CYAN, 0);
-        lv_label_set_text(t_lbl, "Congelador");
-        ov->lbl_freezer_temp = lv_label_create(col_freezer);
-        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_28_es, 0);
-        lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
-        lv_label_set_text(ov->lbl_freezer_temp, "-- \xc2\xb0""C");
-
-        /* Pill 230 V (centro) */
+        /* Pill 230 V centrado en el ancho disponible */
         lv_obj_t *pill = lv_obj_create(bottom_row);
         lv_obj_remove_style_all(pill);
         lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -440,16 +399,6 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_label_set_text(ov->pill_shore_lbl, "230 V");
         lv_obj_center(ov->pill_shore_lbl);
         ov->pill_shore = pill;
-
-        /* Ventilador (derecha): icono animado que gira y cambia de color
-         * con el % de PWM. Sin texto. */
-        ov->img_fan = lv_img_create(bottom_row);
-        lv_img_set_src(ov->img_fan, &icon_fan);
-        lv_img_set_pivot(ov->img_fan, 40, 40);   /* 80/2 — rota sobre centro */
-        /* Estado inicial: gris (apagado) */
-        lv_obj_set_style_img_recolor(ov->img_fan, UI_COLOR_TEXT_DIM, 0);
-        lv_obj_set_style_img_recolor_opa(ov->img_fan, LV_OPA_COVER, 0);
-        ov->fan_angle_deci = 0;
     }
 
     /* ── Columna derecha: card DC/DC arriba + tanque grises abajo ── */
@@ -482,21 +431,107 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
 
-    /* ── Camper bottom: 3 botones grandes ────────────────────── */
+    /* ── Camper bottom: [ [Luz INT][Bomba]  ........  [Luz EXT] ] ──
+     * Agrupamos Luz INT + Bomba en un sub-grupo a la izquierda y dejamos
+     * Luz EXT solo a la derecha (SPACE_BETWEEN en el contenedor padre). */
     ov->camper_bottom = lv_obj_create(ov->base.root);
     lv_obj_remove_style_all(ov->camper_bottom);
     lv_obj_set_width(ov->camper_bottom, lv_pct(100));
     lv_obj_set_height(ov->camper_bottom, LV_SIZE_CONTENT);
     lv_obj_set_layout(ov->camper_bottom, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ov->camper_bottom, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(ov->camper_bottom, LV_FLEX_ALIGN_SPACE_AROUND,
+    lv_obj_set_flex_align(ov->camper_bottom, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(ov->camper_bottom, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_top(ov->camper_bottom, 6, 0);
+    lv_obj_set_style_pad_hor(ov->camper_bottom, 8, 0);
 
-    ov->btn_lin  = camper_make_button(ov->camper_bottom, "Luz INT",  'i');
-    ov->btn_lout = camper_make_button(ov->camper_bottom, "Luz EXT",  'o');
-    ov->btn_pump = camper_make_button(ov->camper_bottom, "Bomba",    'p');
+    /* Grupo izquierdo: Luz INT + Bomba pegados entre sí (gap pequeño). */
+    lv_obj_t *left_group = lv_obj_create(ov->camper_bottom);
+    lv_obj_remove_style_all(left_group);
+    lv_obj_set_size(left_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(left_group, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(left_group, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(left_group, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(left_group, 20, 0);
+    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->btn_lin  = camper_make_button(left_group,         "Luz INT", 'i');
+    ov->btn_pump = camper_make_button(left_group,         "Bomba",   'p');
+
+    /* Card frigo CENTRADA en la fila de botones: con SPACE_BETWEEN del
+     * camper_bottom y 3 hijos (left_group / card_fridge / btn_lout) queda
+     * automáticamente en el centro. Aquí sí hay altura suficiente para que
+     * el borde se vea entero por arriba y por abajo. */
+    {
+        lv_obj_t *card_fridge = lv_obj_create(ov->camper_bottom);
+        lv_obj_remove_style_all(card_fridge);
+        lv_obj_set_size(card_fridge, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card_fridge, UI_COLOR_CARD, 0);
+        lv_obj_set_style_bg_opa(card_fridge, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(card_fridge, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_border_width(card_fridge, 2, 0);
+        lv_obj_set_style_radius(card_fridge, UI_RADIUS_CARD, 0);
+        lv_obj_set_style_pad_hor(card_fridge, 14, 0);
+        lv_obj_set_style_pad_ver(card_fridge, 6, 0);
+        lv_obj_set_style_pad_gap(card_fridge, 14, 0);
+        lv_obj_set_layout(card_fridge, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(card_fridge, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(card_fridge, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(card_fridge, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Congelador (izquierda dentro de la card) — clickable para
+         * silenciar la alarma. */
+        lv_obj_t *col_freezer = lv_obj_create(card_fridge);
+        lv_obj_remove_style_all(col_freezer);
+        lv_obj_set_size(col_freezer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(col_freezer, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(col_freezer, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(col_freezer, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(col_freezer, 2, 0);
+        lv_obj_add_flag(col_freezer, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(col_freezer, alarm_mute_freezer_cb,
+                            LV_EVENT_CLICKED, ov);
+
+        lv_obj_t *t_row = lv_obj_create(col_freezer);
+        lv_obj_remove_style_all(t_row);
+        lv_obj_set_size(t_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(t_row, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(t_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(t_row, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(t_row, 4, 0);
+
+        static lv_font_t s_font_thermo_no_fb;
+        s_font_thermo_no_fb = lv_font_thermometer;
+        s_font_thermo_no_fb.fallback = NULL;
+        lv_obj_t *t_icon = lv_label_create(t_row);
+        lv_obj_set_style_text_font(t_icon, &s_font_thermo_no_fb, 0);
+        lv_obj_set_style_text_color(t_icon, UI_COLOR_CYAN, 0);
+        lv_label_set_text(t_icon, "\xef\x8b\x89");
+
+        lv_obj_t *t_lbl = lv_label_create(t_row);
+        lv_obj_set_style_text_font(t_lbl, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(t_lbl, UI_COLOR_CYAN, 0);
+        lv_label_set_text(t_lbl, "Congelador");
+        ov->lbl_freezer_temp = lv_label_create(col_freezer);
+        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->lbl_freezer_temp, "-- \xc2\xb0""C");
+
+        /* Ventilador (derecha dentro de la card) */
+        ov->img_fan = lv_img_create(card_fridge);
+        lv_img_set_src(ov->img_fan, &icon_fan);
+        lv_img_set_pivot(ov->img_fan, 40, 40);
+        lv_obj_set_style_img_recolor(ov->img_fan, UI_COLOR_TEXT_DIM, 0);
+        lv_obj_set_style_img_recolor_opa(ov->img_fan, LV_OPA_COVER, 0);
+        ov->fan_angle_deci = 0;
+    }
+
+    ov->btn_lout = camper_make_button(ov->camper_bottom,  "Luz EXT", 'o');
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
