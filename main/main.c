@@ -330,12 +330,14 @@ void app_main(void)
     energy_today_init();
     trip_computer_init();
 
-    /* PZEM-004T v3 (AC 220 V) en UART2: TX=GPIO32, RX=GPIO33 del JP1.
+    /* PZEM-004T v3 (AC 220 V) en UART2: TX=GPIO1 (pin 7), RX=GPIO2 (pin 9)
+     * del JP1 — reasignados desde GPIO32/33 (pines 19/21) para caber en el
+     * conector IDC 2x10 y librar GPIO20 (pin 17) que es el único con ADC1.
      * Si no hay modulo fisico, sigue funcionando: marca has_data=false. */
     pzem_config_t pzem_cfg = {
         .uart_num       = UART_NUM_2,
-        .tx_gpio        = GPIO_NUM_32,
-        .rx_gpio        = GPIO_NUM_33,
+        .tx_gpio        = GPIO_NUM_1,
+        .rx_gpio        = GPIO_NUM_2,
         .slave_address  = 0x01,
         .poll_period_ms = 2000,
     };

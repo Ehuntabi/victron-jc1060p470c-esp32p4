@@ -179,8 +179,8 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <h2>9. PZEM-004T v3 — medidor red 230 V (UART2)</h2>
 <table>
 <tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>UART2 TX</td><td>GPIO 32</td><td>JP1 pin 19</td><td>9600 baud 8N1, addr 0x01</td></tr>
-<tr><td>UART2 RX</td><td>GPIO 33</td><td>JP1 pin 21</td><td>Polling 2000 ms</td></tr>
+<tr><td>UART2 TX</td><td>GPIO 1</td><td>JP1 pin 7</td><td>9600 baud 8N1, addr 0x01 (movido desde GPIO 32 / pin 19 para caber en IDC 2x10)</td></tr>
+<tr><td>UART2 RX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Polling 2000 ms (movido desde GPIO 33 / pin 21; deja GPIO 20 libre para ADC)</td></tr>
 </table>
 
 <h2 style="page-break-before: always; break-before: page;">10. NE185 RS-485 directo (UART1, MAX485 onboard)</h2>
@@ -225,8 +225,8 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
 <tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J5</td></tr>
 <tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J5</td></tr>
-<tr><td>32</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 19)</td></tr>
-<tr><td>33</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 21)</td></tr>
+<tr><td>1</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 7)</td></tr>
+<tr><td>2</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 9)</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
 <tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr>
 <tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
@@ -245,7 +245,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <ul>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J5). UART2 PZEM-004T (GPIO 32/33 → JP1).</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J5). UART2 PZEM-004T (GPIO 1/2 → JP1 pines 7/9).</li>
 <li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
 </ul>
 
@@ -283,17 +283,17 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
   <tr><td>2, 4</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr>
   <tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr>
   <tr><td>8</td><td>NC</td><td>No conectado</td></tr>
-  <tr><td>7</td><td>GPIO 1</td><td>Libre</td></tr>
-  <tr><td>9</td><td>GPIO 2</td><td>Libre</td></tr>
+  <tr><td>7</td><td>GPIO 1</td><td><strong>PZEM UART2 TX</strong></td></tr>
+  <tr><td>9</td><td>GPIO 2</td><td><strong>PZEM UART2 RX</strong></td></tr>
   <tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr>
   <tr><td>11</td><td>GPIO 3</td><td>Libre</td></tr>
   <tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr>
   <tr><td>13</td><td>GPIO 4</td><td>Frigo DS18B20</td></tr>
   <tr><td>14</td><td>GPIO 45</td><td>Libre</td></tr>
   <tr><td>15</td><td>GPIO 5</td><td>Frigo PWM</td></tr>
-  <tr><td>17</td><td>GPIO 20</td><td>Libre (ADC1 CH4)</td></tr>
-  <tr><td>19</td><td>GPIO 32</td><td><strong>PZEM UART2 TX</strong></td></tr>
-  <tr><td>21</td><td>GPIO 33</td><td><strong>PZEM UART2 RX</strong></td></tr>
+  <tr><td>17</td><td>GPIO 20</td><td>Libre (único ADC1 CH4 disponible)</td></tr>
+  <tr><td>19</td><td>GPIO 32</td><td>Libre</td></tr>
+  <tr><td>21</td><td>GPIO 33</td><td>Libre (queda fuera del IDC 2x10)</td></tr>
   <tr><td>20, 22, 24, 26</td><td>—</td><td>Radio ESP32-C6</td></tr>
   <tr><td>23, 25</td><td>—</td><td>I²C externo (ES I²C)</td></tr>
   </table>
@@ -301,8 +301,8 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 
 <ul class="reco-compact">
 <li><strong>Alimentación:</strong> 3.3 V en pin 1/18, 5 V en pin 2. GND en 5/6/16.</li>
-<li><strong>UART libre extra:</strong> ninguno completo; quedan GPIOs 3, 20, 45, 46 sueltos.</li>
-<li><strong>ADC:</strong> solo GPIO 20 (pin 17) tiene ADC1 CH4. <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
+<li><strong>UART libre extra:</strong> ninguno completo; quedan GPIOs 3, 20, 32, 33, 45, 46 sueltos.</li>
+<li><strong>ADC:</strong> GPIO 20 (pin 17) tendría ADC1 CH4 pero ahora se usa como PZEM RX. <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
 <li><strong>Reasignables si no usas el frigo:</strong> GPIO 4 (pin 13) y GPIO 5 (pin 15).</li>
 <li><strong>Niveles:</strong> 3.3 V TTL. Para 5 V o RS-232/RS-485 usar level-shifter/transceiver externo.</li>
 </ul>
@@ -358,7 +358,7 @@ en gris hasta conectar el cable del NE185 al J5)</li>
 <ul>
 <li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V)</li>
 <li>Ventilador PWM en GPIO 5 → JP1 pin 15</li>
-<li>PZEM-004T → JP1 pin 19 (GPIO 32) y pin 21 (GPIO 33)</li>
+<li>PZEM-004T → JP1 pin 7 (GPIO 1 TX) y pin 9 (GPIO 2 RX) — pares 4 y 5, lo más arriba posible del IDC 2x10</li>
 <li><strong>NE185 RS-485 → conector J5</strong> (MX 1.25 4P, conector #11). Cable 4 hilos del derivador NE185: A, B, GND, +5V. NO se necesita caja ni hardware externo.</li>
 </ul>
 </div>
