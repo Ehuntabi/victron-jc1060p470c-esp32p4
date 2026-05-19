@@ -265,8 +265,8 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_set_style_radius(led, 5, 0);
     lv_obj_set_style_bg_color(led, lv_color_hex(0x333333), 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
-    /* LED centrado horizontalmente y subido a 4 px del borde superior. */
-    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, 4);
+    /* LED centrado horizontalmente, pegado al borde superior. */
+    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_user_data(btn, led);
 
