@@ -20,6 +20,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_timer.h"
+#include "mbedtls/base64.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -491,16 +492,65 @@ static const char SETTIME_SCRIPT[] =
     "<script>(function(){try{var i=new Image();i.src='/settime?timestamp='"
     "+Math.floor(Date.now()/1000)+'&_='+Math.random();}catch(e){}})();</script>";
 
-/* BasicAuth: user="victron" pass="victron123"
- * base64("victron:victron123") = "REDACTED-credential-rotated" */
-#define BASIC_AUTH_EXPECTED  "Basic REDACTED-credential-rotated"
+/* BasicAuth — credenciales NO hardcoded en el repo.
+ *
+ * Al primer boot generamos un default único por dispositivo:
+ *   user = "victron"
+ *   pass = "v_" + últimos 6 hex MAC del C6 (ej "v_DC078D")
+ * Y lo persistimos en NVS. El user puede cambiar ambas desde Settings.
+ * En el monitor del primer arranque se imprime el valor para que lo apuntes.
+ *
+ * La cadena "Basic <base64>" se calcula en RAM al arrancar el HTTP server
+ * y se guarda en s_auth_header. check_basic_auth() solo compara strings. */
+static char s_auth_header[96] = "";
+
+static void http_auth_init(void)
+{
+    char user[33] = {0};
+    char pass[33] = {0};
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        size_t ul = sizeof(user), pl = sizeof(pass);
+        bool need_default_user = (nvs_get_str(h, "http_user", user, &ul) != ESP_OK || ul <= 1);
+        bool need_default_pass = (nvs_get_str(h, "http_pass", pass, &pl) != ESP_OK || pl <= 1);
+        if (need_default_user) {
+            strcpy(user, "victron");
+            nvs_set_str(h, "http_user", user);
+        }
+        if (need_default_pass) {
+            uint8_t mac[6] = {0};
+            esp_wifi_get_mac(WIFI_IF_AP, mac);
+            snprintf(pass, sizeof(pass), "v_%02X%02X%02X",
+                     mac[3], mac[4], mac[5]);
+            nvs_set_str(h, "http_pass", pass);
+        }
+        nvs_commit(h);
+        nvs_close(h);
+        if (need_default_user || need_default_pass) {
+            ESP_LOGW(TAG, "HTTP auth DEFAULT generado: user='%s' pass='%s'  "
+                          "(cambiar desde Settings, queda en NVS)",
+                     user, pass);
+        }
+    }
+    /* Construir cabecera "Basic <base64(user:pass)>" una vez. */
+    char up[68];
+    int n = snprintf(up, sizeof(up), "%s:%s", user, pass);
+    unsigned char b64[96];
+    size_t b64_len = 0;
+    if (mbedtls_base64_encode(b64, sizeof(b64), &b64_len,
+                               (const unsigned char *)up, n) == 0) {
+        snprintf(s_auth_header, sizeof(s_auth_header), "Basic %.*s",
+                 (int)b64_len, (const char *)b64);
+    }
+}
 
 static esp_err_t check_basic_auth(httpd_req_t *req)
 {
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
-    if (err == ESP_OK && strcmp(auth, BASIC_AUTH_EXPECTED) == 0) {
+    if (err == ESP_OK && s_auth_header[0] != '\0' &&
+        strcmp(auth, s_auth_header) == 0) {
         return ESP_OK;
     }
     httpd_resp_set_status(req, "401 Unauthorized");
@@ -1747,6 +1797,8 @@ esp_err_t config_server_start(void) {
         ESP_LOGD(TAG, "config_server ya activo, skip");
         return ESP_OK;
     }
+    /* Inicializar BasicAuth: lee user/pass de NVS o genera default por MAC. */
+    http_auth_init();
     mount_spiffs();
     httpd_handle_t server = NULL;
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();

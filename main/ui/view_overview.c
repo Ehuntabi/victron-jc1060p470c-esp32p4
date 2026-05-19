@@ -232,18 +232,44 @@ static void camper_btn_event_cb(lv_event_t *e)
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
-static lv_obj_t *camper_make_button(lv_obj_t *parent, const char *text,
+/* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
+ * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn). */
+static lv_obj_t *camper_make_button(lv_obj_t *parent,
+                                    const char *icon, const char *text,
                                     char cmd_char)
 {
     lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, 140, 70);
-    lv_obj_set_style_radius(btn, 12, 0);
+    lv_obj_set_size(btn, 160, 70);
+    lv_obj_set_style_radius(btn, 35, 0);                 /* píldora: radius = h/2 */
     lv_obj_set_style_bg_color(btn, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
+    /* Sombra suave para sensación de elevación */
+    lv_obj_set_style_shadow_width(btn, 14, 0);
+    lv_obj_set_style_shadow_color(btn, lv_color_black(), 0);
+    lv_obj_set_style_shadow_opa(btn, LV_OPA_30, 0);
+    lv_obj_set_style_shadow_ofs_y(btn, 4, 0);
+
+    /* Label con icono + texto en una sola línea */
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s  %s", icon ? icon : "", text);
     lv_obj_t *l = lv_label_create(btn);
     lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(l, text);
+    lv_label_set_text(l, buf);
     lv_obj_center(l);
+
+    /* LED indicador 10x10 esquina sup. dcha. Off gris oscuro; on cambia
+     * color + halo en el refresh general. */
+    lv_obj_t *led = lv_obj_create(btn);
+    lv_obj_remove_style_all(led);
+    lv_obj_set_size(led, 10, 10);
+    lv_obj_set_style_radius(led, 5, 0);
+    lv_obj_set_style_bg_color(led, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
+    /* LED centrado horizontalmente y subido a 4 px del borde superior. */
+    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, 4);
+    lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_user_data(btn, led);
+
     lv_obj_add_event_cb(btn, camper_btn_event_cb, LV_EVENT_CLICKED,
                         (void *)(intptr_t)cmd_char);
     return btn;
@@ -527,8 +553,8 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_pad_gap(left_group, 20, 0);
     lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
 
-    ov->btn_lin  = camper_make_button(left_group,         "Luz INT", 'i');
-    ov->btn_pump = camper_make_button(left_group,         "Bomba",   'p');
+    ov->btn_lin  = camper_make_button(left_group, LV_SYMBOL_HOME, "Luz INT", 'i');
+    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p');
 
     /* Pill 230 V centrado en la fila de botones tras el swap pedido por
      * el usuario. Con SPACE_BETWEEN del camper_bottom y 3 hijos
@@ -553,7 +579,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->pill_shore = pill;
     }
 
-    ov->btn_lout = camper_make_button(ov->camper_bottom,  "Luz EXT", 'o');
+    ov->btn_lout = camper_make_button(ov->camper_bottom, LV_SYMBOL_HOME, "Luz EXT", 'o');
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
@@ -838,33 +864,31 @@ static void overview_render(ui_overview_view_t *ov)
         lv_color_t txt_off = UI_COLOR_TEXT;
         const lv_font_t *font_on  = &lv_font_montserrat_24_es;
         const lv_font_t *font_off = &lv_font_montserrat_20_es;
-        if (ov->btn_lin) {
-            bool on = cd.fresh && cd.light_in;
-            lv_obj_set_style_bg_color(ov->btn_lin,
-                on ? UI_COLOR_YELLOW : UI_COLOR_TEXT_DIM, 0);
-            lv_obj_set_style_text_color(ov->btn_lin,
-                on ? txt_on : txt_off, 0);
-            lv_obj_set_style_text_font(ov->btn_lin,
-                on ? font_on : font_off, 0);
-        }
-        if (ov->btn_lout) {
-            bool on = cd.fresh && cd.light_out;
-            lv_obj_set_style_bg_color(ov->btn_lout,
-                on ? UI_COLOR_YELLOW : UI_COLOR_TEXT_DIM, 0);
-            lv_obj_set_style_text_color(ov->btn_lout,
-                on ? txt_on : txt_off, 0);
-            lv_obj_set_style_text_font(ov->btn_lout,
-                on ? font_on : font_off, 0);
-        }
-        if (ov->btn_pump) {
-            bool on = cd.fresh && cd.pump;
-            lv_obj_set_style_bg_color(ov->btn_pump,
-                on ? UI_COLOR_CYAN : UI_COLOR_TEXT_DIM, 0);
-            lv_obj_set_style_text_color(ov->btn_pump,
-                on ? txt_on : txt_off, 0);
-            lv_obj_set_style_text_font(ov->btn_pump,
-                on ? font_on : font_off, 0);
-        }
+        /* Helper inline: actualiza estilo botón + LED (con halo cuando on). */
+        #define UPDATE_CAMPER_BTN(btn, on, color_on) do {                   \
+            if (!(btn)) break;                                              \
+            lv_obj_set_style_bg_color((btn),                                \
+                (on) ? (color_on) : UI_COLOR_TEXT_DIM, 0);                  \
+            lv_obj_set_style_text_color((btn),                              \
+                (on) ? txt_on : txt_off, 0);                                \
+            lv_obj_set_style_text_font((btn),                               \
+                (on) ? font_on : font_off, 0);                              \
+            lv_obj_t *led = (lv_obj_t *)lv_obj_get_user_data(btn);          \
+            if (led) {                                                      \
+                lv_obj_set_style_bg_color(led,                              \
+                    (on) ? UI_COLOR_TEXT : lv_color_hex(0x333333), 0);      \
+                lv_obj_set_style_shadow_width(led, (on) ? 10 : 0, 0);       \
+                lv_obj_set_style_shadow_color(led, (color_on), 0);          \
+                lv_obj_set_style_shadow_opa(led,                            \
+                    (on) ? LV_OPA_80 : LV_OPA_TRANSP, 0);                   \
+                lv_obj_set_style_shadow_spread(led, (on) ? 2 : 0, 0);       \
+            }                                                               \
+        } while (0)
+
+        UPDATE_CAMPER_BTN(ov->btn_lin,  cd.fresh && cd.light_in,  UI_COLOR_YELLOW);
+        UPDATE_CAMPER_BTN(ov->btn_lout, cd.fresh && cd.light_out, UI_COLOR_YELLOW);
+        UPDATE_CAMPER_BTN(ov->btn_pump, cd.fresh && cd.pump,      UI_COLOR_CYAN);
+        #undef UPDATE_CAMPER_BTN
     }
 
     /* ── Frigo: T_Congelador y % ventilador ─────────────────── */
