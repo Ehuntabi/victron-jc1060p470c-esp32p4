@@ -18,6 +18,8 @@
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -56,6 +58,15 @@ static const char *TAG = "cfg_srv";
  * Asi el siguiente start vuelve a tener un netif fresco que añadir.
  */
 static volatile bool s_ap_started = false;
+/* EventGroup para que wifi_ap_init pueda esperar a que el handler async
+ * AP_START haya hecho el action_start (con netif añadido + DHCP server
+ * activo). Antes dhcp_set_captiveportal_url se ejecutaba justo después de
+ * esp_wifi_start y a veces el netif todavía no estaba listo -> dhcps_start
+ * fallaba silenciosamente (ESP_ERROR_CHECK_WITHOUT_ABORT) y el portal
+ * cautivo quedaba sin activar. */
+#define AP_EVT_STARTED  BIT0
+static EventGroupHandle_t s_ap_evt = NULL;
+
 static void cfg_srv_ap_start_idempotent(void *arg, esp_event_base_t base,
                                           int32_t id, void *data)
 {
@@ -82,6 +93,9 @@ static void cfg_srv_ap_start_idempotent(void *arg, esp_event_base_t base,
                                            esp_netif_netstack_buf_free);
 
     esp_netif_action_start(netif, base, id, data);
+    /* Aviso a wifi_ap_init de que el netif ya está montado y el DHCP
+     * server lo gestiona — momento seguro para dhcp_set_captiveportal_url. */
+    if (s_ap_evt) xEventGroupSetBits(s_ap_evt, AP_EVT_STARTED);
 }
 static void cfg_srv_ap_stop_idempotent(void *arg, esp_event_base_t base,
                                          int32_t id, void *data)
@@ -95,6 +109,49 @@ static void cfg_srv_ap_stop_idempotent(void *arg, esp_event_base_t base,
     esp_netif_action_stop(arg, base, id, data);
 }
 
+/* Auto-off del HTTP server tras 15 min sin NUEVAS asociaciones de cliente.
+ *
+ * Nota: el WiFi AP NO se apaga (el mini está siempre conectado para recibir
+ * los frames UDP del publisher). Solo paramos el servidor HTTP de
+ * configuración (192.168.4.1). Para reactivarlo: toggle "AP enabled" en
+ * Settings re-invoca wifi_ap_init() + config_server_start() (idempotente).
+ *
+ * La lógica es: en cada WIFI_EVENT_AP_STACONNECTED reseteamos el timer.
+ * Si pasan 15 min sin ningún nuevo STA_CONNECTED → HTTP off. El mini se
+ * asocia 1 vez al boot y luego no genera más STA_CONNECTED, así que el
+ * temporizador caduca como pretendemos. */
+#define AP_AUTO_OFF_MS  (15 * 60 * 1000)
+static httpd_handle_t s_httpd = NULL;
+static esp_timer_handle_t s_ap_off_timer = NULL;
+
+static void ap_auto_off_cb(void *arg)
+{
+    (void)arg;
+    if (!s_httpd) return;   /* ya parado */
+    ESP_LOGI(TAG, "Auto-off: 15 min sin nuevas conexiones, parando HTTP server");
+    httpd_stop(s_httpd);
+    s_httpd = NULL;
+    /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
+}
+
+static void ap_off_timer_ensure(void)
+{
+    if (s_ap_off_timer) return;
+    esp_timer_create_args_t args = {
+        .callback = ap_auto_off_cb,
+        .name     = "ap_auto_off",
+    };
+    esp_timer_create(&args, &s_ap_off_timer);
+}
+
+static void ap_off_timer_arm(void)
+{
+    if (!s_ap_off_timer) return;
+    esp_timer_stop(s_ap_off_timer);   /* idempotente */
+    esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
+    ESP_LOGI(TAG, "AP auto-off armado: %d min sin clientes", AP_AUTO_OFF_MS / 60000);
+}
+
 /* Logs visibles cuando un cliente intenta asociarse / desconectarse. En
  * esp_hosted rpc_wrap loggea estos eventos solo a nivel VERBOSE, por eso sin
  * estos handlers los intentos del movil son invisibles en monitor.  */
@@ -105,6 +162,10 @@ static void cfg_srv_ap_sta_connected(void *arg, esp_event_base_t base,
     ESP_LOGI(TAG, "Cliente CONECTADO: MAC=%02x:%02x:%02x:%02x:%02x:%02x aid=%d",
              e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
              e->aid);
+    /* Cada nueva asociación reabre la ventana de auto-off del HTTP. Si el
+     * server estaba parado por inactividad, lo reactivamos. */
+    if (!s_httpd) config_server_start();
+    ap_off_timer_arm();
 }
 static void cfg_srv_ap_sta_disconnected(void *arg, esp_event_base_t base,
                                           int32_t id, void *data)
@@ -113,6 +174,7 @@ static void cfg_srv_ap_sta_disconnected(void *arg, esp_event_base_t base,
     ESP_LOGI(TAG, "Cliente DESCONECTADO: MAC=%02x:%02x:%02x:%02x:%02x:%02x aid=%d",
              e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
              e->aid);
+    /* No tocamos el timer aquí — lo gestiona el handler de CONNECTED. */
 }
 static void cfg_srv_ap_probe_req(void *arg, esp_event_base_t base,
                                    int32_t id, void *data)
@@ -200,7 +262,12 @@ esp_err_t wifi_ap_init(void)
             nvs_set_str(h, "ssid", ssid);
         }
         if (nvs_get_str(h, "password", pass, &pl) != ESP_OK) {
-            pass[0] = '\0';
+            /* NVS sin pass → forzamos fallback "victron123" YA (la regla
+             * de "< 8 chars => victron123" se aplica más abajo, pero ahí
+             * NVS ya estaría escrita con "" y la web mostraría password
+             * vacía aunque el AP usase "victron123" → confusión UX).
+             * Persistimos el default directamente. */
+            strcpy(pass, "victron123");
             nvs_set_str(h, "password", pass);
         }
         if (nvs_get_u8(h, "enabled", &enabled) != ESP_OK) {
@@ -280,7 +347,8 @@ esp_err_t wifi_ap_init(void)
             .ssid_len       = strlen(ssid),
             .max_connection = 4,
             .channel        = 6,
-            .authmode       = WIFI_AUTH_WPA_WPA2_PSK,
+            /* Solo WPA2 (sin WPA legacy, más resistente a downgrade). */
+            .authmode       = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg        = { .required = false },
         }
     };
@@ -296,10 +364,28 @@ esp_err_t wifi_ap_init(void)
      * transmite pero los clientes no pueden asociarse. */
     esp_err_t wifi_cfg_err = esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
     ESP_LOGI(TAG, "esp_wifi_set_config result: 0x%x (%s)", wifi_cfg_err, esp_err_to_name(wifi_cfg_err));
+
+    /* Crear EventGroup ANTES de esp_wifi_start para no perder el evento
+     * AP_START (que llega async). xEventGroupCreate solo la primera vez. */
+    if (!s_ap_evt) s_ap_evt = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* Esperar hasta 2 s a que el handler async termine el action_start
+     * (netif añadido + DHCP server up). Sin esto, dhcp_set_captiveportal_url
+     * puede correr antes de que el netif esté listo y fallar en silencio. */
+    if (s_ap_evt) {
+        xEventGroupWaitBits(s_ap_evt, AP_EVT_STARTED,
+                            pdFALSE, pdTRUE, pdMS_TO_TICKS(2000));
+    }
     dhcp_set_captiveportal_url();
-    
+
+    /* Arrancar contador auto-off del HTTP server: si en 15 min no llega
+     * ningún STA_CONNECTED nuevo, el HTTP se para (el WiFi AP sigue para
+     * que el mini reciba UDP). El handler STA_CONNECTED rearma el timer
+     * y reactiva el HTTP si lo encuentra parado. */
+    ap_off_timer_ensure();
+    ap_off_timer_arm();
+
     ESP_LOGI(TAG, "Soft-AP started");
     return ESP_OK;
 }
@@ -405,8 +491,37 @@ static const char SETTIME_SCRIPT[] =
     "<script>(function(){try{var i=new Image();i.src='/settime?timestamp='"
     "+Math.floor(Date.now()/1000)+'&_='+Math.random();}catch(e){}})();</script>";
 
+/* BasicAuth: user="victron" pass="victron123"
+ * base64("victron:victron123") = "REDACTED-credential-rotated" */
+#define BASIC_AUTH_EXPECTED  "Basic REDACTED-credential-rotated"
+
+static esp_err_t check_basic_auth(httpd_req_t *req)
+{
+    char auth[96] = {0};
+    esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
+                                                  auth, sizeof(auth));
+    if (err == ESP_OK && strcmp(auth, BASIC_AUTH_EXPECTED) == 0) {
+        return ESP_OK;
+    }
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_hdr(req, "WWW-Authenticate",
+                       "Basic realm=\"Victron Display\"");
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_sendstr(req, "Auth required");
+    return ESP_FAIL;
+}
+
+/* Helper macro: pone al inicio de los handlers que exigen auth. Si falla
+ * la respuesta 401 ya está enviada — devolvemos ESP_OK para que el http
+ * server no reintente ni loggee error. NO aplicar al captive-portal
+ * redirect (handle_captive_redirect): rompería la detección de portal. */
+#define REQUIRE_AUTH(req) do { \
+    if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
+} while (0)
+
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     ESP_LOGI(TAG, "GET / -> portal landing");
     uint8_t portal_page = 2; /* default ahora: Dashboard */
     nvs_handle_t h;
@@ -438,6 +553,7 @@ static esp_err_t handle_root(httpd_req_t *req) {
 /* /keys -> sirve el index.html de configuracion Victron desde SPIFFS */
 static esp_err_t handle_keys(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
     return serve_from_spiffs(req, "/index.html");
 }
@@ -449,6 +565,7 @@ static esp_err_t handle_static(httpd_req_t *req) {
 
 // Handler for POST /save (MAC address and AES key)
 static esp_err_t post_save(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     ESP_LOGV(TAG, "HTTP POST /save");
     size_t len = req->content_len;
     if (!len || len > 512) {
@@ -560,6 +677,7 @@ static esp_err_t post_save(httpd_req_t *req) {
 // --- Dashboard handlers ---
 static esp_err_t handle_api_state(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     char buf[1024];
     size_t n = dashboard_state_to_json(buf, sizeof(buf));
     httpd_resp_set_type(req, "application/json");
@@ -590,7 +708,6 @@ static const char DASHBOARD_HTML[] =
       "<a href='/dashboard'><b>Dashboard</b></a>"
       "<a href='/data'>Logs</a>"
       "<a href='/keys'>Keys</a>"
-      "<a href='/mirror'>Mirror</a>"
     "</nav>"
     "<h1>Victron Dashboard</h1>"
     "<div class='grid'>"
@@ -680,6 +797,7 @@ static const char DASHBOARD_HTML[] =
 
 static esp_err_t handle_dashboard(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_sendstr(req, DASHBOARD_HTML);
 }
@@ -709,6 +827,7 @@ static esp_err_t handle_captive_redirect(httpd_req_t *req) {
 
 static esp_err_t handle_settime(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     long ts = 0;
     char buf[128];
 
@@ -1416,6 +1535,7 @@ static esp_err_t handle_data_bateria_csv(httpd_req_t *req)
 
 static esp_err_t handle_data_index(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     const char *html =
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -1440,7 +1560,6 @@ static esp_err_t handle_data_index(httpd_req_t *req)
           "<a href='/dashboard'>Dashboard</a>"
           "<a href='/data'><b>Logs</b></a>"
           "<a href='/keys'>Keys</a>"
-          "<a href='/mirror'>Mirror</a>"
         "</nav>"
         "<h1>Logs historicos</h1>"
         "<a class='btn' href='/data/frigo'>FRIGO</a>"
@@ -1452,6 +1571,7 @@ static esp_err_t handle_data_index(httpd_req_t *req)
 
 static esp_err_t handle_logs(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     char *csv = datalogger_get_csv();
     if (!csv) {
         httpd_resp_set_type(req, "text/csv");
@@ -1465,117 +1585,9 @@ static esp_err_t handle_logs(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* /mirror.bmp -> snapshot del framebuffer downsampleado 2x como BMP 24-bit.
- * Resolucion fuente 1024x600 RGB565 -> 512x300 BMP RGB24 (~460 KB). */
-static esp_err_t handle_mirror_bmp(httpd_req_t *req)
-{
-    lv_disp_t *disp = lv_disp_get_default();
-    if (!disp || !disp->driver || !disp->driver->draw_buf ||
-        !disp->driver->draw_buf->buf1) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No fb");
-        return ESP_FAIL;
-    }
-    int src_w = disp->driver->hor_res;
-    int src_h = disp->driver->ver_res;
-    const int factor = 2;
-    int w = src_w / factor;
-    int h = src_h / factor;
-    int row_size = (w * 3 + 3) & ~3;
-    int img_size = row_size * h;
-    int file_size = 54 + img_size;
-
-    /* Buffer estatico en PSRAM: 1 sola asignacion para todos los refresh
-     * del navegador. Tamano fijo (1024x600 RGB565 -> 512x300 RGB24 + header). */
-    static uint8_t *bmp = NULL;
-    static int bmp_capacity = 0;
-    if (bmp == NULL || bmp_capacity < file_size) {
-        if (bmp) heap_caps_free(bmp);
-        bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
-        bmp_capacity = bmp ? file_size : 0;
-    }
-    if (!bmp) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ENOMEM"); return ESP_FAIL; }
-
-    /* BMP header (54 bytes, BITMAPINFOHEADER) */
-    memset(bmp, 0, 54);
-    bmp[0] = 'B'; bmp[1] = 'M';
-    bmp[2]  = file_size & 0xFF;
-    bmp[3]  = (file_size >>  8) & 0xFF;
-    bmp[4]  = (file_size >> 16) & 0xFF;
-    bmp[5]  = (file_size >> 24) & 0xFF;
-    bmp[10] = 54;          /* offset al pixel data */
-    bmp[14] = 40;          /* tamano DIB header */
-    bmp[18] = w & 0xFF;       bmp[19] = (w >> 8) & 0xFF;
-    bmp[22] = h & 0xFF;       bmp[23] = (h >> 8) & 0xFF; /* positivo => bottom-up */
-    bmp[26] = 1;           /* planes */
-    bmp[28] = 24;          /* bpp */
-    bmp[34] = img_size & 0xFF;
-    bmp[35] = (img_size >>  8) & 0xFF;
-    bmp[36] = (img_size >> 16) & 0xFF;
-    bmp[37] = (img_size >> 24) & 0xFF;
-
-    /* Pixel data: BMP bottom-up. La copia del framebuffer debe ocurrir bajo
-     * lvgl_port_lock para evitar tearing (LVGL puede repintar buf1 a la vez)
-     * y referencia colgante si LVGL reasignara los buffers. */
-    bool got_lock = lvgl_port_lock(500);
-    const lv_color_t *src = (const lv_color_t *)disp->driver->draw_buf->buf1;
-    for (int y = 0; y < h; y++) {
-        uint8_t *row = bmp + 54 + (h - 1 - y) * row_size;
-        int sy = y * factor;
-        for (int x = 0; x < w; x++) {
-            int sx = x * factor;
-            uint16_t v = src[sy * src_w + sx].full;
-            uint8_t r5 = (v >> 11) & 0x1F;
-            uint8_t g6 = (v >>  5) & 0x3F;
-            uint8_t b5 =  v        & 0x1F;
-            row[x * 3 + 0] = (b5 << 3) | (b5 >> 2); /* B */
-            row[x * 3 + 1] = (g6 << 2) | (g6 >> 4); /* G */
-            row[x * 3 + 2] = (r5 << 3) | (r5 >> 2); /* R */
-        }
-    }
-    if (got_lock) lvgl_port_unlock();
-
-    httpd_resp_set_type(req, "image/bmp");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, (const char *)bmp, file_size);
-}
-
-static esp_err_t handle_mirror(httpd_req_t *req)
-{
-    static const char MIRROR_HTML[] =
-        "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Mirror Victron</title><style>"
-        "body{background:#06080C;color:#fff;font-family:system-ui,sans-serif;margin:0;padding:16px;text-align:center}"
-        "h1{color:#FF9800;margin:0 0 12px}"
-        "nav{margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}"
-        "nav a{color:#4FC3F7;text-decoration:none;padding:6px 12px;border:1px solid #2D3340;border-radius:8px;font-size:14px}"
-        "nav a:hover{background:#141821}"
-        "img{max-width:100%;height:auto;border:2px solid #2D3340;border-radius:14px}"
-        ".sub{color:#8A93A6;font-size:14px;margin-top:8px}"
-        "</style></head><body>"
-        "<nav>"
-          "<a href='/dashboard'>Dashboard</a>"
-          "<a href='/data'>Logs</a>"
-          "<a href='/keys'>Keys</a>"
-          "<a href='/mirror'><b>Mirror</b></a>"
-        "</nav>"
-        "<h1>Mirror del display</h1>"
-        "<img id='m' src='/mirror.bmp' alt='Snapshot'>"
-        "<div class='sub'>Auto-refresh cada 1.5 s</div>"
-        "<script>"
-        "function tick(){"
-          "var m=document.getElementById('m');"
-          "m.src='/mirror.bmp?t='+Date.now();"
-        "}"
-        "setInterval(tick,1500);"
-        "</script>"
-        "</body></html>";
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_sendstr(req, MIRROR_HTML);
-}
 
 static esp_err_t handle_screenshot(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     lv_disp_t *disp = lv_disp_get_default();
     if (!disp || !disp->driver || !disp->driver->draw_buf || !disp->driver->draw_buf->buf1) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No framebuffer");
@@ -1729,6 +1741,12 @@ static esp_err_t handle_data_bateria_tar(httpd_req_t *req)
 }
 
 esp_err_t config_server_start(void) {
+    /* Idempotente: si el server ya está arriba (p.ej. tras auto-off + STA
+     * nuevo que lo reactiva) no hacemos nada. */
+    if (s_httpd) {
+        ESP_LOGD(TAG, "config_server ya activo, skip");
+        return ESP_OK;
+    }
     mount_spiffs();
     httpd_handle_t server = NULL;
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
@@ -1740,6 +1758,7 @@ esp_err_t config_server_start(void) {
     cfg.max_uri_handlers = 24;  /* 22 actuales + 2 de margen */
     cfg.max_resp_headers = 16;
     ESP_ERROR_CHECK(httpd_start(&server, &cfg));
+    s_httpd = server;   /* publicar tras start exitoso */
 
     httpd_uri_t uri_root = { .uri = "/",    .method = HTTP_GET,  .handler = handle_root };
     httpd_register_uri_handler(server, &uri_root);
@@ -1772,10 +1791,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_keys);
     httpd_uri_t uri_api_state = { .uri = "/api/state", .method = HTTP_GET, .handler = handle_api_state };
     httpd_register_uri_handler(server, &uri_api_state);
-    httpd_uri_t uri_mirror = { .uri = "/mirror", .method = HTTP_GET, .handler = handle_mirror };
-    httpd_register_uri_handler(server, &uri_mirror);
-    httpd_uri_t uri_mirror_bmp = { .uri = "/mirror.bmp", .method = HTTP_GET, .handler = handle_mirror_bmp };
-    httpd_register_uri_handler(server, &uri_mirror_bmp);
+    /* /mirror y /mirror.bmp eliminados — la info ya está en otras vistas
+     * (Dashboard, Logs, Keys). */
     httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
     httpd_register_uri_handler(server, &uri_data);
     httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };

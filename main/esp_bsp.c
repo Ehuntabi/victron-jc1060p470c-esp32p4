@@ -41,6 +41,16 @@ typedef struct {
     /* el resto no nos importa */
 } bsp_priv_dsi_bus_t;
 
+/* Si el offset de .hal cambia entre versiones de IDF, el cast en
+ * (bsp_priv_dsi_bus_t *)mipi_dsi_bus accedería a basura y rompería el
+ * workaround del BTA silenciosamente. Estos asserts FALLAN EN COMPILACIÓN
+ * si el layout no coincide con lo confirmado en IDF 5.4.4. Si fallan al
+ * upgradear IDF: regenera la struct mirando esp_lcd/dsi/mipi_dsi_priv.h. */
+_Static_assert(offsetof(bsp_priv_dsi_bus_t, bus_id) == 0,
+               "bsp_priv_dsi_bus_t: bus_id debe estar al offset 0");
+_Static_assert(offsetof(bsp_priv_dsi_bus_t, hal) == sizeof(int),
+               "bsp_priv_dsi_bus_t: hal sigue inmediatamente a bus_id");
+
 /* Controlador JD9165BA */
 #include "esp_lcd_jd9165.h"
 
