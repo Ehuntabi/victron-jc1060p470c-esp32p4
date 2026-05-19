@@ -186,6 +186,8 @@ static void ui_check_device_timeouts(lv_timer_t *timer);
 static void clock_timer_cb(lv_timer_t *timer);
 static void idle_to_live_timer_cb(lv_timer_t *t);
 static void nav_btn_event_cb(lv_event_t *e);
+static void settings_auto_return_cb(lv_timer_t *t);
+static void nav_icon_sync_cb(lv_event_t *e);
 static void volume_btn_event_cb(lv_event_t *e);
 static void wifi_btn_event_cb(lv_event_t *e);
 static lv_timer_t *s_idle_to_live_timer;
@@ -474,6 +476,11 @@ void ui_init(void) {
     lv_obj_set_style_text_align(ui->btn_nav, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(ui->btn_nav, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ui->btn_nav, nav_btn_event_cb, LV_EVENT_CLICKED, ui);
+    /* Capturar CUALQUIER cambio del tab activo (botón, swipe, programático)
+     * para mantener el icono de la barra inferior siempre coherente con
+     * la pestaña visible. Sin esto el icono se queda desincronizado al
+     * hacer swipe horizontal entre Live y Settings. */
+    lv_obj_add_event_cb(ui->tabview, nav_icon_sync_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_timer_create(volume_icon_timer_cb, 500, ui);
     lv_timer_create(ac_indicator_timer_cb, 2000, ui);
@@ -487,6 +494,10 @@ void ui_init(void) {
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(ui->tab_settings, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
 
+    /* Auto-vuelta a Live tras 60 s sin tocar la pantalla cuando se está en
+     * Settings. Comprueba cada 5 s. Al volver, reseteamos el menú de
+     * Settings al main page para que la próxima entrada arranque ahí. */
+    lv_timer_create(settings_auto_return_cb, 5000, ui);
 
     ui->keyboard = lv_keyboard_create(lv_layer_top());
     lv_obj_set_size(ui->keyboard, LV_HOR_RES, LV_VER_RES/2);
@@ -793,6 +804,36 @@ void ui_notify_user_activity(void)
     ui_settings_panel_on_user_activity(ui);
 }
 
+/* Sincroniza el icono del botón nav con el tab activo del tabview.
+ * Se invoca en LV_EVENT_VALUE_CHANGED del tabview, así cubre los 3 paths
+ * de cambio: pulsar btn_nav, swipe horizontal, set_act programático. */
+static void nav_icon_sync_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui || !ui->tabview || !ui->btn_nav) return;
+    uint16_t cur = lv_tabview_get_tab_act(ui->tabview);
+    /* En Live (tab 0) → mostrar SETTINGS (acción "ir a Settings").
+     * En Settings → mostrar HOME (acción "volver a Live"). */
+    lv_label_set_text(ui->btn_nav,
+        (cur == ui->tab_settings_index) ? LV_SYMBOL_HOME : LV_SYMBOL_SETTINGS);
+}
+
+/* Timer que vuelve a Live tras 60 s sin tocar la pantalla cuando se está
+ * en Settings. Si NO estamos en Settings, no hace nada. */
+static void settings_auto_return_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->tabview) return;
+    if (lv_tabview_get_tab_act(ui->tabview) != ui->tab_settings_index) return;
+    if (lv_disp_get_inactive_time(NULL) < 60000) return;
+
+    /* Reset menú a página principal de Settings antes de salir, para que
+     * la próxima entrada arranque ahí (no en la subpágina donde quedó).
+     * El icono lo actualiza nav_icon_sync_cb tras set_act. */
+    ui_settings_panel_go_to_main();
+    lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+}
+
 /* Toggle Live ↔ Settings al pulsar el icono de la barra inferior */
 static void nav_btn_event_cb(lv_event_t *e)
 {
@@ -807,11 +848,7 @@ static void nav_btn_event_cb(lv_event_t *e)
         ui_settings_panel_go_to_main();
     }
     lv_tabview_set_act(ui->tabview, next, LV_ANIM_OFF);
-    /* Cambiar el icono según el destino: settings en Live, home en Settings */
-    if (ui->btn_nav) {
-        lv_label_set_text(ui->btn_nav,
-            (next == 0) ? LV_SYMBOL_SETTINGS : LV_SYMBOL_HOME);
-    }
+    /* El icono lo sincroniza nav_icon_sync_cb tras LV_EVENT_VALUE_CHANGED. */
 }
 
 /* Toggle mute/unmute al pulsar el icono de volumen — mismo efecto exacto
