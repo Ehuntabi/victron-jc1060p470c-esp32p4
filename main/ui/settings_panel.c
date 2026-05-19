@@ -324,6 +324,7 @@ static void ap_switch_cb(lv_event_t *e)
 }
 
 static void portal_page_cb(lv_event_t *e);
+static void reactivate_portal_cb(lv_event_t *e);
 static void victron_config_add_btn_event_cb(lv_event_t *e);
 static void victron_config_remove_btn_event_cb(lv_event_t *e);
 static void victron_config_create_row(ui_state_t *ui, size_t index);
@@ -510,6 +511,46 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
         lv_dropdown_set_selected(dd_portal, v);
     }
     lv_obj_add_event_cb(dd_portal, portal_page_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* ── Card 3: botón "Reactivar portal web" ───────────────────────────
+     * El servidor HTTP se apaga solo tras 15 min sin nuevas asociaciones
+     * (auto-off por seguridad). Este botón lo arranca de nuevo sin tener
+     * que reasociar el móvil ni reiniciar el display. */
+    lv_obj_t *card3 = lv_obj_create(cont);
+    lv_obj_set_width(card3, lv_pct(100));
+    lv_obj_set_height(card3, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_all(card3, 12, 0);
+    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card3_title = lv_label_create(card3);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(card3_title, LV_SYMBOL_REFRESH "  Portal web");
+
+    lv_obj_t *btn_react = lv_btn_create(card3);
+    lv_obj_set_height(btn_react, 44);
+    lv_obj_set_style_pad_hor(btn_react, 16, 0);
+    lv_obj_set_style_radius(btn_react, 8, 0);
+    lv_obj_set_style_bg_color(btn_react, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_t *btn_lbl = lv_label_create(btn_react);
+    lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(btn_lbl, lv_color_hex(0x0A0A0A), 0);
+    lv_label_set_text(btn_lbl, "Reactivar");
+    lv_obj_center(btn_lbl);
+    lv_obj_add_event_cb(btn_react, reactivate_portal_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void reactivate_portal_cb(lv_event_t *e)
+{
+    (void)e;
+    /* config_server_start() es idempotente: si ya estaba arriba devuelve
+     * OK sin hacer nada; si estaba parado por auto-off, lo reactiva. */
+    esp_err_t err = config_server_start();
+    ESP_LOGI("settings_panel", "Reactivar portal web: %s",
+             esp_err_to_name(err));
 }
 
 /* ── Zona horaria: presets + callback dropdown ────────────────────────── */
