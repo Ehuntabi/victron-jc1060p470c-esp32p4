@@ -22,6 +22,7 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "ui/frigo_panel.h"
+#include "ui/settings_logs_panel.h"
 #include "esp_chip_info.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -1678,6 +1679,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
     lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
+    lv_obj_t *page_consola = lv_menu_page_create(menu, "CONSOLA");
     lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y AVISOS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
@@ -1699,6 +1701,9 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_logs,
         "Logs",          "Histórico SD: batería y nevera",
         LV_SYMBOL_SAVE,       0xFFAA00);
+    settings_menu_add_entry(ui, main_page, menu, page_consola,
+        "Consola",       "Logs ESP_LOGx en tiempo real",
+        LV_SYMBOL_LIST,       0x8BC34A);
     settings_menu_add_entry(ui, main_page, menu, page_wifi,
         "Wi-Fi",         "Modo AP y credenciales",
         LV_SYMBOL_WIFI,       0x4FC3F7);
@@ -1730,6 +1735,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     create_display_settings_page(ui, page_display);
     create_victron_keys_settings_page(ui, page_victron);
     create_logs_settings_page(ui, page_logs);
+    settings_logs_panel_create(ui, page_consola);
     create_sound_settings_page(ui, page_sound);
     create_about_settings_page(ui, page_about);
     ui_frigo_panel_init(ui);

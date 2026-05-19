@@ -28,6 +28,7 @@
 #include "esp_task_wdt.h"
 #include "watchdog.h"
 #include "config_storage.h"
+#include "log_capture/log_capture.h"
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "pzem004t.h"
@@ -181,6 +182,22 @@ static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
     if (event == LV_EVENT_PRESSED) ui_notify_user_activity();
 }
 
+/* Tarea one-shot: 30s tras boot vuelca el buffer log_capture a SD con el
+ * reset reason en el nombre, y aplica rotacion FIFO (max 20 archivos).
+ * Asume que la SD ya esta montada (datalogger_init ya ha corrido). */
+static void log_autosave_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(30000));
+    esp_err_t err = log_capture_autosave_now(20);
+    if (err == ESP_OK) {
+        ESP_LOGI("LOGSAVE", "autosave OK -> /sdcard/log_*.txt (rotacion FIFO 20)");
+    } else {
+        ESP_LOGW("LOGSAVE", "autosave failed: %s", esp_err_to_name(err));
+    }
+    vTaskDelete(NULL);
+}
+
 
 #define APP_WDT_TIMEOUT_S    60    /* reiniciar si LVGL no responde en 60s */
 #define BLE_TIMEOUT_S       300    /* alerta si no hay datos BLE en 5 min */
@@ -191,6 +208,10 @@ static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 /* ── app_main ────────────────────────────────────────────────── */
 void app_main(void)
 {
+    /* --- Captura de logs en RAM (hook a esp_log_set_vprintf) --- */
+    /* Antes que nada para capturar todo el boot. Ringbuffer en PSRAM ~120 KB. */
+    log_capture_init();
+
     /* --- Chip info --- */
     logSection("LVGL init start");
     esp_chip_info_t chip_info;
@@ -269,6 +290,10 @@ void app_main(void)
     esp_err_t sd_err = datalogger_init();
     if (sd_err != ESP_OK)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
+
+    /* Auto-save de logs a SD 30 s tras boot (con rotacion FIFO 20 archivos).
+     * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
+    xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
 
     /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
     {
