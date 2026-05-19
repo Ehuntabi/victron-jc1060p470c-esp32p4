@@ -388,15 +388,23 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->m_bat_current = ui_metric_create_compact(bat_row, "Corriente");
     ov->arc_soc       = ui_battery_soc_create(bat_row, 120, 112);
     ov->m_ttg         = ui_metric_create_compact(bat_row, "Autonomía");
-    /* Etiquetas Corriente/Autonomía: bajar fuente del título de 24 → 20 y
-     * desplazar las métricas 10 px hacia abajo (sin mover el arc). */
+    /* Bajar fuentes para que las metricas no invadan el arc SoC en el ancho
+     * disponible (col_center ~320 px, arc 120 px ⇒ ~95 px por metrica).
+     * title 24→20, value 46→32, unit 24→20. Desplazar 10 px hacia abajo. */
     {
-        lv_obj_t *t1 = lv_obj_get_child(ov->m_bat_current, 0);
-        lv_obj_t *t2 = lv_obj_get_child(ov->m_ttg, 0);
-        if (t1) lv_obj_set_style_text_font(t1, &lv_font_montserrat_20_es, 0);
-        if (t2) lv_obj_set_style_text_font(t2, &lv_font_montserrat_20_es, 0);
-        lv_obj_set_style_translate_y(ov->m_bat_current, 10, 0);
-        lv_obj_set_style_translate_y(ov->m_ttg, 10, 0);
+        lv_obj_t *metrics[] = { ov->m_bat_current, ov->m_ttg };
+        for (size_t i = 0; i < sizeof(metrics) / sizeof(metrics[0]); ++i) {
+            lv_obj_t *title = lv_obj_get_child(metrics[i], 0);
+            lv_obj_t *row   = lv_obj_get_child(metrics[i], 1);
+            if (title) lv_obj_set_style_text_font(title, &lv_font_montserrat_20_es, 0);
+            if (row) {
+                lv_obj_t *value = lv_obj_get_child(row, 0);
+                lv_obj_t *unit  = lv_obj_get_child(row, 1);
+                if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_32, 0);
+                if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_20_es, 0);
+            }
+            lv_obj_set_style_translate_y(metrics[i], 10, 0);
+        }
     }
 
     /* Spacer de ~12 px entre card_bat y bottom_row.
