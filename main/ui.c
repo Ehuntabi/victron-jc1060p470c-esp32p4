@@ -18,6 +18,7 @@
 #include "battery_history.h"
 #include "alerts.h"
 #include "victron_products.h"
+#include "ui/frigo_panel.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
 #include <stdio.h>
@@ -827,6 +828,11 @@ static void settings_auto_return_cb(lv_timer_t *t)
     if (lv_tabview_get_tab_act(ui->tabview) != ui->tab_settings_index) return;
     if (lv_disp_get_inactive_time(NULL) < 60000) return;
 
+    /* Cerrar dropdowns abiertos del panel Frigo: la lista flotante de un
+     * dropdown LVGL no se cierra sola y, sin esto, se queda visible sobre
+     * la vista Live tras el auto-return. */
+    ui_frigo_panel_close_dropdowns();
+
     /* Reset menú a página principal de Settings antes de salir, para que
      * la próxima entrada arranque ahí (no en la subpágina donde quedó).
      * El icono lo actualiza nav_icon_sync_cb tras set_act. */
@@ -845,6 +851,7 @@ static void nav_btn_event_cb(lv_event_t *e)
      * a la pagina principal para que la proxima entrada arranque ahi y
      * no en la subpagina (Display, Wi-Fi, etc.) donde se quedo. */
     if (cur == ui->tab_settings_index && next == 0) {
+        ui_frigo_panel_close_dropdowns();
         ui_settings_panel_go_to_main();
     }
     lv_tabview_set_act(ui->tabview, next, LV_ANIM_OFF);

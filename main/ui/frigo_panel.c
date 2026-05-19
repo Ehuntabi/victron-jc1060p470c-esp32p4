@@ -19,6 +19,11 @@ static lv_obj_t *s_dd_aletas     = NULL;
 static lv_obj_t *s_dd_congelador = NULL;
 static lv_obj_t *s_dd_exterior   = NULL;
 
+/* Flag para suprimir el callback de los dropdowns cuando refrescamos sus
+ * selecciones programaticamente tras un swap. Sin esto entrariamos en
+ * recursion: refresh -> set_selected -> VALUE_CHANGED -> callback -> swap... */
+static bool s_suppress_dd_cb = false;
+
 static lv_obj_t *s_lbl_tmin_val = NULL;
 static lv_obj_t *s_lbl_tmax_val = NULL;
 
@@ -29,24 +34,58 @@ static ui_state_t *s_ui = NULL;
 #define COL_DD_W     160   /* ancho fijo dropdown       */
 #define COL_DD_PAD    20   /* margen derecho dropdown   */
 
+/* ── Helpers asignacion con swap ─────────────────────────────── */
+/* Refresca la seleccion visible de los 3 dropdowns segun el state actual,
+ * SIN disparar sus VALUE_CHANGED (para no entrar en recursion via swap). */
+static void refresh_dd_selections(void)
+{
+    const frigo_state_t *st = frigo_get_state();
+    s_suppress_dd_cb = true;
+    if (s_dd_aletas)     lv_dropdown_set_selected(s_dd_aletas,     st->assignment[FRIGO_SLOT_ALETAS]);
+    if (s_dd_congelador) lv_dropdown_set_selected(s_dd_congelador, st->assignment[FRIGO_SLOT_CONGELADOR]);
+    if (s_dd_exterior)   lv_dropdown_set_selected(s_dd_exterior,   st->assignment[FRIGO_SLOT_EXTERIOR]);
+    s_suppress_dd_cb = false;
+}
+
+/* Asigna new_idx al slot target. Si new_idx ya estaba asignado a OTRO slot,
+ * hace swap: ese otro slot recibe lo que tenia el target. Garantiza
+ * permutacion 1:1. */
+static void apply_assignment_with_swap(frigo_slot_t target, uint8_t new_idx)
+{
+    const frigo_state_t *st = frigo_get_state();
+    uint8_t prev_in_target = st->assignment[target];
+    for (int s = 0; s < 3; ++s) {
+        if (s == (int)target) continue;
+        if (st->assignment[s] == new_idx) {
+            frigo_set_assignment((frigo_slot_t)s, prev_in_target);
+            break;
+        }
+    }
+    frigo_set_assignment(target, new_idx);
+    refresh_dd_selections();
+}
+
 /* ── Callbacks ───────────────────────────────────────────────── */
 static void dd_aletas_cb(lv_event_t *e)
 {
+    if (s_suppress_dd_cb) return;
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
     uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
-    frigo_set_assignment(FRIGO_SLOT_ALETAS, (uint8_t)idx);
+    apply_assignment_with_swap(FRIGO_SLOT_ALETAS, (uint8_t)idx);
 }
 static void dd_congelador_cb(lv_event_t *e)
 {
+    if (s_suppress_dd_cb) return;
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
     uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
-    frigo_set_assignment(FRIGO_SLOT_CONGELADOR, (uint8_t)idx);
+    apply_assignment_with_swap(FRIGO_SLOT_CONGELADOR, (uint8_t)idx);
 }
 static void dd_exterior_cb(lv_event_t *e)
 {
+    if (s_suppress_dd_cb) return;
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
     uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
-    frigo_set_assignment(FRIGO_SLOT_EXTERIOR, (uint8_t)idx);
+    apply_assignment_with_swap(FRIGO_SLOT_EXTERIOR, (uint8_t)idx);
 }
 static void btn_tmin_minus_cb(lv_event_t *e)
 {
@@ -157,7 +196,12 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
 
     lv_obj_t *dd = lv_dropdown_create(sub);
     lv_obj_set_flex_grow(dd, 1);
-    lv_obj_set_height(dd, 40);
+    lv_obj_set_height(dd, 50);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_24_es, 0);
+    lv_obj_t *dd_list = lv_dropdown_get_list(dd);
+    if (dd_list) {
+        lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_24_es, 0);
+    }
     lv_dropdown_set_options(dd, opts);
     lv_dropdown_set_selected(dd, dd_selected);
     lv_obj_add_event_cb(dd, dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -379,9 +423,40 @@ void ui_frigo_panel_init(ui_state_t *ui)
     ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
 }
 
+/* ── Cerrar dropdowns abiertos ───────────────────────────────── */
+void ui_frigo_panel_close_dropdowns(void)
+{
+    if (s_dd_aletas)     lv_dropdown_close(s_dd_aletas);
+    if (s_dd_congelador) lv_dropdown_close(s_dd_congelador);
+    if (s_dd_exterior)   lv_dropdown_close(s_dd_exterior);
+}
+
 /* ── Update ──────────────────────────────────────────────────── */
 void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
 {
+    /* Si el numero de sensores detectados ha cambiado desde la ultima vez
+     * (tipicamente: la UI se construyo antes de que frigo_init terminase la
+     * enumeracion 1-Wire, asi que arrancaron los dropdowns vacios), regenerar
+     * la lista de opciones y restaurar la asignacion guardada en NVS. */
+    static uint8_t s_last_n = 0xFF;
+    if (state->n_sensors != s_last_n) {
+        char opts[128];
+        build_sensor_options(opts, sizeof(opts), state);
+        struct { lv_obj_t *dd; uint8_t slot; } dds[3] = {
+            { s_dd_aletas,     FRIGO_SLOT_ALETAS     },
+            { s_dd_congelador, FRIGO_SLOT_CONGELADOR },
+            { s_dd_exterior,   FRIGO_SLOT_EXTERIOR   },
+        };
+        for (int i = 0; i < 3; ++i) {
+            if (!dds[i].dd) continue;
+            lv_dropdown_set_options(dds[i].dd, opts);
+            uint8_t sel = state->assignment[dds[i].slot];
+            if (state->n_sensors > 0 && sel >= state->n_sensors) sel = 0;
+            lv_dropdown_set_selected(dds[i].dd, sel);
+        }
+        s_last_n = state->n_sensors;
+    }
+
     if (s_lbl_aletas) {
         char buf[16];
         if (state->T_Aletas < -120.0f)
