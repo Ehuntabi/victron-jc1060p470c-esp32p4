@@ -1961,13 +1961,18 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
     /* Limitar puntos del chart LVGL a un nº manejable; con BH_POINTS=8640
      * y 4 series LVGL aloca demasiado y el render se cuelga. Hacemos
-     * downsample por step antes de meter los puntos. */
-    const int CHART_MAX_PTS = 1500;
+     * downsample por step antes de meter los puntos.
+     * 300 puntos x 4 series = 1200 valores, ~5 min de resolucion en 24h.
+     * 1500 cuelga taskLVGL en set_point_count tras add_series (WDT). */
+    const int CHART_MAX_PTS = 300;
     int chart_pts = (BH_POINTS > CHART_MAX_PTS) ? CHART_MAX_PTS : BH_POINTS;
     int chart_step = (BH_POINTS + chart_pts - 1) / chart_pts;
     if (chart_step < 1) chart_step = 1;
     chart_pts = (BH_POINTS + chart_step - 1) / chart_step;
-    lv_chart_set_point_count(chart, chart_pts);
+    /* CRITICO: crear las series PRIMERO con point_count default (pequeno).
+     * Con point_count=1440 antes, la 3a llamada a lv_chart_add_series
+     * cuelga taskLVGL > 5s (WDT). El set_point_count(1440) final
+     * redimensiona las 4 a la vez de forma controlada. */
     lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 50);
     lv_obj_set_style_pad_left(chart, 50, 0);
     lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
@@ -1977,7 +1982,9 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         s_bh_series[i] = lv_chart_add_series(chart,
             lv_color_hex(colors[i]), LV_CHART_AXIS_PRIMARY_Y);
+        vTaskDelay(1);  /* yield para que IDLE corra entre series */
     }
+    lv_chart_set_point_count(chart, chart_pts);
 
     /* Labels horarios bajo el chart (5 huecos, refrescados al cambiar de dia) */
     s_bh_xlabels = lv_obj_create(scr);
@@ -2077,7 +2084,7 @@ static void bh_chart_load_day(void)
 
     if (s_bh_day_idx < 0) {
         /* HOY: usa el ring buffer en RAM (4 fuentes). Aplica ventana [a, b). */
-        const int CHART_MAX_PTS = 1500;
+        const int CHART_MAX_PTS = 300;  /* ver nota en show_battery_history_screen */
         int win_a_i = (int)(s_bh_win_a * BH_POINTS);
         int win_b_i = (int)(s_bh_win_b * BH_POINTS);
         if (win_b_i <= win_a_i) win_b_i = win_a_i + 1;
@@ -2148,6 +2155,10 @@ static void bh_chart_load_day(void)
                         "%s  +%.1f / -%.1f Ah",
                         battery_history_source_name((bh_source_t)s), ch, dis);
                 }
+                /* Yield al scheduler tras cada serie para que IDLE0 corra y
+                 * el task_wdt no salte. Con 4 series x ~1500 puntos y un
+                 * chart ancho, sin esto monopolizamos taskLVGL > 5 s. */
+                vTaskDelay(1);
             }
             /* pts es estatico: no liberar */
         }
