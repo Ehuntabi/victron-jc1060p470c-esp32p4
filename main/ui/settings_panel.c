@@ -3137,11 +3137,16 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
         LV_SYMBOL_REFRESH,       0xFFAA00,
         logs_btn_frigo_cb, ui);
     lv_obj_set_width(btn_frigo, 500);
+    /* TEMPORALMENTE DESACTIVADO - crashea (WDT taskLVGL al construir el chart).
+     * Pendiente investigar bh_chart_load_day y posiblemente cargarlo en
+     * tareas separadas o trocear con timers LVGL. */
+    /*
     lv_obj_t *btn_bat = settings_card_btn(cont,
         "Batería", "Histórico de SoC, V, I y potencia",
         LV_SYMBOL_BATTERY_FULL,  0x4FC3F7,
         logs_btn_bat_cb,   ui);
     lv_obj_set_width(btn_bat, 500);
+    */
 }
 
 /* === Pagina Sonido === */
