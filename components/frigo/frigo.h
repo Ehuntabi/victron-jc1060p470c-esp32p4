@@ -17,6 +17,17 @@ typedef enum {
     FRIGO_SLOT_EXTERIOR   = 2,
 } frigo_slot_t;
 
+/* Modo de funcionamiento del ventilador.
+ * AUTO: pct se calcula segun T_Aletas y los thresholds T_min/T_max.
+ * OFF/MODE_50/MODE_100: pct fijo, los thresholds se ignoran.
+ * No persiste en NVS: cada reset arranca en AUTO. */
+typedef enum {
+    FRIGO_MODE_AUTO = 0,
+    FRIGO_MODE_OFF  = 1,
+    FRIGO_MODE_50   = 2,
+    FRIGO_MODE_100  = 3,
+} frigo_mode_t;
+
 typedef struct {
     uint64_t address;
     bool     valid;
@@ -32,6 +43,7 @@ typedef struct {
     uint8_t n_sensors;
     frigo_sensor_addr_t sensors[FRIGO_MAX_SENSORS];
     uint8_t assignment[FRIGO_MAX_SENSORS];
+    frigo_mode_t mode;
 } frigo_state_t;
 
 typedef void (*frigo_update_cb_t)(const frigo_state_t *state);
@@ -44,4 +56,5 @@ void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent);
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx);
 esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max);
+void frigo_set_mode(frigo_mode_t m);
 void frigo_addr_to_str(const frigo_sensor_addr_t *addr, char *buf, size_t len);

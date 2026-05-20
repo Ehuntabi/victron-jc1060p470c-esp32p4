@@ -167,13 +167,23 @@ static void frigo_task(void *arg)
             s_state.T_Congelador = TEMP_INVALID(tc) ? -127.0f : tc;
             s_state.T_Exterior   = TEMP_INVALID(te) ? -127.0f : te;
 
-            uint8_t pct = compute_fan(s_state.T_Aletas, s_state.T_min,
+            uint8_t pct;
+            switch (s_state.mode) {
+                case FRIGO_MODE_OFF:  pct = 0;   break;
+                case FRIGO_MODE_50:   pct = 50;  break;
+                case FRIGO_MODE_100:  pct = 100; break;
+                case FRIGO_MODE_AUTO:
+                default:
+                    pct = compute_fan(s_state.T_Aletas, s_state.T_min,
                                       s_state.T_max, s_state.fan_percent);
+                    break;
+            }
             if (pct != s_state.fan_percent) {
                 s_state.fan_percent = pct;
                 fan_set_percent(pct);
-                ESP_LOGI(TAG, "Fan → %d%%  T_Aletas=%.1f T_min=%d T_max=%d",
-                         pct, s_state.T_Aletas, s_state.T_min, s_state.T_max);
+                ESP_LOGI(TAG, "Fan → %d%% (mode=%d) T_Aletas=%.1f T_min=%d T_max=%d",
+                         pct, (int)s_state.mode, s_state.T_Aletas,
+                         s_state.T_min, s_state.T_max);
             }
             xSemaphoreGive(s_mutex);
         }
@@ -256,6 +266,15 @@ esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx)
     }
     nvs_save();
     return ESP_OK;
+}
+
+void frigo_set_mode(frigo_mode_t m)
+{
+    if (m > FRIGO_MODE_100) return;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    s_state.mode = m;
+    xSemaphoreGive(s_mutex);
+    /* No persistir: por decision de diseno cada reset arranca en AUTO. */
 }
 
 esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max)

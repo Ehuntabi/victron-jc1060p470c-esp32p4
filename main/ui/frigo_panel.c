@@ -27,12 +27,65 @@ static bool s_suppress_dd_cb = false;
 static lv_obj_t *s_lbl_tmin_val = NULL;
 static lv_obj_t *s_lbl_tmax_val = NULL;
 
+/* Segmented control "Modo": Auto / OFF / 50% / 100% (4 botones, el activo
+ * se resalta azul). Y referencias a los 4 botones +/- de Min/Max para poder
+ * deshabilitarlos cuando el modo no es AUTO. */
+static lv_obj_t *s_btn_mode[4] = { NULL, NULL, NULL, NULL };
+static lv_obj_t *s_btn_tmin_m  = NULL;
+static lv_obj_t *s_btn_tmin_p  = NULL;
+static lv_obj_t *s_btn_tmax_m  = NULL;
+static lv_obj_t *s_btn_tmax_p  = NULL;
+
 static ui_state_t *s_ui = NULL;
 
 #define COL_NAME_W   250   /* ancho fijo columna nombre */
 #define COL_VAL_W    200   /* ancho fijo columna valor  */
 #define COL_DD_W     160   /* ancho fijo dropdown       */
 #define COL_DD_PAD    20   /* margen derecho dropdown   */
+
+/* ── Helpers modo ventilador (segmented control) ─────────────── */
+/* Resalta visualmente el boton del modo activo y deja el resto en gris. */
+static void highlight_mode_button(frigo_mode_t active)
+{
+    static const uint32_t ACTIVE_BG   = 0x4FC3F7; /* azul */
+    static const uint32_t INACTIVE_BG = 0x444444; /* gris */
+    for (int i = 0; i < 4; ++i) {
+        if (!s_btn_mode[i]) continue;
+        uint32_t bg = (i == (int)active) ? ACTIVE_BG : INACTIVE_BG;
+        lv_obj_set_style_bg_color(s_btn_mode[i], lv_color_hex(bg), 0);
+    }
+}
+
+/* En modo AUTO los thresholds Min/Max aplican: botones habilitados.
+ * En modo manual (OFF/50/100) son irrelevantes: botones grises y bloqueados. */
+static void thresholds_set_enabled(bool en)
+{
+    lv_obj_t *btns[4] = { s_btn_tmin_m, s_btn_tmin_p, s_btn_tmax_m, s_btn_tmax_p };
+    for (int i = 0; i < 4; ++i) {
+        if (!btns[i]) continue;
+        if (en) {
+            lv_obj_clear_state(btns[i], LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(btns[i], LV_OPA_COVER, 0);
+        } else {
+            lv_obj_add_state(btns[i], LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(btns[i], LV_OPA_30, 0);
+        }
+    }
+}
+
+static void apply_mode_visual(frigo_mode_t m)
+{
+    highlight_mode_button(m);
+    thresholds_set_enabled(m == FRIGO_MODE_AUTO);
+}
+
+static void btn_mode_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_mode_t m = (frigo_mode_t)(intptr_t)lv_event_get_user_data(e);
+    frigo_set_mode(m);
+    apply_mode_visual(m);
+}
 
 /* ── Helpers asignacion con swap ─────────────────────────────── */
 /* Refresca la seleccion visible de los 3 dropdowns segun el state actual,
@@ -290,6 +343,32 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_add_style(s_lbl_fan, &ui->styles.small, 0);
     lv_label_set_text(s_lbl_fan, "0 %");
 
+    /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
+    lv_obj_t *row_mode = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(row_mode);
+    lv_obj_set_width(row_mode, lv_pct(100));
+    lv_obj_set_height(row_mode, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_mode, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_mode, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_mode, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row_mode, 6, 0);
+    static const char *mode_labels[4] = { "Auto", "OFF", "50%", "100%" };
+    for (int i = 0; i < 4; ++i) {
+        lv_obj_t *btn = lv_btn_create(row_mode);
+        lv_obj_set_size(btn, 78, 44);
+        lv_obj_set_style_radius(btn, 8, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(0x444444), 0);
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, mode_labels[i]);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn, btn_mode_cb, LV_EVENT_CLICKED,
+                             (void *)(intptr_t)i);
+        s_btn_mode[i] = btn;
+    }
+
     /* Fila T_Min y T_Max */
     lv_obj_t *row_t = lv_obj_create(card_fan);
     lv_obj_remove_style_all(row_t);
@@ -315,15 +394,15 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_tmin, "Min:");
 
-    lv_obj_t *btn_min_m = lv_btn_create(col_min);
-    lv_obj_set_size(btn_min_m, 44, 44);
-    lv_obj_set_style_radius(btn_min_m, 8, 0);
-    lv_obj_set_style_bg_color(btn_min_m, lv_color_hex(0x444444), 0);
-    lv_obj_t *lbl_mm = lv_label_create(btn_min_m);
+    s_btn_tmin_m = lv_btn_create(col_min);
+    lv_obj_set_size(s_btn_tmin_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmin_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_mm = lv_label_create(s_btn_tmin_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_mm);
-    lv_obj_add_event_cb(btn_min_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_btn_tmin_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_tmin_val = lv_label_create(col_min);
     lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24_es, 0);
@@ -332,15 +411,15 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_align(s_lbl_tmin_val, LV_TEXT_ALIGN_CENTER, 0);
     { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_min); lv_label_set_text(s_lbl_tmin_val, buf); }
 
-    lv_obj_t *btn_min_p = lv_btn_create(col_min);
-    lv_obj_set_size(btn_min_p, 44, 44);
-    lv_obj_set_style_radius(btn_min_p, 8, 0);
-    lv_obj_set_style_bg_color(btn_min_p, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_t *lbl_mp = lv_label_create(btn_min_p);
+    s_btn_tmin_p = lv_btn_create(col_min);
+    lv_obj_set_size(s_btn_tmin_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmin_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_p, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_t *lbl_mp = lv_label_create(s_btn_tmin_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_mp);
-    lv_obj_add_event_cb(btn_min_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_btn_tmin_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* T_Max - layout horizontal compacto */
     lv_obj_t *col_max = lv_obj_create(row_t);
@@ -356,15 +435,15 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(lbl_tmax, "Max:");
 
-    lv_obj_t *btn_max_m = lv_btn_create(col_max);
-    lv_obj_set_size(btn_max_m, 44, 44);
-    lv_obj_set_style_radius(btn_max_m, 8, 0);
-    lv_obj_set_style_bg_color(btn_max_m, lv_color_hex(0x444444), 0);
-    lv_obj_t *lbl_xm = lv_label_create(btn_max_m);
+    s_btn_tmax_m = lv_btn_create(col_max);
+    lv_obj_set_size(s_btn_tmax_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmax_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_xm = lv_label_create(s_btn_tmax_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_xm);
-    lv_obj_add_event_cb(btn_max_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_btn_tmax_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_tmax_val = lv_label_create(col_max);
     lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24_es, 0);
@@ -373,15 +452,19 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_align(s_lbl_tmax_val, LV_TEXT_ALIGN_CENTER, 0);
     { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_max); lv_label_set_text(s_lbl_tmax_val, buf); }
 
-    lv_obj_t *btn_max_p = lv_btn_create(col_max);
-    lv_obj_set_size(btn_max_p, 44, 44);
-    lv_obj_set_style_radius(btn_max_p, 8, 0);
-    lv_obj_set_style_bg_color(btn_max_p, lv_color_hex(0xFFAA00), 0);
-    lv_obj_t *lbl_xp = lv_label_create(btn_max_p);
+    s_btn_tmax_p = lv_btn_create(col_max);
+    lv_obj_set_size(s_btn_tmax_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmax_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
+    lv_obj_t *lbl_xp = lv_label_create(s_btn_tmax_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lbl_xp);
-    lv_obj_add_event_cb(btn_max_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Estado visual inicial del segmented control + thresholds segun modo
+     * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */
+    apply_mode_visual(st->mode);
 
     /* Overlay Exterior */
     lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());
@@ -434,6 +517,15 @@ void ui_frigo_panel_close_dropdowns(void)
 /* ── Update ──────────────────────────────────────────────────── */
 void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
 {
+    /* Reflejar cambios del modo del ventilador si vinieron desde otro lado
+     * (ej. simulacion). En uso normal el cambio lo hace el callback de los
+     * botones que ya repinta, asi que esto es defensivo. */
+    static frigo_mode_t s_last_mode = (frigo_mode_t)0xFF;
+    if (state->mode != s_last_mode) {
+        apply_mode_visual(state->mode);
+        s_last_mode = state->mode;
+    }
+
     /* Si el numero de sensores detectados ha cambiado desde la ultima vez
      * (tipicamente: la UI se construyo antes de que frigo_init terminase la
      * enumeracion 1-Wire, asi que arrancaron los dropdowns vacios), regenerar
