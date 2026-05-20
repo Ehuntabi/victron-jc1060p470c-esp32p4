@@ -517,6 +517,17 @@ def strip_v_diode(ax, r_top, r_bot, c, label):
             fontsize=7, color=C_NOTE, style="italic")
 
 
+def strip_cut(ax, r, c_left):
+    """Marca de corte de pista: X roja entre el agujero c_left y c_left+1
+    en la fila r. Aisla electricamente los 2 lados."""
+    ax.add_line(Line2D([c_left + 0.30, c_left + 0.70],
+                       [r - 0.20, r + 0.20], color=C_CUT,
+                       linewidth=2.6, zorder=9))
+    ax.add_line(Line2D([c_left + 0.30, c_left + 0.70],
+                       [r + 0.20, r - 0.20], color=C_CUT,
+                       linewidth=2.6, zorder=9))
+
+
 def strip_mosfet_to220(ax, r, c_g, c_d, c_s):
     """MOSFET TO-220 horizontal: 3 pines en (r, c_g), (r, c_d), (r, c_s)."""
     # Cuerpo (rectangulo grande sobre los 3 agujeros)
@@ -548,8 +559,8 @@ def page_stripboard_3pin(pdf):
     fig.suptitle("Stripboard 12 x 16 - cableado practico version 3-pin",
                   fontsize=15, fontweight="bold", y=0.96)
     fig.text(0.5, 0.93,
-              "Layout sobre perfboard de 12 filas x 16 columnas, sin cortes "
-              "de pista (cada senial vive en su propia fila).",
+              "Layout sobre perfboard 12 x 16 con 2 cortes en la fila del "
+              "MOSFET (X rojas) para aislar Gate / Drain / Source.",
               ha="center", fontsize=9, color=C_NOTE)
 
     ax = fig.add_axes([0.05, 0.34, 0.90, 0.58])
@@ -571,11 +582,12 @@ def page_stripboard_3pin(pdf):
     # Layout horizontal
     PAD_L_COL = 0
     PAD_R_COL = COLS - 1 - 2   # c=13
-    # MOSFET TO-220 ocupa 3 columnas adyacentes en fila F (Source)
+    # MOSFET TO-220 en fila F (5). Pitch 2.54mm = cols ADYACENTES.
+    # Sin cortes, los 3 pines estarian cortocircuitados por la tira F.
     MOSFET_R = 5
-    MOSFET_G = 4
+    MOSFET_G = 5
     MOSFET_D = 6
-    MOSFET_S = 8
+    MOSFET_S = 7
     # D1 (Schottky) vertical entre fila A (catodo) y fila C (anodo)
     D1_C = 11
     # R1 vertical entre fila E (gate) y G (gnd)
@@ -620,7 +632,13 @@ def page_stripboard_3pin(pdf):
     # fila F. (Lo importante es que los 3 puntos esten en F columnas G/D/S).
     strip_mosfet_to220(ax, MOSFET_R, MOSFET_G, MOSFET_D, MOSFET_S)
 
-    # Puente vertical Gate (col 4) entre fila E (4) y fila F (5)
+    # CRITICO: 2 cortes en fila F entre los pines del MOSFET (pitch 2.54mm:
+    # las 3 patillas caen en cols adyacentes 5/6/7). Sin estos cortes, la
+    # tira F cortocircuita Gate-Drain-Source -> MOSFET inutil/quemado.
+    strip_cut(ax, MOSFET_R, MOSFET_G)   # entre G (c=5) y D (c=6)
+    strip_cut(ax, MOSFET_R, MOSFET_D)   # entre D (c=6) y S (c=7)
+
+    # Puente vertical Gate (col 5) entre fila E (4) y fila F (5)
     ax.add_line(Line2D([MOSFET_G, MOSFET_G], [4, 5], color=C_WIRE_K,
                        linewidth=1.6, solid_capstyle="round", zorder=4))
     # Puente vertical Drain (col 6) entre fila C (2) y fila F (5)
@@ -668,9 +686,11 @@ def page_stripboard_3pin(pdf):
                   transform=notes_ax.transAxes, va="top")
     y = 0.42
     for txt in [
-        "1. Ningun corte de pista necesario: cada senial vive en su propia fila.",
-        "2. Pull-down R1 a GND OBLIGATORIO: sin el, con GPIO 5 flotante (reset/boot) "
-           "el fan podria activarse erratico.",
+        "1. CORTAR la pista de la fila F en los 2 puntos marcados con X roja "
+           "(entre G-D y entre D-S del MOSFET). El TO-220 tiene pitch 2.54mm: "
+           "sin cortes los 3 pines quedan cortocircuitados por la tira.",
+        "2. Pull-down R1 a GND: sin el, con GPIO 5 flotante (reset/boot) el "
+           "fan podria activarse erratico.",
         "3. Diodo D1 en paralelo al fan (catodo a +12V, anodo a GND del fan) "
            "absorbe el kick inductivo al apagar el motor; sin el, el MOSFET puede "
            "danarse a la larga.",
