@@ -528,29 +528,31 @@ def strip_cut(ax, r, c_left):
                        linewidth=2.6, zorder=9))
 
 
-def strip_mosfet_to220(ax, r, c_g, c_d, c_s):
-    """MOSFET TO-220 horizontal: 3 pines en (r, c_g), (r, c_d), (r, c_s)."""
-    # Cuerpo (rectangulo grande sobre los 3 agujeros)
-    ax.add_patch(FancyBboxPatch((c_g - 0.4, r - 0.55),
-                                 (c_s - c_g) + 0.8, 1.1,
+def strip_mosfet_to220_rot90(ax, r_g, r_d, r_s, c_pins, c_body=None):
+    """MOSFET TO-220 rotado 90 grados: cuerpo VERTICAL a la derecha, las 3
+    patillas dobladas 90 grados entran horizontalmente en columnas c_pins,
+    cada una en su propia FILA (r_g, r_d, r_s). Asi cada pin queda en su
+    propia tira de cobre sin necesidad de cortes."""
+    if c_body is None:
+        c_body = c_pins + 1.2
+    body_w = 1.3
+    body_top = min(r_g, r_d, r_s) - 0.4
+    body_bot = max(r_g, r_d, r_s) + 0.4
+    # Cuerpo (rectangulo vertical)
+    ax.add_patch(FancyBboxPatch((c_body, body_top), body_w, body_bot - body_top,
                                  boxstyle="round,pad=0,rounding_size=0.10",
                                  facecolor="#2A2A2A", edgecolor=C_LABEL,
                                  linewidth=1.0, zorder=6))
-    # Patillas (lineas verticales)
-    for cx in [c_g, c_d, c_s]:
-        ax.add_line(Line2D([cx, cx], [r - 0.55, r],
+    # 3 patillas horizontales: de c_pins (agujero) a c_body (cuerpo)
+    for rr, lbl in [(r_g, "G"), (r_d, "D"), (r_s, "S")]:
+        ax.add_line(Line2D([c_pins, c_body], [rr, rr],
                            color=C_R_LEAD, linewidth=1.6, zorder=7))
-        ax.add_patch(Circle((cx, r), 0.10, facecolor=C_R_LEAD, zorder=8))
-    # Etiquetas pines
-    ax.text(c_g, r - 0.75, "G", ha="center", va="center",
-            fontsize=8, color="white", fontweight="bold", zorder=9)
-    ax.text(c_d, r - 0.75, "D", ha="center", va="center",
-            fontsize=8, color="white", fontweight="bold", zorder=9)
-    ax.text(c_s, r - 0.75, "S", ha="center", va="center",
-            fontsize=8, color="white", fontweight="bold", zorder=9)
-    # Etiqueta del chip arriba
-    ax.text((c_g + c_s) / 2, r - 0.95, "IRLZ44N",
-            ha="center", va="bottom", fontsize=8.5, color=C_LABEL,
+        ax.add_patch(Circle((c_pins, rr), 0.10, facecolor=C_R_LEAD, zorder=8))
+        ax.text(c_body + 0.15, rr, lbl, ha="left", va="center",
+                fontsize=9, color="white", fontweight="bold", zorder=9)
+    # Etiqueta del chip horizontal debajo del cuerpo
+    ax.text(c_body + body_w / 2, body_bot + 0.45, "IRLZ44N",
+            ha="center", va="center", fontsize=9, color=C_LABEL,
             fontweight="bold")
 
 
@@ -559,105 +561,78 @@ def page_stripboard_3pin(pdf):
     fig.suptitle("Stripboard 12 x 16 - cableado practico version 3-pin",
                   fontsize=15, fontweight="bold", y=0.96)
     fig.text(0.5, 0.93,
-              "Layout sobre perfboard 12 x 16 con 2 cortes en la fila del "
-              "MOSFET (X rojas) para aislar Gate / Drain / Source.",
+              "Perfboard 12 x 16, SIN cortes: MOSFET acostado (rotado 90, "
+              "patillas dobladas) - cada pin G/D/S en su propia fila.",
               ha="center", fontsize=9, color=C_NOTE)
 
     ax = fig.add_axes([0.05, 0.34, 0.90, 0.58])
     ROWS, COLS = 12, 16
     draw_stripboard(ax, ROWS, COLS)
 
-    # ── Asignacion de filas ──────────────────────────────────────
-    # A (0)  +12V de entrada y catodo D1
-    # B (1)  cable VCC fan
-    # C (2)  GND fan + anodo D1 + Drain MOSFET
-    # D (3)  (libre)
-    # E (4)  Gate MOSFET + GPIO 5 PWM
-    # F (5)  Source MOSFET + GND de salida
-    # G (6)  R1 pull-down: Gate -> GND (R1 vertical entre E y G)
-    # H (7)  (libre)
+    # ── Asignacion de filas (MOSFET rotado 90: cada pin en su fila) ──
+    # A (0)  +12V de entrada + catodo D1
+    # B (1)  VCC fan (puente vertical a A en col 1)
+    # C (2)  libre
+    # D (3)  libre
+    # E (4)  GATE MOSFET + GPIO 5 PWM (DIRECTO, sin puente)
+    # F (5)  DRAIN MOSFET + GND fan + anodo D1 (DIRECTO, sin puente)
+    # G (6)  SOURCE MOSFET + GND general (DIRECTO, sin puente)
+    # H (7)  libre
     # I (8)  TACH NC
-    # ... resto libre
+    # ── R1 vertical entre fila E (Gate) y fila G (GND)            ──
+    # ── D1 vertical entre fila A (catodo) y fila F (anodo)        ──
 
-    # Layout horizontal
     PAD_L_COL = 0
     PAD_R_COL = COLS - 1 - 2   # c=13
-    # MOSFET TO-220 en fila F (5). Pitch 2.54mm = cols ADYACENTES.
-    # Sin cortes, los 3 pines estarian cortocircuitados por la tira F.
-    MOSFET_R = 5
-    MOSFET_G = 5
-    MOSFET_D = 6
-    MOSFET_S = 7
-    # D1 (Schottky) vertical entre fila A (catodo) y fila C (anodo)
+    # MOSFET rotado 90: patillas dobladas en col 6, cuerpo a la derecha
+    MOSFET_PIN_COL = 6
+    MOSFET_R_G = 4   # Gate en fila E
+    MOSFET_R_D = 5   # Drain en fila F
+    MOSFET_R_S = 6   # Source en fila G
+    # D1 entre fila A (catodo, +12V) y fila F (anodo, GND fan) - 5 filas de salto
     D1_C = 11
-    # R1 vertical entre fila E (gate) y G (gnd)
-    R1_C = 4
+    # R1 entre fila E (Gate) y fila G (GND) en col 3
+    R1_C = 3
 
-    # ── +12V (fila A) ────────────────────────────────────────────
+    # ── Fila A: +12V + catodo D1 ─────────────────────────────────
     strip_pad(ax, 0, PAD_L_COL, "+12V (fusible 1A)", C_WIRE_R, anchor="left")
-    strip_wire(ax, 0, PAD_L_COL, D1_C, C_WIRE_R)        # +12V por A hasta D1 catodo
-    # extender hasta el pad de salida en fila B (luego cable vertical entre A y B)
-    # B = VCC fan
+    strip_wire(ax, 0, PAD_L_COL, D1_C, C_WIRE_R)
+
+    # ── Fila B: VCC fan ──────────────────────────────────────────
     strip_pad(ax, 1, PAD_R_COL, "VCC fan (rojo)", C_WIRE_R, anchor="right")
     strip_wire(ax, 1, 1, PAD_R_COL, C_WIRE_R)
-    # Puente vertical entre A1 y B1 (junta +12V con VCC fan)
+    # Puente vertical A1 ↔ B1 (junta +12V de la fila A con VCC fan)
     ax.add_line(Line2D([1, 1], [0, 1], color=C_WIRE_R, linewidth=2.4,
                        solid_capstyle="round", zorder=4))
 
-    # ── PZEM TX-style label... no, aqui es solo +12V. ────────────
+    # ── Fila E: GATE + GPIO 5 PWM (todo directo en E) ───────────
+    strip_pad(ax, MOSFET_R_G, PAD_L_COL,
+              "GPIO 5 PWM\n(JP1 pin 15)", C_WIRE_G, anchor="left")
+    strip_wire(ax, MOSFET_R_G, PAD_L_COL, MOSFET_PIN_COL, C_WIRE_G)
 
-    # ── GND fan (fila C) — viene del Drain MOSFET, y conecta el anodo D1 ──
-    strip_pad(ax, 2, PAD_R_COL, "GND fan (negro)", C_WIRE_K, anchor="right")
-    strip_wire(ax, 2, MOSFET_D, PAD_R_COL, C_WIRE_K)
+    # ── Fila F: DRAIN + GND fan + anodo D1 (todo directo en F) ──
+    strip_pad(ax, MOSFET_R_D, PAD_R_COL, "GND fan (negro)", C_WIRE_K,
+              anchor="right")
+    strip_wire(ax, MOSFET_R_D, MOSFET_PIN_COL, PAD_R_COL, C_WIRE_K)
 
-    # ── GPIO 5 PWM (fila E) → Gate MOSFET ─────────────────────────
-    strip_pad(ax, 4, PAD_L_COL, "GPIO 5 PWM\n(JP1 pin 15)", C_WIRE_G,
+    # ── Fila G: SOURCE + GND general (todo directo en G) ────────
+    strip_pad(ax, MOSFET_R_S, PAD_L_COL, "GND (autocarav.)", C_WIRE_K,
               anchor="left")
-    strip_wire(ax, 4, PAD_L_COL, MOSFET_G, C_WIRE_G)
+    strip_wire(ax, MOSFET_R_S, PAD_L_COL, MOSFET_PIN_COL, C_WIRE_K)
 
-    # ── GND general (fila G) — Source + R1 bottom ─────────────────
-    strip_pad(ax, 6, PAD_L_COL, "GND (autocarav.)", C_WIRE_K, anchor="left")
-    strip_wire(ax, 6, PAD_L_COL, R1_C, C_WIRE_K)
-    # Y conectar GND a Source (fila F): puente vertical entre F y G en la col
-    # del Source (c=8)
-    ax.add_line(Line2D([MOSFET_S, MOSFET_S], [5, 6], color=C_WIRE_K,
-                       linewidth=2.4, solid_capstyle="round", zorder=4))
-    # Y extender la pista de GND en fila G hasta col Source
-    strip_wire(ax, 6, R1_C, MOSFET_S, C_WIRE_K)
+    # ── MOSFET TO-220 rotado 90: patillas en col 6, cuerpo a la derecha
+    strip_mosfet_to220_rot90(ax, MOSFET_R_G, MOSFET_R_D, MOSFET_R_S,
+                              MOSFET_PIN_COL)
 
-    # ── MOSFET TO-220 horizontal en fila F (Source = c=8) ────────
-    # G (c=4), D (c=6), S (c=8). Patillas verticales hacia arriba.
-    # Pero las patillas del MOSFET van a la MISMA fila F (5). Por simplicidad
-    # dibujamos el cuerpo arriba (fila 4 visual) y las 3 patillas bajando a
-    # fila F. (Lo importante es que los 3 puntos esten en F columnas G/D/S).
-    strip_mosfet_to220(ax, MOSFET_R, MOSFET_G, MOSFET_D, MOSFET_S)
+    # ── R1 vertical entre fila E (Gate) y fila G (GND) en col R1_C ──
+    strip_v_resistor(ax, MOSFET_R_G, MOSFET_R_S, R1_C,
+                     "R1 = 10 k (pull-down)", label_pos="top")
 
-    # CRITICO: 2 cortes en fila F entre los pines del MOSFET (pitch 2.54mm:
-    # las 3 patillas caen en cols adyacentes 5/6/7). Sin estos cortes, la
-    # tira F cortocircuita Gate-Drain-Source -> MOSFET inutil/quemado.
-    strip_cut(ax, MOSFET_R, MOSFET_G)   # entre G (c=5) y D (c=6)
-    strip_cut(ax, MOSFET_R, MOSFET_D)   # entre D (c=6) y S (c=7)
+    # ── D1 vertical entre fila A (catodo) y fila F (anodo) ──────
+    strip_v_diode(ax, 0, MOSFET_R_D, D1_C, "D1 = 1N5819\n(flyback)")
 
-    # Puente vertical Gate (col 5) entre fila E (4) y fila F (5)
-    ax.add_line(Line2D([MOSFET_G, MOSFET_G], [4, 5], color=C_WIRE_K,
-                       linewidth=1.6, solid_capstyle="round", zorder=4))
-    # Puente vertical Drain (col 6) entre fila C (2) y fila F (5)
-    ax.add_line(Line2D([MOSFET_D, MOSFET_D], [2, 5], color=C_WIRE_K,
-                       linewidth=1.6, solid_capstyle="round", zorder=4))
-
-    # ── R1 vertical entre fila E (Gate) y fila G (GND) en c=4 ─────
-    # Pero col 4 ya tiene el Gate del MOSFET. Mover R1 a col 2.
-    R1_C2 = 2
-    strip_v_resistor(ax, 4, 6, R1_C2, "R1 = 10 k (pull-down)", label_pos="top")
-    # Puente horizontal en fila E del gate (col 4) hasta col R1 (col 2)
-    # — ya cubierto por strip_wire fila E PAD_L→MOSFET_G
-
-    # ── D1 vertical entre fila A (catodo, +12V) y fila C (anodo, GND fan) ─
-    strip_v_diode(ax, 0, 2, D1_C, "D1 = 1N5819\n(flyback)")
-
-    # ── TACH NC (fila I, libre) ───────────────────────────────────
+    # ── Fila I: TACH NC ──────────────────────────────────────────
     strip_pad(ax, 8, PAD_R_COL, "TACH fan (NC)", C_WIRE_Y, anchor="right")
-    # Cable corto en fila I que no llega a ningun lado (NC)
     ax.add_line(Line2D([COLS - 4, COLS - 1 - 2], [8, 8], color=C_WIRE_Y,
                        linewidth=2.4, linestyle="--", zorder=4))
     ax.text(COLS - 4 - 0.5, 8, "X", ha="right", va="center",
@@ -686,9 +661,10 @@ def page_stripboard_3pin(pdf):
                   transform=notes_ax.transAxes, va="top")
     y = 0.42
     for txt in [
-        "1. CORTAR la pista de la fila F en los 2 puntos marcados con X roja "
-           "(entre G-D y entre D-S del MOSFET). El TO-220 tiene pitch 2.54mm: "
-           "sin cortes los 3 pines quedan cortocircuitados por la tira.",
+        "1. MONTAR el MOSFET ACOSTADO (rotado 90): doblar las 3 patillas 90 "
+           "hacia abajo de modo que cada pin (G/D/S) entre en una fila "
+           "DISTINTA del stripboard. Asi cada pin queda aislado en su tira "
+           "y no hace falta ningun corte.",
         "2. Pull-down R1 a GND: sin el, con GPIO 5 flotante (reset/boot) el "
            "fan podria activarse erratico.",
         "3. Diodo D1 en paralelo al fan (catodo a +12V, anodo a GND del fan) "
