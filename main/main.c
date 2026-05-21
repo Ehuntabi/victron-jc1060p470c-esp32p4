@@ -264,6 +264,10 @@ void app_main(void)
         .rotate = LV_DISP_ROT_NONE,
 #endif
     };
+    /* Bump LVGL task stack 7168 -> 12288 B. Margen para draw recursion +
+     * assert handler en escenarios pesados (modales anidados, etc).
+     * Coste ~5 KB en RAM interna (de ~474 KB libres tras LV_MEM_CUSTOM). */
+    cfg.lvgl_port_cfg.task_stack = 12288;
     bsp_display_start_with_config(&cfg);
     bsp_display_brightness_set(80);
 
