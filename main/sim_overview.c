@@ -22,7 +22,7 @@ static const char *TAG = "sim_overview";
 /* Periodo del ciclo completo de la simulacion: 60 segundos. Los distintos
  * indicadores tienen sub-ciclos (algunos mas rapidos, otros lentos) para
  * que la pantalla NO se vea estatica. */
-#define SIM_TICK_MS     200
+#define SIM_TICK_MS     1000
 
 static uint32_t now_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);

@@ -441,7 +441,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                 if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_32, 0);
                 if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_20_es, 0);
             }
-            lv_obj_set_style_translate_y(metrics[i], 10, 0);
+            lv_obj_set_style_translate_y(metrics[i], 48, 0);
         }
     }
 
@@ -786,7 +786,12 @@ static void overview_render(ui_overview_view_t *ov)
 
     /* ── TTG ──────────────────────────────────────────────────── */
     if (bat_fresh && ov->bat.ttg_min != 0xFFFFFFFF && ov->bat.ttg_min > 0) {
-        if (ov->bat.ttg_min >= 60) {
+        if (ov->bat.ttg_min >= 1440) {
+            /* ≥ 24h → días y horas */
+            snprintf(buf, sizeof(buf), "%ud %uh",
+                     (unsigned)(ov->bat.ttg_min / 1440),
+                     (unsigned)((ov->bat.ttg_min % 1440) / 60));
+        } else if (ov->bat.ttg_min >= 60) {
             snprintf(buf, sizeof(buf), "%uh %02um",
                      (unsigned)(ov->bat.ttg_min / 60),
                      (unsigned)(ov->bat.ttg_min % 60));
@@ -901,29 +906,18 @@ static void overview_render(ui_overview_view_t *ov)
                 cd.fresh && cd.shore ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM, 0);
         }
         /* El texto "230 V" se mantiene fijo; solo cambia el color del pill */
-        /* Botones: bg coloreado cuando activos. Texto en oscuro sobre el
-         * color (mejor contraste que blanco sobre amarillo/cian) y blanco
-         * sobre el gris de inactivo. Tipografia mas grande (24 vs 20)
-         * cuando esta activo para simular negrita y que destaque. */
-        lv_color_t txt_on  = lv_color_hex(0x111111);
-        lv_color_t txt_off = UI_COLOR_TEXT;
-        const lv_font_t *font_on  = &lv_font_montserrat_24_es;
-        const lv_font_t *font_off = &lv_font_montserrat_20_es;
-        /* Helper inline: actualiza estilo botón + LED (con halo cuando on). */
+        /* Estetica del boton se mantiene igual ON/OFF (bg gris, texto
+         * del color del acento). Unico indicador de estado: el LED
+         * verde con halo cuando ON. */
         #define UPDATE_CAMPER_BTN(btn, on, color_on) do {                   \
             if (!(btn)) break;                                              \
-            lv_obj_set_style_bg_color((btn),                                \
-                (on) ? (color_on) : UI_COLOR_TEXT_DIM, 0);                  \
-            lv_obj_set_style_text_color((btn),                              \
-                (on) ? txt_on : txt_off, 0);                                \
-            lv_obj_set_style_text_font((btn),                               \
-                (on) ? font_on : font_off, 0);                              \
+            (void)(color_on);                                               \
             lv_obj_t *led = (lv_obj_t *)lv_obj_get_user_data(btn);          \
             if (led) {                                                      \
                 lv_obj_set_style_bg_color(led,                              \
-                    (on) ? UI_COLOR_TEXT : lv_color_hex(0x333333), 0);      \
+                    (on) ? UI_COLOR_GREEN : lv_color_hex(0x333333), 0);     \
                 lv_obj_set_style_shadow_width(led, (on) ? 10 : 0, 0);       \
-                lv_obj_set_style_shadow_color(led, (color_on), 0);          \
+                lv_obj_set_style_shadow_color(led, UI_COLOR_GREEN, 0);      \
                 lv_obj_set_style_shadow_opa(led,                            \
                     (on) ? LV_OPA_80 : LV_OPA_TRANSP, 0);                   \
                 lv_obj_set_style_shadow_spread(led, (on) ? 2 : 0, 0);       \
