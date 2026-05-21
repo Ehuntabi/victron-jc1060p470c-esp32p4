@@ -126,9 +126,43 @@ static void parse_frame(const uint8_t *b)
     tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
     tmp.battery2_v = ((float)b[13] - 30.0f) / 10.0f;
 
-    /* Tanks: sin decodificacion confirmada, dejar a 0 */
-    tmp.s1 = 0;
-    tmp.r1 = 0;
+    /* Tanks: nibble bajo de b[5] (clean) y b[6] (grey) como bitmask de probes.
+     * Posiciones derivadas de class142/ne-rs485 (flask_server.py) cruzado con
+     * los logs reales. Hipotesis NE185 con 4 probes (5 niveles) en vez de
+     * los 3 probes (4 niveles) que documenta el spec NE334:
+     *   raw 0x0 = Reserva (vacio)
+     *   raw 0x1 (bit 0)     = 1/4
+     *   raw 0x3 (bits 0+1)  = 2/4
+     *   raw 0x7 (bits 0+1+2)= 3/4
+     *   raw 0xF (bits 0..3) = 4/4 (lleno)
+     * Combos invalidos (ej. 0x02, 0x05 -- probes intermedios secos) ->
+     * 0xFF = "sin datos" en la UI. */
+    uint8_t raw_clean = b[5] & 0x0F;
+    switch (raw_clean) {
+        case 0x0: tmp.s1 = 0;    break;
+        case 0x1: tmp.s1 = 1;    break;
+        case 0x3: tmp.s1 = 2;    break;
+        case 0x7: tmp.s1 = 3;    break;
+        case 0xF: tmp.s1 = 4;    break;
+        default:  tmp.s1 = 0xFF; break;  /* combo invalido */
+    }
+    /* Grises: en las capturas 2026-05-21 B7 era constante 0x02 con tanque vacio
+     * (per user), valor no contemplado por el spec NE334 (que solo acepta
+     * 0x0/0x1/0x3/0x7). Hipotesis pendiente de validar:
+     *   - Probe inferior del grises averiado -> NE185 reporta solo bit 1
+     *   - O byte 6 no es el grises en NE185 y hay que buscar en otra posicion
+     * De momento aplicamos la misma decodificacion que en clean y dejamos el
+     * resto como 0xFF. Si despues de validar resulta que B7=0x02 = "empty" en
+     * NE185, mover esa logica aqui. */
+    uint8_t raw_grey = b[6] & 0x0F;
+    switch (raw_grey) {
+        case 0x0: tmp.r1 = 0;    break;
+        case 0x1: tmp.r1 = 1;    break;
+        case 0x3: tmp.r1 = 2;    break;
+        case 0x7: tmp.r1 = 3;    break;
+        case 0xF: tmp.r1 = 4;    break;
+        default:  tmp.r1 = 0xFF; break;
+    }
 
     tmp.fresh     = true;
     tmp.last_update_ms = now_ms();
@@ -201,11 +235,32 @@ static void rs485_task(void *arg)
     static uint8_t sniff_buf[SNIFFER_BUF_LEN];
     int sniff_idx = 0;
     while (1) {
-        /* TX runtime: solo si toggle activado desde la UI */
-        if (s_sniffer_tx_enabled &&
-            (now_ms() - last_idle_ms) > IDLE_PERIOD) {
-            uart_write_bytes(NE185_UART_NUM, CMD_IDLE, sizeof(CMD_IDLE));
-            last_idle_ms = now_ms();
+        /* TX runtime: drain cmds + keep-alive, solo si toggle activado.
+         * Antes el modo sniffer NO consumia s_cmd_queue (solo lo hacia
+         * el else, modo no-sniffer); los toggles desde la UI (luz int,
+         * exterior, bomba) se encolaban pero nunca llegaban al bus. */
+        if (s_sniffer_tx_enabled) {
+            /* 1) Drain cmds pendientes (botones UI -> CMD_LIN/CMD_LOUT/CMD_PUMP) */
+            char cmd;
+            while (xQueueReceive(s_cmd_queue, &cmd, 0) == pdTRUE) {
+                const uint8_t *p = NULL;
+                size_t n = 0;
+                switch (cmd) {
+                    case 'i': p = CMD_LIN;  n = sizeof(CMD_LIN);  break;
+                    case 'o': p = CMD_LOUT; n = sizeof(CMD_LOUT); break;
+                    case 'p': p = CMD_PUMP; n = sizeof(CMD_PUMP); break;
+                }
+                if (p) {
+                    uart_write_bytes(NE185_UART_NUM, p, n);
+                    last_idle_ms = now_ms();
+                    ESP_LOGI(TAG, "tx cmd '%c'", cmd);
+                }
+            }
+            /* 2) Keep-alive del bus */
+            if ((now_ms() - last_idle_ms) > IDLE_PERIOD) {
+                uart_write_bytes(NE185_UART_NUM, CMD_IDLE, sizeof(CMD_IDLE));
+                last_idle_ms = now_ms();
+            }
         }
         uint8_t c;
         int n = uart_read_bytes(NE185_UART_NUM, &c, 1, pdMS_TO_TICKS(20));

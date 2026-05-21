@@ -644,9 +644,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     overview_render(ov);
 
-    /* DEMO temporal: cicla los niveles de los tanques cada 1.5s.
-     * Quitar este lv_timer_create cuando NE185 decodifique tanques reales. */
-    lv_timer_create(tank_demo_cb, 1500, ov);
+    /* Tanques: ahora decodificados desde NE185 (clean = b[5] nibble bajo,
+     * grey = b[6] nibble bajo). El refresco de los niveles llega via
+     * overview_update -> ne185_data_t.s1/r1, sin necesidad de timer demo. */
 
     return &ov->base;
 }

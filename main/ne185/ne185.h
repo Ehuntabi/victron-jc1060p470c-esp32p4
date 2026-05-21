@@ -43,8 +43,10 @@ extern "C" {
 #endif
 
 typedef struct {
-    uint8_t  s1;          /* 0..3, nivel agua limpia (no decodificado aun en NE185) */
-    uint8_t  r1;          /* 0..3, nivel grises (no decodificado aun en NE185) */
+    uint8_t  s1;          /* nivel agua limpia: 0=Reserva, 1=1/4, 2=2/4, 3=3/4, 4=4/4,
+                           * 0xFF = sin datos / combo de probes invalido */
+    uint8_t  r1;          /* nivel grises: 0=vacio (OK), >0=lleno (cualquier probe activo),
+                           * 0xFF = sin datos. Encoding exacto NE185 pendiente de validar */
     bool     light_in;    /* salida luz interior ON/OFF */
     bool     light_out;   /* salida luz exterior ON/OFF */
     bool     pump;        /* bomba ON/OFF */
