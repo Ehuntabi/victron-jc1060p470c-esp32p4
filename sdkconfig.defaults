@@ -32,6 +32,11 @@ CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
 # RGB565 — 16 bits/px (mismo que el proyecto original)
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_COLOR_16_SWAP=n
+# Pool de LVGL: malloc/free del sistema en vez del array estatico de 128KB.
+# Razon: con N device cards en Victron Keys (cada una con shadow_width=14) el
+# pool fijo se llena y draw_shadow no consigue su buffer temporal -> assert
+# Out-of-memory -> taskLVGL atascado -> TASK_WDT bootloop.
+CONFIG_LV_MEM_CUSTOM=y
 
 # ── Stack de tareas ───────────────────────────────────────────────────────────
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
@@ -59,9 +64,12 @@ CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_CONTROLLER_DISABLED=y
 
 # LVGL fonts
+# 14/20/24/28/46 estan aliased a Inter en main/fonts/fonts_es.h
+# (los built-in Montserrat de esos tamanos los descarta --gc-sections).
+# 32 y 36 si se usan directamente.
+# 40 y 48: 0 referencias en el proyecto -> deshabilitadas (~150KB ROM
+# fuente de datos const de glifos).
 CONFIG_LV_FONT_MONTSERRAT_24=y
-CONFIG_LV_FONT_MONTSERRAT_40=y
-CONFIG_LV_FONT_MONTSERRAT_48=y
 
 # Partition table
 CONFIG_PARTITION_TABLE_CUSTOM=y

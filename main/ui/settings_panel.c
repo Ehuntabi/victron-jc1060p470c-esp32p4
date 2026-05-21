@@ -136,6 +136,39 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
 static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
 
+/* ── Lazy populate de sub-paginas Settings ────────────────────────
+ * Wi-Fi/Display/Keys/Logs/Consola/Sound/About se crean vacias en boot y
+ * solo se popula su contenido la primera vez que el usuario navega a esa
+ * pagina. Razon: con todas eager + N device cards en Keys, el pool LVGL
+ * se llenaba y draw_shadow disparaba TASK_WDT en bucle (memo
+ * feedback-lvgl-mem-custom-psram). Con LV_MEM_CUSTOM=y ya no hay techo,
+ * pero el lazy reduce boot time y memoria ocupada si el usuario no entra
+ * a una sub-pagina. Frigo se mantiene eager (es la mas usada). */
+struct settings_page_ctx_s;
+typedef struct settings_page_ctx_s settings_page_ctx_t;
+struct settings_page_ctx_s {
+    uint32_t accent;
+    ui_state_t *ui;
+    void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page);
+    bool populated;
+    /* Extras (solo Wi-Fi los usa) */
+    char wifi_ssid[40];
+    char wifi_pass[68];
+    uint8_t wifi_ap_enabled;
+};
+#define SETTINGS_PAGE_CTX_MAX 8
+static settings_page_ctx_t s_page_ctxs[SETTINGS_PAGE_CTX_MAX];
+static size_t s_page_ctx_count = 0;
+
+/* Forward decls de los populate wrappers (defs cerca de settings_menu_add_entry). */
+static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_display(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_consola(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_about(settings_page_ctx_t *ctx, lv_obj_t *page);
+
 /* ── Scrollbar visible en cualquier pagina de Settings ────────── */
 /* Aplica scrollbar AUTO (visible cuando hay overflow) con estilo claro
  * para indicar que se puede deslizar. Llamar tras crear la page. */
@@ -359,10 +392,12 @@ void ui_settings_panel_go_to_main(void)
 }
 
 static void settings_btn_styles_init(void);
-static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
-                                    lv_obj_t *menu, lv_obj_t *target_page,
-                                    const char *title, const char *subtitle,
-                                    const char *icon, uint32_t accent);
+static settings_page_ctx_t *settings_menu_add_entry(
+    ui_state_t *ui, lv_obj_t *main_page,
+    lv_obj_t *menu, lv_obj_t *target_page,
+    const char *title, const char *subtitle,
+    const char *icon, uint32_t accent,
+    void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page));
 static void settings_menu_page_changed_cb(lv_event_t *e);
 
 static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
@@ -1273,13 +1308,15 @@ static void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_vic
     lv_obj_add_event_cb(ui->victron_config.remove_btn,
                         victron_config_remove_btn_event_cb, LV_EVENT_CLICKED, ui);
 
-    /* Texto descriptivo dentro del card */
+    /* Texto descriptivo dentro del card.
+     * \n manual + LONG_CLIP: LONG_WRAP+pct(100) en scroll_cont con hermanos
+     * dispara TASK_WDT al construir (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
     lv_obj_t *lbl_header = lv_label_create(card_ctrl);
     lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_header, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_long_mode(lbl_header, LV_LABEL_LONG_WRAP);
+    lv_label_set_long_mode(lbl_header, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(lbl_header, lv_pct(100));
-    lv_label_set_text(lbl_header, "Configura hasta 8 dispositivos Victron con su dirección MAC y clave AES.");
+    lv_label_set_text(lbl_header, "Configura hasta 8 dispositivos Victron\ncon su dirección MAC y clave AES.");
 
     ui->victron_config.container = victron_container;
 
@@ -1524,7 +1561,10 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_style_text_font(error_lbl, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(error_lbl, "Estado: esperando datos...");
     lv_obj_set_style_text_color(error_lbl, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_WRAP);
+    /* LONG_DOT en vez de LONG_WRAP: status_container tiene flex_grow=1 + flex
+     * column con 3 hermanos dentro de scroll => combo exacto del WDT al
+     * construir (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
+    lv_label_set_long_mode(error_lbl, LV_LABEL_LONG_DOT);
     lv_obj_set_width(error_lbl, lv_pct(100));
 
     /* Store references */
@@ -1695,27 +1735,40 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+    /* Frigo: eager (es la pagina mas usada). populate=NULL para que el lazy
+     * dispatch no haga nada; ui_frigo_panel_init mas abajo construye el
+     * contenido. */
     settings_menu_add_entry(ui, main_page, menu, page_frigo,
         "Frigo",         "Sensores, ventilador y umbrales",
-        LV_SYMBOL_REFRESH,    0x00C851);
+        LV_SYMBOL_REFRESH,    0x00C851, NULL);
     settings_menu_add_entry(ui, main_page, menu, page_logs,
         "Logs",          "Histórico SD: batería y nevera",
-        LV_SYMBOL_SAVE,       0xFFAA00);
+        LV_SYMBOL_SAVE,       0xFFAA00, populate_logs);
     settings_menu_add_entry(ui, main_page, menu, page_consola,
         "Consola",       "Logs ESP_LOGx en tiempo real",
-        LV_SYMBOL_LIST,       0x8BC34A);
-    settings_menu_add_entry(ui, main_page, menu, page_wifi,
+        LV_SYMBOL_LIST,       0x8BC34A, populate_consola);
+    settings_page_ctx_t *ctx_wifi = settings_menu_add_entry(
+        ui, main_page, menu, page_wifi,
         "Wi-Fi",         "Modo AP y credenciales",
-        LV_SYMBOL_WIFI,       0x4FC3F7);
+        LV_SYMBOL_WIFI,       0x4FC3F7, populate_wifi);
+    if (ctx_wifi) {
+        if (default_ssid) {
+            strncpy(ctx_wifi->wifi_ssid, default_ssid, sizeof(ctx_wifi->wifi_ssid) - 1);
+        }
+        if (default_pass) {
+            strncpy(ctx_wifi->wifi_pass, default_pass, sizeof(ctx_wifi->wifi_pass) - 1);
+        }
+        ctx_wifi->wifi_ap_enabled = ap_enabled;
+    }
     settings_menu_add_entry(ui, main_page, menu, page_display,
         "Display",       "Brillo, salvapantallas, modo noche",
-        LV_SYMBOL_EYE_OPEN,   0xBA68C8);
+        LV_SYMBOL_EYE_OPEN,   0xBA68C8, populate_display);
     settings_menu_add_entry(ui, main_page, menu, page_sound,
         "Sonido y avisos","Volumen, jingles y alertas",
-        LV_SYMBOL_VOLUME_MAX, 0xFF7043);
+        LV_SYMBOL_VOLUME_MAX, 0xFF7043, populate_sound);
     settings_menu_add_entry(ui, main_page, menu, page_victron,
         "Victron Keys",  "Dispositivos BLE y claves",
-        LV_SYMBOL_GPS,        0xE91E63);
+        LV_SYMBOL_GPS,        0xE91E63, populate_keys);
     /* Mostrar warning al entrar en Victron Keys */
     {
         lv_obj_t *cont_vk = lv_obj_get_child(main_page, lv_obj_get_child_cnt(main_page) - 1);
@@ -1725,19 +1778,15 @@ void ui_settings_panel_init(ui_state_t *ui,
     }
     settings_menu_add_entry(ui, main_page, menu, page_about,
         "About",         "Sistema, uptime, IP y reinicio",
-        LV_SYMBOL_LIST,       0x90A4AE);
+        LV_SYMBOL_LIST,       0x90A4AE, populate_about);
 
-  
+
     lv_menu_set_page(menu, main_page);
-    /* Recolorea header + back btn al cambiar de pagina segun acento de seccion */
+    /* Recolorea header + back btn al cambiar de pagina segun acento de seccion
+     * y dispara el lazy populate de la pagina destino la primera vez. */
     lv_obj_add_event_cb(menu, settings_menu_page_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    create_wifi_settings_page(ui, page_wifi, default_ssid, default_pass, ap_enabled);
-    create_display_settings_page(ui, page_display);
-    create_victron_keys_settings_page(ui, page_victron);
-    create_logs_settings_page(ui, page_logs);
-    settings_logs_panel_create(ui, page_consola);
-    create_sound_settings_page(ui, page_sound);
-    create_about_settings_page(ui, page_about);
+    /* Frigo eager (lazy dispatch skipped via populate=NULL). El resto se
+     * construye al navegar por primera vez. */
     ui_frigo_panel_init(ui);
 
     lv_obj_t *tab = ui->tab_settings;
@@ -2779,7 +2828,9 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
     lv_obj_set_width(s_trip_label, lv_pct(100));
-    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_WRAP);
+    /* LONG_DOT en vez de WRAP por riesgo WDT al construir
+     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
+    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
     trip_label_refresh();
 
     /* === Card 4: Backup/Restore configuracion === */
@@ -2805,10 +2856,12 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
     lv_obj_set_width(bak_desc, lv_pct(100));
-    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_WRAP);
+    /* \n manual + LONG_CLIP en vez de WRAP por riesgo WDT al construir
+     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
+    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_CLIP);
     lv_label_set_text(bak_desc,
-        "Exporta toda la configuracion (claves Victron, alertas, brillo, "
-        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json. "
+        "Exporta toda la configuracion (claves Victron, alertas, brillo,\n"
+        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json.\n"
         "El password Wi-Fi no se exporta por seguridad.");
 
     lv_obj_t *bak_row = lv_obj_create(card_bak);
@@ -2942,23 +2995,59 @@ static void settings_card_decor(lv_obj_t *cont, const char *title,
     }
 }
 
-static void settings_menu_add_entry(ui_state_t *ui, lv_obj_t *main_page,
-                                    lv_obj_t *menu, lv_obj_t *target_page,
-                                    const char *title, const char *subtitle,
-                                    const char *icon, uint32_t accent)
+/* ── Populate wrappers (firma uniforme para el lazy dispatch) ──────── */
+static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_wifi_settings_page(ctx->ui, page,
+                              ctx->wifi_ssid, ctx->wifi_pass,
+                              ctx->wifi_ap_enabled);
+}
+static void populate_display(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_display_settings_page(ctx->ui, page);
+}
+static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_victron_keys_settings_page(ctx->ui, page);
+}
+static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_logs_settings_page(ctx->ui, page);
+}
+static void populate_consola(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    settings_logs_panel_create(ctx->ui, page);
+}
+static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_sound_settings_page(ctx->ui, page);
+}
+static void populate_about(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_about_settings_page(ctx->ui, page);
+}
+
+static settings_page_ctx_t *settings_menu_add_entry(
+    ui_state_t *ui, lv_obj_t *main_page,
+    lv_obj_t *menu, lv_obj_t *target_page,
+    const char *title, const char *subtitle,
+    const char *icon, uint32_t accent,
+    void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page))
 {
-    (void)ui;
     settings_btn_styles_init();
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_set_width(cont, lv_pct(48));
     lv_obj_set_height(cont, 88);
     settings_card_decor(cont, title, subtitle, icon, accent);
 
-    /* Guardamos el acento de esta seccion en la pagina destino: el handler
-     * de cambio de pagina del menu lo lee para tenir el header dinamicamente. */
-    lv_obj_set_user_data(target_page, (void *)(uintptr_t)accent);
+    /* Reservar ctx y guardarlo como user_data del page; el handler de
+     * cambio de pagina lo lee para (1) tenir el header con el acento y
+     * (2) popular la pagina la primera vez si tiene populate fn. */
+    settings_page_ctx_t *ctx = NULL;
+    if (s_page_ctx_count < SETTINGS_PAGE_CTX_MAX) {
+        ctx = &s_page_ctxs[s_page_ctx_count++];
+        memset(ctx, 0, sizeof(*ctx));
+        ctx->accent = accent;
+        ctx->ui = ui;
+        ctx->populate = populate;
+        lv_obj_set_user_data(target_page, ctx);
+    }
 
     lv_menu_set_load_page_event(menu, cont, target_page);
+    return ctx;
 }
 
 /* Card clickable con la misma estetica que settings_menu_add_entry pero con
@@ -2990,8 +3079,16 @@ static void settings_menu_page_changed_cb(lv_event_t *e)
     lv_obj_t *cur = lv_menu_get_cur_main_page(menu);
     uint32_t accent = SETTINGS_DEFAULT_ACCENT;
     if (cur && cur != s_settings_main_page) {
-        uintptr_t v = (uintptr_t)lv_obj_get_user_data(cur);
-        if (v) accent = (uint32_t)v;
+        settings_page_ctx_t *ctx = (settings_page_ctx_t *)lv_obj_get_user_data(cur);
+        if (ctx) {
+            accent = ctx->accent;
+            /* Lazy populate: la primera vez que se navega a la pagina,
+             * construir su contenido. */
+            if (!ctx->populated && ctx->populate) {
+                ctx->populate(ctx, cur);
+                ctx->populated = true;
+            }
+        }
     }
     if (s_settings_back_btn) {
         /* Variante mas oscura para el estado pulsado: ~60% de cada canal. */
