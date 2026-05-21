@@ -602,26 +602,87 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_set_style_pad_all(tank, 4, 0);
     lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Fill (sube de abajo arriba con el nivel). Gradiente vertical:
-     * arriba mas claro, abajo mas saturado → efecto 'agua con brillo'. */
-    lv_obj_t *fill = lv_obj_create(tank);
-    lv_obj_remove_style_all(fill);
-    lv_obj_set_width(fill, lv_pct(100));
-    lv_obj_set_height(fill, 0);
-    lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_radius(fill, 6, 0);
-    lv_obj_set_style_bg_color(fill, lv_color_lighten(accent_color, 100), 0);
-    lv_obj_set_style_bg_grad_color(fill, accent_color, 0);
-    lv_obj_set_style_bg_grad_dir(fill, LV_GRAD_DIR_VER, 0);
-    lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
+    if (kind == UI_TANK_CLEAN_H) {
+        /* Bargraph LED: 5 segmentos discretos (1 rojo + 4 verdes), sin
+         * fill continuo ni texto. ui_tank_set apaga/enciende segun nivel. */
+        lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        for (int i = 0; i < 5; i++) {
+            lv_obj_t *led = lv_obj_create(tank);
+            lv_obj_remove_style_all(led);
+            lv_obj_set_size(led, lv_pct(18), lv_pct(80));
+            lv_obj_set_style_radius(led, 3, 0);
+            lv_obj_set_style_bg_color(led,
+                (i == 0) ? UI_COLOR_RED : UI_COLOR_GREEN, 0);
+            lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
+            lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
+        }
+    } else if (kind == UI_TANK_GREY_H) {
+        /* 1 LED rojo grande que ocupa casi todo el contenedor (mismo alto
+         * que CLEAN_H ya garantizado por el flex_grow del tank padre). */
+        lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_t *led = lv_obj_create(tank);
+        lv_obj_remove_style_all(led);
+        lv_obj_set_size(led, lv_pct(96), lv_pct(90));
+        lv_obj_set_style_radius(led, 4, 0);
+        lv_obj_set_style_bg_color(led, UI_COLOR_RED, 0);
+        lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
+        lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
+    } else {
+        /* Fill (sube de abajo a arriba con el nivel). Gradiente vertical:
+         * arriba mas claro, abajo mas saturado → efecto 'agua con brillo'. */
+        lv_obj_t *fill = lv_obj_create(tank);
+        lv_obj_remove_style_all(fill);
+        lv_obj_set_width(fill, lv_pct(100));
+        lv_obj_set_height(fill, 0);
+        lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_bg_grad_dir(fill, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_radius(fill, 6, 0);
+        lv_obj_set_style_bg_color(fill, lv_color_lighten(accent_color, 100), 0);
+        lv_obj_set_style_bg_grad_color(fill, accent_color, 0);
+        lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
 
-    /* Label grande con el % - blanco brillante con sombra para legibilidad
-     * sobre cualquier nivel de relleno (vacio o lleno). */
-    lv_obj_t *lbl = lv_label_create(tank);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_label_set_text(lbl, "--");
-    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+        /* Label grande con el % */
+        lv_obj_t *lbl = lv_label_create(tank);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+        lv_label_set_text(lbl, "--");
+        lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
+
+        /* Marcas 25/50/75% solo en CLEAN vertical */
+        if (kind == UI_TANK_CLEAN) {
+            lv_obj_t *marks = lv_obj_create(tank);
+            lv_obj_remove_style_all(marks);
+            lv_obj_set_size(marks, lv_pct(100), lv_pct(100));
+            lv_obj_align(marks, LV_ALIGN_CENTER, 0, 0);
+            lv_obj_set_layout(marks, LV_LAYOUT_FLEX);
+            lv_obj_set_flex_flow(marks, LV_FLEX_FLOW_COLUMN);
+            lv_obj_set_flex_align(marks, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                                  LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_clear_flag(marks, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_clear_flag(marks, LV_OBJ_FLAG_SCROLLABLE);
+            for (int i = 0; i < 5; i++) {
+                lv_obj_t *m = lv_obj_create(marks);
+                lv_obj_remove_style_all(m);
+                if (i == 0 || i == 4) {
+                    lv_obj_set_size(m, 1, 0);
+                } else {
+                    lv_obj_set_size(m, lv_pct(70), 2);
+                    lv_obj_set_style_bg_color(m, lv_color_white(), 0);
+                    lv_obj_set_style_bg_opa(m, LV_OPA_30, 0);
+                    lv_obj_set_style_radius(m, 1, 0);
+                }
+                lv_obj_clear_flag(m, LV_OBJ_FLAG_CLICKABLE);
+            }
+        }
+    }
 
     return box;
 }
@@ -639,12 +700,39 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
 
     ui_tank_kind_t kind = (ui_tank_kind_t)(intptr_t)lv_obj_get_user_data(tank_box);
 
-    /* Altura util interna (descontando padding+borde aprox) */
-    lv_coord_t tank_h = lv_obj_get_content_height(tank);
-    if (tank_h < 1) tank_h = lv_obj_get_height(tank) - 14;
-    if (tank_h < 1) tank_h = 30;
+    /* Modo bargraph LED CLEAN_H: 5 LEDs (1 rojo + 4 verdes).
+     * level 0 = Reserva → solo el rojo enciende
+     * level 1..4 = 1/4..4/4 → enciende N verdes (LEDs 1..level), rojo off */
+    if (kind == UI_TANK_CLEAN_H) {
+        uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
+        bool reserve = (level_0_to_3 == 0);
+        bool no_data = (level_0_to_3 == 0xFF);
+        for (int i = 0; i < 5; i++) {
+            lv_obj_t *led = lv_obj_get_child(tank, i);
+            if (!led) continue;
+            bool on = no_data ? false :
+                      (i == 0) ? reserve :
+                      (i <= lv);
+            lv_obj_set_style_bg_opa(led, on ? LV_OPA_COVER : LV_OPA_20, 0);
+        }
+        return;
+    }
+    /* Modo GREY_H: 1 LED grande (único hijo). */
+    if (kind == UI_TANK_GREY_H) {
+        lv_obj_t *led = lv_obj_get_child(tank, 0);
+        if (led) {
+            bool full = (level_0_to_3 != 0 && level_0_to_3 != 0xFF);
+            lv_obj_set_style_bg_opa(led, full ? LV_OPA_COVER : LV_OPA_20, 0);
+        }
+        return;
+    }
 
-    /* Sin dato → label "--" y fill vacio */
+    /* Modos verticales tradicionales (CLEAN/GREY): fill que sube + label */
+    if (!lbl) return;
+    lv_coord_t tank_d = lv_obj_get_content_height(tank);
+    if (tank_d < 1) tank_d = lv_obj_get_height(tank) - 14;
+    if (tank_d < 1) tank_d = 30;
+
     if (level_0_to_3 == 0xFF) {
         lv_label_set_text(lbl, "--");
         lv_obj_set_height(fill, 0);
@@ -655,13 +743,13 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
     int fill_pct;
     const char *txt;
 
-    if (kind == UI_TANK_CLEAN) {
+    if (kind == UI_TANK_CLEAN || kind == UI_TANK_CLEAN_H) {
         /* 5 estados como el NE187: 0=Reserva (rojo), 1=1/4, 2=2/4, 3=3/4, 4=4/4.
          * El firmware actual envia 0..3 (NE185 sin decodificar todavia los
          * niveles reales). Cuando se decodifique, el rango sera 0..4. */
         uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
         switch (lv) {
-            case 0: main_color = UI_COLOR_RED;    fill_pct = 12; txt = "R";   break;
+            case 0: main_color = UI_COLOR_RED;    fill_pct = 100; txt = "R";  break;
             case 1: main_color = UI_COLOR_YELLOW; fill_pct = 25; txt = "1/4"; break;
             case 2: main_color = UI_COLOR_CYAN;   fill_pct = 50; txt = "2/4"; break;
             case 3: main_color = UI_COLOR_CYAN;   fill_pct = 75; txt = "3/4"; break;
@@ -679,7 +767,7 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
 
     lv_label_set_text(lbl, txt);
 
-    lv_coord_t h = (lv_coord_t)((long)tank_h * (long)fill_pct / 100L);
+    lv_coord_t h = (lv_coord_t)((long)tank_d * (long)fill_pct / 100L);
     if (h < 1 && fill_pct > 0) h = 1;
     lv_obj_set_height(fill, h);
     lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);

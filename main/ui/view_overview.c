@@ -232,6 +232,19 @@ static void camper_btn_event_cb(lv_event_t *e)
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
+/* DEMO temporal de tanques: cicla niveles 0..4 cada tick (1.5 s).
+ * tank_s1 (CLEAN_H) muestra cada nivel del NE187; tank_r1 (GREY_H)
+ * alterna OK/LLENO según paridad. user_data = ui_overview_view_t*. */
+static void tank_demo_cb(lv_timer_t *t)
+{
+    static uint8_t step;
+    ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
+    if (!ov) return;
+    /* Demo solo para grises (limpia espera datos reales del NE185). */
+    if (ov->tank_r1) ui_tank_set(ov->tank_r1, step % 2);
+    step = (step + 1) % 5;
+}
+
 /* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
  * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn).
  * El `accent` se usa como color del borde (2 px) para distinguir la funcion. */
@@ -240,8 +253,8 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
                                     char cmd_char, lv_color_t accent)
 {
     lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, 160, 70);
-    lv_obj_set_style_radius(btn, 35, 0);                 /* píldora: radius = h/2 */
+    lv_obj_set_size(btn, 200, 85);
+    lv_obj_set_style_radius(btn, 42, 0);                 /* píldora: radius = h/2 */
     lv_obj_set_style_bg_color(btn, lv_color_hex(0x37474F), 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
     /* Borde de color de la funcion (2 px) — ahora SE VE como boton */
@@ -267,12 +280,12 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
 
     if (icon && icon[0]) {
         lv_obj_t *l_icon = lv_label_create(row);
-        lv_obj_set_style_text_font(l_icon, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_font(l_icon, &lv_font_montserrat_28_es, 0);
         lv_obj_set_style_text_color(l_icon, accent, 0);
         lv_label_set_text(l_icon, icon);
     }
     lv_obj_t *l_text = lv_label_create(row);
-    lv_obj_set_style_text_font(l_text, &lv_font_inter_semibold_20, 0);
+    lv_obj_set_style_text_font(l_text, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(l_text, accent, 0);
     lv_label_set_text(l_text, text ? text : "");
 
@@ -280,8 +293,8 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
      * color + halo en el refresh general. */
     lv_obj_t *led = lv_obj_create(btn);
     lv_obj_remove_style_all(led);
-    lv_obj_set_size(led, 10, 10);
-    lv_obj_set_style_radius(led, 5, 0);
+    lv_obj_set_size(led, 14, 14);
+    lv_obj_set_style_radius(led, 7, 0);
     lv_obj_set_style_bg_color(led, lv_color_hex(0x333333), 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
     /* LED centrado horizontalmente, asomando un poco por encima del borde */
@@ -341,7 +354,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->card_solar = create_node_card(col_left, &icon_solar,
                                       "Solar", UI_COLOR_GREEN, &ov->m_solar_w);
     lv_obj_set_width(ov->card_solar, lv_pct(100));
-    lv_obj_set_flex_grow(ov->card_solar, 8);
+    /* Altura fija para garantizar tamaño igual al de bat / dcdc.
+     * flex_grow=0 + height pct(80) → cada card 80% del alto de la col. */
+    lv_obj_set_flex_grow(ov->card_solar, 0);
+    lv_obj_set_height(ov->card_solar, lv_pct(80));
     /* Subir el contenido 5 px sin alterar el tamano externo de la card:
      * reducimos el pad superior y aumentamos el inferior en la misma
      * cantidad. La altura es la misma porque la fija el flex_grow. */
@@ -356,9 +372,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->m_solar_kwh = ui_metric_create_compact(ov->card_solar, "Hoy");
     ui_metric_set(ov->m_solar_kwh, "--", "kWh", UI_COLOR_TEXT_DIM);
 
-    ov->tank_s1 = ui_tank_create(col_left, lv_pct(75), 1,
-                                 "Agua limpia", UI_COLOR_CYAN, UI_TANK_CLEAN);
-    lv_obj_set_flex_grow(ov->tank_s1, 3);
+    /* Barra horizontal estilo LED bargraph (como NE187). Ocupa todo el
+     * ancho de la columna y el alto restante (col_left = 8+2 = 10). */
+    ov->tank_s1 = ui_tank_create(col_left, lv_pct(95), 1,
+                                 "Agua limpia", UI_COLOR_CYAN, UI_TANK_CLEAN_H);
+    lv_obj_set_flex_grow(ov->tank_s1, 2);
     lv_obj_add_flag(ov->tank_s1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_s1, alarm_mute_s1_cb, LV_EVENT_CLICKED, ov);
 
@@ -380,7 +398,8 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * col_right card_loads=8, tank_r1=3) para que card_bat tenga la misma
      * altura que Solar/DC/DC y el bottom_row gane espacio suficiente para
      * que la card frigo se vea entera. */
-    lv_obj_set_flex_grow(ov->card_bat, 8);
+    lv_obj_set_flex_grow(ov->card_bat, 0);
+    lv_obj_set_height(ov->card_bat, lv_pct(80));
     /* Subir el contenido 10 px en total (los 5 px del cambio anterior +
      * 5 px adicionales pedidos al "subir la card 5"). Reducimos pad_top
      * a UI_PAD_CARD-10 y aumentamos pad_bottom a UI_PAD_CARD+10 para no
@@ -426,36 +445,114 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         }
     }
 
-    /* Spacer de ~12 px entre card_bat y bottom_row.
-     * Los flex_grow 6:1 reparten el espacio restante; un spacer de 12 px
-     * recorta 6/7 * 12 ≈ 10 px de card_bat y 1/7 * 12 ≈ 2 px de bottom_row,
-     * dando el efecto "card_bat 10 px mas baja por abajo" pedido. */
+    /* Tank aguas grises directamente en col_center (sin wrapper), con
+     * mismo flex_grow=2 que tank_s1 en col_left → mismo alto exacto. */
+    ov->tank_r1 = ui_tank_create(col_center, lv_pct(40), 1,
+                                 "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
+    lv_obj_set_flex_grow(ov->tank_r1, 2);
+    lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
+
+    /* ── Columna derecha: card DC/DC arriba + tanque grises abajo ── */
+    lv_obj_t *col_right = lv_obj_create(grid);
+    lv_obj_remove_style_all(col_right);
+    lv_obj_set_height(col_right, lv_pct(100));
+    lv_obj_set_flex_grow(col_right, 3);
+    lv_obj_set_layout(col_right, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_right, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_right, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_right, 8, 0);
+    lv_obj_clear_flag(col_right, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->card_loads = create_node_card(col_right, &icon_dcdc,
+                                      "DC/DC", UI_COLOR_CYAN, &ov->m_loads_w);
+    lv_obj_set_width(ov->card_loads, lv_pct(100));
+    lv_obj_set_flex_grow(ov->card_loads, 0);
+    lv_obj_set_height(ov->card_loads, lv_pct(80));
+    lv_obj_set_style_pad_top(ov->card_loads, UI_PAD_CARD - 5, 0);
+    lv_obj_set_style_pad_bottom(ov->card_loads, UI_PAD_CARD + 5, 0);
+    /* Reducir el gap entre header/Motor/Servicio de 16 a 8 px: la 2ª
+     * métrica se salía por abajo en columnas estrechas. */
+    lv_obj_set_style_pad_gap(ov->card_loads, 8, 0);
+    /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
+    ui_metric_set_label(ov->m_loads_w, "Motor", UI_COLOR_TEXT_DIM);
+    ui_metric_set(ov->m_loads_w, "--", "V", UI_COLOR_TEXT);
+    ov->m_loads_kwh = ui_metric_create_compact(ov->card_loads, "Servicio");
+    ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
+
+    /* Pill 230V (intercambiado con tank_r1 que ahora va bajo card_bat). */
     {
-        lv_obj_t *spacer = lv_obj_create(col_center);
-        lv_obj_remove_style_all(spacer);
-        lv_obj_set_size(spacer, lv_pct(100), 12);
-        lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_clear_flag(spacer, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_t *wrap = lv_obj_create(col_right);
+        lv_obj_remove_style_all(wrap);
+        lv_obj_set_width(wrap, lv_pct(100));
+        lv_obj_set_flex_grow(wrap, 2);
+        lv_obj_set_layout(wrap, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(wrap, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(wrap, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t *pill = lv_obj_create(wrap);
+        lv_obj_remove_style_all(pill);
+        lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_radius(pill, 14, 0);
+        lv_obj_set_style_border_width(pill, 2, 0);
+        lv_obj_set_style_border_color(pill, UI_COLOR_CARD_BORDER, 0);
+        lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
+        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_hor(pill, 16, 0);
+        lv_obj_set_style_pad_ver(pill, 8, 0);
+        lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+        ov->pill_shore_lbl = lv_label_create(pill);
+        lv_obj_set_style_text_font(ov->pill_shore_lbl, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_color(ov->pill_shore_lbl, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->pill_shore_lbl, "230 V");
+        lv_obj_center(ov->pill_shore_lbl);
+        ov->pill_shore = pill;
     }
 
-    /* Bottom de col_center: card frigorífico (Congelador + temp + ventilador)
-     * centrada. Swap pedido por el usuario respecto a la versión anterior
-     * (que tenía aquí el pill 230V y la card frigo abajo entre los botones).
-     * AVISO: en versiones anteriores el borde superior/inferior se recortaba
-     * porque el slot del bottom_row era bajo; comprobar visualmente. */
-    {
-        lv_obj_t *bottom_row = lv_obj_create(col_center);
-        lv_obj_remove_style_all(bottom_row);
-        lv_obj_set_width(bottom_row, lv_pct(100));
-        lv_obj_set_flex_grow(bottom_row, 3);   /* 8:3 simétrico con laterales */
-        lv_obj_set_layout(bottom_row, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(bottom_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(bottom_row, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(bottom_row, LV_OBJ_FLAG_SCROLLABLE);
+    /* col_right = 8+2 = 10 igual que col_left y col_center → las 3 cards
+     * (Solar, Bateria, DC/DC) ocupan exactamente 8/10 = 80% del alto */
 
-        /* Card frigorífico (marco cian) centrada en bottom_row */
-        lv_obj_t *card_fridge = lv_obj_create(bottom_row);
+    /* ── Camper bottom: [ [Luz INT][Bomba]  ........  [Luz EXT] ] ──
+     * Agrupamos Luz INT + Bomba en un sub-grupo a la izquierda y dejamos
+     * Luz EXT solo a la derecha (SPACE_BETWEEN en el contenedor padre). */
+    ov->camper_bottom = lv_obj_create(ov->base.root);
+    lv_obj_remove_style_all(ov->camper_bottom);
+    lv_obj_set_width(ov->camper_bottom, lv_pct(100));
+    lv_obj_set_height(ov->camper_bottom, LV_SIZE_CONTENT);
+    lv_obj_set_layout(ov->camper_bottom, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ov->camper_bottom, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(ov->camper_bottom, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(ov->camper_bottom, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_top(ov->camper_bottom, 6, 0);
+    lv_obj_set_style_pad_hor(ov->camper_bottom, 8, 0);
+
+    /* Grupo izquierdo: Luz INT + Bomba pegados entre sí (gap pequeño). */
+    lv_obj_t *left_group = lv_obj_create(ov->camper_bottom);
+    lv_obj_remove_style_all(left_group);
+    lv_obj_set_size(left_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(left_group, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(left_group, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(left_group, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(left_group, 20, 0);
+    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Icono bombilla FA5 (0xF0EB) en UTF-8 = "\xEF\x83\xAB" */
+    ov->btn_lin  = camper_make_button(left_group, "\xEF\x83\xAB", "Luz INT", 'i',
+                                       UI_COLOR_YELLOW);
+    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p',
+                                       UI_COLOR_CYAN);
+
+    /* Card frigorífico (marco cian) centrada en camper_bottom — swap
+     * pedido por el usuario respecto a versión anterior (que tenía aquí
+     * el pill 230V). Con SPACE_BETWEEN del camper_bottom queda centrada
+     * entre left_group y btn_lout. */
+    {
+        lv_obj_t *card_fridge = lv_obj_create(ov->camper_bottom);
         lv_obj_remove_style_all(card_fridge);
         lv_obj_set_size(card_fridge, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_set_style_bg_color(card_fridge, UI_COLOR_CARD, 0);
@@ -521,94 +618,6 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->fan_angle_deci = 0;
     }
 
-    /* ── Columna derecha: card DC/DC arriba + tanque grises abajo ── */
-    lv_obj_t *col_right = lv_obj_create(grid);
-    lv_obj_remove_style_all(col_right);
-    lv_obj_set_height(col_right, lv_pct(100));
-    lv_obj_set_flex_grow(col_right, 3);
-    lv_obj_set_layout(col_right, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_right, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(col_right, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col_right, 8, 0);
-    lv_obj_clear_flag(col_right, LV_OBJ_FLAG_SCROLLABLE);
-
-    ov->card_loads = create_node_card(col_right, &icon_dcdc,
-                                      "DC/DC", UI_COLOR_CYAN, &ov->m_loads_w);
-    lv_obj_set_width(ov->card_loads, lv_pct(100));
-    lv_obj_set_flex_grow(ov->card_loads, 8);
-    lv_obj_set_style_pad_top(ov->card_loads, UI_PAD_CARD - 5, 0);
-    lv_obj_set_style_pad_bottom(ov->card_loads, UI_PAD_CARD + 5, 0);
-    /* Reducir el gap entre header/Motor/Servicio de 16 a 8 px: la 2ª
-     * métrica se salía por abajo en columnas estrechas. */
-    lv_obj_set_style_pad_gap(ov->card_loads, 8, 0);
-    /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
-    ui_metric_set_label(ov->m_loads_w, "Motor", UI_COLOR_TEXT_DIM);
-    ui_metric_set(ov->m_loads_w, "--", "V", UI_COLOR_TEXT);
-    ov->m_loads_kwh = ui_metric_create_compact(ov->card_loads, "Servicio");
-    ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
-
-    ov->tank_r1 = ui_tank_create(col_right, lv_pct(75), 1,
-                                 "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY);
-    lv_obj_set_flex_grow(ov->tank_r1, 3);
-    lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
-
-    /* ── Camper bottom: [ [Luz INT][Bomba]  ........  [Luz EXT] ] ──
-     * Agrupamos Luz INT + Bomba en un sub-grupo a la izquierda y dejamos
-     * Luz EXT solo a la derecha (SPACE_BETWEEN en el contenedor padre). */
-    ov->camper_bottom = lv_obj_create(ov->base.root);
-    lv_obj_remove_style_all(ov->camper_bottom);
-    lv_obj_set_width(ov->camper_bottom, lv_pct(100));
-    lv_obj_set_height(ov->camper_bottom, LV_SIZE_CONTENT);
-    lv_obj_set_layout(ov->camper_bottom, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(ov->camper_bottom, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(ov->camper_bottom, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(ov->camper_bottom, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_top(ov->camper_bottom, 6, 0);
-    lv_obj_set_style_pad_hor(ov->camper_bottom, 8, 0);
-
-    /* Grupo izquierdo: Luz INT + Bomba pegados entre sí (gap pequeño). */
-    lv_obj_t *left_group = lv_obj_create(ov->camper_bottom);
-    lv_obj_remove_style_all(left_group);
-    lv_obj_set_size(left_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(left_group, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(left_group, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(left_group, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(left_group, 20, 0);
-    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
-
-    /* Icono bombilla FA5 (0xF0EB) en UTF-8 = "\xEF\x83\xAB" */
-    ov->btn_lin  = camper_make_button(left_group, "\xEF\x83\xAB", "Luz INT", 'i',
-                                       UI_COLOR_YELLOW);
-    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p',
-                                       UI_COLOR_CYAN);
-
-    /* Pill 230 V centrado en la fila de botones tras el swap pedido por
-     * el usuario. Con SPACE_BETWEEN del camper_bottom y 3 hijos
-     * (left_group / pill / btn_lout) queda automáticamente en el centro. */
-    {
-        lv_obj_t *pill = lv_obj_create(ov->camper_bottom);
-        lv_obj_remove_style_all(pill);
-        lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_style_radius(pill, 14, 0);
-        lv_obj_set_style_border_width(pill, 2, 0);
-        lv_obj_set_style_border_color(pill, UI_COLOR_CARD_BORDER, 0);
-        lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
-        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-        lv_obj_set_style_pad_hor(pill, 16, 0);
-        lv_obj_set_style_pad_ver(pill, 8, 0);
-        lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
-        ov->pill_shore_lbl = lv_label_create(pill);
-        lv_obj_set_style_text_font(ov->pill_shore_lbl, &lv_font_montserrat_24_es, 0);
-        lv_obj_set_style_text_color(ov->pill_shore_lbl, UI_COLOR_TEXT, 0);
-        lv_label_set_text(ov->pill_shore_lbl, "230 V");
-        lv_obj_center(ov->pill_shore_lbl);
-        ov->pill_shore = pill;
-    }
-
     ov->btn_lout = camper_make_button(ov->camper_bottom, "\xEF\x83\xAB", "Luz EXT", 'o',
                                        UI_COLOR_YELLOW);
 
@@ -634,6 +643,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->base.destroy = overview_destroy;
 
     overview_render(ov);
+
+    /* DEMO temporal: cicla los niveles de los tanques cada 1.5s.
+     * Quitar este lv_timer_create cuando NE185 decodifique tanques reales. */
+    lv_timer_create(tank_demo_cb, 1500, ov);
+
     return &ov->base;
 }
 

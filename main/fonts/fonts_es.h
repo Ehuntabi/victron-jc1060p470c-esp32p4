@@ -18,6 +18,7 @@ extern const lv_font_t lv_font_inter_24_es;
 extern const lv_font_t lv_font_inter_28_es;
 extern const lv_font_t lv_font_inter_46;
 extern const lv_font_t lv_font_inter_semibold_20;
+extern const lv_font_t lv_font_inter_semibold_24;
 
 /* Aliases para no tocar todos los `lv_font_montserrat_*_es` esparcidos */
 #define lv_font_montserrat_14_es lv_font_inter_14_es

@@ -111,8 +111,10 @@ void      ui_battery_soc_set(lv_obj_t *bat_box,
  * label_text aparece arriba del widget (ej. "Agua limpia").
  * El % grande se muestra dentro del depósito.                        */
 typedef enum {
-    UI_TANK_CLEAN  = 0,   /* alerta cuando vacio (level == 0) */
-    UI_TANK_GREY   = 1,   /* alerta cuando lleno (level == 3) */
+    UI_TANK_CLEAN   = 0,  /* depósito vertical limpia (alerta vacío) */
+    UI_TANK_GREY    = 1,  /* depósito vertical grises (alerta lleno) */
+    UI_TANK_CLEAN_H = 2,  /* barra horizontal limpia (5 LEDs: 1R + 4G) */
+    UI_TANK_GREY_H  = 3,  /* barra horizontal grises (1 LED rojo on/off) */
 } ui_tank_kind_t;
 
 lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
