@@ -43,12 +43,14 @@ extern "C" {
 #endif
 
 typedef struct {
-    uint8_t  s1;          /* 0..3, nivel agua limpia */
-    uint8_t  r1;          /* 0..3, nivel grises */
+    uint8_t  s1;          /* 0..3, nivel agua limpia (no decodificado aun en NE185) */
+    uint8_t  r1;          /* 0..3, nivel grises (no decodificado aun en NE185) */
     bool     light_in;    /* salida luz interior ON/OFF */
     bool     light_out;   /* salida luz exterior ON/OFF */
     bool     pump;        /* bomba ON/OFF */
     bool     shore;       /* conectado a red 230 V */
+    float    battery1_v;  /* bateria servicio (V), 0 si no disponible */
+    float    battery2_v;  /* bateria motor (V), 0 si no disponible */
     bool     fresh;       /* hubo trama valida en los ultimos 30 s */
     uint32_t last_update_ms;
 } ne185_data_t;
@@ -62,6 +64,29 @@ void ne185_send_cmd(char cmd);   /* 'i', 'o', 'p' */
 void ne185_sim_inject(uint8_t s1, uint8_t r1,
                       bool light_in, bool light_out,
                       bool pump, bool shore);
+
+/* Contador de bursts SNIFF recibidos en modo SNIFFER. Se usa como
+ * feedback en vivo en la UI ("NE185: RX N tramas") para saber si hay
+ * comunicacion sin abrir el log de la SD. Devuelve 0 si el firmware no
+ * fue compilado en modo sniffer. */
+uint32_t ne185_get_sniff_count(void);
+
+/* Loguea un marcador en el log con prefijo "MARK:" para autoetiquetar
+ * la captura sniffer (ej. "MARK: Luz INT" justo antes de pulsar). */
+void ne185_log_marker(const char *what);
+
+/* Inyecta una trama RAW de 20 bytes (tipica respuesta de la centralita)
+ * y la procesa como si hubiera llegado del bus. Para test/simulacion
+ * sin HW. Devuelve true si la trama paso la validacion y se decodifico. */
+bool ne185_sim_inject_raw(const uint8_t *frame20);
+
+/* Activa/desactiva la transmision automatica de CMD_IDLE en modo sniffer.
+ * Solo aplica si el firmware esta compilado en NE185_SNIFFER_MODE >= 1.
+ * Por defecto OFF (sniff puro, no transmite). Si ON, el ESP envia
+ * CMD_IDLE cada 5s y se comporta como master del bus mientras sigue
+ * logueando todo lo que llega via SNIFF. */
+void ne185_set_sniffer_tx(bool enable);
+bool ne185_get_sniffer_tx(void);
 
 #ifdef __cplusplus
 }

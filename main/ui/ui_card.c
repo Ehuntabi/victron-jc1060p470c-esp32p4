@@ -63,7 +63,8 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
     lv_obj_set_size(header, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(header, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* Titulo centrado + pill al lado (politica global: titulos centrados) */
+    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(header, 10, 0);
     /* Línea fina inferior con el color de acento como separador del body */
@@ -106,7 +107,8 @@ lv_obj_t *ui_card_set_title_img(lv_obj_t *card, const lv_img_dsc_t *img_src,
     lv_obj_set_size(header, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(header, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* Titulo centrado (con icono) + pill flotante a la derecha */
+    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(header, 12, 0);
     lv_obj_set_style_pad_bottom(header, 8, 0);
@@ -600,14 +602,17 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_set_style_pad_all(tank, 4, 0);
     lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Fill (sube de abajo arriba con el nivel) */
+    /* Fill (sube de abajo arriba con el nivel). Gradiente vertical:
+     * arriba mas claro, abajo mas saturado → efecto 'agua con brillo'. */
     lv_obj_t *fill = lv_obj_create(tank);
     lv_obj_remove_style_all(fill);
     lv_obj_set_width(fill, lv_pct(100));
     lv_obj_set_height(fill, 0);
     lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_radius(fill, 6, 0);
-    lv_obj_set_style_bg_color(fill, accent_color, 0);
+    lv_obj_set_style_bg_color(fill, lv_color_lighten(accent_color, 100), 0);
+    lv_obj_set_style_bg_grad_color(fill, accent_color, 0);
+    lv_obj_set_style_bg_grad_dir(fill, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
 
     /* Label grande con el % - blanco brillante con sombra para legibilidad
@@ -639,27 +644,49 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
     if (tank_h < 1) tank_h = lv_obj_get_height(tank) - 14;
     if (tank_h < 1) tank_h = 30;
 
-    if (level_0_to_3 > 3) {
+    /* Sin dato → label "--" y fill vacio */
+    if (level_0_to_3 == 0xFF) {
         lv_label_set_text(lbl, "--");
         lv_obj_set_height(fill, 0);
         return;
     }
 
-    int pct = level_0_to_3 * 100 / 3;
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d %%", pct);
-    lv_label_set_text(lbl, buf);
+    lv_color_t main_color;
+    int fill_pct;
+    const char *txt;
 
-    lv_coord_t h = (lv_coord_t)((long)tank_h * (long)level_0_to_3 / 3L);
-    if (h < 1) h = 1;
+    if (kind == UI_TANK_CLEAN) {
+        /* 5 estados como el NE187: 0=Reserva (rojo), 1=1/4, 2=2/4, 3=3/4, 4=4/4.
+         * El firmware actual envia 0..3 (NE185 sin decodificar todavia los
+         * niveles reales). Cuando se decodifique, el rango sera 0..4. */
+        uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
+        switch (lv) {
+            case 0: main_color = UI_COLOR_RED;    fill_pct = 12; txt = "R";   break;
+            case 1: main_color = UI_COLOR_YELLOW; fill_pct = 25; txt = "1/4"; break;
+            case 2: main_color = UI_COLOR_CYAN;   fill_pct = 50; txt = "2/4"; break;
+            case 3: main_color = UI_COLOR_CYAN;   fill_pct = 75; txt = "3/4"; break;
+            default: main_color = UI_COLOR_GREEN; fill_pct = 100; txt = "4/4"; break;
+        }
+    } else {
+        /* GREY: sensor binario en autocaravana → lleno o no.
+         * El firmware envia 0 (vacio) o 1..3 (lleno). Cualquier valor > 0
+         * se trata como 'lleno'. */
+        bool full = (level_0_to_3 > 0);
+        main_color = full ? UI_COLOR_RED   : UI_COLOR_GREEN;
+        fill_pct   = full ? 100            : 0;
+        txt        = full ? "LLENO"        : "OK";
+    }
+
+    lv_label_set_text(lbl, txt);
+
+    lv_coord_t h = (lv_coord_t)((long)tank_h * (long)fill_pct / 100L);
+    if (h < 1 && fill_pct > 0) h = 1;
     lv_obj_set_height(fill, h);
     lv_obj_align(fill, LV_ALIGN_BOTTOM_MID, 0, 0);
 
-    /* Color por alarma */
-    bool alarm = false;
-    if (kind == UI_TANK_CLEAN && level_0_to_3 == 0) alarm = true;
-    if (kind == UI_TANK_GREY  && level_0_to_3 == 3) alarm = true;
-    lv_obj_set_style_bg_color(fill, alarm ? UI_COLOR_RED : UI_COLOR_CYAN, 0);
+    /* Gradiente VER: top mas claro, bottom saturado (efecto agua) */
+    lv_obj_set_style_bg_color(fill, lv_color_lighten(main_color, 100), 0);
+    lv_obj_set_style_bg_grad_color(fill, main_color, 0);
 }
 
 /* ── Helpers de color por rango ──────────────────────────────────── */

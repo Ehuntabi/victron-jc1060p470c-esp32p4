@@ -233,29 +233,48 @@ static void camper_btn_event_cb(lv_event_t *e)
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
 /* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
- * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn). */
+ * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn).
+ * El `accent` se usa como color del borde (2 px) para distinguir la funcion. */
 static lv_obj_t *camper_make_button(lv_obj_t *parent,
                                     const char *icon, const char *text,
-                                    char cmd_char)
+                                    char cmd_char, lv_color_t accent)
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, 160, 70);
     lv_obj_set_style_radius(btn, 35, 0);                 /* píldora: radius = h/2 */
-    lv_obj_set_style_bg_color(btn, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x37474F), 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
+    /* Borde de color de la funcion (2 px) — ahora SE VE como boton */
+    lv_obj_set_style_border_color(btn, accent, 0);
+    lv_obj_set_style_border_width(btn, 2, 0);
     /* Sombra suave para sensación de elevación */
     lv_obj_set_style_shadow_width(btn, 14, 0);
     lv_obj_set_style_shadow_color(btn, lv_color_black(), 0);
     lv_obj_set_style_shadow_opa(btn, LV_OPA_30, 0);
     lv_obj_set_style_shadow_ofs_y(btn, 4, 0);
 
-    /* Label con icono + texto en una sola línea */
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%s  %s", icon ? icon : "", text);
-    lv_obj_t *l = lv_label_create(btn);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(l, buf);
-    lv_obj_center(l);
+    /* Contenedor horizontal con icono (fuente regular para los glyphs FA)
+     * + texto (SemiBold para mejor contraste sin oscurecer el fondo). */
+    lv_obj_t *row = lv_obj_create(btn);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_center(row);
+
+    if (icon && icon[0]) {
+        lv_obj_t *l_icon = lv_label_create(row);
+        lv_obj_set_style_text_font(l_icon, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(l_icon, accent, 0);
+        lv_label_set_text(l_icon, icon);
+    }
+    lv_obj_t *l_text = lv_label_create(row);
+    lv_obj_set_style_text_font(l_text, &lv_font_inter_semibold_20, 0);
+    lv_obj_set_style_text_color(l_text, accent, 0);
+    lv_label_set_text(l_text, text ? text : "");
 
     /* LED indicador 10x10 esquina sup. dcha. Off gris oscuro; on cambia
      * color + halo en el refresh general. */
@@ -265,8 +284,8 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_set_style_radius(led, 5, 0);
     lv_obj_set_style_bg_color(led, lv_color_hex(0x333333), 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
-    /* LED centrado horizontalmente, pegado al borde superior. */
-    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, 0);
+    /* LED centrado horizontalmente, asomando un poco por encima del borde */
+    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, -5);
     lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_user_data(btn, led);
 
@@ -561,8 +580,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_pad_gap(left_group, 20, 0);
     lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
 
-    ov->btn_lin  = camper_make_button(left_group, LV_SYMBOL_HOME, "Luz INT", 'i');
-    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p');
+    /* Icono bombilla FA5 (0xF0EB) en UTF-8 = "\xEF\x83\xAB" */
+    ov->btn_lin  = camper_make_button(left_group, "\xEF\x83\xAB", "Luz INT", 'i',
+                                       UI_COLOR_YELLOW);
+    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p',
+                                       UI_COLOR_CYAN);
 
     /* Pill 230 V centrado en la fila de botones tras el swap pedido por
      * el usuario. Con SPACE_BETWEEN del camper_bottom y 3 hijos
@@ -587,7 +609,8 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->pill_shore = pill;
     }
 
-    ov->btn_lout = camper_make_button(ov->camper_bottom, LV_SYMBOL_HOME, "Luz EXT", 'o');
+    ov->btn_lout = camper_make_button(ov->camper_bottom, "\xEF\x83\xAB", "Luz EXT", 'o',
+                                       UI_COLOR_YELLOW);
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */

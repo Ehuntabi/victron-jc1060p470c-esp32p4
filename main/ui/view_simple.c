@@ -59,32 +59,37 @@ static lv_color_t simple_color_for_type(victron_record_type_t t)
     }
 }
 
+/* Crea una metrica compact (label arriba dim, valor abajo grande) con ancho
+ * fijo al 48% del ancho del padre, para que dos metricas quepan por fila en
+ * un padre con FLEX_FLOW_ROW_WRAP. Devuelve el label del VALOR, ya que el
+ * `formatter` del descriptor lo necesita para escribir el texto. */
 static lv_obj_t *create_value_row(ui_simple_view_t *view, lv_obj_t *parent,
                                   const ui_simple_label_descriptor_t *desc)
 {
     if (!view || !desc || !view->base.ui) return NULL;
 
-    lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    lv_obj_t *metric = ui_metric_create_compact(parent,
+                                                 desc->title ? desc->title : "");
+    if (!metric) return NULL;
+    lv_obj_set_width(metric, lv_pct(48));   /* 2 columnas con margen */
+
+    /* Centramos el contenido de la metrica horizontalmente */
+    lv_obj_set_flex_align(metric, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row, 12, 0);
 
-    lv_obj_t *title = lv_label_create(row);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(title, UI_COLOR_TEXT_DIM, 0);
-    lv_label_set_text(title, desc->title ? desc->title : "");
+    /* Subir label al siguiente tamaño (24 -> 28) ya que en grid 2x2
+     * hay espacio horizontal de sobra. */
+    lv_obj_t *title = lv_obj_get_child(metric, 0);
+    if (title) lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
 
-    lv_obj_t *value = lv_label_create(row);
-    lv_obj_set_style_text_font(value, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(value, UI_COLOR_TEXT, 0);
-    lv_label_set_text(value, "--");
-    lv_label_set_long_mode(value, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_RIGHT, 0);
-
+    /* Devolvemos el label del VALOR (box.child(1) = row, row.child(0) = value).
+     * El formatter escribira el texto completo (ej. "12.85 V"); ocultamos
+     * el unit label porque no lo separamos. */
+    lv_obj_t *row = lv_obj_get_child(metric, 1);
+    if (!row) return NULL;
+    lv_obj_t *unit = lv_obj_get_child(row, 1);
+    if (unit) lv_obj_add_flag(unit, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *value = lv_obj_get_child(row, 0);
     return value;
 }
 
@@ -162,17 +167,32 @@ ui_device_view_t *ui_simple_view_create(ui_state_t *ui,
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    /* Card que envuelve todas las filas */
+    /* Card que envuelve todas las filas. Llena el alto disponible y
+     * distribuye header arriba / contenido centrado / filas pegadas. */
     lv_color_t accent = simple_color_for_type(config->type);
     view->card = ui_card_create(view->base.root, accent);
+    lv_obj_set_flex_grow(view->card, 1);
+    lv_obj_set_height(view->card, lv_pct(100));
     ui_card_set_title(view->card, LV_SYMBOL_LIST,
                       simple_title_for_type(config->type), accent);
 
     /* Permitimos scroll vertical en la card si hay muchas filas */
     lv_obj_set_scroll_dir(view->card, LV_DIR_VER);
 
+    /* Body con grid 2 columnas (ROW_WRAP). Las metricas tienen ancho 48%
+     * cada una, por lo que LVGL las acomoda 2 por fila automaticamente. */
+    lv_obj_t *body = lv_obj_create(view->card);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_layout(body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(body, 16, 0);
+
     for (size_t i = 0; i < config->label_count; ++i) {
-        view->values[i] = create_value_row(view, view->card, &config->labels[i]);
+        view->values[i] = create_value_row(view, body, &config->labels[i]);
     }
 
     view->base.update  = simple_view_update;

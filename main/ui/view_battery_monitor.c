@@ -25,7 +25,7 @@ typedef struct {
     lv_obj_t *arc_soc;
     lv_obj_t *m_voltage;
     lv_obj_t *m_current;
-    lv_obj_t *bar_current;     /* Barra bipolar bajo m_current */
+    lv_obj_t *bar_current;     /* Barra bipolar bajo potencia */
     lv_obj_t *m_power;
     lv_obj_t *m_ttg;
     lv_obj_t *m_consumed;
@@ -50,8 +50,8 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_size(view->base.root, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_opa(view->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(view->base.root, 0, 0);
-    lv_obj_set_style_pad_all(view->base.root, 8, 0);
-    lv_obj_set_style_pad_gap(view->base.root, 8, 0);
+    lv_obj_set_style_pad_all(view->base.root, 4, 0);
+    lv_obj_set_style_pad_gap(view->base.root, 4, 0);
     lv_obj_set_layout(view->base.root, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(view->base.root, LV_FLEX_FLOW_COLUMN);
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
@@ -59,67 +59,86 @@ ui_device_view_t *ui_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     /* ── Card "Batería" border naranja ─────────────────────────── */
     view->card = ui_card_create(view->base.root, UI_COLOR_ORANGE);
+    /* Override: la card ocupa todo el alto disponible y distribuye
+     * header arriba / body al medio / footer pegado abajo */
+    lv_obj_set_flex_grow(view->card, 1);
+    lv_obj_set_height(view->card, lv_pct(100));
+    lv_obj_set_flex_align(view->card, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *header = ui_card_set_title_img(view->card, &icon_battery,
                                              "Batería", UI_COLOR_ORANGE);
     view->pill_state = ui_pill_create(header, "Reposo", UI_COLOR_TEXT_DIM);
 
-    /* Body row: arc SOC izquierda (tamaño fijo) + columna métricas que
-     * llena el espacio restante (flex_grow=1) y centra sus métricas. */
+    /* Body row: 3 columnas → metricas izq | arc SOC central | metricas dcha
+     * Izquierda: Tension, Corriente
+     * Centro:    Arc SOC (principal, mas grande)
+     * Derecha:   Autonomia, Consumido
+     */
     lv_obj_t *body = lv_obj_create(view->card);
     lv_obj_remove_style_all(body);
     lv_obj_set_size(body, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(body, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_SPACE_AROUND,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(body, 16, 0);
+    lv_obj_set_style_pad_gap(body, 8, 0);
+    lv_obj_set_style_pad_top(body, 0, 0);
 
-    view->arc_soc = ui_arc_soc_create(body, 180);
-
-    lv_obj_t *col = lv_obj_create(body);
-    lv_obj_remove_style_all(col);
-    lv_obj_set_height(col, LV_SIZE_CONTENT);
-    lv_obj_set_flex_grow(col, 1);  /* ocupa todo el espacio horizontal restante */
-    lv_obj_set_layout(col, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_SPACE_AROUND,
+    /* Columna izquierda: Tension + Corriente
+     * Sin flex_grow para que use solo el ancho de su contenido y se centre
+     * en el hueco entre arc y borde via SPACE_AROUND del body */
+    lv_obj_t *col_left = lv_obj_create(body);
+    lv_obj_remove_style_all(col_left);
+    lv_obj_set_size(col_left, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(col_left, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_left, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_left, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col, 8, 0);
+    lv_obj_set_style_pad_gap(col_left, 12, 0);
+    view->m_voltage = ui_metric_create_compact(col_left, "Tensión");
+    view->m_current = ui_metric_create_compact(col_left, "Corriente");
+    view->m_power   = ui_metric_create_compact(col_left, "Potencia");
 
-    view->m_voltage = ui_metric_create_compact(col, "Tensión");
-    view->m_current = ui_metric_create_compact(col, "Corriente");
+    /* Arc SOC central (principal) */
+    view->arc_soc = ui_arc_soc_create(body, 240);
 
-    /* Barra bipolar de corriente bajo m_current.
-     * Centro = 0 A, izquierda = descarga (naranja), derecha = carga (verde).
-     * Rango ±50 A cubre las baterías típicas de 12 V. */
-    view->bar_current = lv_bar_create(col);
-    lv_obj_set_size(view->bar_current, lv_pct(95), 8);
-    lv_bar_set_range(view->bar_current, -50, 50);
-    lv_bar_set_mode(view->bar_current, LV_BAR_MODE_SYMMETRICAL);
-    lv_bar_set_value(view->bar_current, 0, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(view->bar_current, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_MAIN);
-    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
+    /* Columna derecha: Autonomia + Consumido + Aux
+     * Mismo patron que col_left: contenido centrado en su hueco */
+    lv_obj_t *col_right = lv_obj_create(body);
+    lv_obj_remove_style_all(col_right);
+    lv_obj_set_size(col_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(col_right, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_right, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_right, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_right, 12, 0);
+    view->m_ttg      = ui_metric_create_compact(col_right, "Autonomía");
+    view->m_consumed = ui_metric_create_compact(col_right, "Consumido");
+    view->m_aux      = ui_metric_create_compact(col_right, "Aux");
 
-    view->m_power   = ui_metric_create_compact(col, "Potencia");
-
-    /* Footer row: TTG + Consumido + Aux distribuidos en todo el ancho */
+    /* Footer: barra bipolar de corriente, mas estrecha y subida del borde */
     lv_obj_t *footer = lv_obj_create(view->card);
     lv_obj_remove_style_all(footer);
     lv_obj_set_size(footer, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(footer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_AROUND,
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(footer, 8, 0);
-    lv_obj_set_style_pad_top(footer, 8, 0);
+    lv_obj_set_style_pad_gap(footer, 16, 0);
+    lv_obj_set_style_pad_top(footer, 0, 0);
+    lv_obj_set_style_pad_bottom(footer, 16, 0);
 
-    view->m_ttg      = ui_metric_create_compact(footer, "Autonomía");
-    view->m_consumed = ui_metric_create_compact(footer, "Consumido");
-    view->m_aux      = ui_metric_create_compact(footer, "Aux");
+    view->bar_current = lv_bar_create(footer);
+    lv_obj_set_size(view->bar_current, lv_pct(55), 6);
+    lv_bar_set_range(view->bar_current, -50, 50);
+    lv_bar_set_mode(view->bar_current, LV_BAR_MODE_SYMMETRICAL);
+    lv_bar_set_value(view->bar_current, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(view->bar_current, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 3, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
 
     view->base.update  = battery_view_update;
     view->base.show    = battery_view_show;

@@ -19,6 +19,7 @@
 #include "alerts.h"
 #include "victron_products.h"
 #include "ui/frigo_panel.h"
+#include "ne185/ne185.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
 #include <stdio.h>

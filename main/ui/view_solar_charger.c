@@ -51,8 +51,12 @@ ui_device_view_t *ui_solar_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_clear_flag(view->base.root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(view->base.root, LV_OBJ_FLAG_HIDDEN);
 
-    /* ── Card Solar (verde) ────────────────────────────────────── */
+    /* ── Card Solar (verde): ocupa mitad del alto ──────────────── */
     view->card_solar = ui_card_create(view->base.root, UI_COLOR_GREEN);
+    lv_obj_set_flex_grow(view->card_solar, 1);
+    lv_obj_set_height(view->card_solar, lv_pct(50));
+    lv_obj_set_flex_align(view->card_solar, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *header_solar = ui_card_set_title_img(view->card_solar, &icon_solar,
                                                    "Solar", UI_COLOR_GREEN);
     view->pill_state = ui_pill_create(header_solar, "-", UI_COLOR_TEXT_DIM);
@@ -66,11 +70,15 @@ ui_device_view_t *ui_solar_view_create(ui_state_t *ui, lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(body_solar, 16, 0);
 
-    view->m_pv_power = ui_metric_create_large(body_solar, "Potencia PV");
-    view->m_yield    = ui_metric_create_large(body_solar, "Hoy");
+    view->m_pv_power = ui_metric_create_compact(body_solar, "Potencia PV");
+    view->m_yield    = ui_metric_create_compact(body_solar, "Hoy");
 
-    /* ── Card Salida a batería (naranja) ───────────────────────── */
+    /* ── Card Salida a batería (naranja): ocupa la otra mitad ─── */
     view->card_out = ui_card_create(view->base.root, UI_COLOR_ORANGE);
+    lv_obj_set_flex_grow(view->card_out, 1);
+    lv_obj_set_height(view->card_out, lv_pct(50));
+    lv_obj_set_flex_align(view->card_out, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *header_out = ui_card_set_title_img(view->card_out, &icon_battery,
                                                  "Salida a batería",
                                                  UI_COLOR_ORANGE);
@@ -86,9 +94,9 @@ ui_device_view_t *ui_solar_view_create(ui_state_t *ui, lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(body_out, 16, 0);
 
-    view->m_voltage  = ui_metric_create_large(body_out, "Tensión");
-    view->m_current  = ui_metric_create_large(body_out, "Corriente");
-    view->m_charge_w = ui_metric_create_large(body_out, "Potencia carga");
+    view->m_voltage  = ui_metric_create_compact(body_out, "Tensión");
+    view->m_current  = ui_metric_create_compact(body_out, "Corriente");
+    view->m_charge_w = ui_metric_create_compact(body_out, "Potencia carga");
 
     view->base.update  = solar_view_update;
     view->base.show    = solar_view_show;
