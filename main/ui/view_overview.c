@@ -417,7 +417,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_t *bat_left = bat_header ? lv_obj_get_child(bat_header, 0) : NULL;
         lv_obj_t *bat_img  = bat_left   ? lv_obj_get_child(bat_left, 0) : NULL;
         if (bat_img) {
-            lv_obj_set_style_translate_y(bat_img, -25, 0);
+            /* margin_top negativo: participa en el layout flex y desplaza
+             * el objeto verticalmente (translate_y solo afectaba al render
+             * y se quedaba clipped al borde del card). */
+            lv_obj_set_style_margin_top(bat_img, -25, 0);
         }
     }
     /* Click en la card de bateria silencia la alarma de SOC */
