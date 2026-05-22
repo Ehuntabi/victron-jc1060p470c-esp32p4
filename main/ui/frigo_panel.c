@@ -12,7 +12,8 @@ static const char *TAG = "FRIGO_PANEL";
 static lv_obj_t *s_lbl_aletas     = NULL;
 static lv_obj_t *s_lbl_congelador = NULL;
 static lv_obj_t *s_lbl_exterior   = NULL;
-static lv_obj_t *s_lbl_fan        = NULL;
+static lv_obj_t *s_lbl_fan        = NULL;  /* legacy, no se usa (visual LED ahora) */
+static lv_obj_t *s_fan_leds[2]    = { NULL, NULL };  /* 2 LEDs verdes: 50%, 100% */
 static lv_obj_t *s_lbl_exterior_overlay = NULL;
 
 static lv_obj_t *s_dd_aletas     = NULL;
@@ -355,9 +356,25 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
-    s_lbl_fan = lv_label_create(row_fan_hdr);
-    lv_obj_add_style(s_lbl_fan, &ui->styles.small, 0);
-    lv_label_set_text(s_lbl_fan, "0 %");
+    /* Indicador LED del nivel del ventilador (estilo CLEAN_H de tanques):
+     * 2 LEDs verdes que se encienden segun el porcentaje. Gris cuando off. */
+    lv_obj_t *fan_ind = lv_obj_create(row_fan_hdr);
+    lv_obj_remove_style_all(fan_ind);
+    lv_obj_set_size(fan_ind, LV_SIZE_CONTENT, 20);
+    lv_obj_set_layout(fan_ind, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fan_ind, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fan_ind, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(fan_ind, 6, 0);
+    for (int i = 0; i < 2; i++) {
+        lv_obj_t *led = lv_obj_create(fan_ind);
+        lv_obj_remove_style_all(led);
+        lv_obj_set_size(led, 16, 16);
+        lv_obj_set_style_radius(led, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(led, lv_color_hex(0x444444), 0);
+        lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
+        s_fan_leds[i] = led;
+    }
 
     /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
     lv_obj_t *row_mode = lv_obj_create(card_fan);
@@ -597,10 +614,20 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
             snprintf(buf, sizeof(buf), "%.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior, buf);
     }
-    if (s_lbl_fan) {
-        char buf[24];
-        snprintf(buf, sizeof(buf), "%d %%", state->fan_percent);
-        lv_label_set_text(s_lbl_fan, buf);
+    /* Indicador LED del ventilador: 2 verdes.
+     * Buckets: 0-24% -> 0 verdes, 25-74% -> 1 verde, 75-100% -> 2 verdes.
+     * Matchea los modos discretos OFF/50%/100% y queda razonable en Auto. */
+    {
+        uint8_t pct = state->fan_percent;
+        int leds_on = (pct >= 75) ? 2 : (pct >= 25) ? 1 : 0;
+        lv_color_t on_color  = lv_color_hex(0x00C851);  /* verde */
+        lv_color_t off_color = lv_color_hex(0x444444);  /* gris */
+        for (int i = 0; i < 2; i++) {
+            if (s_fan_leds[i]) {
+                lv_obj_set_style_bg_color(s_fan_leds[i],
+                                          (i < leds_on) ? on_color : off_color, 0);
+            }
+        }
     }
     if (s_lbl_exterior_overlay) {
         char buf[32];
