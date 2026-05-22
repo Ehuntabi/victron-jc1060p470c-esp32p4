@@ -959,33 +959,28 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
-    /* Fila titulo: [EYE_CLOSE Salvapantallas] a la izda,
-     * [Activar + switch] + [Tiempo (min): - val +] a la dcha. */
+    /* Fila titulo: [EYE_CLOSE Salvapantallas (flex_grow)] [Activar] [SW] [Tiempo - 1 +]
+     * Estructura plana: title con flex_grow=1 empuja el resto a la dcha. */
     lv_obj_t *title_row = lv_obj_create(card2);
     lv_obj_remove_style_all(title_row);
     lv_obj_set_size(title_row, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(title_row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(title_row, 12, 0);
 
     lv_obj_t *card2_title = lv_label_create(title_row);
-    /* Montserrat built-in para que LV_SYMBOL_EYE_CLOSE se renderice. */
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
+    lv_obj_set_flex_grow(card2_title, 1);  /* empuja el resto a la dcha */
 
-    /* Grupo derecho: Activar(switch) + Tiempo(min) -val+
-     * Estructura plana (sin sub-grupos): cada elemento directamente en
-     * title_row para evitar el bug que dejaba invisible 'Activar' cuando
-     * estaba en un sub-grupo con FLEX_ALIGN_END + remove_style_all. */
-
-    lv_obj_t *activar_lbl = lv_label_create(title_row);
-    lv_obj_set_style_text_font(activar_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(activar_lbl, lv_color_white(), 0);
-    lv_label_set_text(activar_lbl, "Activar");
-
+    /* Switch sin label 'Activar' a propuesta del usuario (mismo estilo
+     * que el switch de Modo nocturno: solo el toggle, el contexto del
+     * card 'Salvapantallas' ya lo explica). */
     ui->screensaver.checkbox = lv_switch_create(title_row);
+    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);  /* tamano explicito */
     lv_obj_set_style_bg_color(ui->screensaver.checkbox, lv_color_hex(0xFF9800),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
