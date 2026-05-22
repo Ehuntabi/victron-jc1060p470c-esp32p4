@@ -417,12 +417,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_t *bat_left = bat_header ? lv_obj_get_child(bat_header, 0) : NULL;
         lv_obj_t *bat_img  = bat_left   ? lv_obj_get_child(bat_left, 0) : NULL;
         if (bat_img) {
-            /* Achicar el bounding box del img (alto 64 -> 40) y mover el
-             * dibujo del bitmap hacia arriba con offset_y. Asi el flex
-             * recalcula la fila mas baja y el icono se ve mas arriba
-             * respecto al baseline del titulo, sin clipping del card. */
-            lv_obj_set_height(bat_img, 40);
-            lv_img_set_offset_y(bat_img, -25);
+            /* FLOATING: el img sale del calculo del flex layout y lo
+             * podemos posicionar libremente con lv_obj_align. -25 abs
+             * respecto a su posicion natural del header. */
+            lv_obj_add_flag(bat_img, LV_OBJ_FLAG_FLOATING);
+            lv_obj_align(bat_img, LV_ALIGN_LEFT_MID, 0, -25);
         }
     }
     /* Click en la card de bateria silencia la alarma de SOC */
