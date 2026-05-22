@@ -989,9 +989,10 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
      * con fuente Inter aliased; ver feedback-inter-font-symbols-missing). */
     lv_obj_t *activar_lbl = lv_label_create(right_grp);
     lv_obj_set_style_text_font(activar_lbl, &lv_font_montserrat_20_es, 0);
-    /* Ancho explicito: en SIZE_CONTENT dentro del flex padre se queda
-     * a 0 y el texto desaparece. Igual que paso con 'Silenciar avisos'. */
-    lv_obj_set_width(activar_lbl, 90);
+    /* Color de texto explicito (sin esto el label heredaba algo invisible:
+     * el bug no era el ancho sino el color tras flex SIZE_CONTENT). */
+    lv_obj_set_style_text_color(activar_lbl, lv_color_white(), 0);
+    lv_obj_set_width(activar_lbl, 120);
     lv_label_set_long_mode(activar_lbl, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(activar_lbl, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(activar_lbl, "Activar");
