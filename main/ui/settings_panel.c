@@ -753,7 +753,8 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(nm_lhs, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(nm_lhs, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(nm_lhs, 10, 0);
+    /* Separacion entre 'Modo nocturno' y el switch */
+    lv_obj_set_style_pad_gap(nm_lhs, 28, 0);
 
     lv_obj_t *nm_title = lv_label_create(nm_lhs);
     lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
@@ -968,7 +969,8 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(title_row, 12, 0);
+    /* Separacion entre 'Salvapantallas' y el switch/Tiempo */
+    lv_obj_set_style_pad_column(title_row, 28, 0);
 
     lv_obj_t *card2_title = lv_label_create(title_row);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
