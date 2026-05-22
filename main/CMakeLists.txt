@@ -33,6 +33,7 @@ idf_component_register(
     alerts               # Umbrales configurables de alarmas
     json                 # cJSON para backup/restore de configuracion
     mbedtls              # base64 encode para BasicAuth HTTP
+    esp_app_format       # esp_app_get_description() para la pagina About
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

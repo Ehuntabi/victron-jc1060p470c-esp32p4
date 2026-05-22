@@ -1762,7 +1762,9 @@ void ui_settings_panel_init(ui_state_t *ui,
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
-    lv_obj_t *page_about = lv_menu_page_create(menu, LV_SYMBOL_LIST "  ABOUT VictronSolarDisplay");
+    /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
+     * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
+    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT VictronSolarDisplay");
     
     /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
