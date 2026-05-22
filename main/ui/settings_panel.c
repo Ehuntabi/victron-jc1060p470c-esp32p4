@@ -1458,6 +1458,12 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_checkbox_set_text(enabled_cb, "Activo");
     lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(enabled_cb, UI_COLOR_TEXT, 0);
+    /* El tick (LV_SYMBOL_OK) por defecto cabe justo en el indicador y se
+     * ve cortado con fuente 20pt. Damos mas tamano + padding al indicator
+     * para que el tick se vea entero. */
+    lv_obj_set_style_width(enabled_cb, 28, LV_PART_INDICATOR);
+    lv_obj_set_style_height(enabled_cb, 28, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_all(enabled_cb, 4, LV_PART_INDICATOR);
     lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb,
                         LV_EVENT_VALUE_CHANGED, ui);
 
