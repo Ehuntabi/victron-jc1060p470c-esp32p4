@@ -243,8 +243,11 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_t *lbl_val = lv_label_create(sub);
     lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
-    /* Ancho para '-12.5 °C' (8 chars a 20pt ~ 100 px). 110 deja margen. */
+    /* Ancho para '-12.5 °C' (8 chars a 20pt ~ 100 px). 110 deja margen.
+     * Texto justificado a la derecha: '-- °C' y '-12.5 °C' terminan en
+     * el mismo borde junto al dropdown (no se desplazan a la izquierda). */
     lv_obj_set_width(lbl_val, 110);
+    lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
     *lbl_val_out = lbl_val;
 
