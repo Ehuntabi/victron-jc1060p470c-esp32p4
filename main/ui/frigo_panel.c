@@ -243,12 +243,15 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_t *lbl_val = lv_label_create(sub);
     lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_width(lbl_val, 70);
+    /* Ancho para '-12.5 °C' (8 chars a 20pt ~ 100 px). 110 deja margen. */
+    lv_obj_set_width(lbl_val, 110);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
     *lbl_val_out = lbl_val;
 
     lv_obj_t *dd = lv_dropdown_create(sub);
-    lv_obj_set_flex_grow(dd, 1);
+    /* Ancho fijo razonable en vez de flex_grow(1) que lo expandia hasta
+     * llenar toda la card. Cabe 'Sensor 8 (1A2B3C)' a 24pt. */
+    lv_obj_set_width(dd, 220);
     lv_obj_set_height(dd, 50);
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_24_es, 0);
     /* La flecha del dropdown (LV_PART_INDICATOR) es LV_SYMBOL_DOWN. Inter
