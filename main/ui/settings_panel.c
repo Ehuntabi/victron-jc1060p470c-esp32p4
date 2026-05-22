@@ -3334,6 +3334,12 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *lbl_mute = lv_label_create(mute_grp);
     lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20_es, 0);
+    /* Ancho explicito para evitar que el flex SIZE_CONTENT del padre
+     * lo dimensione a un valor menor y se vea cortado por la izquierda
+     * ('ar avisos' en vez de 'Silenciar avisos'). */
+    lv_obj_set_width(lbl_mute, 180);
+    lv_label_set_long_mode(lbl_mute, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(lbl_mute, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
     lv_obj_t *sw = lv_switch_create(mute_grp);
