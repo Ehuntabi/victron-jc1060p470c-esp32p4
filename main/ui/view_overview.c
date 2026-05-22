@@ -404,26 +404,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * 5 px adicionales pedidos al "subir la card 5"). Reducimos pad_top
      * a UI_PAD_CARD-10 y aumentamos pad_bottom a UI_PAD_CARD+10 para no
      * tocar el tamano externo de la card. */
-    /* pad_top mayor para que el icono caben al subirlo translate_y -25 sin
-     * que la rounded-corner del card lo clipe; pad_bottom compensa para
-     * mantener la altura visual interna. */
-    lv_obj_set_style_pad_top(ov->card_bat, UI_PAD_CARD + 20, 0);
-    lv_obj_set_style_pad_bottom(ov->card_bat, UI_PAD_CARD - 10, 0);
-    {
-        /* Captamos el header para acceder al icono y subirlo verticalmente.
-         * Estructura: header -> left(flex row) -> img + lbl. */
-        lv_obj_t *bat_header = ui_card_set_title_img(ov->card_bat, &icon_battery,
-                                                     "Batería", UI_COLOR_ORANGE);
-        lv_obj_t *bat_left = bat_header ? lv_obj_get_child(bat_header, 0) : NULL;
-        lv_obj_t *bat_img  = bat_left   ? lv_obj_get_child(bat_left, 0) : NULL;
-        if (bat_img) {
-            /* FLOATING: el img sale del calculo del flex layout y lo
-             * podemos posicionar libremente con lv_obj_align. -25 abs
-             * respecto a su posicion natural del header. */
-            lv_obj_add_flag(bat_img, LV_OBJ_FLAG_FLOATING);
-            lv_obj_align(bat_img, LV_ALIGN_LEFT_MID, 0, -25);
-        }
-    }
+    lv_obj_set_style_pad_top(ov->card_bat, UI_PAD_CARD - 10, 0);
+    lv_obj_set_style_pad_bottom(ov->card_bat, UI_PAD_CARD + 10, 0);
+    ui_card_set_title_img(ov->card_bat, &icon_battery,
+                          "Batería", UI_COLOR_ORANGE);
     /* Click en la card de bateria silencia la alarma de SOC */
     lv_obj_add_flag(ov->card_bat, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->card_bat, alarm_mute_soc_cb, LV_EVENT_CLICKED, ov);
@@ -441,6 +425,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_clear_flag(bat_row, LV_OBJ_FLAG_SCROLLABLE);
     ov->m_bat_current = ui_metric_create_compact(bat_row, "Corriente");
     ov->arc_soc       = ui_battery_soc_create(bat_row, 120, 112);
+    /* Subir el widget de bateria visual (arc SoC) un poco respecto al
+     * baseline del flex row para que quede mas alineado con el titulo. */
+    lv_obj_set_style_translate_y(ov->arc_soc, -25, 0);
     ov->m_ttg         = ui_metric_create_compact(bat_row, "Autonomía");
     /* Bajar fuentes para que las metricas no invadan el arc SoC en el ancho
      * disponible (col_center ~320 px, arc 120 px ⇒ ~95 px por metrica).
