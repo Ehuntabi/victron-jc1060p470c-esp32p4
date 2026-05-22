@@ -975,29 +975,17 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 
-    /* Grupo derecho: Activar(switch) + Tiempo(min) -val+ */
-    lv_obj_t *right_grp = lv_obj_create(title_row);
-    lv_obj_remove_style_all(right_grp);
-    lv_obj_set_size(right_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(right_grp, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(right_grp, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(right_grp, LV_FLEX_ALIGN_END,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(right_grp, 18, 0);
+    /* Grupo derecho: Activar(switch) + Tiempo(min) -val+
+     * Estructura plana (sin sub-grupos): cada elemento directamente en
+     * title_row para evitar el bug que dejaba invisible 'Activar' cuando
+     * estaba en un sub-grupo con FLEX_ALIGN_END + remove_style_all. */
 
-    /* Activar: label + switch (switch en vez de checkbox por bug del tick
-     * con fuente Inter aliased; ver feedback-inter-font-symbols-missing). */
-    lv_obj_t *activar_lbl = lv_label_create(right_grp);
+    lv_obj_t *activar_lbl = lv_label_create(title_row);
     lv_obj_set_style_text_font(activar_lbl, &lv_font_montserrat_20_es, 0);
-    /* Color de texto explicito (sin esto el label heredaba algo invisible:
-     * el bug no era el ancho sino el color tras flex SIZE_CONTENT). */
     lv_obj_set_style_text_color(activar_lbl, lv_color_white(), 0);
-    lv_obj_set_width(activar_lbl, 120);
-    lv_label_set_long_mode(activar_lbl, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_align(activar_lbl, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(activar_lbl, "Activar");
 
-    ui->screensaver.checkbox = lv_switch_create(right_grp);
+    ui->screensaver.checkbox = lv_switch_create(title_row);
     lv_obj_set_style_bg_color(ui->screensaver.checkbox, lv_color_hex(0xFF9800),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
@@ -1005,7 +993,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     /* Tiempo (min): label + [-][spin][+] (los botones se anaden mas abajo
      * a cont_to, no aqui). */
-    lv_obj_t *cont_to = lv_obj_create(right_grp);
+    lv_obj_t *cont_to = lv_obj_create(title_row);
     lv_obj_remove_style_all(cont_to);
     lv_obj_set_size(cont_to, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(cont_to, LV_LAYOUT_FLEX);
