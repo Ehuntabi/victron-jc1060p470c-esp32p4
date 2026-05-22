@@ -1470,7 +1470,11 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_style_text_color(enabled_lbl, UI_COLOR_TEXT, 0);
 
     lv_obj_t *enabled_cb = lv_switch_create(header_row);
-    lv_obj_set_size(enabled_cb, 50, 26);
+    /* Sin set_size explicito: el theme LVGL le da forma de pill bien
+     * proporcionada (con set_size 50x26 se renderizaba como dos rayas).
+     * Acento cyan en CHECKED para coherencia con el card de Keys. */
+    lv_obj_set_style_bg_color(enabled_cb, UI_COLOR_CYAN,
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb,
                         LV_EVENT_VALUE_CHANGED, ui);
 
