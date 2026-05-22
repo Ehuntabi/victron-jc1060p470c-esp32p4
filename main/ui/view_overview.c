@@ -547,10 +547,15 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p',
                                        UI_COLOR_CYAN);
 
-    /* Card frigorífico (marco cian) centrada en camper_bottom — swap
-     * pedido por el usuario respecto a versión anterior (que tenía aquí
-     * el pill 230V). Con SPACE_BETWEEN del camper_bottom queda centrada
-     * entre left_group y btn_lout. */
+    /* Luz EXT en posicion central (swap con la card del congelador
+     * a peticion del usuario 2026-05-22). Creando btn_lout ANTES que
+     * card_fridge, con SPACE_BETWEEN del camper_bottom queda:
+     *   [LIN+Bomba] [Luz EXT] [card_fridge]
+     */
+    ov->btn_lout = camper_make_button(ov->camper_bottom, "\xEF\x83\xAB", "Luz EXT", 'o',
+                                       UI_COLOR_YELLOW);
+
+    /* Card frigorífico (marco cian) a la derecha de camper_bottom. */
     {
         lv_obj_t *card_fridge = lv_obj_create(ov->camper_bottom);
         lv_obj_remove_style_all(card_fridge);
@@ -618,8 +623,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->fan_angle_deci = 0;
     }
 
-    ov->btn_lout = camper_make_button(ov->camper_bottom, "\xEF\x83\xAB", "Luz EXT", 'o',
-                                       UI_COLOR_YELLOW);
+    /* btn_lout creado mas arriba (antes del card_fridge tras swap). */
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
