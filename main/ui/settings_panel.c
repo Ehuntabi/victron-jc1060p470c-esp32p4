@@ -3307,10 +3307,40 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *card1_title = lv_label_create(card1);
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
+    /* Fila titulo: 'VOLUME_MAX Sonido' a la izda, 'Silenciar avisos' + switch a la dcha */
+    lv_obj_t *title_row = lv_obj_create(card1);
+    lv_obj_remove_style_all(title_row);
+    lv_obj_set_size(title_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(title_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card1_title = lv_label_create(title_row);
+    /* Montserrat built-in para que el LV_SYMBOL_VOLUME_MAX se renderice. */
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
+
+    /* Sub-grupo derecho: label + switch para silenciar */
+    lv_obj_t *mute_grp = lv_obj_create(title_row);
+    lv_obj_remove_style_all(mute_grp);
+    lv_obj_set_size(mute_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(mute_grp, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(mute_grp, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(mute_grp, LV_FLEX_ALIGN_END,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(mute_grp, 12, 0);
+
+    lv_obj_t *lbl_mute = lv_label_create(mute_grp);
+    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_mute, "Silenciar avisos");
+
+    lv_obj_t *sw = lv_switch_create(mute_grp);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0xFF7043), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    ui->sound_mute_switch = sw;
 
     /* Volumen */
     lv_obj_t *lbl_vol = lv_label_create(card1);
@@ -3325,25 +3355,6 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
-
-    /* Mute (texto + switch) */
-    lv_obj_t *row_mute = lv_obj_create(card1);
-    lv_obj_remove_style_all(row_mute);
-    lv_obj_set_size(row_mute, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_mute, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_mute, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_mute, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(row_mute, 16, 0);
-
-    lv_obj_t *lbl_mute = lv_label_create(row_mute);
-    lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_mute, "Silenciar avisos");
-
-    lv_obj_t *sw = lv_switch_create(row_mute);
-    lv_obj_set_style_bg_color(sw, lv_color_hex(0xFF7043), LV_STATE_CHECKED | LV_PART_INDICATOR);
-    if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    ui->sound_mute_switch = sw;
 
     /* === Card 2: Bateria === */
     lv_obj_t *card2 = lv_obj_create(cont);
