@@ -27,6 +27,7 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_idf_version.h"
+#include "esp_app_desc.h"
 #include "esp_vfs_fat.h"
 #include "ff.h"
 #include "esp_timer.h"
@@ -2793,11 +2794,22 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_center(lbl_reboot_hdr);
     lv_obj_add_event_cb(btn_reboot_hdr, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 
-    /* Version */
+    /* Version + build info: app version (hardcoded) + git describe (de
+     * esp_app_get_description; coincide con el tag/commit del flash) +
+     * fecha/hora de compilacion. */
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text_fmt(lbl_ver_top, "Version: %s", APP_VERSION);
+
+    const esp_app_desc_t *app_desc = esp_app_get_description();
+    lv_obj_t *lbl_build = lv_label_create(card3);
+    lv_obj_set_style_text_font(lbl_build, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_build, lv_color_hex(0xAAAAAA), 0);
+    lv_label_set_text_fmt(lbl_build, "Build: %s  (%s %s)",
+                          app_desc ? app_desc->version : "?",
+                          app_desc ? app_desc->date : __DATE__,
+                          app_desc ? app_desc->time : __TIME__);
 
     /* Chip + IDF */
     esp_chip_info_t chip = {0};
