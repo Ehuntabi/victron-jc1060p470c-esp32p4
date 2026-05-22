@@ -959,28 +959,47 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *card2_title = lv_label_create(card2);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
+    /* Fila titulo: [EYE_CLOSE Salvapantallas] a la izda,
+     * [Activar + switch] + [Tiempo (min): - val +] a la dcha. */
+    lv_obj_t *title_row = lv_obj_create(card2);
+    lv_obj_remove_style_all(title_row);
+    lv_obj_set_size(title_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(title_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card2_title = lv_label_create(title_row);
+    /* Montserrat built-in para que LV_SYMBOL_EYE_CLOSE se renderice. */
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 
-    /* Row: Activar checkbox + Tiempo spinbox en la misma linea */
-    lv_obj_t *row_enable_to = lv_obj_create(card2);
-    lv_obj_remove_style_all(row_enable_to);
-    lv_obj_set_size(row_enable_to, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_enable_to, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_enable_to, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_enable_to, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Grupo derecho: Activar(switch) + Tiempo(min) -val+ */
+    lv_obj_t *right_grp = lv_obj_create(title_row);
+    lv_obj_remove_style_all(right_grp);
+    lv_obj_set_size(right_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(right_grp, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(right_grp, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(right_grp, LV_FLEX_ALIGN_END,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(right_grp, 18, 0);
 
-    /* Enable */
-    ui->screensaver.checkbox = lv_checkbox_create(row_enable_to);
-    lv_checkbox_set_text(ui->screensaver.checkbox, "Activar");
-    lv_obj_set_style_text_font(ui->screensaver.checkbox, &lv_font_montserrat_20_es, 0);
+    /* Activar: label + switch (switch en vez de checkbox por bug del tick
+     * con fuente Inter aliased; ver feedback-inter-font-symbols-missing). */
+    lv_obj_t *activar_lbl = lv_label_create(right_grp);
+    lv_obj_set_style_text_font(activar_lbl, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(activar_lbl, "Activar");
+
+    ui->screensaver.checkbox = lv_switch_create(right_grp);
+    lv_obj_set_style_bg_color(ui->screensaver.checkbox, lv_color_hex(0xFF9800),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
     lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* Tiempo (min): label + [-][spin][+] */
-    lv_obj_t *cont_to = lv_obj_create(row_enable_to);
+    /* Tiempo (min): label + [-][spin][+] (los botones se anaden mas abajo
+     * a cont_to, no aqui). */
+    lv_obj_t *cont_to = lv_obj_create(right_grp);
     lv_obj_remove_style_all(cont_to);
     lv_obj_set_size(cont_to, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(cont_to, LV_LAYOUT_FLEX);
