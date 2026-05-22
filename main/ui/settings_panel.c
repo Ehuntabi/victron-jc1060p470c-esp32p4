@@ -976,17 +976,21 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
-    lv_obj_set_flex_grow(card2_title, 1);  /* empuja el resto a la dcha */
 
-    /* Switch sin label 'Activar' a propuesta del usuario (mismo estilo
-     * que el switch de Modo nocturno: solo el toggle, el contexto del
-     * card 'Salvapantallas' ya lo explica). */
+    /* Switch JUNTO al titulo (sin label, mismo estilo que Modo nocturno). */
     ui->screensaver.checkbox = lv_switch_create(title_row);
-    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);  /* tamano explicito */
+    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
     lv_obj_set_style_bg_color(ui->screensaver.checkbox, lv_color_hex(0xFF9800),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
     lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    /* Spacer invisible flex_grow=1: empuja el cont_to hacia la derecha
+     * dejando el switch pegado al titulo. */
+    lv_obj_t *spacer = lv_obj_create(title_row);
+    lv_obj_remove_style_all(spacer);
+    lv_obj_set_height(spacer, 1);
+    lv_obj_set_flex_grow(spacer, 1);
 
     /* Tiempo (min): label + [-][spin][+] (los botones se anaden mas abajo
      * a cont_to, no aqui). */
