@@ -406,8 +406,17 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * tocar el tamano externo de la card. */
     lv_obj_set_style_pad_top(ov->card_bat, UI_PAD_CARD - 10, 0);
     lv_obj_set_style_pad_bottom(ov->card_bat, UI_PAD_CARD + 10, 0);
-    ui_card_set_title_img(ov->card_bat, &icon_battery,
-                          "Batería", UI_COLOR_ORANGE);
+    {
+        /* Captamos el header para acceder al icono y subirlo un poco
+         * verticalmente (estructura: header -> left(flex row) -> img + lbl). */
+        lv_obj_t *bat_header = ui_card_set_title_img(ov->card_bat, &icon_battery,
+                                                     "Batería", UI_COLOR_ORANGE);
+        lv_obj_t *bat_left = bat_header ? lv_obj_get_child(bat_header, 0) : NULL;
+        lv_obj_t *bat_img  = bat_left   ? lv_obj_get_child(bat_left, 0) : NULL;
+        if (bat_img) {
+            lv_obj_set_style_translate_y(bat_img, -6, 0);
+        }
+    }
     /* Click en la card de bateria silencia la alarma de SOC */
     lv_obj_add_flag(ov->card_bat, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->card_bat, alarm_mute_soc_cb, LV_EVENT_CLICKED, ov);
