@@ -404,11 +404,14 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * 5 px adicionales pedidos al "subir la card 5"). Reducimos pad_top
      * a UI_PAD_CARD-10 y aumentamos pad_bottom a UI_PAD_CARD+10 para no
      * tocar el tamano externo de la card. */
-    lv_obj_set_style_pad_top(ov->card_bat, UI_PAD_CARD - 10, 0);
-    lv_obj_set_style_pad_bottom(ov->card_bat, UI_PAD_CARD + 10, 0);
+    /* pad_top mayor para que el icono caben al subirlo translate_y -25 sin
+     * que la rounded-corner del card lo clipe; pad_bottom compensa para
+     * mantener la altura visual interna. */
+    lv_obj_set_style_pad_top(ov->card_bat, UI_PAD_CARD + 20, 0);
+    lv_obj_set_style_pad_bottom(ov->card_bat, UI_PAD_CARD - 10, 0);
     {
-        /* Captamos el header para acceder al icono y subirlo un poco
-         * verticalmente (estructura: header -> left(flex row) -> img + lbl). */
+        /* Captamos el header para acceder al icono y subirlo verticalmente.
+         * Estructura: header -> left(flex row) -> img + lbl. */
         lv_obj_t *bat_header = ui_card_set_title_img(ov->card_bat, &icon_battery,
                                                      "Batería", UI_COLOR_ORANGE);
         lv_obj_t *bat_left = bat_header ? lv_obj_get_child(bat_header, 0) : NULL;
