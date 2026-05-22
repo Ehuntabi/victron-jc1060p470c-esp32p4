@@ -1454,16 +1454,23 @@ static void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_t *header_row = ui_card_set_title(row, LV_SYMBOL_BLUETOOTH,
                                              title_buf, UI_COLOR_CYAN);
 
-    lv_obj_t *enabled_cb = lv_checkbox_create(header_row);
-    lv_checkbox_set_text(enabled_cb, "Activo");
-    lv_obj_set_style_text_font(enabled_cb, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(enabled_cb, UI_COLOR_TEXT, 0);
-    /* El tick (LV_SYMBOL_OK) por defecto cabe justo en el indicador y se
-     * ve cortado con fuente 20pt. Damos mas tamano + padding al indicator
-     * para que el tick se vea entero. */
-    lv_obj_set_style_width(enabled_cb, 28, LV_PART_INDICATOR);
-    lv_obj_set_style_height(enabled_cb, 28, LV_PART_INDICATOR);
-    lv_obj_set_style_pad_all(enabled_cb, 4, LV_PART_INDICATOR);
+    /* Switch en vez de checkbox: el LV_SYMBOL_OK del indicador no renderiza
+     * bien con la fuente Inter aliased (lv_font_montserrat_20_es ->
+     * lv_font_inter_20_es) -> el tick salia cortado. lv_switch no usa
+     * caracter de tick y queda consistente con el resto de toggles de la UI
+     * (Wi-Fi, brillo, screensaver, etc). API igual: LV_STATE_CHECKED +
+     * LV_EVENT_VALUE_CHANGED.
+     *
+     * Layout: [label "Activo"] + [switch], en el header_row.
+     * El nombre del puntero (enabled_cb) se mantiene para no tocar
+     * referencias en victron_config.enabled_checkboxes[]. */
+    lv_obj_t *enabled_lbl = lv_label_create(header_row);
+    lv_label_set_text(enabled_lbl, "Activo");
+    lv_obj_set_style_text_font(enabled_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(enabled_lbl, UI_COLOR_TEXT, 0);
+
+    lv_obj_t *enabled_cb = lv_switch_create(header_row);
+    lv_obj_set_size(enabled_cb, 50, 26);
     lv_obj_add_event_cb(enabled_cb, victron_enabled_checkbox_event_cb,
                         LV_EVENT_VALUE_CHANGED, ui);
 
