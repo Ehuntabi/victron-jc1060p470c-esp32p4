@@ -137,9 +137,34 @@ static void frigo_task(void *arg)
 {
     while (1) {
 
-       
+        /* Si no hay sensores DS18B20, igualmente atendemos los cambios de
+         * modo OFF/50/100 (que no requieren temperatura) para que la UI
+         * refleje correctamente el ventilador. Solo AUTO necesita sensor.
+         * Antes, el continue prematuro impedia llamar al callback y la UI
+         * (incluido el indicador LED del ventilador) no se actualizaba. */
         if (s_state.n_sensors == 0) {
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                s_state.T_Aletas     = -127.0f;
+                s_state.T_Congelador = -127.0f;
+                s_state.T_Exterior   = -127.0f;
+                uint8_t pct;
+                switch (s_state.mode) {
+                    case FRIGO_MODE_OFF:  pct = 0;   break;
+                    case FRIGO_MODE_50:   pct = 50;  break;
+                    case FRIGO_MODE_100:  pct = 100; break;
+                    case FRIGO_MODE_AUTO:
+                    default:              pct = 0;   break;  /* sin temp -> 0 */
+                }
+                if (pct != s_state.fan_percent) {
+                    s_state.fan_percent = pct;
+                    fan_set_percent(pct);
+                    ESP_LOGI(TAG, "Fan → %d%% (mode=%d, sin DS18B20)",
+                             pct, (int)s_state.mode);
+                }
+                xSemaphoreGive(s_mutex);
+            }
+            if (s_cb) s_cb(&s_state);
+            vTaskDelay(pdMS_TO_TICKS(1000));  /* poll modo a 1Hz */
             continue;
         }
 
