@@ -226,6 +226,10 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
 static void camper_btn_event_cb(lv_event_t *e)
 {
     char cmd = (char)(intptr_t)lv_event_get_user_data(e);
+    /* Log explicito para verificar que el event llega al handler. Si pulsas
+     * un boton y NO ves esta linea en SD/serial, el event no llega
+     * (probablemente atrapado por screensaver/overlay o desregistrado). */
+    ESP_LOGI("OV", "camper_btn pressed: cmd='%c'", cmd);
     ne185_send_cmd(cmd);
 }
 
