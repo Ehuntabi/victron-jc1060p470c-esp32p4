@@ -251,6 +251,10 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_set_flex_grow(dd, 1);
     lv_obj_set_height(dd, 50);
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_24_es, 0);
+    /* La flecha del dropdown (LV_PART_INDICATOR) es LV_SYMBOL_DOWN. Inter
+     * (alias de _es) no incluye los LV_SYMBOL_* -> forzamos Montserrat
+     * built-in para el indicator para que la flecha se vea. */
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_24, LV_PART_INDICATOR);
     lv_obj_t *dd_list = lv_dropdown_get_list(dd);
     if (dd_list) {
         lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_24_es, 0);
@@ -275,10 +279,12 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_pad_gap(tab, 16, 0);
     lv_obj_set_scroll_dir(tab, LV_DIR_VER);
 
-    /* === Card 1: Sensores DS18B20 (azul) === */
+    /* === Card 1: Sensores DS18B20 (azul) ===
+     * Altura fija para que las dos cards (sensores y ventilador) tengan
+     * exactamente el mismo tamano visual cuando van lado a lado. */
     lv_obj_t *card_sensors = lv_obj_create(tab);
     lv_obj_set_width(card_sensors, lv_pct(49));
-    lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
+    lv_obj_set_height(card_sensors, 380);
     lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
@@ -292,9 +298,10 @@ void ui_frigo_panel_init(ui_state_t *ui)
     char opts[128];
     build_sensor_options(opts, sizeof(opts), st);
 
-    /* Titulo */
+    /* Titulo. Montserrat built-in (no _es) porque Inter no tiene los
+     * LV_SYMBOL_* y el LV_SYMBOL_LIST saldria invisible. */
     lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
-    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
 
@@ -314,14 +321,16 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* === Card 2: Ventilador y temperaturas (verde) === */
     lv_obj_t *card_fan = lv_obj_create(tab);
     lv_obj_set_width(card_fan, lv_pct(49));
-    lv_obj_set_height(card_fan, LV_SIZE_CONTENT);
+    lv_obj_set_height(card_fan, 380);  /* misma altura que card_sensors */
     lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card_fan, 1, 0);
     lv_obj_set_style_radius(card_fan, 12, 0);
     lv_obj_set_style_pad_all(card_fan, 16, 0);
-    lv_obj_set_style_pad_gap(card_fan, 12, 0);
+    /* pad_gap mas amplio para que Auto/OFF y Min/Max esten claramente
+     * separados visualmente (antes 12). */
+    lv_obj_set_style_pad_gap(card_fan, 24, 0);
     lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
 
@@ -336,7 +345,8 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_flow(row_fan_hdr, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_fan_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *lbl_fan_sec = lv_label_create(row_fan_hdr);
-    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24_es, 0);
+    /* Montserrat built-in para que el LV_SYMBOL_REFRESH renderice. */
+    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     s_lbl_fan = lv_label_create(row_fan_hdr);
@@ -369,6 +379,14 @@ void ui_frigo_panel_init(ui_state_t *ui)
         s_btn_mode[i] = btn;
     }
 
+    /* Separador visual entre el segmented control (Auto/OFF/50/100) y las
+     * filas Min/Max para que queden claramente diferenciados. */
+    lv_obj_t *sep = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(sep);
+    lv_obj_set_size(sep, lv_pct(85), 1);
+    lv_obj_set_style_bg_color(sep, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(sep, LV_OPA_30, 0);
+
     /* Fila T_Min y T_Max */
     lv_obj_t *row_t = lv_obj_create(card_fan);
     lv_obj_remove_style_all(row_t);
@@ -400,7 +418,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_mm = lv_label_create(s_btn_tmin_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_mm);
     lv_obj_add_event_cb(s_btn_tmin_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -417,7 +435,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmin_p, lv_color_hex(0x4FC3F7), 0);
     lv_obj_t *lbl_mp = lv_label_create(s_btn_tmin_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_mp);
     lv_obj_add_event_cb(s_btn_tmin_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -441,7 +459,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_xm = lv_label_create(s_btn_tmax_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_xm);
     lv_obj_add_event_cb(s_btn_tmax_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -458,7 +476,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
     lv_obj_t *lbl_xp = lv_label_create(s_btn_tmax_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 
