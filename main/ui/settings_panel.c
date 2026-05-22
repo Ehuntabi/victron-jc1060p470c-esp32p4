@@ -865,36 +865,51 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         }
     }
 
-    /* === Card Zona horaria === */
-    lv_obj_t *card_tz = lv_obj_create(cont);
-    lv_obj_set_width(card_tz, lv_pct(100));
-    lv_obj_set_height(card_tz, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_tz, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_tz, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_tz, lv_color_hex(0x00C851), 0);  /* verde */
-    lv_obj_set_style_border_width(card_tz, 1, 0);
-    lv_obj_set_style_radius(card_tz, 12, 0);
-    lv_obj_set_style_pad_all(card_tz, 16, 0);
-    lv_obj_set_style_pad_gap(card_tz, 10, 0);
-    lv_obj_set_layout(card_tz, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_tz, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card_tz, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* === Card Vista por defecto === */
+    lv_obj_t *card3 = lv_obj_create(cont);
+    lv_obj_set_width(card3, lv_pct(100));
+    lv_obj_set_height(card3, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card3, 1, 0);
+    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_pad_all(card3, 16, 0);
+    lv_obj_set_style_pad_gap(card3, 12, 0);
+    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *tz_title = lv_label_create(card_tz);
-    lv_obj_set_style_text_font(tz_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(tz_title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(tz_title, LV_SYMBOL_GPS "  Zona horaria");
+    lv_obj_t *card3_row = lv_obj_create(card3);
+    lv_obj_remove_style_all(card3_row);
+    lv_obj_set_size(card3_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card3_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *tz_dd = lv_dropdown_create(card_tz);
-    lv_obj_set_width(tz_dd, 320);
-    lv_dropdown_set_options(tz_dd, TZ_LABELS);
-    {
-        char tz_now[48];
-        load_timezone(tz_now, sizeof(tz_now));
-        lv_dropdown_set_selected(tz_dd, tz_index_from_posix(tz_now));
+    lv_obj_t *card3_title = lv_label_create(card3_row);
+    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
+
+    ui->view_selection.dropdown = lv_dropdown_create(card3_row);
+    lv_obj_set_width(ui->view_selection.dropdown, 280);
+    lv_dropdown_set_options(ui->view_selection.dropdown,
+        "Auto Detection\n"
+        "Default Battery View\n"
+        "Solar Charger View\n"
+        "Battery Monitor View\n"
+        "Inverter View\n"
+        "DC/DC Converter View\n"
+        "Overview"
+    );
+    uint8_t saved_mode = (uint8_t)UI_VIEW_MODE_OVERVIEW;
+    if (load_ui_view_mode(&saved_mode) == ESP_OK) {
+        ui->view_selection.mode = (ui_view_mode_t)saved_mode;
+    } else {
+        ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
     }
-    lv_obj_add_event_cb(tz_dd, tz_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
+    lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     /* === Card Splash (logo de bienvenida al boot) === */
     lv_obj_t *card_sp = lv_obj_create(cont);
@@ -1111,51 +1126,36 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_add_event_cb(btn_period_inc, ss_period_inc_cb, LV_EVENT_CLICKED, ui);
     lv_obj_set_user_data(btn_period_inc, lbl_period_val);
 
-    /* === Card 3: Modo de vista === */
-    lv_obj_t *card3 = lv_obj_create(cont);
-    lv_obj_set_width(card3, lv_pct(100));
-    lv_obj_set_height(card3, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card3, 1, 0);
-    lv_obj_set_style_radius(card3, 12, 0);
-    lv_obj_set_style_pad_all(card3, 16, 0);
-    lv_obj_set_style_pad_gap(card3, 12, 0);
-    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
+    /* === Card Zona horaria (al final) === */
+    lv_obj_t *card_tz = lv_obj_create(cont);
+    lv_obj_set_width(card_tz, lv_pct(100));
+    lv_obj_set_height(card_tz, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_tz, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_tz, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_tz, lv_color_hex(0x00C851), 0);  /* verde */
+    lv_obj_set_style_border_width(card_tz, 1, 0);
+    lv_obj_set_style_radius(card_tz, 12, 0);
+    lv_obj_set_style_pad_all(card_tz, 16, 0);
+    lv_obj_set_style_pad_gap(card_tz, 10, 0);
+    lv_obj_set_layout(card_tz, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_tz, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card_tz, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *card3_row = lv_obj_create(card3);
-    lv_obj_remove_style_all(card3_row);
-    lv_obj_set_size(card3_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(card3_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card3_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card3_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *tz_title = lv_label_create(card_tz);
+    lv_obj_set_style_text_font(tz_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(tz_title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(tz_title, LV_SYMBOL_GPS "  Zona horaria");
 
-    lv_obj_t *card3_title = lv_label_create(card3_row);
-    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
-
-    ui->view_selection.dropdown = lv_dropdown_create(card3_row);
-    lv_obj_set_width(ui->view_selection.dropdown, 280);
-    lv_dropdown_set_options(ui->view_selection.dropdown,
-        "Auto Detection\n"
-        "Default Battery View\n"
-        "Solar Charger View\n"
-        "Battery Monitor View\n"
-        "Inverter View\n"
-        "DC/DC Converter View\n"
-        "Overview"
-    );
-    uint8_t saved_mode = (uint8_t)UI_VIEW_MODE_OVERVIEW;
-    if (load_ui_view_mode(&saved_mode) == ESP_OK) {
-        ui->view_selection.mode = (ui_view_mode_t)saved_mode;
-    } else {
-        ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
+    lv_obj_t *tz_dd = lv_dropdown_create(card_tz);
+    lv_obj_set_width(tz_dd, 320);
+    lv_dropdown_set_options(tz_dd, TZ_LABELS);
+    {
+        char tz_now[48];
+        load_timezone(tz_now, sizeof(tz_now));
+        lv_dropdown_set_selected(tz_dd, tz_index_from_posix(tz_now));
     }
-    lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
-    lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_event_cb(tz_dd, tz_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 
