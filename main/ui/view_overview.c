@@ -9,6 +9,7 @@
 #include "audio_es8311.h"
 #include "alerts.h"
 #include "lv_font_thermometer.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
