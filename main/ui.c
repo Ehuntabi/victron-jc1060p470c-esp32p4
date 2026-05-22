@@ -784,13 +784,23 @@ void ui_refresh_clock(void)
     }
 }
 
-/* ── Auto-volver a Live tras 60 s sin actividad del usuario ── */
+/* ── Auto-volver a Live tras 60 s sin actividad del usuario ──
+ * Disparado por s_idle_to_live_timer; reset en ui_notify_user_activity
+ * (que solo se llama desde LV_EVENT_PRESSED real del usuario).
+ * Cierra todos los overlays y resetea el menu Settings a su pagina
+ * principal antes de cambiar de tab para que la proxima entrada
+ * arranque en main, no en la subpagina donde quedo. */
 static void idle_to_live_timer_cb(lv_timer_t *t)
 {
     ui_state_t *ui = t ? (ui_state_t *)t->user_data : ui_get_state();
     if (!ui || !ui->tabview) return;
     /* No interferir con el screensaver: si está activo, deja que rote/atenúe */
     if (ui->screensaver.active) return;
+    /* Si estamos en Settings, cerrar submenu y dropdowns antes de salir */
+    if (lv_tabview_get_tab_act(ui->tabview) == ui->tab_settings_index) {
+        ui_frigo_panel_close_dropdowns();
+        ui_settings_panel_go_to_main();
+    }
     if (lv_tabview_get_tab_act(ui->tabview) != 0) {
         lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
     }
