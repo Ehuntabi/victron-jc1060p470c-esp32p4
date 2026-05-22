@@ -407,20 +407,25 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 {
     (void)ap_enabled;
     style_settings_scrollbar(page_wifi);
-    /* Root container */
+    /* Root container: ROW_WRAP + SPACE_BETWEEN para que las 2 primeras
+     * cards (Punto de acceso + Pagina inicial portal) queden lado a lado
+     * a pct(49), y la tercera (Reactivar portal web) ocupe linea entera
+     * a pct(100) -- mismo patron que frigo_panel. */
     lv_obj_t *cont = lv_obj_create(page_wifi);
     lv_obj_set_width(cont, lv_pct(100));
     lv_obj_set_height(cont, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_all(cont, 16, 0);
     lv_obj_set_style_pad_gap(cont, 16, 0);
 
-    /* === Card 1: Punto de acceso === */
+    /* === Card 1: Punto de acceso (mitad ancho, lado izdo) === */
     lv_obj_t *card1 = lv_obj_create(cont);
-    lv_obj_set_width(card1, lv_pct(100));
+    lv_obj_set_width(card1, lv_pct(49));
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
@@ -512,9 +517,9 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_READY, ui);
     lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* === Card 2: Portal web === */
+    /* === Card 2: Portal web (mitad ancho, lado dcho) === */
     lv_obj_t *card2 = lv_obj_create(cont);
-    lv_obj_set_width(card2, lv_pct(100));
+    lv_obj_set_width(card2, lv_pct(49));
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
