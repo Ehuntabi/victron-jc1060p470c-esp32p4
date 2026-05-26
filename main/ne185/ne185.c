@@ -50,6 +50,9 @@ static const char *TAG = "ne185";
 #define READ_TIMEOUT_MS   200  /* timeout lectura respuesta NE185 (NE185 puede tardar 50-150ms) */
 #define FRESH_MS          30000
 #define BUS_DEAD_THRESH   20   /* N timeouts consecutivos -> bus caido */
+#define MUTEX_TIMEOUT_MS  100  /* timeout take mutex (en lugar de portMAX_DELAY)
+                                * para detectar starvation con log en vez de
+                                * bloquear la task indefinidamente */
 
 /* Comandos (verificados con tramas reales del NE187, ver checksum.py) */
 static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x00, 0x3F};
@@ -102,7 +105,10 @@ static void parse_frame(const uint8_t *b)
 {
     ne185_data_t prev;
     ne185_data_t tmp;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "parse_frame: mutex starvation, skip");
+        return;
+    }
     prev = s_data;
     tmp  = s_data;
     xSemaphoreGive(s_mutex);
@@ -144,7 +150,10 @@ static void parse_frame(const uint8_t *b)
     tmp.fresh = true;
     tmp.last_update_ms = now_ms();
 
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "parse_frame commit: mutex starvation, skip");
+        return;
+    }
     s_data = tmp;
     xSemaphoreGive(s_mutex);
 
@@ -188,7 +197,9 @@ static void rs485_task(void *arg)
     uint32_t watch_start_ms = 0;          /* ts cuando empezo el watch */
     uint8_t  watch_bit_mask = 0;          /* mascara byte 15 del bit que debe cambiar */
     bool     watch_prev_state = false;    /* estado antes del press */
-    #define WATCH_TIMEOUT_MS 800           /* tras 800 ms sin cambio -> FAILED */
+    #define WATCH_TIMEOUT_MS 1500          /* tras 1.5s sin cambio -> FAILED.
+                                            * Margen para variabilidad RX si
+                                            * la comunicacion se degrada */
 
     ESP_LOGI(TAG, "Master RS-485 NE185 activo (poll %d ms, hold %d frames)",
              POLL_PERIOD_MS, HOLD_FRAMES);
@@ -240,12 +251,25 @@ static void rs485_task(void *arg)
                               watch_bit_mask = 0x04; break;
                 }
                 press_frames_left--;
-                /* Iniciar watch: recordar estado actual del bit, esperar cambio */
-                xSemaphoreTake(s_mutex, portMAX_DELAY);
-                watch_prev_state = (s_data.light_in && watch_bit_mask == 0x01) ||
-                                   (s_data.light_out && watch_bit_mask == 0x02) ||
-                                   (s_data.pump && watch_bit_mask == 0x04);
-                xSemaphoreGive(s_mutex);
+                /* Iniciar watch: recordar estado actual del bit, esperar cambio.
+                 * Si starvation -> default false (mejor falso negativo que bloqueo). */
+                if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE) {
+                    watch_prev_state = (s_data.light_in && watch_bit_mask == 0x01) ||
+                                       (s_data.light_out && watch_bit_mask == 0x02) ||
+                                       (s_data.pump && watch_bit_mask == 0x04);
+                    xSemaphoreGive(s_mutex);
+                } else {
+                    ESP_LOGE(TAG, "press start: mutex starvation, asumiendo prev_state=false");
+                    watch_prev_state = false;
+                }
+                if (watching_press) {
+                    /* Anterior watcher no llego a CONFIRMED/FAILED; logueamos
+                     * antes de sobreescribir para no perder el resultado. */
+                    ESP_LOGW(TAG, "press '%c' watcher abortado tras %lu ms "
+                                  "(llego nuevo '%c')",
+                             watching_press, now_ms() - watch_start_ms,
+                             current_press);
+                }
                 watching_press = current_press;
                 watch_start_ms = now_ms();
                 ESP_LOGI(TAG, "press '%c' start (was %s, expect toggle)",
@@ -256,12 +280,17 @@ static void rs485_task(void *arg)
         /* Watcher: comprobar si el press se confirmo o fallo */
         if (watching_press) {
             uint32_t elapsed = now_ms() - watch_start_ms;
-            bool current_state;
-            xSemaphoreTake(s_mutex, portMAX_DELAY);
-            current_state = (watch_bit_mask == 0x01) ? s_data.light_in :
-                            (watch_bit_mask == 0x02) ? s_data.light_out :
-                            (watch_bit_mask == 0x04) ? s_data.pump : false;
-            xSemaphoreGive(s_mutex);
+            bool current_state = false;
+            if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE) {
+                current_state = (watch_bit_mask == 0x01) ? s_data.light_in :
+                                (watch_bit_mask == 0x02) ? s_data.light_out :
+                                (watch_bit_mask == 0x04) ? s_data.pump : false;
+                xSemaphoreGive(s_mutex);
+            } else {
+                ESP_LOGE(TAG, "watcher: mutex starvation, skip ciclo");
+                /* Saltamos esta evaluacion; reintentamos al proximo tick */
+                goto watcher_skip;
+            }
             if (current_state != watch_prev_state) {
                 ESP_LOGI(TAG, "press '%c' CONFIRMED in %lu ms (%s -> %s)",
                          watching_press, elapsed,
@@ -274,6 +303,7 @@ static void rs485_task(void *arg)
                          watch_prev_state ? "ON" : "OFF");
                 watching_press = 0;
             }
+watcher_skip:;
         }
 
         /* === TX + RX sync ============================================ */
@@ -326,15 +356,24 @@ static void rs485_task(void *arg)
             if (consec_timeouts == BUS_DEAD_THRESH) {
                 ESP_LOGW(TAG, "bus inactivo (%lu timeouts) - marcando stale",
                          consec_timeouts);
-                xSemaphoreTake(s_mutex, portMAX_DELAY);
-                s_data.fresh = false;
-                xSemaphoreGive(s_mutex);
+                if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE) {
+                    s_data.fresh = false;
+                    xSemaphoreGive(s_mutex);
+                } else {
+                    ESP_LOGE(TAG, "marcar stale: mutex starvation");
+                }
             }
-            /* Log detallado del fallo (LOGI para que aparezca en log SD) */
-            if (n > 0) {
+            /* Log detallado del fallo (LOGI para que aparezca en log SD).
+             * Distinguir entre error del driver (n<0), timeout puro (n==0)
+             * y short-read con datos parciales (0<n<15 o 15<n<20). */
+            if (n < 0) {
+                ESP_LOGE(TAG, "uart_read_bytes error rc=%d", n);
+            } else if (n > 0) {
                 ESP_LOGI(TAG, "rx %d bytes (esperaba 15 o 20). b[0..4]=%02X %02X %02X %02X %02X",
                          n, buf[0], buf[1], buf[2], buf[3], buf[4]);
             }
+            /* n == 0: timeout puro (sin bytes) - no loguear, ya hay
+             * el "bus inactivo" cuando consec_timeouts == BUS_DEAD_THRESH */
         }
 
         /* Mantener cadencia exacta de POLL_PERIOD_MS */
@@ -465,7 +504,12 @@ void ne185_send_cmd(char cmd)
 {
     if (!s_inited || !s_press_queue) return;
     if (cmd != 'i' && cmd != 'o' && cmd != 'p') return;
-    xQueueSend(s_press_queue, &cmd, 0);
+    if (xQueueSend(s_press_queue, &cmd, 0) != pdTRUE) {
+        /* Cola llena (16 presses pendientes). Indica que el bus esta
+         * caido o muy lento y el user esta pulsando mas rapido de lo que
+         * podemos procesar. Press se descarta. */
+        ESP_LOGW(TAG, "press '%c' descartado (queue full)", cmd);
+    }
 }
 
 uint32_t ne185_get_sniff_count(void)
