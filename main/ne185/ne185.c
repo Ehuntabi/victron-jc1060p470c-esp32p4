@@ -1,4 +1,32 @@
-/* ne185.c — Maestro RS-485 directo */
+/* ne185.c — Master RS-485 NE185 (refactor 2026-05-26)
+ *
+ * Cambios respecto a la version anterior (basados en analisis de logs reales
+ * del NE187 original capturados 2026-05-21):
+ *
+ *  1. CMD FORMAT CORREGIDO. NE187 envia botones como overlay sobre IDLE:
+ *        IDLE     = FF 40 00 00 3F
+ *        LUZ INT  = FF 41 00 00 40  (no FF 01 que no existe en el protocolo)
+ *        LUZ EXT  = FF 42 00 00 41  (no FF 02)
+ *        BOMBA    = FF 44 00 00 43  (no FF 04, por eso la bomba nunca funciono)
+ *     byte1 = 0x40 | <bit boton>, byte4 = (b0+b1+b2+b3) & 0xFF
+ *
+ *  2. PRESS HOLD. NE185 ignora un solo frame FF 4X; necesita >=2 frames
+ *     consecutivos a 60ms para procesar el toggle. NE187 los envia mientras
+ *     el usuario tiene el dedo en el boton (~4 frames = 240ms).
+ *
+ *  3. CADENCIA 60ms. Igual que NE187 (16Hz). La UI ve cambios al instante.
+ *
+ *  4. LOOP SINCRONO. cmd -> wait_tx_done -> read 20 bytes -> parse. Sin race.
+ *
+ *  5. CHECKSUM CORREGIDO (derivado de tramas reales):
+ *        b19 = (b5 + b9 + b14 + b15 + 0xB1) & 0xFF
+ *     La formula anterior era del repo class142 (NE334), no aplicaba.
+ *
+ *  6. Quitado check buf[14] == 0xFF (byte 14 es sensor variable, no marcador).
+ *
+ *  7. parse_frame SIEMPRE se llama. La version anterior en modo sniffer solo
+ *     loguea hex y no actualizaba s_data -> LED de los botones nunca encendia.
+ */
 #include "ne185.h"
 
 #include <string.h>
@@ -13,130 +41,90 @@
 
 static const char *TAG = "ne185";
 
-#define RX_BUF_SIZE   1024
-#define TX_BUF_SIZE   256
-#define FRAME_LEN     20    /* longitud trama protocolo (parse normal) */
-#define SNIFFER_BUF_LEN 64  /* buffer sniffer ampliado (no cortar respuestas) */
-#define IDLE_PERIOD   5000  /* ms entre comandos idle */
-#define FRESH_MS      30000 /* sin trama -> stale */
+#define RX_BUF_SIZE       1024
+#define TX_BUF_SIZE       256
+#define FRAME_LEN         20
+#define POLL_PERIOD_MS    60   /* cadencia igual a NE187 real (16Hz) */
+#define HOLD_FRAMES       4    /* frames consecutivos FF 4X por press (~240ms) */
+#define RELEASE_FRAMES    2    /* frames IDLE entre press y press del mismo boton */
+#define READ_TIMEOUT_MS   50   /* timeout lectura respuesta NE185 */
+#define FRESH_MS          30000
+#define BUS_DEAD_THRESH   20   /* N timeouts consecutivos -> bus caido */
 
-/* TEST: al arrancar, transmitir CMD_IDLE continuamente durante 30 s para
- * poder medir DE del MAX485 con multimetro DC. Deberia leerse ~3.3 V
- * (DE en HIGH casi todo el tiempo durante TX back-to-back). Cambiar a 0
- * para uso normal. (Verificado 2026-05-20: DE = 0.714V DC durante test,
- * auto-DE funciona, no hace falta repetir el test.) */
-#define NE185_TEST_DE_FORCE_TX  0
-
-/* SNIFFER:
- * 0 = produccion: TX comandos + parse_frame (formato NE187 real)
- * 1 = modo sniffer activo (loguea SNIFF). El TX se controla en RUNTIME
- *     via ne185_set_sniffer_tx(true/false) desde la UI. Por defecto OFF
- *     (solo escucha); cuando se activa desde la UI, envia CMD_IDLE cada
- *     5s ademas de seguir logueando. */
-#define NE185_SNIFFER_MODE  1
-
-/* Comandos del protocolo NordElettronica (capturados del NE187 real
- * via sniffer en autocaravana 2026-05-20). Los valores documentados en
- * class142/ne-rs485 son del NE334 y NO coinciden con este modelo NE185:
- * - Idle/polling real:    FF 40 00 00 3F  (no FF 40 00 C0 BF)
- * - All indoor lights:    FF 01 00 00 00  (coincide con docs)
- * - Variante wake-up:     FF 00 00 00 FF  (no FF 00 00 C0 FF)
- *
- * Las luces exterior y bomba NO se capturaron aun; se mantienen valores
- * tentativos del repo, a confirmar en proxima sesion.
- *
- * Marcados unused para silenciar warning cuando NE185_SNIFFER_MODE = 1. */
-/* Checksum descubierto via reverse engineering: byte 4 = (b0+b1+b2+b3) & 0xFF.
- * Confirmado en los 4 comandos capturados del NE187 real. */
-__attribute__((unused)) static const uint8_t CMD_INIT[] = {0xFF, 0x40, 0x00, 0x00, 0x3F}; /* capturado */
-__attribute__((unused)) static const uint8_t CMD_IDLE[] = {0xFF, 0x40, 0x00, 0x00, 0x3F}; /* capturado */
-__attribute__((unused)) static const uint8_t CMD_LIN[]  = {0xFF, 0x01, 0x00, 0x00, 0x00}; /* capturado */
-__attribute__((unused)) static const uint8_t CMD_LOUT[] = {0xFF, 0x02, 0x00, 0x00, 0x01}; /* calculado por checksum */
-__attribute__((unused)) static const uint8_t CMD_PUMP[] = {0xFF, 0x04, 0x00, 0x00, 0x03}; /* capturado */
+/* Comandos (verificados con tramas reales del NE187, ver checksum.py) */
+static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x00, 0x3F};
+static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x41, 0x00, 0x00, 0x40};
+static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x42, 0x00, 0x00, 0x41};
+static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x44, 0x00, 0x00, 0x43};
 
 static ne185_data_t       s_data;
 static SemaphoreHandle_t  s_mutex;
-static QueueHandle_t      s_cmd_queue;
+static QueueHandle_t      s_press_queue;
 static bool               s_inited;
 static volatile uint32_t  s_sniff_bursts = 0;
-/* TX runtime toggle: default OFF (sniff puro). UI puede cambiarlo. */
-static volatile bool      s_sniffer_tx_enabled = false;
-/* Marcado a true tras la primera trama valida; se usa para encolar
- * automaticamente las acciones de auto-encendido (Luz INT + Bomba) */
-static bool               s_initial_actions_done;
+static volatile uint32_t  s_frames_fail = 0;
+static volatile bool      s_verbose_log = true;   /* default ON para validacion autocaravana */
+static uint8_t            s_last_raw[FRAME_LEN];
+static SemaphoreHandle_t  s_raw_mutex;            /* protege s_last_raw */
 
 static uint32_t now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
 }
 
-/* Suma bytes 0..17 mod 128, comparada con (b[18..19] mod 128) - 2.
- * Heuristica del repo class142/ne-rs485 (ingenieria inversa NE334).
- *
- * Reescrita como (s+2) % 128 == recv % 128 para evitar underflow cuando
- * recv % 128 < 2 (que con la formula original rechazaria el ~1.6% de
- * tramas validas debido a aritmetica unsigned). Equivalente matematica. */
+/* Checksum derivado de tramas reales del NE185:
+ *   b[19] = (b[5] + b[9] + b[14] + b[15] + 0xB1) & 0xFF
+ * Validado en 5+ tramas distintas (IDLE, FF41, FF42, FF44 responses). */
 static bool checksum_ok(const uint8_t *b)
 {
-    uint16_t s = 0;
-    for (int i = 0; i < FRAME_LEN - 2; i++) s += b[i];
-    uint16_t recv = ((uint16_t)b[FRAME_LEN - 2] << 8) | b[FRAME_LEN - 1];
-    return (((s + 2) % 128) == (recv % 128));
+    uint8_t exp = (b[5] + b[9] + b[14] + b[15] + 0xB1) & 0xFF;
+    return exp == b[19];
 }
 
-static int popcount3bit(uint8_t v)
-{
-    return __builtin_popcount(v & 0x07);
-}
-
-/* Decodifica una trama valida y vuelca en s_data.
- * Layout (ingenieria inversa del NE185 real, 2026-05-20/21):
- *   bytes 0-4    : eco del comando enviado (FF 40 00 00 3F idle, etc.)
- *   bytes 5-8    : "03 02 00 40" constantes (header respuesta)
- *   byte 9       : variable (sensor, voltaje o contador, sin confirmar)
- *   byte 12      : battery1 = (byte - 30) / 10 [V]  (servicio)
- *   byte 13      : battery2 = (byte - 30) / 10 [V]  (motor)
- *   byte 14      : flag ED/EE (sin confirmar)
- *   byte 15      : bitmap de estados:
- *                    bit 0 -> luz interior ON
- *                    bit 1 -> luz exterior ON
- *                    bit 2 -> bomba ON
- *                    bit 7 -> shore (red 230 V conectada)
- *   bytes 16-18  : "30 00 00" constantes
- *   byte 19      : checksum
- *
- * Niveles de tanque (s1, r1) NO decodificados aun en NE185 - el repo
- * class142 era para NE334 con layout distinto. Pendiente: capturar con
- * tanques en diferentes niveles para identificar posicion. */
+/* Decodifica trama valida y vuelca en s_data.
+ * Layout (autopsia tramas reales NE185, 2026-05-21/26):
+ *   0..4  : eco del cmd enviado
+ *   5     : nibble bajo = nivel tanque LIMPIO (0/1/3/7/F -> 0/1/2/3/4 cuartos)
+ *   6     : tanque GRISES (bit 1 set = vacio, 0 = lleno per observacion user)
+ *   7..8  : 00 40 constantes
+ *   9     : variable (counter/sensor, sin confirmar - logueado en verbose)
+ *   10    : 00 constante
+ *   11    : FF constante
+ *   12    : battery1 servicio  V = (byte - 30) / 10
+ *   13    : battery2 motor     V = (byte - 30) / 10
+ *   14    : variable (sensor/temperatura?, sin confirmar - logueado en verbose)
+ *   15    : bitmap estados: bit0=lin, bit1=lout, bit2=pump, bit7=shore
+ *   16..18: 30 00 00 constantes
+ *   19    : checksum
+ */
 static void parse_frame(const uint8_t *b)
 {
+    ne185_data_t prev;
     ne185_data_t tmp;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    tmp = s_data;
+    prev = s_data;
+    tmp  = s_data;
     xSemaphoreGive(s_mutex);
 
-    /* States bitmap en byte 15 */
+    /* Estados bitmap (byte 15) */
     uint8_t f = b[15];
     tmp.light_in  = (f & 0x01) != 0;
     tmp.light_out = (f & 0x02) != 0;
     tmp.pump      = (f & 0x04) != 0;
     tmp.shore     = (f & 0x80) != 0;
 
-    /* Baterias: byte = voltaje*10 + 30 */
+    /* Baterias: voltaje = (byte - 30) / 10 */
     tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
     tmp.battery2_v = ((float)b[13] - 30.0f) / 10.0f;
 
-    /* Tanks: nibble bajo de b[5] (clean) y b[6] (grey) como bitmask de probes.
-     * Posiciones derivadas de class142/ne-rs485 (flask_server.py) cruzado con
-     * los logs reales. Hipotesis NE185 con 4 probes (5 niveles) en vez de
-     * los 3 probes (4 niveles) que documenta el spec NE334:
-     *   raw 0x0 = Reserva (vacio)
-     *   raw 0x1 (bit 0)     = 1/4
-     *   raw 0x3 (bits 0+1)  = 2/4
-     *   raw 0x7 (bits 0+1+2)= 3/4
-     *   raw 0xF (bits 0..3) = 4/4 (lleno)
-     * Combos invalidos (ej. 0x02, 0x05 -- probes intermedios secos) ->
-     * 0xFF = "sin datos" en la UI. */
+    /* Tanque LIMPIO (clean): nibble bajo de byte 5
+     *   0x0 = Reserva (vacio)
+     *   0x1 = 1/4
+     *   0x3 = 2/4
+     *   0x7 = 3/4
+     *   0xF = 4/4 (lleno)
+     *   otro = 0xFF (combo invalido / sin datos)
+     */
     uint8_t raw_clean = b[5] & 0x0F;
     switch (raw_clean) {
         case 0x0: tmp.s1 = 0;    break;
@@ -144,52 +132,38 @@ static void parse_frame(const uint8_t *b)
         case 0x3: tmp.s1 = 2;    break;
         case 0x7: tmp.s1 = 3;    break;
         case 0xF: tmp.s1 = 4;    break;
-        default:  tmp.s1 = 0xFF; break;  /* combo invalido */
-    }
-    /* Grises: en las capturas 2026-05-21 B7 era constante 0x02 con tanque vacio
-     * (per user), valor no contemplado por el spec NE334 (que solo acepta
-     * 0x0/0x1/0x3/0x7). Hipotesis pendiente de validar:
-     *   - Probe inferior del grises averiado -> NE185 reporta solo bit 1
-     *   - O byte 6 no es el grises en NE185 y hay que buscar en otra posicion
-     * De momento aplicamos la misma decodificacion que en clean y dejamos el
-     * resto como 0xFF. Si despues de validar resulta que B7=0x02 = "empty" en
-     * NE185, mover esa logica aqui. */
-    uint8_t raw_grey = b[6] & 0x0F;
-    switch (raw_grey) {
-        case 0x0: tmp.r1 = 0;    break;
-        case 0x1: tmp.r1 = 1;    break;
-        case 0x3: tmp.r1 = 2;    break;
-        case 0x7: tmp.r1 = 3;    break;
-        case 0xF: tmp.r1 = 4;    break;
-        default:  tmp.r1 = 0xFF; break;
+        default:  tmp.s1 = 0xFF; break;
     }
 
-    tmp.fresh     = true;
+    /* Tanque GRISES: bit 1 de byte 6 (user observo 0x02 con tanque vacio).
+     * Hipotesis: probe se moja cuando lleno -> bit 1 a 0; seco (vacio) -> bit 1 a 1.
+     *   r1 = 0 vacio, 1 lleno. */
+    tmp.r1 = (b[6] & 0x02) ? 0 : 1;
+
+    tmp.fresh = true;
     tmp.last_update_ms = now_ms();
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_data = tmp;
     xSemaphoreGive(s_mutex);
 
-    ESP_LOGD(TAG, "rx bat1=%.1fV bat2=%.1fV lin=%d lout=%d pump=%d shore=%d",
-             tmp.battery1_v, tmp.battery2_v,
-             tmp.light_in, tmp.light_out, tmp.pump, tmp.shore);
-
-    /* Acciones de auto-encendido al establecer conexion por primera vez:
-     * Luz Interior y Bomba a ON si no lo estan. Los comandos son TOGGLE,
-     * asi que solo se mandan si el estado actual es OFF. */
-    if (!s_initial_actions_done) {
-        s_initial_actions_done = true;
-        if (!tmp.light_in) {
-            char c = 'i';
-            xQueueSend(s_cmd_queue, &c, 0);
-            ESP_LOGI(TAG, "auto-init: Luz Interior -> ON");
-        }
-        if (!tmp.pump) {
-            char c = 'p';
-            xQueueSend(s_cmd_queue, &c, 0);
-            ESP_LOGI(TAG, "auto-init: Bomba -> ON");
-        }
+    /* Log de cambios de estado (no de cada frame, evita spam a 60ms) */
+    bool state_change = (prev.light_in  != tmp.light_in)  ||
+                        (prev.light_out != tmp.light_out) ||
+                        (prev.pump      != tmp.pump)      ||
+                        (prev.shore     != tmp.shore)     ||
+                        (prev.s1        != tmp.s1)        ||
+                        (prev.r1        != tmp.r1)        ||
+                        !prev.fresh;
+    if (state_change) {
+        ESP_LOGI(TAG, "state lin=%d lout=%d pump=%d shore=%d clean=%d grey=%d "
+                      "bat1=%.1fV bat2=%.1fV",
+                 tmp.light_in, tmp.light_out, tmp.pump, tmp.shore,
+                 tmp.s1, tmp.r1, tmp.battery1_v, tmp.battery2_v);
+    }
+    if (s_verbose_log) {
+        ESP_LOGI(TAG, "raw b5=%02X b6=%02X b9=%02X b14=%02X b15=%02X chk=%02X",
+                 b[5], b[6], b[9], b[14], b[15], b[19]);
     }
 }
 
@@ -197,188 +171,153 @@ static void rs485_task(void *arg)
 {
     (void)arg;
     uint8_t buf[FRAME_LEN];
-    int idx = 0;
-    uint32_t last_idle_ms = 0;
 
-#if NE185_SNIFFER_MODE
-    ESP_LOGW(TAG, ">>> MODO SNIFFER: TX OFF inicial (toggle desde Consola)");
-    ESP_LOGW(TAG, ">>> Conecta NE187 al bus o activa TX desde la UI");
-#else
-    /* Despertar el bus */
-    uart_write_bytes(NE185_UART_NUM, CMD_INIT, sizeof(CMD_INIT));
-#endif
-    last_idle_ms = now_ms();
+    /* Estado del press hold */
+    char current_press = 0;          /* 0 = idle, 'i'/'o'/'p' = pulsando */
+    int  press_frames_left = 0;       /* frames FF 4X restantes en hold actual */
+    int  release_frames_left = 0;     /* frames IDLE de margen tras release */
+    uint32_t consec_timeouts = 0;
+    TickType_t last_tick = xTaskGetTickCount();
 
-#if NE185_TEST_DE_FORCE_TX
-    /* TEST: 30 s de TX continuo para medir DE con multimetro.
-     * Espera ~5 s para que el boot termine y empieces a medir. */
-    ESP_LOGW(TAG, ">>> TEST DE: en 5 s comenzara TX continuo 30 s - prepara multimetro");
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    ESP_LOGW(TAG, ">>> TEST DE: TX continuo INICIADO - mide DE del U8 ahora");
-    uint32_t test_start = now_ms();
-    while (now_ms() - test_start < 30000) {
-        uart_write_bytes(NE185_UART_NUM, CMD_IDLE, sizeof(CMD_IDLE));
-        /* Pequena pausa para no bloquear el FreeRTOS scheduler totalmente */
-        vTaskDelay(1);
-    }
-    ESP_LOGW(TAG, ">>> TEST DE: fin del TX continuo. Modo normal");
-    last_idle_ms = now_ms();
-#endif
+    ESP_LOGI(TAG, "Master RS-485 NE185 activo (poll %d ms, hold %d frames)",
+             POLL_PERIOD_MS, HOLD_FRAMES);
 
-#if NE185_SNIFFER_MODE
-    /* === LOOP SNIFFER (modo 1 o 2) ====================================
-     * Modo 1: solo escucha y loguea SNIFF (cero TX).
-     * Modo 2: envia CMD_IDLE cada 5 s y loguea TODO RX en SNIFF (sin
-     *         parse_frame, util para probar con la centralita sin NE187). */
-    uint32_t s_last_byte_ms = 0;
-    /* Buffer especifico mas grande para el sniffer (no cortar respuestas) */
-    static uint8_t sniff_buf[SNIFFER_BUF_LEN];
-    int sniff_idx = 0;
     while (1) {
-        /* TX runtime: drain cmds + keep-alive, solo si toggle activado.
-         * Antes el modo sniffer NO consumia s_cmd_queue (solo lo hacia
-         * el else, modo no-sniffer); los toggles desde la UI (luz int,
-         * exterior, bomba) se encolaban pero nunca llegaban al bus. */
-        if (s_sniffer_tx_enabled) {
-            /* 1) Drain cmds pendientes (botones UI -> CMD_LIN/CMD_LOUT/CMD_PUMP) */
+        /* === FSM de cmd a enviar ====================================== */
+        const uint8_t *tx_cmd = CMD_IDLE;
+        size_t tx_len = sizeof(CMD_IDLE);
+
+        if (press_frames_left > 0) {
+            /* Continuar hold actual */
+            switch (current_press) {
+                case 'i': tx_cmd = CMD_BTN_LIN;  tx_len = sizeof(CMD_BTN_LIN);  break;
+                case 'o': tx_cmd = CMD_BTN_LOUT; tx_len = sizeof(CMD_BTN_LOUT); break;
+                case 'p': tx_cmd = CMD_BTN_PUMP; tx_len = sizeof(CMD_BTN_PUMP); break;
+            }
+            press_frames_left--;
+            if (press_frames_left == 0) {
+                /* Acabamos hold, ahora release */
+                release_frames_left = RELEASE_FRAMES;
+                ESP_LOGI(TAG, "press '%c' release", current_press);
+                current_press = 0;
+            }
+        } else if (release_frames_left > 0) {
+            /* En release: forzar IDLE */
+            release_frames_left--;
+        } else {
+            /* Buscar siguiente press en la cola, coalesciendo duplicados */
             char cmd;
-            while (xQueueReceive(s_cmd_queue, &cmd, 0) == pdTRUE) {
-                const uint8_t *p = NULL;
-                size_t n = 0;
-                switch (cmd) {
-                    case 'i': p = CMD_LIN;  n = sizeof(CMD_LIN);  break;
-                    case 'o': p = CMD_LOUT; n = sizeof(CMD_LOUT); break;
-                    case 'p': p = CMD_PUMP; n = sizeof(CMD_PUMP); break;
-                }
-                if (p) {
-                    uart_write_bytes(NE185_UART_NUM, p, n);
-                    last_idle_ms = now_ms();
-                    ESP_LOGI(TAG, "tx cmd '%c'", cmd);
+            while (xQueueReceive(s_press_queue, &cmd, 0) == pdTRUE) {
+                if (cmd == 'i' || cmd == 'o' || cmd == 'p') {
+                    current_press = cmd;
+                    press_frames_left = HOLD_FRAMES;
+                    /* Drenar duplicados consecutivos del MISMO boton */
+                    char peek;
+                    while (xQueuePeek(s_press_queue, &peek, 0) == pdTRUE && peek == cmd) {
+                        xQueueReceive(s_press_queue, &peek, 0);
+                    }
+                    break;
                 }
             }
-            /* 2) Keep-alive del bus */
-            if ((now_ms() - last_idle_ms) > IDLE_PERIOD) {
-                uart_write_bytes(NE185_UART_NUM, CMD_IDLE, sizeof(CMD_IDLE));
-                last_idle_ms = now_ms();
+            if (current_press) {
+                switch (current_press) {
+                    case 'i': tx_cmd = CMD_BTN_LIN;  tx_len = sizeof(CMD_BTN_LIN);  break;
+                    case 'o': tx_cmd = CMD_BTN_LOUT; tx_len = sizeof(CMD_BTN_LOUT); break;
+                    case 'p': tx_cmd = CMD_BTN_PUMP; tx_len = sizeof(CMD_BTN_PUMP); break;
+                }
+                press_frames_left--;
+                ESP_LOGI(TAG, "press '%c' start (hold %d frames)",
+                         current_press, HOLD_FRAMES);
             }
         }
-        uint8_t c;
-        int n = uart_read_bytes(NE185_UART_NUM, &c, 1, pdMS_TO_TICKS(20));
-        if (n > 0) {
-            if (sniff_idx < SNIFFER_BUF_LEN) sniff_buf[sniff_idx++] = c;
-            s_last_byte_ms = now_ms();
-        } else if (sniff_idx > 0 && (now_ms() - s_last_byte_ms) >= 5) {
-            /* Fin de burst: vuelca hex */
-            char hex[SNIFFER_BUF_LEN * 3 + 4];
-            int off = 0;
-            for (int i = 0; i < sniff_idx && off < (int)sizeof(hex) - 4; i++) {
-                off += snprintf(hex + off, sizeof(hex) - off, "%02X ", sniff_buf[i]);
+
+        /* === TX + RX sync ============================================ */
+        uart_flush_input(NE185_UART_NUM);
+        uart_write_bytes(NE185_UART_NUM, tx_cmd, tx_len);
+        uart_wait_tx_done(NE185_UART_NUM, pdMS_TO_TICKS(20));
+
+        int n = uart_read_bytes(NE185_UART_NUM, buf, FRAME_LEN,
+                                pdMS_TO_TICKS(READ_TIMEOUT_MS));
+        if (n == FRAME_LEN && buf[0] == 0xFF && checksum_ok(buf)) {
+            parse_frame(buf);
+            /* Guardar copia de la ultima trama valida para vista debug */
+            if (s_raw_mutex) {
+                xSemaphoreTake(s_raw_mutex, portMAX_DELAY);
+                memcpy(s_last_raw, buf, FRAME_LEN);
+                xSemaphoreGive(s_raw_mutex);
             }
-            ESP_LOGI(TAG, "SNIFF (%d bytes): %s", sniff_idx, hex);
             s_sniff_bursts++;
-            sniff_idx = 0;
+            consec_timeouts = 0;
+        } else {
+            consec_timeouts++;
+            s_frames_fail++;
+            if (consec_timeouts == BUS_DEAD_THRESH) {
+                ESP_LOGW(TAG, "bus inactivo (%lu timeouts) - marcando stale",
+                         consec_timeouts);
+                xSemaphoreTake(s_mutex, portMAX_DELAY);
+                s_data.fresh = false;
+                xSemaphoreGive(s_mutex);
+            }
+            if (n > 0 && n < FRAME_LEN) {
+                ESP_LOGD(TAG, "rx parcial %d bytes (esperaba %d)", n, FRAME_LEN);
+            } else if (n == FRAME_LEN) {
+                ESP_LOGD(TAG, "rx frame invalido: b0=%02X chk_calc=%02X chk_recv=%02X",
+                         buf[0],
+                         (buf[5]+buf[9]+buf[14]+buf[15]+0xB1) & 0xFF,
+                         buf[19]);
+            }
         }
-        if (n <= 0 && sniff_idx == 0) {
-            vTaskDelay(1);
-        }
+
+        /* Mantener cadencia exacta de POLL_PERIOD_MS */
+        vTaskDelayUntil(&last_tick, pdMS_TO_TICKS(POLL_PERIOD_MS));
     }
-    (void)buf;  /* silenciar unused warning del buffer del modo normal */
-    (void)idx;
-#else
-    while (1) {
-        /* 1) Procesar comandos pendientes encolados desde la UI */
-        char cmd;
-        while (xQueueReceive(s_cmd_queue, &cmd, 0) == pdTRUE) {
-            const uint8_t *p = NULL;
-            size_t n = 0;
-            switch (cmd) {
-                case 'i': p = CMD_LIN;  n = sizeof(CMD_LIN);  break;
-                case 'o': p = CMD_LOUT; n = sizeof(CMD_LOUT); break;
-                case 'p': p = CMD_PUMP; n = sizeof(CMD_PUMP); break;
-            }
-            if (p) {
-                uart_write_bytes(NE185_UART_NUM, p, n);
-                last_idle_ms = now_ms();
-                ESP_LOGI(TAG, "tx cmd '%c'", cmd);
-            }
-        }
-
-        /* 2) Mantener el bus despierto con idle cada IDLE_PERIOD */
-        if (now_ms() - last_idle_ms > IDLE_PERIOD) {
-            uart_write_bytes(NE185_UART_NUM, CMD_IDLE, sizeof(CMD_IDLE));
-            last_idle_ms = now_ms();
-        }
-
-        /* 3) Leer respuesta del bus, byte a byte, con resincronizacion */
-        uint8_t c;
-        int n = uart_read_bytes(NE185_UART_NUM, &c, 1, pdMS_TO_TICKS(50));
-        if (n > 0) {
-            buf[idx++] = c;
-            if (idx >= FRAME_LEN) {
-                if (buf[0] == 0xFF && buf[14] == 0xFF && checksum_ok(buf)) {
-                    parse_frame(buf);
-                    idx = 0;
-                } else {
-                    /* shift left 1 byte para resincronizar */
-                    for (int i = 0; i < FRAME_LEN - 1; i++) buf[i] = buf[i + 1];
-                    idx = FRAME_LEN - 1;
-                }
-            }
-        }
-
-        /* 4) Marcar stale si llevamos mucho sin trama valida */
-        xSemaphoreTake(s_mutex, portMAX_DELAY);
-        if (s_data.fresh && (now_ms() - s_data.last_update_ms) > FRESH_MS) {
-            s_data.fresh = false;
-        }
-        xSemaphoreGive(s_mutex);
-    }
-#endif
 }
 
-/* Self-test del parse con tramas reales capturadas en logs. Si todo va
- * bien deberia loguear OK para cada una. Si alguno falla, los offsets
- * del parse_frame no encajan con el formato real del NE185. */
-static void ne185_self_test_parse(void)
+/* Self-test con tramas reales capturadas del NE187 (log_20260521_*). */
+static void ne185_self_test(void)
 {
     struct test_case {
         const char *name;
         uint8_t frame[20];
         bool exp_lin, exp_lout, exp_pump, exp_shore;
     } cases[] = {
-        { "IDLE todo OFF (byte15=00)",
-          { 0xFF, 0x40, 0x00, 0x00, 0x3F,  0x03, 0x02, 0x00, 0x40, 0x4D,
-            0x00, 0xFF, 0x9A, 0xA7, 0xED,  0x00, 0x30, 0x00, 0x00, 0xEF },
+        { "IDLE response, todo OFF",
+          { 0xFF, 0x40, 0x00, 0x00, 0x3F, 0x03, 0x02, 0x00, 0x40, 0x5F,
+            0x00, 0xFF, 0x9A, 0xA6, 0xED, 0x00, 0x30, 0x00, 0x00, 0x00 },
           false, false, false, false },
-        { "CHECK + shore (byte15=80)",
-          { 0xFF, 0x00, 0x00, 0x00, 0xFF,  0x03, 0x02, 0x00, 0x40, 0x34,
-            0x00, 0xFF, 0x9A, 0xA7, 0xED,  0x80, 0x30, 0x00, 0x00, 0x56 },
-          false, false, false, true },
-        { "Bomba + shore (byte15=84)",
-          { 0xFF, 0x04, 0x00, 0x00, 0x03,  0x03, 0x02, 0x00, 0x40, 0x34,
-            0x00, 0xFF, 0x9A, 0xA7, 0xEE,  0x84, 0x30, 0x00, 0x00, 0x5B },
-          false, false, true, true },
-        { "Todas las luces + bomba sin shore (byte15=07)",
-          { 0xFF, 0x40, 0x00, 0x00, 0x3F,  0x03, 0x02, 0x00, 0x40, 0x5A,
-            0x00, 0xFF, 0x9A, 0xA7, 0xED,  0x07, 0x30, 0x00, 0x00, 0x03 },
-          true, true, true, false },
+        { "FF41 response, luz INT ON",
+          { 0xFF, 0x41, 0x00, 0x00, 0x40, 0x03, 0x02, 0x00, 0x40, 0x66,
+            0x00, 0xFF, 0x9A, 0xA6, 0xED, 0x01, 0x30, 0x00, 0x00, 0x08 },
+          true, false, false, false },
+        { "FF42 response, luz EXT ON",
+          { 0xFF, 0x42, 0x00, 0x00, 0x41, 0x03, 0x02, 0x00, 0x40, 0x60,
+            0x00, 0xFF, 0x9A, 0xA6, 0xED, 0x02, 0x30, 0x00, 0x00, 0x03 },
+          false, true, false, false },
+        { "FF44 response, EXT + BOMBA",
+          { 0xFF, 0x44, 0x00, 0x00, 0x43, 0x01, 0x02, 0x00, 0x40, 0x69,
+            0x00, 0xFF, 0x9A, 0xA6, 0xEC, 0x06, 0x30, 0x00, 0x00, 0x0D },
+          false, true, true, false },
     };
     int n = sizeof(cases) / sizeof(cases[0]);
     int ok = 0;
     for (int i = 0; i < n; ++i) {
+        if (!checksum_ok(cases[i].frame)) {
+            ESP_LOGE(TAG, "SELFTEST [FAIL chk] %s", cases[i].name);
+            continue;
+        }
         ne185_sim_inject_raw(cases[i].frame);
         xSemaphoreTake(s_mutex, portMAX_DELAY);
         ne185_data_t got = s_data;
         xSemaphoreGive(s_mutex);
-        bool pass = (got.light_in  == cases[i].exp_lin) &&
+        bool pass = (got.light_in  == cases[i].exp_lin)  &&
                     (got.light_out == cases[i].exp_lout) &&
                     (got.pump      == cases[i].exp_pump) &&
                     (got.shore     == cases[i].exp_shore);
         if (pass) {
             ESP_LOGI(TAG, "SELFTEST [OK] %s -> lin=%d lout=%d pump=%d shore=%d "
-                          "bat1=%.1fV bat2=%.1fV",
+                          "bat1=%.1fV bat2=%.1fV clean=%d grey=%d",
                      cases[i].name, got.light_in, got.light_out, got.pump,
-                     got.shore, got.battery1_v, got.battery2_v);
+                     got.shore, got.battery1_v, got.battery2_v, got.s1, got.r1);
             ok++;
         } else {
             ESP_LOGW(TAG, "SELFTEST [FAIL] %s -> esperado lin=%d/got=%d, "
@@ -402,18 +341,20 @@ void ne185_init(void)
     if (s_inited) return;
 
     s_mutex = xSemaphoreCreateMutex();
-    if (s_mutex == NULL) {
-        ESP_LOGE(TAG, "no se pudo crear el mutex; ne185 deshabilitado");
+    if (!s_mutex) {
+        ESP_LOGE(TAG, "no se pudo crear mutex; ne185 deshabilitado");
         return;
     }
-    s_cmd_queue = xQueueCreate(8, sizeof(char));
-    if (s_cmd_queue == NULL) {
-        ESP_LOGE(TAG, "no se pudo crear la queue; ne185 deshabilitado");
+    s_press_queue = xQueueCreate(16, sizeof(char));
+    if (!s_press_queue) {
+        ESP_LOGE(TAG, "no se pudo crear queue; ne185 deshabilitado");
         vSemaphoreDelete(s_mutex);
         s_mutex = NULL;
         return;
     }
+    s_raw_mutex = xSemaphoreCreateMutex();
     memset(&s_data, 0, sizeof(s_data));
+    memset(s_last_raw, 0, sizeof(s_last_raw));
 
     const uart_config_t cfg = {
         .baud_rate = NE185_UART_BAUD,
@@ -432,12 +373,11 @@ void ne185_init(void)
     xTaskCreate(rs485_task, "ne185_rs485", 4096, NULL, 5, NULL);
     s_inited = true;
 
-    /* Self-test del parse con tramas reales de los logs. Si todos OK,
-     * el parse esta listo para procesar tramas reales sin mas pruebas HW. */
-    ne185_self_test_parse();
+    ne185_self_test();
     ESP_LOGI(TAG,
-             "RS-485 master listo (UART%d TX=%d RX=%d @ %d baud) — MAX485 onboard, conector J5",
-             NE185_UART_NUM, NE185_UART_TX, NE185_UART_RX, NE185_UART_BAUD);
+             "NE185 master listo (UART%d TX=%d RX=%d @ %d baud, poll %d ms)",
+             NE185_UART_NUM, NE185_UART_TX, NE185_UART_RX, NE185_UART_BAUD,
+             POLL_PERIOD_MS);
 }
 
 void ne185_get(ne185_data_t *out)
@@ -454,9 +394,9 @@ void ne185_get(ne185_data_t *out)
 
 void ne185_send_cmd(char cmd)
 {
-    if (!s_inited || !s_cmd_queue) return;
+    if (!s_inited || !s_press_queue) return;
     if (cmd != 'i' && cmd != 'o' && cmd != 'p') return;
-    xQueueSend(s_cmd_queue, &cmd, 0);
+    xQueueSend(s_press_queue, &cmd, 0);
 }
 
 uint32_t ne185_get_sniff_count(void)
@@ -479,16 +419,30 @@ bool ne185_sim_inject_raw(const uint8_t *frame20)
     return true;
 }
 
-void ne185_set_sniffer_tx(bool enable)
+/* Verbose log toggle: si ON, loguea hex de cada frame RX (util para
+ * diagnosticar cambios en bytes desconocidos b9/b14). Default OFF para
+ * evitar spam a 16Hz. */
+void ne185_set_verbose(bool enable)
 {
-    s_sniffer_tx_enabled = enable;
-    ESP_LOGW(TAG, ">>> SNIFFER TX %s desde la UI <<<",
-             enable ? "ACTIVADO (ESP transmite)" : "DESACTIVADO (solo escucha)");
+    s_verbose_log = enable;
+    ESP_LOGW(TAG, ">>> VERBOSE log %s <<<", enable ? "ON (log raw RX)" : "OFF");
 }
 
-bool ne185_get_sniffer_tx(void)
+bool ne185_get_verbose(void)
 {
-    return s_sniffer_tx_enabled;
+    return s_verbose_log;
+}
+
+void ne185_get_last_raw(uint8_t out[FRAME_LEN], uint32_t *n_frames_ok,
+                        uint32_t *n_frames_fail)
+{
+    if (out && s_raw_mutex) {
+        xSemaphoreTake(s_raw_mutex, portMAX_DELAY);
+        memcpy(out, s_last_raw, FRAME_LEN);
+        xSemaphoreGive(s_raw_mutex);
+    }
+    if (n_frames_ok)   *n_frames_ok   = s_sniff_bursts;
+    if (n_frames_fail) *n_frames_fail = s_frames_fail;
 }
 
 void ne185_sim_inject(uint8_t s1, uint8_t r1,

@@ -67,14 +67,13 @@ void ne185_sim_inject(uint8_t s1, uint8_t r1,
                       bool light_in, bool light_out,
                       bool pump, bool shore);
 
-/* Contador de bursts SNIFF recibidos en modo SNIFFER. Se usa como
- * feedback en vivo en la UI ("NE185: RX N tramas") para saber si hay
- * comunicacion sin abrir el log de la SD. Devuelve 0 si el firmware no
- * fue compilado en modo sniffer. */
+/* Contador de tramas RX validas recibidas del NE185. Se usa como
+ * feedback en vivo en la UI ("NE185 RX: N tramas") para saber si hay
+ * comunicacion sin abrir el log de la SD. */
 uint32_t ne185_get_sniff_count(void);
 
 /* Loguea un marcador en el log con prefijo "MARK:" para autoetiquetar
- * la captura sniffer (ej. "MARK: Luz INT" justo antes de pulsar). */
+ * la captura (ej. "MARK: Luz INT" justo antes de pulsar). */
 void ne185_log_marker(const char *what);
 
 /* Inyecta una trama RAW de 20 bytes (tipica respuesta de la centralita)
@@ -82,13 +81,20 @@ void ne185_log_marker(const char *what);
  * sin HW. Devuelve true si la trama paso la validacion y se decodifico. */
 bool ne185_sim_inject_raw(const uint8_t *frame20);
 
-/* Activa/desactiva la transmision automatica de CMD_IDLE en modo sniffer.
- * Solo aplica si el firmware esta compilado en NE185_SNIFFER_MODE >= 1.
- * Por defecto OFF (sniff puro, no transmite). Si ON, el ESP envia
- * CMD_IDLE cada 5s y se comporta como master del bus mientras sigue
- * logueando todo lo que llega via SNIFF. */
-void ne185_set_sniffer_tx(bool enable);
-bool ne185_get_sniffer_tx(void);
+/* Devuelve la ultima trama RX valida (20 bytes) en `out`. Util para vista
+ * de diagnostico en pantalla (ver bytes raw sin sacar SD). Si `n_frames_ok`
+ * y `n_frames_fail` no son NULL, devuelve los contadores actuales. */
+void ne185_get_last_raw(uint8_t out[20], uint32_t *n_frames_ok,
+                        uint32_t *n_frames_fail);
+
+/* Verbose log: si ON, loguea el hex de cada frame RX recibido del bus
+ * (util para diagnosticar cambios en bytes desconocidos como b9/b14).
+ * Si OFF, solo loguea cambios de estado (default, evita spam a 16Hz).
+ *
+ * Compat: estas funciones se llamaban antes set_sniffer_tx/get_sniffer_tx
+ * pero ese concepto desaparecio - el master TX siempre esta activo. */
+void ne185_set_verbose(bool enable);
+bool ne185_get_verbose(void);
 
 #ifdef __cplusplus
 }
