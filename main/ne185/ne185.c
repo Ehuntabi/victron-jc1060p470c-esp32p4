@@ -60,6 +60,15 @@ static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x41, 0x00, 0x00, 0x40};
 static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x42, 0x00, 0x00, 0x41};
 static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x44, 0x00, 0x00, 0x43};
 
+/* Cmd init (wake-up) descubierto en repo class142/ne-rs485 para el panel
+ * NE334. Hipotesis: el NE185 se duerme tras inactividad y necesita uno o
+ * mas frames de despertar antes de aceptar polling. El sniffer no captura
+ * esta fase porque solo logra conectarse despues del power-on del NE187.
+ * Secuencia: 3 frames FF 40 00 80 BF con 100ms entre ellos al arranque. */
+static const uint8_t CMD_INIT[]     = {0xFF, 0x40, 0x00, 0x80, 0xBF};
+#define INIT_FRAMES        3
+#define INIT_FRAME_GAP_MS  100
+
 static ne185_data_t       s_data;
 static SemaphoreHandle_t  s_mutex;
 static QueueHandle_t      s_press_queue;
@@ -203,6 +212,30 @@ static void rs485_task(void *arg)
 
     ESP_LOGI(TAG, "Master RS-485 NE185 activo (poll %d ms, hold %d frames)",
              POLL_PERIOD_MS, HOLD_FRAMES);
+
+    /* === INIT SEQUENCE: despertar el bus NE185 ===
+     * Hipotesis derivada de class142/ne-rs485 spec: el NE185 puede estar
+     * dormido y necesitar uno o mas frames de wake-up antes de responder.
+     * Enviamos INIT_FRAMES copias de CMD_INIT con INIT_FRAME_GAP_MS entre
+     * ellas, leemos las respuestas (puede haber 1, 2 o ninguna), logueamos. */
+    for (int i = 0; i < INIT_FRAMES; ++i) {
+        ESP_LOGI(TAG, "init [%d/%d] tx FF 40 00 80 BF",
+                 i + 1, INIT_FRAMES);
+        uart_write_bytes(NE185_UART_NUM, CMD_INIT, sizeof(CMD_INIT));
+        uart_wait_tx_done(NE185_UART_NUM, pdMS_TO_TICKS(20));
+        uint8_t init_rx[FRAME_LEN];
+        int n = uart_read_bytes(NE185_UART_NUM, init_rx, FRAME_LEN,
+                                pdMS_TO_TICKS(READ_TIMEOUT_MS));
+        if (n > 0) {
+            ESP_LOGI(TAG, "init [%d/%d] rx %d bytes (b0=%02X b1=%02X)",
+                     i + 1, INIT_FRAMES, n, init_rx[0], init_rx[1]);
+        } else {
+            ESP_LOGI(TAG, "init [%d/%d] sin respuesta (n=%d)",
+                     i + 1, INIT_FRAMES, n);
+        }
+        vTaskDelay(pdMS_TO_TICKS(INIT_FRAME_GAP_MS));
+    }
+    ESP_LOGI(TAG, "init secuencia completa, iniciando polling normal");
 
     while (1) {
         /* === FSM de cmd a enviar ====================================== */
