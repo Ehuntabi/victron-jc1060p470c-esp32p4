@@ -228,6 +228,18 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         return 0;
     }
 
+    /* Diagnostico Orion DC/DC: si la MAC del adv coincide con una NVS,
+     * loguear SIEMPRE antes de cualquier filtro de vendor/longitud/tipo.
+     * Asi vemos si el adv del Orion llega aunque tenga vendor/record/len no esperados. */
+    if (find_device_config_by_mac(event->disc.addr.val) != NULL) {
+        uint16_t vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
+            ? (uint16_t)(fields.mfg_data[0] | (fields.mfg_data[1] << 8)) : 0xFFFF;
+        ESP_LOGI(TAG, "[DIAG] adv MAC=%02X:%02X:%02X:%02X:%02X:%02X mfg_len=%u vid=0x%04X",
+                 event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
+                 event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0],
+                 (unsigned)fields.mfg_data_len, vid);
+    }
+
     if (fields.mfg_data_len < offsetof(victronManufacturerData, victronEncryptedData) + 1)
         return 0;
 
@@ -286,7 +298,11 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     // Check if we should ignore unknown devices
     if (device_config == NULL && device_count > 0) {
         // If we have configured devices, ignore packets from unknown MACs
-        ESP_LOGD(TAG, "Ignoring packet from unknown MAC address (not in configured device list)");
+        // Subido a LOGW temporalmente para diagnosticar Orion DC/DC no recibido:
+        // si veo este WARN con la MAC del Orion -> esta mal anadido al NVS
+        ESP_LOGW(TAG, "MAC desconocida %02X:%02X:%02X:%02X:%02X:%02X NO en NVS - descartado",
+                 event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
+                 event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0]);
         return 0;
     }
 

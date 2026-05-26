@@ -10,3 +10,6 @@ dependencies.lock
 .DS_Store
 Thumbs.db
 *.log
+
+# HA backup snapshots (no van al repo)
+homeassistant*.tar.gz
