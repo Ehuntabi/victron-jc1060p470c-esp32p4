@@ -47,7 +47,7 @@ static const char *TAG = "ne185";
 #define POLL_PERIOD_MS    60   /* cadencia igual a NE187 real (16Hz) */
 #define HOLD_FRAMES       4    /* frames consecutivos FF 4X por press (~240ms) */
 #define RELEASE_FRAMES    2    /* frames IDLE entre press y press del mismo boton */
-#define READ_TIMEOUT_MS   50   /* timeout lectura respuesta NE185 */
+#define READ_TIMEOUT_MS   200  /* timeout lectura respuesta NE185 (NE185 puede tardar 50-150ms) */
 #define FRESH_MS          30000
 #define BUS_DEAD_THRESH   20   /* N timeouts consecutivos -> bus caido */
 
@@ -63,7 +63,8 @@ static QueueHandle_t      s_press_queue;
 static bool               s_inited;
 static volatile uint32_t  s_sniff_bursts = 0;
 static volatile uint32_t  s_frames_fail = 0;
-static volatile bool      s_verbose_log = true;   /* default ON para validacion autocaravana */
+static volatile bool      s_verbose_log = false;  /* default OFF - activar desde UI "LOG ON" durante test
+                                                   * (16Hz logueando rellena el buffer RAM rapido) */
 static uint8_t            s_last_raw[FRAME_LEN];
 static SemaphoreHandle_t  s_raw_mutex;            /* protege s_last_raw */
 
@@ -179,6 +180,16 @@ static void rs485_task(void *arg)
     uint32_t consec_timeouts = 0;
     TickType_t last_tick = xTaskGetTickCount();
 
+    /* Tracking para "press confirmado": al iniciar press, recordamos el bit
+     * del estado AL QUE deberia cambiar (toggle). Tras release esperamos
+     * unos frames y comprobamos si el bit cambio. Si si -> CONFIRMED.
+     * Si no tras N frames -> FAILED. */
+    char     watching_press = 0;          /* boton 'i'/'o'/'p' pendiente de confirmar */
+    uint32_t watch_start_ms = 0;          /* ts cuando empezo el watch */
+    uint8_t  watch_bit_mask = 0;          /* mascara byte 15 del bit que debe cambiar */
+    bool     watch_prev_state = false;    /* estado antes del press */
+    #define WATCH_TIMEOUT_MS 800           /* tras 800 ms sin cambio -> FAILED */
+
     ESP_LOGI(TAG, "Master RS-485 NE185 activo (poll %d ms, hold %d frames)",
              POLL_PERIOD_MS, HOLD_FRAMES);
 
@@ -221,29 +232,90 @@ static void rs485_task(void *arg)
             }
             if (current_press) {
                 switch (current_press) {
-                    case 'i': tx_cmd = CMD_BTN_LIN;  tx_len = sizeof(CMD_BTN_LIN);  break;
-                    case 'o': tx_cmd = CMD_BTN_LOUT; tx_len = sizeof(CMD_BTN_LOUT); break;
-                    case 'p': tx_cmd = CMD_BTN_PUMP; tx_len = sizeof(CMD_BTN_PUMP); break;
+                    case 'i': tx_cmd = CMD_BTN_LIN;  tx_len = sizeof(CMD_BTN_LIN);
+                              watch_bit_mask = 0x01; break;
+                    case 'o': tx_cmd = CMD_BTN_LOUT; tx_len = sizeof(CMD_BTN_LOUT);
+                              watch_bit_mask = 0x02; break;
+                    case 'p': tx_cmd = CMD_BTN_PUMP; tx_len = sizeof(CMD_BTN_PUMP);
+                              watch_bit_mask = 0x04; break;
                 }
                 press_frames_left--;
-                ESP_LOGI(TAG, "press '%c' start (hold %d frames)",
-                         current_press, HOLD_FRAMES);
+                /* Iniciar watch: recordar estado actual del bit, esperar cambio */
+                xSemaphoreTake(s_mutex, portMAX_DELAY);
+                watch_prev_state = (s_data.light_in && watch_bit_mask == 0x01) ||
+                                   (s_data.light_out && watch_bit_mask == 0x02) ||
+                                   (s_data.pump && watch_bit_mask == 0x04);
+                xSemaphoreGive(s_mutex);
+                watching_press = current_press;
+                watch_start_ms = now_ms();
+                ESP_LOGI(TAG, "press '%c' start (was %s, expect toggle)",
+                         current_press, watch_prev_state ? "ON" : "OFF");
+            }
+        }
+
+        /* Watcher: comprobar si el press se confirmo o fallo */
+        if (watching_press) {
+            uint32_t elapsed = now_ms() - watch_start_ms;
+            bool current_state;
+            xSemaphoreTake(s_mutex, portMAX_DELAY);
+            current_state = (watch_bit_mask == 0x01) ? s_data.light_in :
+                            (watch_bit_mask == 0x02) ? s_data.light_out :
+                            (watch_bit_mask == 0x04) ? s_data.pump : false;
+            xSemaphoreGive(s_mutex);
+            if (current_state != watch_prev_state) {
+                ESP_LOGI(TAG, "press '%c' CONFIRMED in %lu ms (%s -> %s)",
+                         watching_press, elapsed,
+                         watch_prev_state ? "ON" : "OFF",
+                         current_state ? "ON" : "OFF");
+                watching_press = 0;
+            } else if (elapsed > WATCH_TIMEOUT_MS) {
+                ESP_LOGW(TAG, "press '%c' FAILED (no toggle tras %lu ms, sigue %s)",
+                         watching_press, elapsed,
+                         watch_prev_state ? "ON" : "OFF");
+                watching_press = 0;
             }
         }
 
         /* === TX + RX sync ============================================ */
-        uart_flush_input(NE185_UART_NUM);
+        /* NO flush antes: respuesta del NE185 puede llegar muy rapido
+         * y un flush descartaria bytes legitimos. */
         uart_write_bytes(NE185_UART_NUM, tx_cmd, tx_len);
         uart_wait_tx_done(NE185_UART_NUM, pdMS_TO_TICKS(20));
 
+        /* Leemos hasta 20 bytes con timeout largo. Dos modos posibles:
+         *  - Caso A: auto-DE bloquea RX durante TX -> solo llegan 15 bytes
+         *            de respuesta NE185 (sin echo del cmd).
+         *  - Caso B: auto-DE imperfecto -> llegan 20 bytes (5 echo + 15 resp).
+         * Manejamos ambos.
+         *
+         * uart_read_bytes con timeout 200ms espera hasta FRAME_LEN(20) o
+         * timeout. Si llegan 15 bytes y se queda esperando 5 mas, agota
+         * el timeout y devuelve n=15. */
         int n = uart_read_bytes(NE185_UART_NUM, buf, FRAME_LEN,
                                 pdMS_TO_TICKS(READ_TIMEOUT_MS));
+
+        bool ok = false;
+        uint8_t frame20[FRAME_LEN];
+
         if (n == FRAME_LEN && buf[0] == 0xFF && checksum_ok(buf)) {
-            parse_frame(buf);
-            /* Guardar copia de la ultima trama valida para vista debug */
+            /* Caso B: frame completo con echo */
+            memcpy(frame20, buf, FRAME_LEN);
+            ok = true;
+        } else if (n == 15) {
+            /* Caso A: solo respuesta (15 bytes). Reconstruir frame de 20
+             * prependiendo el cmd que enviamos (tx_cmd) en bytes 0..4. */
+            memcpy(frame20, tx_cmd, 5);
+            memcpy(frame20 + 5, buf, 15);
+            if (checksum_ok(frame20)) {
+                ok = true;
+            }
+        }
+
+        if (ok) {
+            parse_frame(frame20);
             if (s_raw_mutex) {
                 xSemaphoreTake(s_raw_mutex, portMAX_DELAY);
-                memcpy(s_last_raw, buf, FRAME_LEN);
+                memcpy(s_last_raw, frame20, FRAME_LEN);
                 xSemaphoreGive(s_raw_mutex);
             }
             s_sniff_bursts++;
@@ -258,13 +330,10 @@ static void rs485_task(void *arg)
                 s_data.fresh = false;
                 xSemaphoreGive(s_mutex);
             }
-            if (n > 0 && n < FRAME_LEN) {
-                ESP_LOGD(TAG, "rx parcial %d bytes (esperaba %d)", n, FRAME_LEN);
-            } else if (n == FRAME_LEN) {
-                ESP_LOGD(TAG, "rx frame invalido: b0=%02X chk_calc=%02X chk_recv=%02X",
-                         buf[0],
-                         (buf[5]+buf[9]+buf[14]+buf[15]+0xB1) & 0xFF,
-                         buf[19]);
+            /* Log detallado del fallo (LOGI para que aparezca en log SD) */
+            if (n > 0) {
+                ESP_LOGI(TAG, "rx %d bytes (esperaba 15 o 20). b[0..4]=%02X %02X %02X %02X %02X",
+                         n, buf[0], buf[1], buf[2], buf[3], buf[4]);
             }
         }
 
