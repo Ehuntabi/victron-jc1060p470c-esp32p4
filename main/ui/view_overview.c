@@ -87,6 +87,8 @@ typedef struct {
     lv_obj_t *btn_lin;
     lv_obj_t *btn_lout;
     lv_obj_t *btn_pump;
+    /* Test strip (test autocaravana): raw bytes live + 4 markers */
+    lv_obj_t *test_raw_label;
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -227,11 +229,37 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
 static void camper_btn_event_cb(lv_event_t *e)
 {
     char cmd = (char)(intptr_t)lv_event_get_user_data(e);
-    /* Log explicito para verificar que el event llega al handler. Si pulsas
-     * un boton y NO ves esta linea en SD/serial, el event no llega
-     * (probablemente atrapado por screensaver/overlay o desregistrado). */
-    ESP_LOGI("OV", "camper_btn pressed: cmd='%c'", cmd);
+    /* Auto-marker en log para correlacionar pulsacion con tramas RX */
+    const char *name = (cmd == 'i') ? "BTN Luz INT" :
+                       (cmd == 'o') ? "BTN Luz EXT" :
+                       (cmd == 'p') ? "BTN Bomba" : "BTN ?";
+    ne185_log_marker(name);
     ne185_send_cmd(cmd);
+}
+
+/* Callback de los 4 botones marker del test strip. Solo escribe en log,
+ * no controla nada fisico (vease user_data = string con el marker). */
+static void test_marker_cb(lv_event_t *e)
+{
+    const char *what = (const char *)lv_event_get_user_data(e);
+    if (what) ne185_log_marker(what);
+}
+
+/* Crea un boton marker pequeno para el test strip. */
+static lv_obj_t *make_test_marker_btn(lv_obj_t *parent, const char *label,
+                                       lv_color_t bg, const char *marker_str)
+{
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 90, 36);
+    lv_obj_set_style_bg_color(btn, bg, 0);
+    lv_obj_set_style_radius(btn, 6, 0);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, label);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lbl);
+    lv_obj_add_event_cb(btn, test_marker_cb, LV_EVENT_CLICKED,
+                         (void *)marker_str);
+    return btn;
 }
 
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
@@ -633,6 +661,33 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     /* btn_lout creado mas arriba (antes del card_fridge tras swap). */
 
+    /* === Test strip (autocaravana 2026-05): raw bytes live + markers ===
+     * Aparece al fondo de la vista. Permite validar shore/bat sin salir a
+     * Consola. Los 4 botones solo escriben en log (no controlan nada fisico). */
+    lv_obj_t *test_strip = lv_obj_create(ov->base.root);
+    lv_obj_remove_style_all(test_strip);
+    lv_obj_set_size(test_strip, lv_pct(100), 44);
+    lv_obj_set_style_bg_color(test_strip, lv_color_hex(0x1A1A1A), 0);
+    lv_obj_set_style_bg_opa(test_strip, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(test_strip, 6, 0);
+    lv_obj_set_style_pad_all(test_strip, 4, 0);
+    lv_obj_set_style_pad_gap(test_strip, 6, 0);
+    lv_obj_set_layout(test_strip, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(test_strip, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(test_strip, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(test_strip, LV_OBJ_FLAG_SCROLLABLE);
+
+    ov->test_raw_label = lv_label_create(test_strip);
+    lv_label_set_text(ov->test_raw_label, "b15=-- b12=-- b6=-- b5=--");
+    lv_obj_set_style_text_color(ov->test_raw_label, lv_color_hex(0xFFC107), 0);
+    lv_obj_set_flex_grow(ov->test_raw_label, 1);
+
+    make_test_marker_btn(test_strip, "230 ON",  lv_color_hex(0x4CAF50), "230V ON");
+    make_test_marker_btn(test_strip, "230 OFF", lv_color_hex(0x9E9E9E), "230V OFF");
+    make_test_marker_btn(test_strip, "CARG ON", lv_color_hex(0x2196F3), "Cargador ON");
+    make_test_marker_btn(test_strip, "CARG OFF",lv_color_hex(0x607D8B), "Cargador OFF");
+
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
     lv_timer_create(overview_camper_tick_cb, 500, ov);
@@ -686,6 +741,21 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
             }
             case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
                 const victron_record_dcdc_converter_t *c = &data->record.dcdc;
+                ov->dcdc.has_data = true;
+                ov->dcdc.state      = c->device_state;
+                ov->dcdc.vin_centi  = (int16_t)c->input_voltage_centi;
+                ov->dcdc.vout_centi = (int16_t)c->output_voltage_centi;
+                ov->dcdc.last_update_ms = now;
+                ui_card_pulse(ov->card_loads);
+                break;
+            }
+            case VICTRON_BLE_RECORD_ORION_XS: {
+                /* Orion XS (0x0F) tiene misma semantica que DCDC_CONVERTER
+                 * (input_voltage_centi = motor, output_voltage_centi = servicio,
+                 *  device_state = 0 off / >0 active). El user real lleva un
+                 * Orion XS, no un Orion-Tr Smart. Sin este case la card DC/DC
+                 * de la vista overview se quedaba en "--" eternamente. */
+                const victron_record_orion_xs_t *c = &data->record.orion;
                 ov->dcdc.has_data = true;
                 ov->dcdc.state      = c->device_state;
                 ov->dcdc.vin_centi  = (int16_t)c->input_voltage_centi;
@@ -820,13 +890,28 @@ static void overview_render(ui_overview_view_t *ov)
         ne185_data_t cd;
         ne185_get(&cd);
 
+        /* Test strip: raw bytes live (b15 shore, b12 bat, b6 grey, b5 clean) */
+        if (ov->test_raw_label) {
+            uint8_t raw[20];
+            uint32_t n_ok, n_fail;
+            ne185_get_last_raw(raw, &n_ok, &n_fail);
+            if (n_ok > 0) {
+                lv_label_set_text_fmt(ov->test_raw_label,
+                    "b15=%02X b12=%02X b13=%02X b6=%02X b5=%02X  | RX %lu / fail %lu",
+                    raw[15], raw[12], raw[13], raw[6], raw[5],
+                    (unsigned long)n_ok, (unsigned long)n_fail);
+            } else {
+                lv_label_set_text(ov->test_raw_label, "esperando bus NE185...");
+            }
+        }
+
         /* Tanques visuales: nivel 0..3 (ui_tank_set ignora valores > 3) */
         if (ov->tank_s1) ui_tank_set(ov->tank_s1, cd.fresh ? cd.s1 : 0xFF);
         if (ov->tank_r1) ui_tank_set(ov->tank_r1, cd.fresh ? cd.r1 : 0xFF);
 
         /* ── Alarmas de tanque ─────────────────────────────── */
-        bool alarm_s1 = cd.fresh && cd.s1 == 0;
-        bool alarm_r1 = cd.fresh && cd.r1 == 3;
+        bool alarm_s1 = cd.fresh && cd.s1 == 0;   /* limpio en reserva */
+        bool alarm_r1 = cd.fresh && cd.r1 == 1;   /* grises lleno (NE185 real: 0=vacio, 1=lleno) */
         uint32_t now_ms_val = (uint32_t)(lv_tick_get());
 
         /* Auto-reset del mute al volver a estado normal */

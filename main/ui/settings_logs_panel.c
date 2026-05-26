@@ -11,7 +11,8 @@
 
 static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_ne185_counter_label = NULL;
-static lv_obj_t *s_tx_toggle_btn_lbl = NULL;
+static lv_obj_t *s_ne185_raw_label = NULL;       /* raw bytes live para validacion */
+static lv_obj_t *s_verbose_toggle_btn_lbl = NULL;
 
 /* Cuenta log_*.txt en /sdcard. -1 si la SD no se puede abrir.
  * Corre en taskLVGL desde el callback del boton; no se llama en boot. */
@@ -35,22 +36,48 @@ static int count_sd_logs(void)
 static void ne185_counter_refresh_cb(lv_timer_t *t)
 {
     (void)t;
-    if (!s_ne185_counter_label) return;
-    uint32_t n = ne185_get_sniff_count();
-    static uint32_t last_n = 0xFFFFFFFF;
-    if (n == last_n) return;
-    last_n = n;
-    if (n == 0) {
-        lv_label_set_text(s_ne185_counter_label,
-                          "NE185 SNIFF: 0 tramas RX  (esperando bus...)");
-        lv_obj_set_style_text_color(s_ne185_counter_label,
-                                     lv_color_hex(0x999999), 0);
-    } else {
-        lv_label_set_text_fmt(s_ne185_counter_label,
-                               "NE185 SNIFF: %lu tramas RX  (bus OK)",
-                               (unsigned long)n);
-        lv_obj_set_style_text_color(s_ne185_counter_label,
-                                     lv_color_hex(0x8BC34A), 0);
+    uint8_t raw[20];
+    uint32_t n_ok, n_fail;
+    ne185_get_last_raw(raw, &n_ok, &n_fail);
+
+    /* Counter de tramas */
+    if (s_ne185_counter_label) {
+        if (n_ok == 0) {
+            lv_label_set_text(s_ne185_counter_label,
+                              "NE185 RX: 0 OK  (esperando bus...)");
+            lv_obj_set_style_text_color(s_ne185_counter_label,
+                                         lv_color_hex(0x999999), 0);
+        } else {
+            lv_label_set_text_fmt(s_ne185_counter_label,
+                                   "NE185 RX: %lu OK  |  %lu fail",
+                                   (unsigned long)n_ok, (unsigned long)n_fail);
+            lv_obj_set_style_text_color(s_ne185_counter_label,
+                                         lv_color_hex(0x8BC34A), 0);
+        }
+    }
+
+    /* Raw bytes live: solo los relevantes (b5/b6 tank, b12/b13 bat, b15 estado)
+     * Util para validar en autocaravana sin sacar SD:
+     *  - b15 bit 7 ON cuando enchufas 230V
+     *  - b12 cambia cuando enciendes cargador (bat habitaculo sube)
+     *  - b13 cambia cuando arranca motor (bat motor)
+     *  - b6 cambia si llenas grises (de 0x02 a otro valor) */
+    if (s_ne185_raw_label && n_ok > 0) {
+        lv_label_set_text_fmt(s_ne185_raw_label,
+            "b5=%02X b6=%02X b9=%02X b12=%02X b13=%02X b14=%02X b15=%02X",
+            raw[5], raw[6], raw[9], raw[12], raw[13], raw[14], raw[15]);
+    }
+}
+
+/* Callback de los botones marker (usa el texto del label como marker). */
+static void btn_marker_cb(lv_event_t *e)
+{
+    const char *what = (const char *)lv_event_get_user_data(e);
+    if (what) {
+        ne185_log_marker(what);
+        if (s_status_label) {
+            lv_label_set_text_fmt(s_status_label, "MARK: %s", what);
+        }
     }
 }
 
@@ -85,28 +112,16 @@ static void btn_save_cb(lv_event_t *e)
     }
 }
 
-/* Callback de los botones marcadores. user_data = string con el nombre. */
-static void btn_marker_cb(lv_event_t *e)
-{
-    const char *what = (const char *)lv_event_get_user_data(e);
-    if (what) {
-        ne185_log_marker(what);
-        if (s_status_label) {
-            lv_label_set_text_fmt(s_status_label, "MARK: %s", what);
-        }
-    }
-}
-
-/* Toggle TX del sniffer NE185. Cambia el texto del label segun el estado. */
-static void btn_tx_toggle_cb(lv_event_t *e)
+/* Toggle VERBOSE log NE185 (hex de cada frame RX al buffer log). */
+static void btn_verbose_toggle_cb(lv_event_t *e)
 {
     lv_obj_t *btn = lv_event_get_target(e);
-    bool new_state = !ne185_get_sniffer_tx();
-    ne185_set_sniffer_tx(new_state);
-    if (s_tx_toggle_btn_lbl) {
-        lv_label_set_text(s_tx_toggle_btn_lbl,
-                          new_state ? LV_SYMBOL_UPLOAD "  TX ON"
-                                     : LV_SYMBOL_PAUSE "  TX OFF");
+    bool new_state = !ne185_get_verbose();
+    ne185_set_verbose(new_state);
+    if (s_verbose_toggle_btn_lbl) {
+        lv_label_set_text(s_verbose_toggle_btn_lbl,
+                          new_state ? LV_SYMBOL_EYE_OPEN "  LOG ON"
+                                     : LV_SYMBOL_EYE_CLOSE "  LOG OFF");
     }
     lv_obj_set_style_bg_color(btn,
         new_state ? lv_color_hex(0x00C851)   /* verde activo */
@@ -159,18 +174,19 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
     lv_obj_center(btn_lbl);
     lv_obj_add_event_cb(btn, btn_save_cb, LV_EVENT_CLICKED, NULL);
 
-    /* Botón toggle TX sniffer NE185: OFF (gris) <-> ON (verde) */
-    lv_obj_t *btn_tx = lv_btn_create(cont);
-    lv_obj_set_size(btn_tx, 260, 60);
-    lv_obj_set_style_bg_color(btn_tx, lv_color_hex(0x607D8B), 0);
-    lv_obj_set_style_radius(btn_tx, 12, 0);
-    s_tx_toggle_btn_lbl = lv_label_create(btn_tx);
-    lv_label_set_text(s_tx_toggle_btn_lbl, LV_SYMBOL_PAUSE "  TX OFF");
-    lv_obj_set_style_text_font(s_tx_toggle_btn_lbl,
+    /* Botón toggle VERBOSE log NE185: OFF (gris) <-> ON (verde).
+     * Cuando ON, cada frame RX se loguea con hex de bytes desconocidos. */
+    lv_obj_t *btn_verbose = lv_btn_create(cont);
+    lv_obj_set_size(btn_verbose, 260, 60);
+    lv_obj_set_style_bg_color(btn_verbose, lv_color_hex(0x607D8B), 0);
+    lv_obj_set_style_radius(btn_verbose, 12, 0);
+    s_verbose_toggle_btn_lbl = lv_label_create(btn_verbose);
+    lv_label_set_text(s_verbose_toggle_btn_lbl, LV_SYMBOL_EYE_CLOSE "  LOG OFF");
+    lv_obj_set_style_text_font(s_verbose_toggle_btn_lbl,
                                 &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_tx_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(s_tx_toggle_btn_lbl);
-    lv_obj_add_event_cb(btn_tx, btn_tx_toggle_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_style_text_color(s_verbose_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(s_verbose_toggle_btn_lbl);
+    lv_obj_add_event_cb(btn_verbose, btn_verbose_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     s_status_label = lv_label_create(cont);
     lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_20_es, 0);
@@ -185,9 +201,29 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_color(s_ne185_counter_label,
                                  lv_color_hex(0x999999), 0);
     lv_label_set_text(s_ne185_counter_label,
-                      "NE185 SNIFF: 0 tramas RX  (esperando bus...)");
-    /* Timer cada 500ms para refrescar contador */
+                      "NE185 RX: 0 OK  (esperando bus...)");
+
+    /* Label de bytes RAW live (validacion in-situ sin SD).
+     * Mira b15 bit 7 para shore, b12 para bateria habit, b13 motor, b6 grises. */
+    s_ne185_raw_label = lv_label_create(cont);
+    lv_obj_set_style_text_font(s_ne185_raw_label,
+                                &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_ne185_raw_label,
+                                 lv_color_hex(0xFFC107), 0);  /* ambar */
+    lv_label_set_text(s_ne185_raw_label,
+                      "b5=- b6=- b9=- b12=- b13=- b14=- b15=-");
+
+    /* Timer cada 500ms para refrescar contador + raw */
     lv_timer_create(ne185_counter_refresh_cb, 500, NULL);
 
-    /* MARKERS desactivados temporal - WDT al construir 4 botones */
+    /* 4 botones marker para etiquetar el log durante pruebas in-situ */
+    lv_obj_t *row = lv_obj_create(cont);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    make_marker_btn(row, "230V ON",     lv_color_hex(0x4CAF50), "230V ON");
+    make_marker_btn(row, "230V OFF",    lv_color_hex(0x9E9E9E), "230V OFF");
+    make_marker_btn(row, "Cargador ON", lv_color_hex(0x2196F3), "Cargador ON");
+    make_marker_btn(row, "Cargador OFF",lv_color_hex(0x607D8B), "Cargador OFF");
 }
