@@ -5,8 +5,13 @@
 // Victron manufacturer ID
 #define VICTRON_MANUFACTURER_ID 0x02E1
 
-// Maximum encrypted Victron BLE data payload size
-#define VICTRON_ENCRYPTED_DATA_MAX_SIZE 21
+// Maximum encrypted Victron BLE data payload size.
+// Era 21, pero los Orion DC/DC Tr Smart envian 22-25 bytes y el filtro
+// "if (encr_size > 21)" los rechazaba silenciosamente -> card DC/DC del
+// overview se quedaba en "--". Subido a 32 con margen.
+// Buffer overflow protegido: los arrays input/output[] tienen este tamano
+// y el bound es el mismo, por lo que memcpy nunca escribe fuera.
+#define VICTRON_ENCRYPTED_DATA_MAX_SIZE 32
 
 // ---------------------------------------------------------------------------
 // Record Type Enum
