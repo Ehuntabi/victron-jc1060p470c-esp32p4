@@ -237,12 +237,35 @@ static void camper_btn_event_cb(lv_event_t *e)
     ne185_send_cmd(cmd);
 }
 
-/* Callback de los 4 botones marker del test strip. Solo escribe en log,
- * no controla nada fisico (vease user_data = string con el marker). */
+/* Timer one-shot que se dispara 30s tras pulsar 230 ON/OFF. Captura el
+ * estado actual de los bytes utiles del NE185 para correlacionar evento
+ * fisico (enchufar/desenchufar 230V) con bits del bitmap b15. */
+static void test_marker_end_cb(lv_timer_t *t)
+{
+    const char *what = (const char *)t->user_data;
+    uint8_t raw[20];
+    uint32_t ok = 0, fail = 0;
+    ne185_get_last_raw(raw, &ok, &fail);
+    char buf[80];
+    snprintf(buf, sizeof(buf),
+             "%s END b5=%02X b6=%02X b12=%02X b13=%02X b15=%02X",
+             what ? what : "?", raw[5], raw[6], raw[12], raw[13], raw[15]);
+    ne185_log_marker(buf);
+    lv_timer_del(t);
+}
+
+/* Callback de los botones marker del test strip. Para 230 ON/OFF inicia
+ * un countdown de 30s y captura el estado tras ese tiempo (permite al
+ * usuario salir, enchufar/desenchufar y volver). */
 static void test_marker_cb(lv_event_t *e)
 {
     const char *what = (const char *)lv_event_get_user_data(e);
-    if (what) ne185_log_marker(what);
+    if (!what) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s START countdown 30s", what);
+    ne185_log_marker(buf);
+    lv_timer_t *t = lv_timer_create(test_marker_end_cb, 30000, (void *)what);
+    lv_timer_set_repeat_count(t, 1);
 }
 
 /* Crea un boton marker pequeno para el test strip. */
@@ -685,8 +708,6 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     make_test_marker_btn(test_strip, "230 ON",  lv_color_hex(0x4CAF50), "230V ON");
     make_test_marker_btn(test_strip, "230 OFF", lv_color_hex(0x9E9E9E), "230V OFF");
-    make_test_marker_btn(test_strip, "CARG ON", lv_color_hex(0x2196F3), "Cargador ON");
-    make_test_marker_btn(test_strip, "CARG OFF",lv_color_hex(0x607D8B), "Cargador OFF");
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
