@@ -420,16 +420,30 @@ watcher_skip:;
         uint8_t frame20[FRAME_LEN];
 
         if (n == FRAME_LEN && buf[0] == 0xFF && checksum_ok(buf)) {
-            /* Caso B: frame completo con echo */
+            /* Caso B: frame completo con echo (canonical NE187 sniff) */
             memcpy(frame20, buf, FRAME_LEN);
             ok = true;
         } else if (n == 15) {
-            /* Caso A: solo respuesta (15 bytes). Reconstruir frame de 20
-             * prependiendo el cmd que enviamos (tx_cmd) en bytes 0..4. */
-            memcpy(frame20, tx_cmd, 5);
-            memcpy(frame20 + 5, buf, 15);
-            if (checksum_ok(frame20)) {
+            /* Caso A1: frame15 NATIVO NE185 (descubierto 2026-05-27).
+             * Cabecera 7C E0 00 40, contador en b[4], checksum
+             * simple b[14] = b[4] | 0xA0. NO coincide con checksum
+             * del sniffer NE187 (b5+b9+b14+b15+0xB1) porque el NE187
+             * intermedia tarea distinta. Reconstruimos canonical
+             * tx_cmd+buf para que parse_frame extraiga lo decodificable
+             * (bat servicio buf[7], bat motor buf[8], bitmap buf[10]). */
+            if (buf[0] == 0x7C && buf[1] == 0xE0 && buf[2] == 0x00 &&
+                buf[3] == 0x40 && buf[14] == ((buf[4] | 0xA0) & 0xFF)) {
+                memcpy(frame20, tx_cmd, 5);
+                memcpy(frame20 + 5, buf, 15);
                 ok = true;
+            } else {
+                /* Caso A2: respuesta canonical sin echo (fallback antiguo).
+                 * Reconstruir con tx_cmd y validar checksum NE187. */
+                memcpy(frame20, tx_cmd, 5);
+                memcpy(frame20 + 5, buf, 15);
+                if (checksum_ok(frame20)) {
+                    ok = true;
+                }
             }
         }
 
