@@ -396,17 +396,33 @@ watcher_skip:;
                     ESP_LOGE(TAG, "marcar stale: mutex starvation");
                 }
             }
-            /* Log detallado del fallo (LOGI para que aparezca en log SD).
-             * Distinguir entre error del driver (n<0), timeout puro (n==0)
-             * y short-read con datos parciales (0<n<15 o 15<n<20). */
+            /* Log detallado del fallo. n<0 = error UART, n==0 = timeout puro
+             * (no logueamos, ya hay "bus inactivo"), n>0 = bytes recibidos.
+             *
+             * CRITICO (2026-05-27): NE185 responde con bytes estructurados
+             * que NO coinciden con la fórmula checksum del sniffer NE187
+             * (7C E0 00 40 counter ...). Loguear TODOS los bytes para
+             * reverse-engineer el nuevo formato. Una vez identificado,
+             * volver a un log conciso. */
             if (n < 0) {
                 ESP_LOGE(TAG, "uart_read_bytes error rc=%d", n);
             } else if (n > 0) {
-                ESP_LOGI(TAG, "rx %d bytes (esperaba 15 o 20). b[0..4]=%02X %02X %02X %02X %02X",
-                         n, buf[0], buf[1], buf[2], buf[3], buf[4]);
+                if (n == 15) {
+                    ESP_LOGI(TAG, "rx15: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
+                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
+                             buf[10], buf[11], buf[12], buf[13], buf[14]);
+                } else if (n == 20) {
+                    ESP_LOGI(TAG, "rx20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
+                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
+                             buf[10], buf[11], buf[12], buf[13], buf[14],
+                             buf[15], buf[16], buf[17], buf[18], buf[19]);
+                } else {
+                    ESP_LOGI(TAG, "rx %d bytes (parcial). b[0..4]=%02X %02X %02X %02X %02X",
+                             n, buf[0], buf[1], buf[2], buf[3], buf[4]);
+                }
             }
-            /* n == 0: timeout puro (sin bytes) - no loguear, ya hay
-             * el "bus inactivo" cuando consec_timeouts == BUS_DEAD_THRESH */
         }
 
         /* Mantener cadencia exacta de POLL_PERIOD_MS */
