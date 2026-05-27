@@ -10,8 +10,11 @@
 #include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
+#include "esp_log.h"
 
 static log_capture_entry_t *s_buf = NULL;
 static size_t   s_head  = 0;        /* siguiente posicion a escribir */
@@ -235,78 +238,115 @@ size_t log_capture_get_lines(log_capture_entry_t *out, size_t max,
     return out_cnt;
 }
 
-/* Flag para evitar dos saves concurrentes (causa de pantallazo azul al
- * pulsar 2 veces "Guardar SD" en <1s). */
+/* Flag para evitar dos saves concurrentes. */
 static volatile bool s_save_busy = false;
+
+/* Task asincrona dedicada al SD save. El callback LVGL solo encola la
+ * peticion (no bloquea), y esta task hace el fprintf real (lento, ~1-3s)
+ * en background. Evita Task Watchdog del LVGL task. */
+typedef struct {
+    char path[80];
+    log_capture_entry_t *snap;
+    size_t snap_count;
+    size_t snap_head;
+} save_request_t;
+
+static QueueHandle_t s_save_queue = NULL;
+static const char *SAVE_TAG = "log_save";
+
+static void log_save_task(void *arg)
+{
+    (void)arg;
+    save_request_t req;
+    while (1) {
+        if (xQueueReceive(s_save_queue, &req, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+        ESP_LOGI(SAVE_TAG, "iniciando save -> %s (%u lineas)",
+                 req.path, (unsigned)req.snap_count);
+
+        FILE *f = fopen(req.path, "w");
+        if (!f) {
+            ESP_LOGE(SAVE_TAG, "fopen %s fallo", req.path);
+            free(req.snap);
+            s_save_busy = false;
+            continue;
+        }
+
+        for (size_t i = 0; i < req.snap_count; ++i) {
+            size_t idx = (req.snap_head + LOG_CAPTURE_MAX_LINES - req.snap_count + i)
+                         % LOG_CAPTURE_MAX_LINES;
+            const log_capture_entry_t *e = &req.snap[idx];
+            const char lvl_ch = (e->level == ESP_LOG_ERROR)   ? 'E' :
+                                (e->level == ESP_LOG_WARN)    ? 'W' :
+                                (e->level == ESP_LOG_INFO)    ? 'I' :
+                                (e->level == ESP_LOG_DEBUG)   ? 'D' :
+                                (e->level == ESP_LOG_VERBOSE) ? 'V' : '?';
+            fprintf(f, "%lu [%c] %s: %s\n",
+                    (unsigned long)e->ts_ms, lvl_ch, e->tag, e->msg);
+        }
+
+        fclose(f);
+        free(req.snap);
+        s_save_busy = false;
+        ESP_LOGI(SAVE_TAG, "save completo -> %s", req.path);
+    }
+}
 
 esp_err_t log_capture_save_to_file(const char *path)
 {
     if (!path || !s_buf) return ESP_ERR_INVALID_ARG;
     if (!s_mtx) return ESP_ERR_INVALID_STATE;
 
-    /* Rechazar save concurrente. Si una llamada anterior aun esta
-     * escribiendo a SD (que es lento, ~1-3s para 500 lineas), una segunda
-     * pulsacion del boton "Guardar SD" colisionaria sobre el mismo path
-     * (segundos coinciden) y corromperia FATFS - causa probable del
-     * panic/pantalla azul observado el 2026-05-27. */
-    if (s_save_busy) {
-        return ESP_ERR_INVALID_STATE;
+    /* Lazy init de la task asincrona (1 vez) */
+    if (!s_save_queue) {
+        s_save_queue = xQueueCreate(2, sizeof(save_request_t));
+        if (!s_save_queue) return ESP_ERR_NO_MEM;
+        BaseType_t r = xTaskCreatePinnedToCore(log_save_task, "log_save",
+                                               4096, NULL, 3, NULL,
+                                               tskNO_AFFINITY);
+        if (r != pdPASS) {
+            vQueueDelete(s_save_queue);
+            s_save_queue = NULL;
+            return ESP_ERR_NO_MEM;
+        }
     }
+
+    /* Rechazar save concurrente (segunda pulsacion mientras el primero
+     * aun procesa). */
+    if (s_save_busy) return ESP_ERR_INVALID_STATE;
     s_save_busy = true;
 
-    /* Estrategia copy-then-write para evitar starvation:
-     *  1) take mutex (rapido)
-     *  2) snapshot del buffer entero a memoria temporal (~118 KB PSRAM)
-     *  3) release mutex (otras tasks pueden loguear normalmente)
-     *  4) escribir el snapshot a SD sin mutex (lento, ~500-2000ms i/o)
-     *
-     * El metodo anterior tomaba el mutex con portMAX_DELAY y hacia el
-     * fprintf con el mutex aun tomado -> mientras escribia a SD (que es
-     * lento) todas las demas tasks que loguean a 16Hz (NE185, BLE) se
-     * bloqueaban -> Task Watchdog dispara panic. */
-    log_capture_entry_t *snap = heap_caps_malloc(
+    /* Snapshot rapido del buffer (~118 KB PSRAM) bajo mutex.
+     * Esto es lo unico que bloquea al caller (LVGL), ~1-5ms, no causa WDT. */
+    save_request_t req;
+    strncpy(req.path, path, sizeof(req.path) - 1);
+    req.path[sizeof(req.path) - 1] = 0;
+    req.snap = heap_caps_malloc(
         sizeof(log_capture_entry_t) * LOG_CAPTURE_MAX_LINES,
         MALLOC_CAP_SPIRAM);
-    if (!snap) {
+    if (!req.snap) {
         s_save_busy = false;
         return ESP_ERR_NO_MEM;
     }
-
-    size_t snap_count = 0;
-    size_t snap_head  = 0;
     if (xSemaphoreTake(s_mtx, pdMS_TO_TICKS(200)) != pdTRUE) {
-        free(snap);
+        free(req.snap);
         s_save_busy = false;
         return ESP_ERR_TIMEOUT;
     }
-    snap_count = s_count;
-    snap_head  = s_head;
-    memcpy(snap, s_buf, sizeof(log_capture_entry_t) * LOG_CAPTURE_MAX_LINES);
+    req.snap_count = s_count;
+    req.snap_head  = s_head;
+    memcpy(req.snap, s_buf, sizeof(log_capture_entry_t) * LOG_CAPTURE_MAX_LINES);
     xSemaphoreGive(s_mtx);
 
-    /* Ya tenemos el snapshot. Las demas tasks pueden loguear sin bloqueo. */
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        free(snap);
+    /* Encolar a la task. La task hara fopen+fprintf+fclose+free(snap)
+     * en background sin bloquear el LVGL task. */
+    if (xQueueSend(s_save_queue, &req, 0) != pdTRUE) {
+        free(req.snap);
         s_save_busy = false;
-        return ESP_FAIL;
+        return ESP_ERR_NO_MEM;
     }
-
-    for (size_t i = 0; i < snap_count; ++i) {
-        size_t idx = (snap_head + LOG_CAPTURE_MAX_LINES - snap_count + i) % LOG_CAPTURE_MAX_LINES;
-        const log_capture_entry_t *e = &snap[idx];
-        const char lvl_ch = (e->level == ESP_LOG_ERROR)   ? 'E' :
-                            (e->level == ESP_LOG_WARN)    ? 'W' :
-                            (e->level == ESP_LOG_INFO)    ? 'I' :
-                            (e->level == ESP_LOG_DEBUG)   ? 'D' :
-                            (e->level == ESP_LOG_VERBOSE) ? 'V' : '?';
-        fprintf(f, "%lu [%c] %s: %s\n",
-                (unsigned long)e->ts_ms, lvl_ch, e->tag, e->msg);
-    }
-
-    fclose(f);
-    free(snap);
-    s_save_busy = false;
     return ESP_OK;
 }
 
