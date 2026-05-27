@@ -235,22 +235,66 @@ size_t log_capture_get_lines(log_capture_entry_t *out, size_t max,
     return out_cnt;
 }
 
+/* Flag para evitar dos saves concurrentes (causa de pantallazo azul al
+ * pulsar 2 veces "Guardar SD" en <1s). */
+static volatile bool s_save_busy = false;
+
 esp_err_t log_capture_save_to_file(const char *path)
 {
     if (!path || !s_buf) return ESP_ERR_INVALID_ARG;
     if (!s_mtx) return ESP_ERR_INVALID_STATE;
 
-    FILE *f = fopen(path, "w");
-    if (!f) return ESP_FAIL;
+    /* Rechazar save concurrente. Si una llamada anterior aun esta
+     * escribiendo a SD (que es lento, ~1-3s para 500 lineas), una segunda
+     * pulsacion del boton "Guardar SD" colisionaria sobre el mismo path
+     * (segundos coinciden) y corromperia FATFS - causa probable del
+     * panic/pantalla azul observado el 2026-05-27. */
+    if (s_save_busy) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_save_busy = true;
 
-    if (xSemaphoreTake(s_mtx, portMAX_DELAY) != pdTRUE) {
-        fclose(f);
+    /* Estrategia copy-then-write para evitar starvation:
+     *  1) take mutex (rapido)
+     *  2) snapshot del buffer entero a memoria temporal (~118 KB PSRAM)
+     *  3) release mutex (otras tasks pueden loguear normalmente)
+     *  4) escribir el snapshot a SD sin mutex (lento, ~500-2000ms i/o)
+     *
+     * El metodo anterior tomaba el mutex con portMAX_DELAY y hacia el
+     * fprintf con el mutex aun tomado -> mientras escribia a SD (que es
+     * lento) todas las demas tasks que loguean a 16Hz (NE185, BLE) se
+     * bloqueaban -> Task Watchdog dispara panic. */
+    log_capture_entry_t *snap = heap_caps_malloc(
+        sizeof(log_capture_entry_t) * LOG_CAPTURE_MAX_LINES,
+        MALLOC_CAP_SPIRAM);
+    if (!snap) {
+        s_save_busy = false;
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t snap_count = 0;
+    size_t snap_head  = 0;
+    if (xSemaphoreTake(s_mtx, pdMS_TO_TICKS(200)) != pdTRUE) {
+        free(snap);
+        s_save_busy = false;
+        return ESP_ERR_TIMEOUT;
+    }
+    snap_count = s_count;
+    snap_head  = s_head;
+    memcpy(snap, s_buf, sizeof(log_capture_entry_t) * LOG_CAPTURE_MAX_LINES);
+    xSemaphoreGive(s_mtx);
+
+    /* Ya tenemos el snapshot. Las demas tasks pueden loguear sin bloqueo. */
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        free(snap);
+        s_save_busy = false;
         return ESP_FAIL;
     }
 
-    for (size_t i = 0; i < s_count; ++i) {
-        size_t idx = (s_head + LOG_CAPTURE_MAX_LINES - s_count + i) % LOG_CAPTURE_MAX_LINES;
-        const log_capture_entry_t *e = &s_buf[idx];
+    for (size_t i = 0; i < snap_count; ++i) {
+        size_t idx = (snap_head + LOG_CAPTURE_MAX_LINES - snap_count + i) % LOG_CAPTURE_MAX_LINES;
+        const log_capture_entry_t *e = &snap[idx];
         const char lvl_ch = (e->level == ESP_LOG_ERROR)   ? 'E' :
                             (e->level == ESP_LOG_WARN)    ? 'W' :
                             (e->level == ESP_LOG_INFO)    ? 'I' :
@@ -260,8 +304,9 @@ esp_err_t log_capture_save_to_file(const char *path)
                 (unsigned long)e->ts_ms, lvl_ch, e->tag, e->msg);
     }
 
-    xSemaphoreGive(s_mtx);
     fclose(f);
+    free(snap);
+    s_save_busy = false;
     return ESP_OK;
 }
 
