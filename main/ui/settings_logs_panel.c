@@ -13,6 +13,7 @@ static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_ne185_counter_label = NULL;
 static lv_obj_t *s_ne185_raw_label = NULL;       /* raw bytes live para validacion */
 static lv_obj_t *s_verbose_toggle_btn_lbl = NULL;
+static lv_obj_t *s_sniff_toggle_btn_lbl = NULL;
 
 /* Cuenta log_*.txt en /sdcard. -1 si la SD no se puede abrir.
  * Corre en taskLVGL desde el callback del boton; no se llama en boot. */
@@ -120,6 +121,53 @@ static void btn_save_cb(lv_event_t *e)
                                   esp_err_to_name(err));
         }
     }
+}
+
+/* Toggle SNIFF mode NE185: pausa el polling, solo escucha el bus. */
+static void btn_sniff_toggle_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    bool new_state = !ne185_get_polling_paused();
+    ne185_set_polling_paused(new_state);
+    if (s_sniff_toggle_btn_lbl) {
+        lv_label_set_text(s_sniff_toggle_btn_lbl,
+                          new_state ? LV_SYMBOL_EYE_OPEN "  SNIFF ON"
+                                     : LV_SYMBOL_REFRESH "  MASTER MODE");
+    }
+    lv_obj_set_style_bg_color(btn,
+        new_state ? lv_color_hex(0xFF9800)   /* naranja = sniff (read-only) */
+                   : lv_color_hex(0x607D8B), /* gris = master normal */
+        0);
+}
+
+/* Custom cmd buttons: envia un cmd UNICO con b1 distinto al estandar.
+ * user_data del boton = uint8_t b1 (casteado a uintptr_t). */
+static void btn_custom_cmd_cb(lv_event_t *e)
+{
+    uintptr_t b1_ptr = (uintptr_t)lv_event_get_user_data(e);
+    uint8_t b1 = (uint8_t)b1_ptr;
+    ne185_inject_custom_cmd(b1);
+    if (s_status_label) {
+        lv_label_set_text_fmt(s_status_label,
+                              "Cmd custom enviado: FF %02X 00 00 %02X\n"
+                              "(ver respuesta en log)",
+                              b1, (0xFF + b1) & 0xFF);
+    }
+}
+
+static lv_obj_t *make_custom_cmd_btn(lv_obj_t *parent, const char *label, uint8_t b1)
+{
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 110, 50);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x673AB7), 0);  /* morado */
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, label);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lbl);
+    lv_obj_add_event_cb(btn, btn_custom_cmd_cb, LV_EVENT_CLICKED,
+                        (void *)(uintptr_t)b1);
+    return btn;
 }
 
 /* Toggle VERBOSE log NE185 (hex de cada frame RX al buffer log). */
@@ -236,4 +284,37 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
     make_marker_btn(row, "230V OFF",    lv_color_hex(0x9E9E9E), "230V OFF");
     make_marker_btn(row, "Cargador ON", lv_color_hex(0x2196F3), "Cargador ON");
     make_marker_btn(row, "Cargador OFF",lv_color_hex(0x607D8B), "Cargador OFF");
+
+    /* Boton SNIFF MODE toggle: si ON, pausa el polling (solo escucha).
+     * Util para ver si el NE185 emite frames sin pedirlos. */
+    lv_obj_t *btn_sniff = lv_btn_create(cont);
+    lv_obj_set_size(btn_sniff, 260, 60);
+    lv_obj_set_style_bg_color(btn_sniff, lv_color_hex(0x607D8B), 0);
+    lv_obj_set_style_radius(btn_sniff, 12, 0);
+    s_sniff_toggle_btn_lbl = lv_label_create(btn_sniff);
+    lv_label_set_text(s_sniff_toggle_btn_lbl,
+                      LV_SYMBOL_REFRESH "  MASTER MODE");
+    lv_obj_set_style_text_font(s_sniff_toggle_btn_lbl,
+                                &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_sniff_toggle_btn_lbl,
+                                 lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(s_sniff_toggle_btn_lbl);
+    lv_obj_add_event_cb(btn_sniff, btn_sniff_toggle_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Fila de cmds custom para probar respuestas NE185 distintas a FF 40.
+     * Cada boton envia UNA vez (no polling). Ver respuesta en log. */
+    lv_obj_t *label_cmd = lv_label_create(cont);
+    lv_obj_set_style_text_color(label_cmd, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text(label_cmd, "Probar cmds custom:");
+
+    lv_obj_t *row_cmd = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_cmd);
+    lv_obj_set_size(row_cmd, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row_cmd, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_gap(row_cmd, 8, 0);
+    make_custom_cmd_btn(row_cmd, "FF 30", 0x30);
+    make_custom_cmd_btn(row_cmd, "FF 50", 0x50);
+    make_custom_cmd_btn(row_cmd, "FF 60", 0x60);
+    make_custom_cmd_btn(row_cmd, "FF 70", 0x70);
+    make_custom_cmd_btn(row_cmd, "FF 80", 0x80);
 }

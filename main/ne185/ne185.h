@@ -96,6 +96,18 @@ void ne185_get_last_raw(uint8_t out[20], uint32_t *n_frames_ok,
 void ne185_set_verbose(bool enable);
 bool ne185_get_verbose(void);
 
+/* Sniff mode: si true, NO emite cmds. Solo lee el bus. Util para detectar
+ * si los frames del NE185 son emision propia (vienen aunque no enviamos)
+ * o respuesta a nuestros cmds. */
+void ne185_set_polling_paused(bool paused);
+bool ne185_get_polling_paused(void);
+
+/* Inyecta un cmd custom para que la siguiente iteracion del rs485_task lo
+ * envie en lugar del cmd normal. Formato: FF <b1> 00 00 (FF+b1)&0xFF.
+ * Util para probar otros comandos (FF 50, FF 60, etc.) y ver respuesta.
+ * Solo envia UNA vez (no en loop). */
+void ne185_inject_custom_cmd(uint8_t b1);
+
 #ifdef __cplusplus
 }
 #endif

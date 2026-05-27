@@ -77,6 +77,9 @@ static volatile uint32_t  s_sniff_bursts = 0;
 static volatile uint32_t  s_frames_fail = 0;
 static volatile bool      s_verbose_log = false;  /* default OFF - activar desde UI "LOG ON" durante test
                                                    * (16Hz logueando rellena el buffer RAM rapido) */
+static volatile bool      s_polling_paused = false; /* sniff mode: no envia, solo lee */
+static volatile uint8_t   s_custom_cmd_b1 = 0;       /* 0 = nada pendiente */
+static volatile bool      s_custom_cmd_set = false;
 static uint8_t            s_last_raw[FRAME_LEN];
 static SemaphoreHandle_t  s_raw_mutex;            /* protege s_last_raw */
 
@@ -339,6 +342,55 @@ static void rs485_task(void *arg)
 watcher_skip:;
         }
 
+        /* === CUSTOM CMD pendiente? ===
+         * Si se inyecto un cmd custom desde la UI (ne185_inject_custom_cmd),
+         * lo enviamos UNA vez en lugar del cmd normal. Para diagnosticar
+         * que responde el NE185 a otros cmds (FF 50, FF 60, etc.). */
+        uint8_t custom_cmd_buf[5];
+        if (s_custom_cmd_set) {
+            uint8_t b1 = s_custom_cmd_b1;
+            custom_cmd_buf[0] = 0xFF;
+            custom_cmd_buf[1] = b1;
+            custom_cmd_buf[2] = 0x00;
+            custom_cmd_buf[3] = 0x00;
+            custom_cmd_buf[4] = (0xFF + b1) & 0xFF;
+            tx_cmd = custom_cmd_buf;
+            tx_len = 5;
+            ESP_LOGW(TAG, ">>> CUSTOM tx: FF %02X 00 00 %02X <<<",
+                     b1, custom_cmd_buf[4]);
+            s_custom_cmd_set = false;
+            /* Cancelar press en curso si estabamos en hold */
+            press_frames_left = 0;
+            release_frames_left = 0;
+        }
+
+        /* === SNIFF MODE (pause polling) ===
+         * Si s_polling_paused == true: no enviamos. Solo intentamos leer.
+         * Util para detectar si el NE185 emite frames espontaneamente. */
+        if (s_polling_paused) {
+            int n = uart_read_bytes(NE185_UART_NUM, buf, FRAME_LEN,
+                                    pdMS_TO_TICKS(READ_TIMEOUT_MS));
+            if (n > 0) {
+                if (n == 15) {
+                    ESP_LOGI(TAG, "sniff rx15: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
+                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
+                             buf[10], buf[11], buf[12], buf[13], buf[14]);
+                } else if (n == 20) {
+                    ESP_LOGI(TAG, "sniff rx20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
+                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
+                             buf[10], buf[11], buf[12], buf[13], buf[14],
+                             buf[15], buf[16], buf[17], buf[18], buf[19]);
+                } else {
+                    ESP_LOGI(TAG, "sniff rx %d bytes b[0..4]=%02X %02X %02X %02X %02X",
+                             n, buf[0], buf[1], buf[2], buf[3], buf[4]);
+                }
+            }
+            vTaskDelayUntil(&last_tick, pdMS_TO_TICKS(POLL_PERIOD_MS));
+            continue;
+        }
+
         /* === TX + RX sync ============================================ */
         /* NO flush antes: respuesta del NE185 puede llegar muy rapido
          * y un flush descartaria bytes legitimos. */
@@ -593,6 +645,25 @@ void ne185_set_verbose(bool enable)
 bool ne185_get_verbose(void)
 {
     return s_verbose_log;
+}
+
+void ne185_set_polling_paused(bool paused)
+{
+    s_polling_paused = paused;
+    ESP_LOGW(TAG, ">>> POLLING %s <<<", paused ? "PAUSED (sniff mode)" : "ACTIVE");
+}
+
+bool ne185_get_polling_paused(void)
+{
+    return s_polling_paused;
+}
+
+void ne185_inject_custom_cmd(uint8_t b1)
+{
+    s_custom_cmd_b1 = b1;
+    s_custom_cmd_set = true;
+    ESP_LOGW(TAG, ">>> custom cmd encolado: FF %02X 00 00 %02X <<<",
+             b1, (0xFF + b1) & 0xFF);
 }
 
 void ne185_get_last_raw(uint8_t out[FRAME_LEN], uint32_t *n_frames_ok,
