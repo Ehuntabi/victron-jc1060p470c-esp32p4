@@ -44,9 +44,16 @@ static const char *TAG = "ne185";
 #define RX_BUF_SIZE       1024
 #define TX_BUF_SIZE       256
 #define FRAME_LEN         20
-#define POLL_PERIOD_MS    60   /* cadencia igual a NE187 real (16Hz) */
-#define HOLD_FRAMES       4    /* frames consecutivos FF 4X por press (~240ms) */
-#define RELEASE_FRAMES    2    /* frames IDLE entre press y press del mismo boton */
+#define POLL_PERIOD_MS    100  /* subido de 60->100 el 2026-05-27: dar mas
+                                * tiempo al NE185 a procesar entre cmds. El
+                                * bus tiene bias correcto (placa user con
+                                * R1=R2=680 + R3=132 terminacion) pero TX
+                                * a 60ms producia toggle erratico */
+#define HOLD_FRAMES       8    /* subido de 4->8: mas margen para que >=2
+                                * frames consecutivos lleguen limpios al
+                                * NE185 (necesita 2 para procesar toggle). */
+#define RELEASE_FRAMES    5    /* subido de 2->5: mas idle entre press del
+                                * mismo boton para evitar doble toggle */
 #define READ_TIMEOUT_MS   200  /* timeout lectura respuesta NE185 (NE185 puede tardar 50-150ms) */
 #define FRESH_MS          30000
 #define BUS_DEAD_THRESH   20   /* N timeouts consecutivos -> bus caido */
