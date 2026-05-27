@@ -77,8 +77,11 @@ static QueueHandle_t      s_press_queue;
 static bool               s_inited;
 static volatile uint32_t  s_sniff_bursts = 0;
 static volatile uint32_t  s_frames_fail = 0;
-static volatile bool      s_verbose_log = false;  /* default OFF - activar desde UI "LOG ON" durante test
-                                                   * (16Hz logueando rellena el buffer RAM rapido) */
+static volatile bool      s_verbose_log = true;   /* default ON 2026-05-27: fase reverse
+                                                   * engineering del frame15 nativo,
+                                                   * necesitamos capturar TODO el hex raw.
+                                                   * Usuario puede apagarlo desde UI si
+                                                   * el buffer satura otros logs */
 static volatile bool      s_polling_paused = false; /* sniff mode: no envia, solo lee */
 static volatile uint8_t   s_custom_cmd_b1 = 0;       /* 0 = nada pendiente */
 static volatile bool      s_custom_cmd_set = false;
