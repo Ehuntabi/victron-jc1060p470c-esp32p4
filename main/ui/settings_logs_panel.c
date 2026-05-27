@@ -207,111 +207,99 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
 
+    /* Layout compactado 2026-05-27 para caber en 1024x600 sin scroll. */
     lv_obj_t *cont = lv_obj_create(page);
     lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER,
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 8, 0);
+    lv_obj_set_style_pad_all(cont, 8, 0);
 
-    lv_obj_t *info = lv_label_create(cont);
-    lv_obj_set_style_text_font(info, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(info, lv_color_hex(0xCCCCCC), 0);
-    lv_label_set_text(info, "Vuelca el buffer de logs en RAM a la SD\n"
-                              "(archivo log_YYYYMMDD_HHMMSS.txt)");
+    /* === Fila 1: 3 botones de accion grandes (Guardar / LOG / SNIFF) === */
+    lv_obj_t *row_actions = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_actions);
+    lv_obj_set_size(row_actions, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row_actions, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_actions, 8, 0);
 
-    lv_obj_t *btn = lv_btn_create(cont);
-    lv_obj_set_size(btn, 260, 60);
+    /* Guardar a SD */
+    lv_obj_t *btn = lv_btn_create(row_actions);
+    lv_obj_set_size(btn, 220, 50);
     lv_obj_set_style_bg_color(btn, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_radius(btn, 12, 0);
+    lv_obj_set_style_radius(btn, 10, 0);
     lv_obj_t *btn_lbl = lv_label_create(btn);
-    lv_label_set_text(btn_lbl, LV_SYMBOL_SAVE "  Guardar a SD");
-    lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(btn_lbl, LV_SYMBOL_SAVE "  Guardar SD");
     lv_obj_set_style_text_color(btn_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(btn_lbl);
     lv_obj_add_event_cb(btn, btn_save_cb, LV_EVENT_CLICKED, NULL);
 
-    /* Botón toggle VERBOSE log NE185: OFF (gris) <-> ON (verde).
-     * Cuando ON, cada frame RX se loguea con hex de bytes desconocidos. */
-    lv_obj_t *btn_verbose = lv_btn_create(cont);
-    lv_obj_set_size(btn_verbose, 260, 60);
+    /* Toggle VERBOSE log NE185 */
+    lv_obj_t *btn_verbose = lv_btn_create(row_actions);
+    lv_obj_set_size(btn_verbose, 220, 50);
     lv_obj_set_style_bg_color(btn_verbose, lv_color_hex(0x607D8B), 0);
-    lv_obj_set_style_radius(btn_verbose, 12, 0);
+    lv_obj_set_style_radius(btn_verbose, 10, 0);
     s_verbose_toggle_btn_lbl = lv_label_create(btn_verbose);
     lv_label_set_text(s_verbose_toggle_btn_lbl, LV_SYMBOL_EYE_CLOSE "  LOG OFF");
-    lv_obj_set_style_text_font(s_verbose_toggle_btn_lbl,
-                                &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(s_verbose_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(s_verbose_toggle_btn_lbl);
     lv_obj_add_event_cb(btn_verbose, btn_verbose_toggle_cb, LV_EVENT_CLICKED, NULL);
 
+    /* Toggle SNIFF MODE (pausa polling) */
+    lv_obj_t *btn_sniff = lv_btn_create(row_actions);
+    lv_obj_set_size(btn_sniff, 220, 50);
+    lv_obj_set_style_bg_color(btn_sniff, lv_color_hex(0x607D8B), 0);
+    lv_obj_set_style_radius(btn_sniff, 10, 0);
+    s_sniff_toggle_btn_lbl = lv_label_create(btn_sniff);
+    lv_label_set_text(s_sniff_toggle_btn_lbl, LV_SYMBOL_REFRESH "  MASTER MODE");
+    lv_obj_set_style_text_color(s_sniff_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(s_sniff_toggle_btn_lbl);
+    lv_obj_add_event_cb(btn_sniff, btn_sniff_toggle_cb, LV_EVENT_CLICKED, NULL);
+
+    /* === Labels info compactos === */
     s_status_label = lv_label_create(cont);
-    lv_obj_set_style_text_font(s_status_label, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(s_status_label, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(s_status_label, "");
 
-    /* Contador SNIFF NE185 - visible cuando hay tramas, indica si el bus
-     * responde sin necesidad de abrir el log SD. */
     s_ne185_counter_label = lv_label_create(cont);
-    lv_obj_set_style_text_font(s_ne185_counter_label,
-                                &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_ne185_counter_label,
-                                 lv_color_hex(0x999999), 0);
+    lv_obj_set_style_text_color(s_ne185_counter_label, lv_color_hex(0x999999), 0);
     lv_label_set_text(s_ne185_counter_label,
                       "NE185 RX: 0 OK  (esperando bus...)");
 
-    /* Label de bytes RAW live (validacion in-situ sin SD).
-     * Mira b15 bit 7 para shore, b12 para bateria habit, b13 motor, b6 grises. */
     s_ne185_raw_label = lv_label_create(cont);
-    lv_obj_set_style_text_font(s_ne185_raw_label,
-                                &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_ne185_raw_label,
-                                 lv_color_hex(0xFFC107), 0);  /* ambar */
+    lv_obj_set_style_text_color(s_ne185_raw_label, lv_color_hex(0xFFC107), 0);
     lv_label_set_text(s_ne185_raw_label,
                       "b5=- b6=- b9=- b12=- b13=- b14=- b15=-");
 
     /* Timer cada 500ms para refrescar contador + raw */
     lv_timer_create(ne185_counter_refresh_cb, 500, NULL);
 
-    /* 4 botones marker para etiquetar el log durante pruebas in-situ */
-    lv_obj_t *row = lv_obj_create(cont);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    make_marker_btn(row, "230V ON",     lv_color_hex(0x4CAF50), "230V ON");
-    make_marker_btn(row, "230V OFF",    lv_color_hex(0x9E9E9E), "230V OFF");
-    make_marker_btn(row, "Cargador ON", lv_color_hex(0x2196F3), "Cargador ON");
-    make_marker_btn(row, "Cargador OFF",lv_color_hex(0x607D8B), "Cargador OFF");
+    /* === Fila 2: 4 markers === */
+    lv_obj_t *lbl_markers = lv_label_create(cont);
+    lv_obj_set_style_text_color(lbl_markers, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text(lbl_markers, "Marcadores log:");
 
-    /* Boton SNIFF MODE toggle: si ON, pausa el polling (solo escucha).
-     * Util para ver si el NE185 emite frames sin pedirlos. */
-    lv_obj_t *btn_sniff = lv_btn_create(cont);
-    lv_obj_set_size(btn_sniff, 260, 60);
-    lv_obj_set_style_bg_color(btn_sniff, lv_color_hex(0x607D8B), 0);
-    lv_obj_set_style_radius(btn_sniff, 12, 0);
-    s_sniff_toggle_btn_lbl = lv_label_create(btn_sniff);
-    lv_label_set_text(s_sniff_toggle_btn_lbl,
-                      LV_SYMBOL_REFRESH "  MASTER MODE");
-    lv_obj_set_style_text_font(s_sniff_toggle_btn_lbl,
-                                &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_sniff_toggle_btn_lbl,
-                                 lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(s_sniff_toggle_btn_lbl);
-    lv_obj_add_event_cb(btn_sniff, btn_sniff_toggle_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *row_markers = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_markers);
+    lv_obj_set_size(row_markers, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row_markers, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_markers, 6, 0);
+    make_marker_btn(row_markers, "230V ON",     lv_color_hex(0x4CAF50), "230V ON");
+    make_marker_btn(row_markers, "230V OFF",    lv_color_hex(0x9E9E9E), "230V OFF");
+    make_marker_btn(row_markers, "Cargador ON", lv_color_hex(0x2196F3), "Cargador ON");
+    make_marker_btn(row_markers, "Cargador OFF",lv_color_hex(0x607D8B), "Cargador OFF");
 
-    /* Fila de cmds custom para probar respuestas NE185 distintas a FF 40.
-     * Cada boton envia UNA vez (no polling). Ver respuesta en log. */
-    lv_obj_t *label_cmd = lv_label_create(cont);
-    lv_obj_set_style_text_color(label_cmd, lv_color_hex(0xCCCCCC), 0);
-    lv_label_set_text(label_cmd, "Probar cmds custom:");
+    /* === Fila 3: cmds custom NE185 === */
+    lv_obj_t *lbl_cmd = lv_label_create(cont);
+    lv_obj_set_style_text_color(lbl_cmd, lv_color_hex(0xCCCCCC), 0);
+    lv_label_set_text(lbl_cmd, "Probar cmds custom NE185 (envia 1 vez):");
 
     lv_obj_t *row_cmd = lv_obj_create(cont);
     lv_obj_remove_style_all(row_cmd);
     lv_obj_set_size(row_cmd, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(row_cmd, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_style_pad_gap(row_cmd, 8, 0);
+    lv_obj_set_flex_flow(row_cmd, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_cmd, 6, 0);
     make_custom_cmd_btn(row_cmd, "FF 30", 0x30);
     make_custom_cmd_btn(row_cmd, "FF 50", 0x50);
     make_custom_cmd_btn(row_cmd, "FF 60", 0x60);
