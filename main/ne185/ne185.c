@@ -61,11 +61,23 @@ static const char *TAG = "ne185";
                                 * para detectar starvation con log en vez de
                                 * bloquear la task indefinidamente */
 
-/* Comandos (verificados con tramas reales del NE187, ver checksum.py) */
-static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x00, 0x3F};
-static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x41, 0x00, 0x00, 0x40};
-static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x42, 0x00, 0x00, 0x41};
-static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x44, 0x00, 0x00, 0x43};
+/* Comandos NUEVA HIPOTESIS 2026-05-27 tras descubrir repos class142/ne-rs485
+ * (NE334) + thespinmaster/venus-os (NE319/334). Lo que YO interprete como
+ * "cmd del NE187" del sniffer (FF 40 00 00 3F y FF 4X) era en realidad el
+ * ECHO de la respuesta del NE185 al NE187 (que incluye echo del cmd en
+ * los primeros bytes del frame canonical 20). Los cmds REALES son:
+ *
+ *   IDLE: byte3=0x80, checksum=0xBF
+ *   ACTION: byte3=0xC0, byte1 = bit del boton (0x01,0x02,0x04,0x08)
+ *
+ * Esto explica por que el NE185 sin NE187 nos respondia frame15 degradado
+ * (7C E0 00 40...) cuando le mandabamos cmd con b3=0x00 - era invalido. */
+static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x80, 0xBF};
+static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x01, 0x00, 0xC0, 0xC0};
+static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x02, 0x00, 0xC0, 0xC1};
+static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x04, 0x00, 0xC0, 0xC3};
+/* Adicional: cmds aprendidos de los repos publicos (no usados aun pero
+ * listos): CMD_BTN_AUX = FF 08 00 C0 C7, CMD_ALL_OFF = FF 80 00 00 7F */
 
 /* Cmd init DESCARTADO 2026-05-27 19:30. Rompia el TX al NE185.
  * Conservamos comentado por si en el futuro lo necesitamos investigar.
