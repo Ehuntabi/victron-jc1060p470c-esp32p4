@@ -105,8 +105,18 @@ static void btn_save_cb(lv_event_t *e)
                                        "Guardado:\n%s\n(SD no accesible para conteo)",
                                        path);
             }
+        } else if (err == ESP_ERR_INVALID_STATE) {
+            /* Lo emite log_capture_save_to_file cuando otro save esta en curso. */
+            lv_label_set_text(s_status_label,
+                              "Otra escritura en curso, espera unos segundos");
+        } else if (count_sd_logs() < 0) {
+            /* opendir(/sdcard) fallo -> SD no montada/insertada. */
+            lv_label_set_text(s_status_label,
+                              LV_SYMBOL_SD_CARD "  Inserta la tarjeta SD");
         } else {
-            lv_label_set_text_fmt(s_status_label, "Error: %s",
+            lv_label_set_text_fmt(s_status_label,
+                                  "Error guardando: %s\n"
+                                  "(SD insertada pero falla escritura)",
                                   esp_err_to_name(err));
         }
     }
