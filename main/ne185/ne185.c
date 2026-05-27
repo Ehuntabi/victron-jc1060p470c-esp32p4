@@ -67,14 +67,9 @@ static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x41, 0x00, 0x00, 0x40};
 static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x42, 0x00, 0x00, 0x41};
 static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x44, 0x00, 0x00, 0x43};
 
-/* Cmd init (wake-up) descubierto en repo class142/ne-rs485 para el panel
- * NE334. Hipotesis: el NE185 se duerme tras inactividad y necesita uno o
- * mas frames de despertar antes de aceptar polling. El sniffer no captura
- * esta fase porque solo logra conectarse despues del power-on del NE187.
- * Secuencia: 3 frames FF 40 00 80 BF con 100ms entre ellos al arranque. */
-static const uint8_t CMD_INIT[]     = {0xFF, 0x40, 0x00, 0x80, 0xBF};
-#define INIT_FRAMES        3
-#define INIT_FRAME_GAP_MS  100
+/* Cmd init DESCARTADO 2026-05-27 19:30. Rompia el TX al NE185.
+ * Conservamos comentado por si en el futuro lo necesitamos investigar.
+ * static const uint8_t CMD_INIT[] = {0xFF, 0x40, 0x00, 0x80, 0xBF}; */
 
 static ne185_data_t       s_data;
 static SemaphoreHandle_t  s_mutex;
@@ -132,6 +127,12 @@ static void parse_frame(const uint8_t *b)
     tmp  = s_data;
     xSemaphoreGive(s_mutex);
 
+    /* Detectar frame15 nativo NE185 reconstruido: b[5..6] = 0x7C 0xE0 (header
+     * propio del frame nativo, NO datos de tanks). En ese caso NO decodificar
+     * tanks porque no estan en este formato corto - falso positivo de
+     * "aguas grises llena" reportado por user 2026-05-27 19:08. */
+    bool is_native_ne185 = (b[5] == 0x7C && b[6] == 0xE0);
+
     /* Estados bitmap (byte 15) */
     uint8_t f = b[15];
     tmp.light_in  = (f & 0x01) != 0;
@@ -143,28 +144,35 @@ static void parse_frame(const uint8_t *b)
     tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
     tmp.battery2_v = ((float)b[13] - 30.0f) / 10.0f;
 
-    /* Tanque LIMPIO (clean): nibble bajo de byte 5
-     *   0x0 = Reserva (vacio)
-     *   0x1 = 1/4
-     *   0x3 = 2/4
-     *   0x7 = 3/4
-     *   0xF = 4/4 (lleno)
-     *   otro = 0xFF (combo invalido / sin datos)
-     */
-    uint8_t raw_clean = b[5] & 0x0F;
-    switch (raw_clean) {
-        case 0x0: tmp.s1 = 0;    break;
-        case 0x1: tmp.s1 = 1;    break;
-        case 0x3: tmp.s1 = 2;    break;
-        case 0x7: tmp.s1 = 3;    break;
-        case 0xF: tmp.s1 = 4;    break;
-        default:  tmp.s1 = 0xFF; break;
-    }
+    if (is_native_ne185) {
+        /* Frame nativo NE185 (sin NE187): no contiene tanks - dejar
+         * los valores actuales (preservar). Marcar como "sin dato". */
+        tmp.s1 = 0xFF;
+        tmp.r1 = 0xFF;
+    } else {
+        /* Tanque LIMPIO (clean): nibble bajo de byte 5
+         *   0x0 = Reserva (vacio)
+         *   0x1 = 1/4
+         *   0x3 = 2/4
+         *   0x7 = 3/4
+         *   0xF = 4/4 (lleno)
+         *   otro = 0xFF (combo invalido / sin datos)
+         */
+        uint8_t raw_clean = b[5] & 0x0F;
+        switch (raw_clean) {
+            case 0x0: tmp.s1 = 0;    break;
+            case 0x1: tmp.s1 = 1;    break;
+            case 0x3: tmp.s1 = 2;    break;
+            case 0x7: tmp.s1 = 3;    break;
+            case 0xF: tmp.s1 = 4;    break;
+            default:  tmp.s1 = 0xFF; break;
+        }
 
-    /* Tanque GRISES: bit 1 de byte 6 (user observo 0x02 con tanque vacio).
-     * Hipotesis: probe se moja cuando lleno -> bit 1 a 0; seco (vacio) -> bit 1 a 1.
-     *   r1 = 0 vacio, 1 lleno. */
-    tmp.r1 = (b[6] & 0x02) ? 0 : 1;
+        /* Tanque GRISES: bit 1 de byte 6 (user observo 0x02 con tanque vacio).
+         * Hipotesis: probe se moja cuando lleno -> bit 1 a 0; seco (vacio) -> bit 1 a 1.
+         *   r1 = 0 vacio, 1 lleno. */
+        tmp.r1 = (b[6] & 0x02) ? 0 : 1;
+    }
 
     tmp.fresh = true;
     tmp.last_update_ms = now_ms();
@@ -223,29 +231,14 @@ static void rs485_task(void *arg)
     ESP_LOGI(TAG, "Master RS-485 NE185 activo (poll %d ms, hold %d frames)",
              POLL_PERIOD_MS, HOLD_FRAMES);
 
-    /* === INIT SEQUENCE: despertar el bus NE185 ===
-     * Hipotesis derivada de class142/ne-rs485 spec: el NE185 puede estar
-     * dormido y necesitar uno o mas frames de wake-up antes de responder.
-     * Enviamos INIT_FRAMES copias de CMD_INIT con INIT_FRAME_GAP_MS entre
-     * ellas, leemos las respuestas (puede haber 1, 2 o ninguna), logueamos. */
-    for (int i = 0; i < INIT_FRAMES; ++i) {
-        ESP_LOGI(TAG, "init [%d/%d] tx FF 40 00 80 BF",
-                 i + 1, INIT_FRAMES);
-        uart_write_bytes(NE185_UART_NUM, CMD_INIT, sizeof(CMD_INIT));
-        uart_wait_tx_done(NE185_UART_NUM, pdMS_TO_TICKS(20));
-        uint8_t init_rx[FRAME_LEN];
-        int n = uart_read_bytes(NE185_UART_NUM, init_rx, FRAME_LEN,
-                                pdMS_TO_TICKS(READ_TIMEOUT_MS));
-        if (n > 0) {
-            ESP_LOGI(TAG, "init [%d/%d] rx %d bytes (b0=%02X b1=%02X)",
-                     i + 1, INIT_FRAMES, n, init_rx[0], init_rx[1]);
-        } else {
-            ESP_LOGI(TAG, "init [%d/%d] sin respuesta (n=%d)",
-                     i + 1, INIT_FRAMES, n);
-        }
-        vTaskDelay(pdMS_TO_TICKS(INIT_FRAME_GAP_MS));
-    }
-    ESP_LOGI(TAG, "init secuencia completa, iniciando polling normal");
+    /* INIT sequence DESACTIVADA 2026-05-27 19:30:
+     * Hipotesis: el cmd CMD_INIT (FF 40 00 80 BF) ponia al NE185 en
+     * un modo distinto que rechazaba los cmds posteriores. Evidencia:
+     * tras este cambio, b[4] del frame15 paso de rango 0x40-0x58 a 0x79+
+     * y el TX dejo de funcionar incluso erratically (antes funcionaba a
+     * veces, ahora no funciona nunca).
+     * Volvemos al comportamiento previo: solo poll FF 40 00 00 3F desde
+     * el primer frame, sin init wake-up. */
 
     while (1) {
         /* === FSM de cmd a enviar ====================================== */
@@ -425,14 +418,24 @@ watcher_skip:;
             ok = true;
         } else if (n == 15) {
             /* Caso A1: frame15 NATIVO NE185 (descubierto 2026-05-27).
-             * Cabecera 7C E0 00 40, contador en b[4], checksum
-             * simple b[14] = b[4] | 0xA0. NO coincide con checksum
-             * del sniffer NE187 (b5+b9+b14+b15+0xB1) porque el NE187
-             * intermedia tarea distinta. Reconstruimos canonical
-             * tx_cmd+buf para que parse_frame extraiga lo decodificable
-             * (bat servicio buf[7], bat motor buf[8], bitmap buf[10]). */
+             * Cabecera 7C E0 00 40, contador en b[4].
+             *
+             * 2026-05-27 19:08: comprobado que el checksum NO es simple
+             * b[4] | 0xA0 como pensaba (solo coincidio por casualidad
+             * en una muestra). Hace falta mas data para reverse-engineer
+             * la formula real.
+             *
+             * Estrategia provisional: aceptar el frame solo por la
+             * CABECERA (7C E0 00 40) sin validar checksum. La probabilidad
+             * de que 4 bytes consecutivos coincidan por ruido en el bus
+             * es 1/(2^32) - despreciable. Si el frame es corrupto, los
+             * bytes parsed (bat, bitmap) seran "raros" pero no peligrosos.
+             *
+             * Reconstruimos canonical tx_cmd+buf para que parse_frame
+             * extraiga lo decodificable (bat servicio buf[7], bat motor
+             * buf[8], bitmap buf[10]). */
             if (buf[0] == 0x7C && buf[1] == 0xE0 && buf[2] == 0x00 &&
-                buf[3] == 0x40 && buf[14] == ((buf[4] | 0xA0) & 0xFF)) {
+                buf[3] == 0x40) {
                 memcpy(frame20, tx_cmd, 5);
                 memcpy(frame20 + 5, buf, 15);
                 ok = true;
