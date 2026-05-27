@@ -434,8 +434,13 @@ watcher_skip:;
              * Reconstruimos canonical tx_cmd+buf para que parse_frame
              * extraiga lo decodificable (bat servicio buf[7], bat motor
              * buf[8], bitmap buf[10]). */
-            if (buf[0] == 0x7C && buf[1] == 0xE0 && buf[2] == 0x00 &&
-                buf[3] == 0x40) {
+            /* Aceptar ambos modos: header 7C E0 (normal) o FC E0 (modo
+             * descubierto 2026-05-27, bit 7 de b[0] alto). Ambos parecen
+             * llevar el mismo formato de datos. b[3] puede ser 0x40 o
+             * 0x00 segun el modo (descubierto analizando 79 frames). */
+            if ((buf[0] == 0x7C || buf[0] == 0xFC) &&
+                buf[1] == 0xE0 && buf[2] == 0x00 &&
+                (buf[3] == 0x40 || buf[3] == 0x00)) {
                 memcpy(frame20, tx_cmd, 5);
                 memcpy(frame20 + 5, buf, 15);
                 ok = true;
