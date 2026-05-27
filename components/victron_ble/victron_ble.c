@@ -228,16 +228,45 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         return 0;
     }
 
-    /* Diagnostico Orion DC/DC: si la MAC del adv coincide con una NVS,
-     * loguear SIEMPRE antes de cualquier filtro de vendor/longitud/tipo.
-     * Asi vemos si el adv del Orion llega aunque tenga vendor/record/len no esperados. */
-    if (find_device_config_by_mac(event->disc.addr.val) != NULL) {
-        uint16_t vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
-            ? (uint16_t)(fields.mfg_data[0] | (fields.mfg_data[1] << 8)) : 0xFFFF;
-        ESP_LOGI(TAG, "[DIAG] adv MAC=%02X:%02X:%02X:%02X:%02X:%02X mfg_len=%u vid=0x%04X",
+    /* Diagnostico Orion DC/DC ampliado (2026-05-27): loguear TODO adv que
+     * tenga vendorID == Victron (0x02E1), no solo los con MAC en NVS.
+     * Asi descubrimos si el Orion llega con MAC distinta o si NINGUN
+     * adv Victron mas alla de BMV+Solar llega al host. */
+    static uint32_t s_adv_total = 0;
+    static uint32_t s_adv_victron = 0;
+    s_adv_total++;
+
+    uint16_t early_vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
+        ? (uint16_t)(fields.mfg_data[0] | (fields.mfg_data[1] << 8)) : 0xFFFF;
+    bool is_victron = (early_vid == VICTRON_MANUFACTURER_ID);
+    bool mac_known  = (find_device_config_by_mac(event->disc.addr.val) != NULL);
+
+    if (is_victron) s_adv_victron++;
+
+    /* Log cada adv Victron con info enriquecida (addr_type, rssi, product_id
+     * si lo podemos leer). Es 16Hz max para Victron en zona pero con 3
+     * dispositivos eso son ~3-10 advs/s, manejable. */
+    if (is_victron || mac_known) {
+        uint16_t pid = 0;
+        if (fields.mfg_data_len >= 6) {
+            pid = (uint16_t)(fields.mfg_data[4] | (fields.mfg_data[5] << 8));
+        }
+        ESP_LOGI(TAG, "[DIAG] adv MAC=%02X:%02X:%02X:%02X:%02X:%02X "
+                      "type=%u rssi=%d mfg_len=%u vid=0x%04X pid=0x%04X %s",
                  event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
                  event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0],
-                 (unsigned)fields.mfg_data_len, vid);
+                 (unsigned)event->disc.addr.type,
+                 (int)event->disc.rssi,
+                 (unsigned)fields.mfg_data_len,
+                 early_vid, pid,
+                 mac_known ? "[NVS]" : "[unk]");
+    }
+
+    /* Cada 200 advs totales, logue stats globales para ver volumen del scan. */
+    if ((s_adv_total % 200) == 0) {
+        ESP_LOGW(TAG, "[STATS] adv total=%lu, victron=%lu (%.1f%%)",
+                 (unsigned long)s_adv_total, (unsigned long)s_adv_victron,
+                 s_adv_total ? 100.0 * s_adv_victron / s_adv_total : 0.0);
     }
 
     if (fields.mfg_data_len < offsetof(victronManufacturerData, victronEncryptedData) + 1)
