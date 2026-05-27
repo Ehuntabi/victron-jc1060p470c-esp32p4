@@ -288,17 +288,20 @@ static lv_obj_t *make_test_marker_btn(lv_obj_t *parent, const char *label,
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
-/* DEMO temporal de tanques: cicla niveles 0..4 cada tick (1.5 s).
- * tank_s1 (CLEAN_H) muestra cada nivel del NE187; tank_r1 (GREY_H)
- * alterna OK/LLENO según paridad. user_data = ui_overview_view_t*. */
+/* DEMO temporal de tanques DESACTIVADO 2026-05-27: confundia al usuario
+ * haciendo creer que habia lectura real del NE185 cuando solo era el
+ * ciclado del demo. Si no hay datos NE185 (s_data.fresh==false), los
+ * tanks deberian permanecer en su estado vacio/placeholder hasta que
+ * llegue el primer frame valido (ne185_get rellena s1/r1 del bus).
+ *
+ * NOTA: aun con el master mode no recibiendo frames validos (formato
+ * desconocido), aqui no se cicla nada. Cuando el reverse engineering
+ * del nuevo formato NE185 sea exitoso, ne185_get devolvera valores
+ * reales y los tanks se actualizaran solos. */
 static void tank_demo_cb(lv_timer_t *t)
 {
-    static uint8_t step;
-    ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
-    if (!ov) return;
-    /* Demo solo para grises (limpia espera datos reales del NE185). */
-    if (ov->tank_r1) ui_tank_set(ov->tank_r1, step % 2);
-    step = (step + 1) % 5;
+    (void)t;
+    /* No-op: dejado por si en el futuro queremos animacion de "esperando" */
 }
 
 /* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
