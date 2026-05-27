@@ -235,13 +235,17 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
     lv_obj_center(btn_lbl);
     lv_obj_add_event_cb(btn, btn_save_cb, LV_EVENT_CLICKED, NULL);
 
-    /* Toggle VERBOSE log NE185 */
+    /* Toggle VERBOSE log NE185 - sincronizar estado inicial con ne185_get_verbose() */
     lv_obj_t *btn_verbose = lv_btn_create(row_actions);
     lv_obj_set_size(btn_verbose, 220, 50);
-    lv_obj_set_style_bg_color(btn_verbose, lv_color_hex(0x607D8B), 0);
+    bool verbose_now = ne185_get_verbose();
+    lv_obj_set_style_bg_color(btn_verbose,
+        verbose_now ? lv_color_hex(0x00C851) : lv_color_hex(0x607D8B), 0);
     lv_obj_set_style_radius(btn_verbose, 10, 0);
     s_verbose_toggle_btn_lbl = lv_label_create(btn_verbose);
-    lv_label_set_text(s_verbose_toggle_btn_lbl, LV_SYMBOL_EYE_CLOSE "  LOG OFF");
+    lv_label_set_text(s_verbose_toggle_btn_lbl,
+        verbose_now ? LV_SYMBOL_EYE_OPEN "  LOG ON"
+                     : LV_SYMBOL_EYE_CLOSE "  LOG OFF");
     lv_obj_set_style_text_color(s_verbose_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(s_verbose_toggle_btn_lbl);
     lv_obj_add_event_cb(btn_verbose, btn_verbose_toggle_cb, LV_EVENT_CLICKED, NULL);
