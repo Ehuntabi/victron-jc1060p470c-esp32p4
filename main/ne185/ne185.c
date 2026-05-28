@@ -449,12 +449,23 @@ watcher_skip:;
              * Reconstruimos canonical tx_cmd+buf para que parse_frame
              * extraiga lo decodificable (bat servicio buf[7], bat motor
              * buf[8], bitmap buf[10]). */
-            /* Aceptar ambos modos: header 7C E0 (normal) o FC E0 (modo
-             * descubierto 2026-05-27, bit 7 de b[0] alto). Ambos parecen
-             * llevar el mismo formato de datos. b[3] puede ser 0x40 o
-             * 0x00 segun el modo (descubierto analizando 79 frames). */
-            if ((buf[0] == 0x7C || buf[0] == 0xFC) &&
-                buf[1] == 0xE0 && buf[2] == 0x00 &&
+            /* Aceptar TODAS las variantes de header observadas hasta ahora.
+             * El NE185 responde con headers distintos segun el cmd recibido:
+             *   - 7C E0: cmd legacy FF 40 00 00 3F (sniffer NE187 historico)
+             *   - FC E0: variante transitoria 0.4% de frames (poco frecuente)
+             *   - F8 E0: cmd moderno FF 40 00 80 BF (descubierto 2026-05-28)
+             *
+             * 2026-05-28 user reporto que con cmd nuevo el LED de la UI no se
+             * encendia. El header cambio a F8 E0 (bit 2 vs 7C tiene bit 2 ON
+             * y bit 7 OFF; F8 tiene bit 7 ON y bit 2 OFF; FC tiene ambos ON).
+             *
+             * Solucion mas robusta: aceptar cualquier b[0] con bit 6 set (todos
+             * los observados tienen bit 6 = 0x40 set: 7C=...111100, FC=...111100,
+             * F8=...111000 todos). Filtramos por bits 0-3 (b1 must be E0)
+             * y b[1]=0xE0 + b[2]=0x00 + (b[3] 0x40 or 0x00). */
+            if ((buf[0] & 0x40) != 0 &&        /* bit 6 set en TODOS los headers observados */
+                buf[1] == 0xE0 &&
+                buf[2] == 0x00 &&
                 (buf[3] == 0x40 || buf[3] == 0x00)) {
                 memcpy(frame20, tx_cmd, 5);
                 memcpy(frame20 + 5, buf, 15);
