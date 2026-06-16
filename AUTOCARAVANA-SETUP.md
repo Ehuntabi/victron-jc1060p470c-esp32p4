@@ -265,11 +265,19 @@ Si necesitas algo del PC principal (logs viejos, configs, etc.) durante el viaje
 ```bash
 # El portatil ya tiene Tailscale activo (db3-k72f, 100.104.50.31)
 tailscale status                           # ver nodos
-# El PC principal NO tiene Tailscale instalado, no puedes alcanzarlo via Tailscale
-# Pero el Proxmox SI esta accesible:
+# El PC principal NO tiene Tailscale instalado, no puedes alcanzarlo directamente
+# Pero todo lo de la LAN de casa SI esta accesible via subnet router del Proxmox:
 ssh proxmox                                # via Tailscale 100.122.42.61
-# Desde Proxmox puedes ver LXCs, PBS, HA OS, etc.
+ssh root@192.168.1.19                      # mismo Proxmox via subnet
+# Desde Proxmox puedes ver LXCs (Pi-hole, PBS, Immich), HA OS, etc.
 ```
+
+Servicios LAN accesibles desde la autocaravana (vía subnet router 192.168.1.0/24):
+- `http://192.168.1.23:8123` — Home Assistant
+- `http://192.168.1.25/admin` — Pi-hole admin (sección 7b)
+- `https://192.168.1.112:8007` — PBS web UI
+- `http://192.168.1.11:2283` — Immich
+- `ssh root@192.168.1.19` — Proxmox
 
 **Para acceder al PC principal**, opciones:
 - Si tienes IP publica/dyndns: SSH directo
@@ -279,6 +287,120 @@ ssh proxmox                                # via Tailscale 100.122.42.61
   curl -fsSL https://tailscale.com/install.sh | sh
   sudo tailscale up
   ```
+
+---
+
+## 7b. Acceder al Pi-hole desde la autocaravana
+
+El Pi-hole (LXC 102) está en `192.168.1.25` dentro de la LAN de casa.
+Desde el portátil **vía Tailscale** puedes alcanzarlo porque Proxmox anuncia
+la subnet `192.168.1.0/24` (subnet router aprobado).
+
+### 7b.1 Pre-flight — verificar Tailscale + ruta
+
+Desde el portátil:
+```bash
+tailscale status            # debe mostrar nodos proxmox / db3-k72f / poco-f5-pro
+tailscale ping 192.168.1.25 # OK = la ruta a la LAN funciona via Proxmox subnet router
+ping -c 2 192.168.1.25      # ping normal (segundo confirm)
+```
+
+Si `tailscale ping` falla:
+- Verificar que el portatil tiene `--accept-routes` activo:
+  ```bash
+  tailscale up --accept-routes
+  ```
+- Verificar que el subnet router del Proxmox sigue activo:
+  ```bash
+  ssh proxmox tailscale status
+  # Buscar "offers subnet routes: 192.168.1.0/24"
+  ```
+  Si no aparece o no está aprobado, reactivar (necesita usuario admin):
+  ```bash
+  ssh proxmox sudo tailscale up --advertise-routes=192.168.1.0/24
+  # Luego aprobar en https://login.tailscale.com/admin/machines
+  ```
+
+### 7b.2 Web admin (lo más común)
+
+URL: **http://192.168.1.25/admin**
+
+- Username: no requiere (Pi-hole v6+ solo password)
+- Password: la que pusiste al setup (está en KeePass)
+- Si olvidaste la password:
+  ```bash
+  ssh proxmox 'pct exec 102 -- pihole setpassword NUEVA_PASSWORD'
+  ```
+
+Acceso desde Cinnamon: abrir Firefox/Chrome → `http://192.168.1.25/admin`
+
+### 7b.3 SSH directo al LXC Pi-hole
+
+```bash
+ssh proxmox                     # primero al Proxmox via Tailscale
+pct enter 102                   # te entra en la shell del LXC Pi-hole
+# Comandos utiles dentro:
+pihole status
+pihole -t                       # tail del log de queries en tiempo real
+pihole -c                       # estadisticas
+pihole -g                       # update gravity (listas bloqueo)
+pihole disable 5m               # pausar bloqueo 5 minutos
+pihole enable                   # reactivar
+```
+
+Para SSH directo al LXC desde el portátil (sin pasar por Proxmox):
+```bash
+ssh root@192.168.1.25           # si configuraste authorized_keys del root del LXC
+```
+
+### 7b.4 Usar el Pi-hole como DNS desde la autocaravana
+
+Si quieres que las queries DNS del portátil pasen por tu Pi-hole de casa (bloqueo de ads activo):
+
+**Opción A — Cambiar DNS solo del portátil temporalmente**:
+```bash
+# Linux Mint: NetworkManager
+nmcli connection modify "WiFi_AUTOCARAVANA" ipv4.dns "192.168.1.25"
+nmcli connection modify "WiFi_AUTOCARAVANA" ipv4.ignore-auto-dns yes
+nmcli connection up "WiFi_AUTOCARAVANA"
+# Verificar:
+nslookup google.com 192.168.1.25
+```
+
+**Opción B — Usar el Proxmox como exit node de Tailscale**:
+Esto envía TODO el tráfico del portátil por casa (no solo DNS).
+```bash
+tailscale up --exit-node=proxmox
+# Para volver a normal:
+tailscale up --exit-node=
+```
+Verifica antes desde https://login.tailscale.com/admin/machines que el Proxmox tiene "Use as exit node" activado.
+
+### 7b.5 Troubleshooting Pi-hole
+
+| Síntoma | Diagnóstico |
+|---|---|
+| `pihole status` da "Pi-hole blocking is disabled" | `pihole enable` |
+| Web admin no carga (timeout) | LXC parado: `ssh proxmox pct start 102` |
+| Web admin pide password viejo | `pihole setpassword` con nuevo (ver 7b.2) |
+| DNS no resuelve | FTL parado: `pct exec 102 -- systemctl status pihole-FTL` |
+| Pi-hole reset IP | Memoria avisa: NUNCA dhcp en Pi-hole. Verificar `pct config 102` y reaplicar IP estatica `pct set 102 --net0 name=eth0,bridge=vmbr0,gw=192.168.1.1,hwaddr=BC:24:11:8A:30:5A,ip=192.168.1.25/24` |
+
+### 7b.6 Comandos rápidos referencia
+
+```bash
+# Stats rapidos sin entrar al LXC:
+ssh proxmox 'pct exec 102 -- pihole -c -e'
+
+# Forzar update de listas (gravity):
+ssh proxmox 'pct exec 102 -- pihole -g'
+
+# Ver ultimas 50 queries bloqueadas:
+ssh proxmox 'pct exec 102 -- pihole -t' | head -50
+
+# Restart Pi-hole entero (sin reiniciar LXC):
+ssh proxmox 'pct exec 102 -- pihole restartdns'
+```
 
 ---
 
