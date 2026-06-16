@@ -13,3 +13,6 @@ Thumbs.db
 
 # HA backup snapshots (no van al repo)
 homeassistant*.tar.gz
+
+# Capturas runtime NE185 reverse engineering
+logs/
