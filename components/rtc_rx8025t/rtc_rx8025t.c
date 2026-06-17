@@ -133,6 +133,16 @@ esp_err_t rtc_get_time(struct tm *tm_out)
     tm_out->tm_mday = bcd2dec(regs[4] & 0x3F);
     tm_out->tm_mon  = bcd2dec(regs[5] & 0x1F) - 1;
     tm_out->tm_year = bcd2dec(regs[6]) + 100;  /* siglo 21 (2000-2099) */
+
+    /* Validar plausibilidad de la fecha. Si el RTC perdio la pila, devuelve
+     * basura; rtc_init ya limpio el VLF, asi que el rango es la senal fiable.
+     * Rechazarla aqui protege a TODOS los callers (rtc_get_timestamp, etc.),
+     * no solo a los que replican el chequeo de año. */
+    if (tm_out->tm_year < 120 || tm_out->tm_year > 200 ||
+        tm_out->tm_mon  < 0   || tm_out->tm_mon  > 11  ||
+        tm_out->tm_mday < 1   || tm_out->tm_mday > 31) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     return ESP_OK;
 }
 
@@ -140,9 +150,12 @@ esp_err_t rtc_set_time(const struct tm *tm_in)
 {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
 
-    /* Detener oscilador antes de escribir (RX8025T: CONTROL bit 6 = STOP) */
+    /* Detener oscilador antes de escribir (RX8025T: CONTROL bit 6 = STOP).
+     * Comprobar la lectura: si falla, ctrl quedaria en 0 y al reescribir
+     * CONTROL borrariamos los bits de config (AIE/TIE/UIE). Mejor abortar. */
     uint8_t ctrl = 0;
-    rtc_read(REG_CONTROL, &ctrl, 1);
+    esp_err_t cret = rtc_read(REG_CONTROL, &ctrl, 1);
+    if (cret != ESP_OK) return cret;
     rtc_write(REG_CONTROL, ctrl | CTRL_STOP);
     vTaskDelay(pdMS_TO_TICKS(10));
 
