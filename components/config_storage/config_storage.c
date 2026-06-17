@@ -385,17 +385,23 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
         // No devices configured yet, try to migrate from legacy single device
         uint8_t legacy_key[16] = {0};
         if (load_aes_key(legacy_key) == ESP_OK) {
-            // Create a single device from legacy data
+            // Create a single device from legacy data.
+            // Construir en un buffer local del tamano completo del blob:
+            // devices_out lo dimensiona el caller con max_devices (puede ser
+            // < VICTRON_MAX_DEVICES), asi que escribir el blob desde devices_out
+            // leeria fuera de su buffer. El dispositivo migrado se releera mas
+            // abajo desde NVS a stored_devices y se copiara a devices_out.
             count = 1;
-            memset(&devices_out[0], 0, sizeof(victron_device_config_t));
-            strcpy(devices_out[0].mac_address, "00:00:00:00:00:00");
-            memcpy(devices_out[0].aes_key, legacy_key, 16);
-            strcpy(devices_out[0].device_name, "Legacy Device");
-            devices_out[0].enabled = true;
-            
+            victron_device_config_t migrated[VICTRON_MAX_DEVICES];
+            memset(migrated, 0, sizeof(migrated));
+            strcpy(migrated[0].mac_address, "00:00:00:00:00:00");
+            memcpy(migrated[0].aes_key, legacy_key, 16);
+            strcpy(migrated[0].device_name, "Legacy Device");
+            migrated[0].enabled = true;
+
             // Save the migrated data
             nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
-            nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, devices_out, sizeof(victron_device_config_t) * VICTRON_MAX_DEVICES);
+            nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, migrated, sizeof(migrated));
             changed = true;
         } else {
             count = 0;
