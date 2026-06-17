@@ -36,6 +36,15 @@ void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 void ui_show_chart_screen(ui_state_t *ui);
 void ui_show_battery_history_screen(ui_state_t *ui);
 
+/* true si hay alguna alarma activa (no silenciada) en la vista Overview
+ * (S1 agua/ R1 agua / SoC / congelador). La consulta el salvapantallas para
+ * no rotar mientras hay alarma. */
+bool ui_overview_alarm_active(void);
+
+/* Si el salvapantallas esta rotando, lo interrumpe y salta a Live + Overview
+ * para que la alarma sea visible. Llamado desde la deteccion de alarmas. */
+void ui_alarm_interrupt_screensaver(void);
+
 /**
  * Mark a device as offline in the Victron Keys settings page.
  * @param mac_address MAC address of the device to mark as offline

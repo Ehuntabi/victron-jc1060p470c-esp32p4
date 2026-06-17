@@ -817,6 +817,23 @@ void ui_notify_user_activity(void)
     ui_settings_panel_on_user_activity(ui);
 }
 
+void ui_alarm_interrupt_screensaver(void)
+{
+    ui_state_t *ui = &g_ui;
+    /* Solo si el salvapantallas esta rotando: sacamos al usuario de la
+     * rotacion y mostramos Live + Overview, donde la alarma parpadea. */
+    if (ui->screensaver.mode != UI_SCREENSAVER_MODE_ROTATE) return;
+    if (!ui->screensaver.active) return;
+    /* Reutiliza el wake: sale del salvapantallas, para la rotacion, restaura
+     * brillo y vuelve a la pestaña Live. */
+    ui_settings_panel_on_user_activity(ui);
+    /* Forzar la vista Overview dentro de Live (la alarma se visualiza ahi).
+     * Solo en memoria; no persiste la preferencia del usuario. */
+    ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
+    ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
+    ESP_LOGW(TAG_UI, "Alarma activa: rotacion interrumpida -> Live/Overview");
+}
+
 /* Sincroniza el icono del botón nav con el tab activo del tabview.
  * Se invoca en LV_EVENT_VALUE_CHANGED del tabview, así cubre los 3 paths
  * de cambio: pulsar btn_nav, swipe horizontal, set_act programático. */

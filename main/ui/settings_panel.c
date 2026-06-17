@@ -2238,6 +2238,10 @@ static void screensaver_timer_cb(lv_timer_t *timer)
     ESP_LOGI("SAVER", "timer fired mode=%d period=%d", ui->screensaver.mode, ui->screensaver.rotate_period_min);
 
     if (ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) {
+        /* No entrar en rotacion si hay una alarma activa: hay que mantener
+         * Live+Overview visible hasta que se despeje (Feature A). El timer es
+         * periodico, asi que reintentara cuando la alarma se aclare. */
+        if (ui_overview_alarm_active()) return;
         /* Modo Rotar: ciclar Live/Frigo/Bateria cada rotate_period_min via
          * screensaver_rotate_timer_cb. La fragmentacion del pool LVGL de
          * 128KB que obligo a desactivarlo ya NO aplica: con LV_MEM_CUSTOM=y

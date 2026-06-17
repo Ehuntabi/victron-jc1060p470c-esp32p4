@@ -118,6 +118,13 @@ static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
 /* ── Sistema de alarmas tanques: cola + tarea para el pitido de 5 s ── */
 static QueueHandle_t s_alarm_queue = NULL;
 
+/* Estado agregado de alarmas (cualquiera activa y no silenciada), para que el
+ * salvapantallas pueda interrumpir la rotacion. Lo actualiza overview_render. */
+static volatile bool s_ov_alarm_active = false;
+static bool          s_ov_prev_alarm   = false;
+
+bool ui_overview_alarm_active(void) { return s_ov_alarm_active; }
+
 /* Patron de alarma estilo "detector de humos" (~5 s).
  * Es el sonido universalmente reconocido como ALARMA: tres pitidos
  * agudos cortos, silencio, repetido. Sin musicalidad ni adornos —
@@ -1020,6 +1027,18 @@ static void overview_render(ui_overview_view_t *ov)
         } else {
             ov->alarm_freezer_last_sound_ms = 0;
         }
+
+        /* ── Feature A: interrumpir la rotacion del salvapantallas cuando
+         * salta cualquier alarma no silenciada, para que no quede oculta. ── */
+        bool any_alarm = (alarm_s1 && !ov->alarm_s1_muted) ||
+                         (alarm_r1 && !ov->alarm_r1_muted) ||
+                         (alarm_soc && !ov->alarm_soc_muted) ||
+                         (alarm_freezer && !ov->alarm_freezer_muted);
+        s_ov_alarm_active = any_alarm;
+        if (any_alarm && !s_ov_prev_alarm) {
+            ui_alarm_interrupt_screensaver();
+        }
+        s_ov_prev_alarm = any_alarm;
 
         /* Indicador 230 V grande */
         if (ov->pill_shore) {
