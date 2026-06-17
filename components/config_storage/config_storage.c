@@ -132,19 +132,25 @@ esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t
 
     uint8_t en = 1, bright = 20;
     uint16_t tout = 60;
-    nvs_get_u8(h, SS_ENABLED_KEY, &en);
-    nvs_get_u8(h, SS_BRIGHT_KEY, &bright);
-    nvs_get_u16(h, SS_TIMEOUT_KEY, &tout);
+    bool changed = false;
+
+    // Persistir el default solo si la clave no existia (evita escritura +
+    // commit NVS en cada carga, que desgasta flash innecesariamente).
+    if (nvs_get_u8(h, SS_ENABLED_KEY, &en) != ESP_OK) {
+        nvs_set_u8(h, SS_ENABLED_KEY, en); changed = true;
+    }
+    if (nvs_get_u8(h, SS_BRIGHT_KEY, &bright) != ESP_OK) {
+        nvs_set_u8(h, SS_BRIGHT_KEY, bright); changed = true;
+    }
+    if (nvs_get_u16(h, SS_TIMEOUT_KEY, &tout) != ESP_OK) {
+        nvs_set_u16(h, SS_TIMEOUT_KEY, tout); changed = true;
+    }
 
     if (enabled) *enabled = en;
     if (brightness) *brightness = bright;
     if (timeout) *timeout = tout;
 
-    // Save defaults if not present
-    nvs_set_u8(h, SS_ENABLED_KEY, en);
-    nvs_set_u8(h, SS_BRIGHT_KEY, bright);
-    nvs_set_u16(h, SS_TIMEOUT_KEY, tout);
-    nvs_commit(h);
+    if (changed) nvs_commit(h);
     nvs_close(h);
     return ESP_OK;
 }

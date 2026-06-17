@@ -256,18 +256,21 @@ esp_err_t datalogger_log(const frigo_state_t *frigo)
     entry.T_Congelador = frigo->T_Congelador;
     entry.T_Exterior   = frigo->T_Exterior;
     entry.fan_percent  = frigo->fan_percent;
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        s_buf[s_head] = entry;
-        s_head = (s_head + 1) % DATALOGGER_MAX_ENTRIES;
-        if (s_count < DATALOGGER_MAX_ENTRIES) s_count++;
-        if (s_pending_count < DATALOGGER_MAX_ENTRIES) {
-            s_pending_count++;
-        } else {
-            /* buffer pendientes lleno: descartar mas antiguo */
-            s_pending_first = (s_pending_first + 1) % DATALOGGER_MAX_ENTRIES;
-        }
-        xSemaphoreGive(s_mutex);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Log descartado: timeout tomando mutex");
+        return ESP_ERR_TIMEOUT;
     }
+    s_buf[s_head] = entry;
+    s_head = (s_head + 1) % DATALOGGER_MAX_ENTRIES;
+    if (s_count < DATALOGGER_MAX_ENTRIES) s_count++;
+    if (s_pending_count < DATALOGGER_MAX_ENTRIES) {
+        s_pending_count++;
+    } else {
+        /* buffer pendientes lleno: descartar mas antiguo */
+        s_pending_first = (s_pending_first + 1) % DATALOGGER_MAX_ENTRIES;
+    }
+    xSemaphoreGive(s_mutex);
+
     ESP_LOGI(TAG, "Log[%d]: %s | %.1f | %.1f | %.1f | fan=%d%%",
              s_count, entry.timestamp,
              entry.T_Aletas, entry.T_Congelador,

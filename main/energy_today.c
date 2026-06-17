@@ -11,7 +11,7 @@ static const char *TAG = "ENERGY";
 static const char *NVS_NS = "energy";
 
 static struct {
-    double pv_wh;            /* energía cargada hoy (mWh internamente) */
+    double pv_wh;            /* energía cargada hoy, en Wh (double) */
     double loads_wh;         /* energía consumida hoy */
     double yesterday_pv_wh;  /* snapshot ayer (al rollover de medianoche) */
     double yesterday_loads_wh;
