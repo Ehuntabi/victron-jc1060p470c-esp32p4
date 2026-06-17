@@ -42,8 +42,7 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
 
 ## Pendientes activos
-1. Debug rotación del salvapantallas (modo Rotar Live/Frigo/Batería cada N min)
-2. Aplicar cards a vistas Live: battery_monitor, solar_charger, simple, simple_devices
-3. Victron Keys 2 columnas (intento alternativo, el anterior no renderizaba textos)
-4. DS18B20 físicos (cuando se conecten)
-5. Ventilador GPIO21 (cuando esté cableado)
+1. Aplicar cards a vistas Live: battery_monitor, solar_charger, simple, simple_devices
+2. Victron Keys 2 columnas (intento alternativo, el anterior no renderizaba textos)
+3. DS18B20 físicos (cuando se conecten)
+4. Ventilador GPIO21 (cuando esté cableado)
