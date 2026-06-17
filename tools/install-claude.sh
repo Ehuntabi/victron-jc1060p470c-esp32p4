@@ -86,7 +86,9 @@ ok "CLAUDE.md global copiado"
 # -----------------------------------------------------------------------------
 step "4. Migrar memorias persistentes"
 
-for d in "$HOME/.claude/projects/-home-jc/memory" "$HOME/.claude/projects/-home-jc-joint-victron/memory"; do
+# Path dinamico: -home-<user> (no hardcoded -home-jc)
+USERNAME=$(whoami)
+for d in "$HOME/.claude/projects/-home-$USERNAME/memory" "$HOME/.claude/projects/-home-$USERNAME-joint-victron/memory"; do
   mkdir -p "$d"
   if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
     bak="$d.bak.$(date +%Y%m%d-%H%M%S)"
