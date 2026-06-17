@@ -7,6 +7,7 @@
 - [Toolchain warnings != errors](feedback_toolchain_warnings_not_errors.md) — ignorables si build OK
 - [Comandos destructivos: pedir permiso primero](feedback_destructive_commands_ask_first.md) — fullclean/rm -rf/reset --hard requieren confirmacion
 - [~/joint/ = autocaravana](project_joint_autocaravana.md) — paths actualizados
+- [Portatil: rutas IDF y puerto](project_laptop_idf_paths.md) — IDF en ~/.espressif, puerto ttyACM0, fix cmake/ninja/venv
 - [Verificar script antes de batch](feedback_verify_scripts_before_batch.md) — testar con 1 input real primero
 - [Politica commits/push](feedback_commit_policy.md) — commit automatico tras grupo logico, push al final
 - [KiCad: limitaciones sin GUI](feedback_kicad_limitations.md) — PCB requiere GUI
