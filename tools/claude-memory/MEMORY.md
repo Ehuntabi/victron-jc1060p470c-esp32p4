@@ -4,6 +4,7 @@
 - [Revision estabilidad 2026-06](project_stability_review_2026-06.md) — #7 Rotar RESUELTO, pendiente solo #10 (DS18B20), modelo watchdog heartbeat
 - [NE185 pausa pre-vacaciones](project_ne185_pause_pre_vacation.md) — estado al detener trabajo
 - [Victron BLE: subir MAX_PAYLOAD_SIZE](feedback_victron_ble_max_payload_size.md) — 32 para Orion DC/DC Tr
+- [Referencia protocolo Victron BLE](reference_victron_ble_protocol.md) — keshavdv para verificar, Orion XS 0x0F decode + NA (fix d288815)
 - [sdkconfig known-good tag](feedback_sdkconfig_known_good_tag.md) — diff antes de tocar sdkconfig
 - [Toolchain warnings != errors](feedback_toolchain_warnings_not_errors.md) — ignorables si build OK
 - [Comandos destructivos: pedir permiso primero](feedback_destructive_commands_ask_first.md) — fullclean/rm -rf/reset --hard requieren confirmacion
