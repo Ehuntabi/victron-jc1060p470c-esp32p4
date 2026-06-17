@@ -21,6 +21,38 @@ static const char *s_reason_str = "Unknown";
 #define WD_LVGL_LOCK_TIMEOUT   200    /* ms */
 #define WD_LVGL_FAIL_THRESHOLD 3      /* fallos consecutivos para reset */
 
+/* Vigilancia de tareas por heartbeat. Umbral generoso (margen amplio sobre
+ * la cadencia mas lenta, pzem ~2s) para no provocar resets espureos. */
+#define WD_TASK_TIMEOUT_US     (10LL * 1000000LL)  /* 10 s sin latido -> reset */
+
+static volatile int64_t s_last_beat[WD_TASK_COUNT];   /* 0 = nunca latio */
+static portMUX_TYPE s_beat_mux = portMUX_INITIALIZER_UNLOCKED;
+
+void watchdog_heartbeat(wd_task_t task)
+{
+    if (task >= WD_TASK_COUNT) return;
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_beat_mux);
+    s_last_beat[task] = now;
+    portEXIT_CRITICAL(&s_beat_mux);
+}
+
+/* Devuelve el indice de la primera tarea que lleva muda mas del umbral, o -1.
+ * Ignora tareas que aun no han latido (s_last_beat == 0). */
+static int wd_stalled_task(int64_t now)
+{
+    int stalled = -1;
+    portENTER_CRITICAL(&s_beat_mux);
+    for (int i = 0; i < WD_TASK_COUNT; i++) {
+        if (s_last_beat[i] != 0 && (now - s_last_beat[i]) > WD_TASK_TIMEOUT_US) {
+            stalled = i;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&s_beat_mux);
+    return stalled;
+}
+
 static void wd_increment_counter_nvs(void)
 {
     nvs_handle_t h;
@@ -74,7 +106,8 @@ static void wd_monitor_task(void *arg)
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(WD_MONITOR_PERIOD_MS));
-        bool in_grace = (esp_timer_get_time() - start_us) < GRACE_US;
+        int64_t now_us = esp_timer_get_time();
+        bool in_grace = (now_us - start_us) < GRACE_US;
 
         if (lvgl_port_lock(WD_LVGL_LOCK_TIMEOUT)) {
             lvgl_port_unlock();
@@ -90,6 +123,19 @@ static void wd_monitor_task(void *arg)
                  * muerta), datalogger_flush() / battery_history_flush()
                  * deadlock-an y el reset nunca ocurre. Preferimos perder
                  * el ultimo bloque de muestras antes que no reiniciar. */
+                bsp_display_brightness_set(0);
+                vTaskDelay(pdMS_TO_TICKS(100));
+                esp_restart();
+            }
+        }
+
+        /* Vigilancia de tareas de app por heartbeat. Una tarea que dejo de
+         * latir (colgada en UART/1-Wire) no la detecta el chequeo de LVGL. */
+        if (!in_grace) {
+            int stalled = wd_stalled_task(now_us);
+            if (stalled >= 0) {
+                ESP_LOGE(TAG, "Tarea %d sin latido >10s — reset controlado",
+                         stalled);
                 bsp_display_brightness_set(0);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 esp_restart();

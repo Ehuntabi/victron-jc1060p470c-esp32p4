@@ -38,6 +38,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "watchdog.h"
 
 static const char *TAG = "ne185";
 
@@ -256,6 +257,7 @@ static void rs485_task(void *arg)
      * el primer frame, sin init wake-up. */
 
     while (1) {
+        watchdog_heartbeat(WD_TASK_NE185);
         /* === FSM de cmd a enviar ====================================== */
         const uint8_t *tx_cmd = CMD_IDLE;
         size_t tx_len = sizeof(CMD_IDLE);

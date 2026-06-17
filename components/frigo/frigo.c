@@ -39,6 +39,7 @@ static frigo_state_t      s_state = {
 };
 static SemaphoreHandle_t  s_mutex = NULL;
 static frigo_update_cb_t  s_cb    = NULL;
+static frigo_heartbeat_cb_t s_hb_cb = NULL;
 static onewire_bus_handle_t s_bus  = NULL;
 static ds18b20_device_handle_t s_devs[FRIGO_MAX_SENSORS] = {0};
 
@@ -136,6 +137,7 @@ static uint8_t compute_fan(float t_aletas, uint8_t t_min, uint8_t t_max,
 static void frigo_task(void *arg)
 {
     while (1) {
+        if (s_hb_cb) s_hb_cb();  /* latido watchdog */
 
         /* Si no hay sensores DS18B20, igualmente atendemos los cambios de
          * modo OFF/50/100 (que no requieren temperatura) para que la UI
@@ -270,6 +272,8 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
 }
 
 const frigo_state_t *frigo_get_state(void) { return &s_state; }
+
+void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb) { s_hb_cb = cb; }
 
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent)

@@ -21,3 +21,17 @@ uint32_t watchdog_get_reset_count(void);
  * ("Power-on", "Watchdog (TWDT)", "Panic", etc.). El puntero apunta a una
  * cadena estática y no debe liberarse. */
 const char *watchdog_last_reset_reason(void);
+
+/* Tareas de app vigiladas por heartbeat. Cada una debe llamar a
+ * watchdog_heartbeat() en cada iteracion de su bucle principal. Si una deja
+ * de latir mas de WD_TASK_TIMEOUT, el monitor fuerza un reset controlado.
+ * Una tarea que nunca late (p.ej. no arranco) simplemente no se vigila. */
+typedef enum {
+    WD_TASK_NE185 = 0,
+    WD_TASK_PZEM,
+    WD_TASK_FRIGO,
+    WD_TASK_COUNT
+} wd_task_t;
+
+/* Marca la tarea como viva (latido). Seguro de llamar desde cualquier tarea. */
+void watchdog_heartbeat(wd_task_t task);

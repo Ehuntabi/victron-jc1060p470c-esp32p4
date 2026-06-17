@@ -122,6 +122,11 @@ static void night_mode_timer_cb(void *arg)
 static ui_state_t *s_ui = NULL;
 
 /* ── Callback frigo: actualiza UI + log cada 5 min ──────────── */
+/* Latido del watchdog para frigo_task. Lo invoca frigo_task en cada
+ * iteracion (via frigo_set_heartbeat_cb), no el simulador, asi que vigila
+ * la tarea real aunque el modo simulacion este activo. */
+static void frigo_heartbeat(void) { watchdog_heartbeat(WD_TASK_FRIGO); }
+
 static void frigo_update_cb(const frigo_state_t *state)
 {
     if (!s_ui) return;
@@ -199,12 +204,6 @@ static void log_autosave_task(void *arg)
     vTaskDelete(NULL);
 }
 
-
-#define APP_WDT_TIMEOUT_S    60    /* reiniciar si LVGL no responde en 60s */
-#define BLE_TIMEOUT_S       300    /* alerta si no hay datos BLE en 5 min */
-
-
-/* Llamar desde frigo_update_cb y ui_on_panel_data para alimentar el WDT */
 
 /* ── app_main ────────────────────────────────────────────────── */
 void app_main(void)
@@ -343,6 +342,7 @@ void app_main(void)
     esp_err_t frigo_err = frigo_init(frigo_update_cb);
     if (frigo_err != ESP_OK)
         ESP_LOGW(TAG, "frigo_init failed: %s", esp_err_to_name(frigo_err));
+    frigo_set_heartbeat_cb(frigo_heartbeat);
 
     /* Crear el mutex de dashboard_state antes de arrancar httpd/BLE/sim,
      * que son los que acceden al estado concurrentemente. */

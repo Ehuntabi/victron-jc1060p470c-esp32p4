@@ -51,6 +51,12 @@ typedef void (*frigo_update_cb_t)(const frigo_state_t *state);
 esp_err_t frigo_init(frigo_update_cb_t cb);
 const frigo_state_t *frigo_get_state(void);
 
+/* Hook de "estoy vivo": frigo_task lo invoca en cada iteracion de su bucle.
+ * Permite a la app vigilar la tarea (watchdog) sin que el componente frigo
+ * dependa de modulos de la app. NULL = sin vigilancia. */
+typedef void (*frigo_heartbeat_cb_t)(void);
+void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb);
+
 /* Inyeccion para modo simulacion: sobreescribe temperaturas y % fan. */
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent);

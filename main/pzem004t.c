@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -124,6 +125,7 @@ static void pzem_task(void *arg)
     int consecutive_fail = 0;
     TickType_t period = pdMS_TO_TICKS(s.cfg.poll_period_ms);
     while (1) {
+        watchdog_heartbeat(WD_TASK_PZEM);
         esp_err_t err = pzem_poll_once();
         if (err == ESP_OK) {
             consecutive_fail = 0;
