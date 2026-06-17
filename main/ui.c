@@ -817,6 +817,11 @@ void ui_notify_user_activity(void)
     ui_settings_panel_on_user_activity(ui);
 }
 
+bool ui_screensaver_is_active(void)
+{
+    return g_ui.screensaver.active;
+}
+
 void ui_alarm_interrupt_screensaver(void)
 {
     ui_state_t *ui = &g_ui;

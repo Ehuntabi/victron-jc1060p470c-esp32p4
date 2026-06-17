@@ -185,7 +185,18 @@ static void frigo_update_cb(const frigo_state_t *state)
 /* ── Touch callback para screensaver ─────────────────────────── */
 static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 {
-    if (event == LV_EVENT_PRESSED) ui_notify_user_activity();
+    if (event != LV_EVENT_PRESSED) return;
+    /* Si el salvapantallas esta activo, este primer toque solo debe
+     * despertarlo, NO navegar. feedback_cb corre antes de despachar el evento
+     * al widget; consumimos la pulsacion con lv_indev_wait_release() para que
+     * no genere CLICKED ni gesto en el widget de debajo. Hace falta un segundo
+     * toque para cambiar de pantalla. */
+    bool was_active = ui_screensaver_is_active();
+    ui_notify_user_activity();              /* despierta: active -> false */
+    if (was_active) {
+        lv_indev_t *indev = lv_indev_get_act();
+        if (indev) lv_indev_wait_release(indev);
+    }
 }
 
 /* Tarea one-shot: 30s tras boot vuelca el buffer log_capture a SD con el

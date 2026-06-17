@@ -29,6 +29,11 @@ void ui_set_ble_mac(const uint8_t *mac);
  */
 void ui_notify_user_activity(void);
 
+/* Devuelve true si el salvapantallas esta activo (atenuado o rotando).
+ * Permite que el primer toque solo lo despierte y no se propague como
+ * click/gesto al widget de debajo. */
+bool ui_screensaver_is_active(void);
+
 /* Forzar un refresco inmediato del label de la hora.
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);
