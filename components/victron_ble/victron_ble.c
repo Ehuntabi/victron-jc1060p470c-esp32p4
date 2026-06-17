@@ -208,6 +208,7 @@ static const char* get_device_type_name(uint8_t type)
         case 0x0B: return "Multi RS";
         case 0x0C: return "VE.Bus";
         case 0x0D: return "DC Energy Meter";
+        case 0x0F: return "Orion XS";
         default:   return "Unknown/Reserved";
     }
 }
@@ -418,10 +419,15 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 };
                 parsed.record.solar.device_state = r->device_state;
                 parsed.record.solar.charger_error = r->charger_error;
-                parsed.record.solar.battery_voltage_centi = r->battery_voltage_centi;
-                parsed.record.solar.battery_current_deci = r->battery_current_deci;
-                parsed.record.solar.yield_today_centikwh = r->yield_today_centikwh;
-                parsed.record.solar.pv_power_w = r->pv_power_w;
+                /* Centinelas NA -> 0 (el UI los trata como "--"/sin dato). */
+                parsed.record.solar.battery_voltage_centi =
+                    (r->battery_voltage_centi == (int16_t)0x7FFF) ? 0 : r->battery_voltage_centi;
+                parsed.record.solar.battery_current_deci =
+                    (r->battery_current_deci == (int16_t)0x7FFF) ? 0 : r->battery_current_deci;
+                parsed.record.solar.yield_today_centikwh =
+                    (r->yield_today_centikwh == 0xFFFF) ? 0 : r->yield_today_centikwh;
+                parsed.record.solar.pv_power_w =
+                    (r->pv_power_w == 0xFFFF) ? 0 : r->pv_power_w;
                 parsed.record.solar.load_current_deci = load_raw;
                 data_cb(&parsed);
             }
@@ -472,6 +478,10 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 parsed.record.battery.battery_current_milli = current_bits;
                 parsed.record.battery.consumed_ah_deci = consumed_bits;
                 parsed.record.battery.soc_deci_percent = soc_bits;
+                /* NA -> 0 para voltaje (el UI muestra "--" si es 0). SoC NA
+                 * (0x3FF) lo gestiona el UI (>1000). */
+                if (voltage_raw == 0x7FFF)
+                    parsed.record.battery.battery_voltage_centi = 0;
                 data_cb(&parsed);
             }
             break;
@@ -550,8 +560,11 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 };
                 parsed.record.dcdc.device_state = device_state;
                 parsed.record.dcdc.charger_error = charger_error;
-                parsed.record.dcdc.input_voltage_centi = input_voltage_centi;
-                parsed.record.dcdc.output_voltage_centi = output_voltage_centi;
+                /* Centinelas NA -> 0 (input 0xFFFF, output 0x7FFF). */
+                parsed.record.dcdc.input_voltage_centi =
+                    (input_voltage_centi == 0xFFFF) ? 0 : input_voltage_centi;
+                parsed.record.dcdc.output_voltage_centi =
+                    (output_voltage_centi == 0x7FFF) ? 0 : output_voltage_centi;
                 parsed.record.dcdc.off_reason = off_reason;
                 data_cb(&parsed);
             }
@@ -605,6 +618,51 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 parsed.record.lithium.battery_voltage_centi = battery_voltage_centi;
                 parsed.record.lithium.balancer_status = balancer_status;
                 parsed.record.lithium.temperature_c = temperature_raw;
+                data_cb(&parsed);
+            }
+            break;
+        }
+
+        case VICTRON_BLE_RECORD_ORION_XS: {
+            /* Orion XS DC/DC (record 0x0F). Layout 14 bytes: state, error,
+             * Vout(0.01V), Iout(0.1A), Vin(0.01V), Iin(0.1A), off_reason(32).
+             * Verificado contra keshavdv/victron-ble. La vista Overview y
+             * dashboard_state ya tenian el case ORION_XS esperando este record. */
+            if (encr_size < 14) {
+                ESP_LOGW(TAG, "Orion XS payload too short: %d", encr_size);
+                break;
+            }
+            const uint8_t *b = output;
+            uint8_t device_state = b[0];
+            uint8_t charger_error = b[1];
+            uint16_t output_voltage_centi = (uint16_t)(b[2] | (b[3] << 8));
+            uint16_t output_current_deci  = (uint16_t)(b[4] | (b[5] << 8));
+            uint16_t input_voltage_centi  = (uint16_t)(b[6] | (b[7] << 8));
+            uint16_t input_current_deci   = (uint16_t)(b[8] | (b[9] << 8));
+            uint32_t off_reason = (uint32_t)b[10]
+                                | ((uint32_t)b[11] << 8)
+                                | ((uint32_t)b[12] << 16)
+                                | ((uint32_t)b[13] << 24);
+
+            ESP_LOGI(TAG, "=== Orion XS DC/DC ===");
+            ESP_LOGI(TAG, "State=%u Err=0x%02X Vin=%.2fV Iin=%.1fA Vout=%.2fV Iout=%.1fA",
+                     (unsigned)device_state, (unsigned)charger_error,
+                     input_voltage_centi / 100.0f, input_current_deci / 10.0f,
+                     output_voltage_centi / 100.0f, output_current_deci / 10.0f);
+
+            if (data_cb) {
+                victron_data_t parsed = {
+                    .type = VICTRON_BLE_RECORD_ORION_XS,
+                    .product_id = product_id
+                };
+                /* Centinelas NA (0xFFFF) -> 0 */
+                parsed.record.orion.device_state = device_state;
+                parsed.record.orion.charger_error = charger_error;
+                parsed.record.orion.output_voltage_centi = (output_voltage_centi == 0xFFFF) ? 0 : output_voltage_centi;
+                parsed.record.orion.output_current_deci  = (output_current_deci == 0xFFFF) ? 0 : output_current_deci;
+                parsed.record.orion.input_voltage_centi  = (input_voltage_centi == 0xFFFF) ? 0 : input_voltage_centi;
+                parsed.record.orion.input_current_deci   = (input_current_deci == 0xFFFF) ? 0 : input_current_deci;
+                parsed.record.orion.off_reason = off_reason;
                 data_cb(&parsed);
             }
             break;
