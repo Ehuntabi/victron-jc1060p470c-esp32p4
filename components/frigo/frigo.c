@@ -274,10 +274,13 @@ const frigo_state_t *frigo_get_state(void) { return &s_state; }
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent)
 {
-    s_state.T_Aletas     = t_aletas;
-    s_state.T_Congelador = t_congelador;
-    s_state.T_Exterior   = t_exterior;
-    s_state.fan_percent  = fan_percent;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_state.T_Aletas     = t_aletas;
+        s_state.T_Congelador = t_congelador;
+        s_state.T_Exterior   = t_exterior;
+        s_state.fan_percent  = fan_percent;
+        xSemaphoreGive(s_mutex);
+    }
     if (s_cb) s_cb(&s_state);
 }
 

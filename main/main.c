@@ -13,6 +13,7 @@
 #include "esp_system.h"
 #include "esp_heap_caps.h"
 #include "ui.h"
+#include "dashboard_state.h"
 #include "config_server.h"
 #include "frigo.h"
 #include "battery_history.h"
@@ -342,6 +343,10 @@ void app_main(void)
     esp_err_t frigo_err = frigo_init(frigo_update_cb);
     if (frigo_err != ESP_OK)
         ESP_LOGW(TAG, "frigo_init failed: %s", esp_err_to_name(frigo_err));
+
+    /* Crear el mutex de dashboard_state antes de arrancar httpd/BLE/sim,
+     * que son los que acceden al estado concurrentemente. */
+    dashboard_state_init();
 
     /* --- WiFi + config server --- */
     wifi_ap_init();

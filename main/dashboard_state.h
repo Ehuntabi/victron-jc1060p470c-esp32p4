@@ -9,6 +9,10 @@
 extern "C" {
 #endif
 
+/* Crear el mutex interno. Llamar una vez desde app_main antes de arrancar
+ * cualquier tarea que acceda al estado (BLE, simulador, servidor HTTP). */
+void dashboard_state_init(void);
+
 /* Llamar en el hook ui_on_panel_data: cachea los campos relevantes del
  * dispositivo Victron en una struct atómica que el servidor HTTP puede leer. */
 void dashboard_state_on_record(const victron_data_t *data);

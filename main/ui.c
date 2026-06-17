@@ -567,7 +567,8 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
                                            IDLE_TO_LIVE_TIMEOUT_MS, ui);
     clock_timer_cb(NULL);
-    lvgl_port_unlock();
+    /* NO desbloqueamos aqui: el lock LVGL lo toma y libera el llamante
+     * (app_main), que ejecuta splash_show() tras ui_init bajo el mismo lock. */
 }
 
 void ui_on_panel_data(const victron_data_t *d) {

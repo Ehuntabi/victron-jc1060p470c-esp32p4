@@ -31,6 +31,14 @@ static struct {
     SemaphoreHandle_t mtx;
 } s;
 
+void dashboard_state_init(void)
+{
+    /* Crear el mutex una sola vez, desde app_main, ANTES de arrancar las
+     * tareas que escriben/leen el estado (BLE, sim, httpd). Evita la carrera
+     * de creacion perezosa cuando dos tareas llaman a lock() a la vez. */
+    if (!s.mtx) s.mtx = xSemaphoreCreateMutex();
+}
+
 static void lock(void)
 {
     if (!s.mtx) s.mtx = xSemaphoreCreateMutex();

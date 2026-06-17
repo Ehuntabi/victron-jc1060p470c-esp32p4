@@ -240,6 +240,7 @@ size_t log_capture_get_lines(log_capture_entry_t *out, size_t max,
 
 /* Flag para evitar dos saves concurrentes. */
 static volatile bool s_save_busy = false;
+static portMUX_TYPE  s_busy_mux  = portMUX_INITIALIZER_UNLOCKED;
 
 /* Task asincrona dedicada al SD save. El callback LVGL solo encola la
  * peticion (no bloquea), y esta task hace el fprintf real (lento, ~1-3s)
@@ -314,9 +315,15 @@ esp_err_t log_capture_save_to_file(const char *path)
     }
 
     /* Rechazar save concurrente (segunda pulsacion mientras el primero
-     * aun procesa). */
-    if (s_save_busy) return ESP_ERR_INVALID_STATE;
+     * aun procesa). Test-and-set atomico para evitar que dos tareas pasen
+     * el chequeo a la vez. */
+    portENTER_CRITICAL(&s_busy_mux);
+    if (s_save_busy) {
+        portEXIT_CRITICAL(&s_busy_mux);
+        return ESP_ERR_INVALID_STATE;
+    }
     s_save_busy = true;
+    portEXIT_CRITICAL(&s_busy_mux);
 
     /* Snapshot rapido del buffer (~118 KB PSRAM) bajo mutex.
      * Esto es lo unico que bloquea al caller (LVGL), ~1-5ms, no causa WDT. */
