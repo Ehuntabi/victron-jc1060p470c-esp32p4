@@ -87,8 +87,6 @@ typedef struct {
     lv_obj_t *btn_lin;
     lv_obj_t *btn_lout;
     lv_obj_t *btn_pump;
-    /* Test strip (test autocaravana): raw bytes live + 4 markers */
-    lv_obj_t *test_raw_label;
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -244,72 +242,8 @@ static void camper_btn_event_cb(lv_event_t *e)
     ne185_send_cmd(cmd);
 }
 
-/* Timer one-shot que se dispara 30s tras pulsar 230 ON/OFF. Captura el
- * estado actual de los bytes utiles del NE185 para correlacionar evento
- * fisico (enchufar/desenchufar 230V) con bits del bitmap b15. */
-static void test_marker_end_cb(lv_timer_t *t)
-{
-    const char *what = (const char *)t->user_data;
-    uint8_t raw[20];
-    uint32_t ok = 0, fail = 0;
-    ne185_get_last_raw(raw, &ok, &fail);
-    char buf[80];
-    snprintf(buf, sizeof(buf),
-             "%s END b5=%02X b6=%02X b12=%02X b13=%02X b15=%02X",
-             what ? what : "?", raw[5], raw[6], raw[12], raw[13], raw[15]);
-    ne185_log_marker(buf);
-    lv_timer_del(t);
-}
-
-/* Callback de los botones marker del test strip. Para 230 ON/OFF inicia
- * un countdown de 30s y captura el estado tras ese tiempo (permite al
- * usuario salir, enchufar/desenchufar y volver). */
-static void test_marker_cb(lv_event_t *e)
-{
-    const char *what = (const char *)lv_event_get_user_data(e);
-    if (!what) return;
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%s START countdown 30s", what);
-    ne185_log_marker(buf);
-    lv_timer_t *t = lv_timer_create(test_marker_end_cb, 30000, (void *)what);
-    lv_timer_set_repeat_count(t, 1);
-}
-
-/* Crea un boton marker pequeno para el test strip. */
-static lv_obj_t *make_test_marker_btn(lv_obj_t *parent, const char *label,
-                                       lv_color_t bg, const char *marker_str)
-{
-    lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, 90, 36);
-    lv_obj_set_style_bg_color(btn, bg, 0);
-    lv_obj_set_style_radius(btn, 6, 0);
-    lv_obj_t *lbl = lv_label_create(btn);
-    lv_label_set_text(lbl, label);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(lbl);
-    lv_obj_add_event_cb(btn, test_marker_cb, LV_EVENT_CLICKED,
-                         (void *)marker_str);
-    return btn;
-}
-
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
-
-/* DEMO temporal de tanques DESACTIVADO 2026-05-27: confundia al usuario
- * haciendo creer que habia lectura real del NE185 cuando solo era el
- * ciclado del demo. Si no hay datos NE185 (s_data.fresh==false), los
- * tanks deberian permanecer en su estado vacio/placeholder hasta que
- * llegue el primer frame valido (ne185_get rellena s1/r1 del bus).
- *
- * NOTA: aun con el master mode no recibiendo frames validos (formato
- * desconocido), aqui no se cicla nada. Cuando el reverse engineering
- * del nuevo formato NE185 sea exitoso, ne185_get devolvera valores
- * reales y los tanks se actualizaran solos. */
-static void tank_demo_cb(lv_timer_t *t)
-{
-    (void)t;
-    /* No-op: dejado por si en el futuro queremos animacion de "esperando" */
-}
 
 /* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
  * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn).
@@ -699,31 +633,6 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     /* btn_lout creado mas arriba (antes del card_fridge tras swap). */
 
-    /* === Test strip (autocaravana 2026-05): raw bytes live + markers ===
-     * Aparece al fondo de la vista. Permite validar shore/bat sin salir a
-     * Consola. Los 4 botones solo escriben en log (no controlan nada fisico). */
-    lv_obj_t *test_strip = lv_obj_create(ov->base.root);
-    lv_obj_remove_style_all(test_strip);
-    lv_obj_set_size(test_strip, lv_pct(100), 44);
-    lv_obj_set_style_bg_color(test_strip, lv_color_hex(0x1A1A1A), 0);
-    lv_obj_set_style_bg_opa(test_strip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(test_strip, 6, 0);
-    lv_obj_set_style_pad_all(test_strip, 4, 0);
-    lv_obj_set_style_pad_gap(test_strip, 6, 0);
-    lv_obj_set_layout(test_strip, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(test_strip, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(test_strip, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(test_strip, LV_OBJ_FLAG_SCROLLABLE);
-
-    ov->test_raw_label = lv_label_create(test_strip);
-    lv_label_set_text(ov->test_raw_label, "b15=-- b12=-- b6=-- b5=--");
-    lv_obj_set_style_text_color(ov->test_raw_label, lv_color_hex(0xFFC107), 0);
-    lv_obj_set_flex_grow(ov->test_raw_label, 1);
-
-    make_test_marker_btn(test_strip, "230 ON",  lv_color_hex(0x4CAF50), "230V ON");
-    make_test_marker_btn(test_strip, "230 OFF", lv_color_hex(0x9E9E9E), "230V OFF");
-
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
     lv_timer_create(overview_camper_tick_cb, 500, ov);
@@ -925,21 +834,6 @@ static void overview_render(ui_overview_view_t *ov)
     {
         ne185_data_t cd;
         ne185_get(&cd);
-
-        /* Test strip: raw bytes live (b15 shore, b12 bat, b6 grey, b5 clean) */
-        if (ov->test_raw_label) {
-            uint8_t raw[20];
-            uint32_t n_ok, n_fail;
-            ne185_get_last_raw(raw, &n_ok, &n_fail);
-            if (n_ok > 0) {
-                lv_label_set_text_fmt(ov->test_raw_label,
-                    "b15=%02X b12=%02X b13=%02X b6=%02X b5=%02X  | RX %lu / fail %lu",
-                    raw[15], raw[12], raw[13], raw[6], raw[5],
-                    (unsigned long)n_ok, (unsigned long)n_fail);
-            } else {
-                lv_label_set_text(ov->test_raw_label, "esperando bus NE185...");
-            }
-        }
 
         /* Tanques visuales: nivel 0..3 (ui_tank_set ignora valores > 3) */
         if (ov->tank_s1) ui_tank_set(ov->tank_s1, cd.fresh ? cd.s1 : 0xFF);
