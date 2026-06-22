@@ -336,6 +336,11 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
      * + texto (SemiBold para mejor contraste sin oscurecer el fondo). */
     lv_obj_t *row = lv_obj_create(btn);
     lv_obj_remove_style_all(row);
+    /* El row (lv_obj_create) sale CLICKABLE por defecto en LVGL v8 y cubre
+     * el centro del boton, robandole el click (los eventos no burbujean sin
+     * EVENT_BUBBLE). Sin esto, pulsar el boton NO dispara camper_btn_event_cb
+     * -> los botones Luz INT/EXT/Bomba parecian muertos. Igual que el led. */
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
