@@ -722,6 +722,12 @@ CONFIG_SLAVE_IDF_TARGET_ESP32C6=y
 # end of Project Configuration
 
 #
+# DS18B20 Configuration
+#
+# CONFIG_DS18B20_SENSOR_HUB is not set
+# end of DS18B20 Configuration
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y

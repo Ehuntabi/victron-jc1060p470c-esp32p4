@@ -226,4 +226,45 @@ Con `s_verbose_log = true` activado desde UI (LOG ON button):
 - Bench test con generador de frames (otro ESP32 simulando NE185) para validar master mode sin viajar
 - Si no es posible bench: viaje proximo + log SD insertada antes de power-on + 2 minutos con LOG ON
 
-Relacionado: [[project-ne185-protocol]] - decodificacion protocolo, [[project-joint-autocaravana]] - paths
+## 2026-06-21 noche (autocaravana) — sesion monitor en vivo
+
+Nuevo: Claude lee `/dev/ttyACM0` en vivo via pyserial (ver
+[[feedback-live-serial-sniffer-workflow]]). Bucle cerrado usuario<->Claude.
+
+**BLE: resuelto, todos los dispositivos OK.**
+- BMV/SmartShunt FF:3C:F3:77:D6:86 (0xA389) OK. Motor en marcha: Ibat +21.5A
+  cargando, Aux 13.95V (antes -0.2A descarga) -> el Orion/alternador carga bien.
+- SmartSolar MPPT 100/30 C2:6D:F3:71:63:2F (0xA056) OK.
+- Orion DC/DC: el usuario CONFIRMA que ahora SI ve sus valores en pantalla.
+  (Hipotesis Orion previas de esta memoria quedan superadas / a revisar.)
+- F6:40:14:6F:DF:4F (0xA075 SmartSolar 75/15, rssi -92..-99) = VECINO, descartado OK.
+
+**Incidencia USB (no firmware):** el P4 se reenumeraba en bucle (USB disconnect
+device 8->14) con la PANTALLA encendida (sin reset del chip) => cable/conector USB
+de datos defectuoso, NO brownout ni codigo. Sintoma usuario: "a veces marca y
+otras no". Alimentacion era solo-USB-portatil. Fix: cable USB-C de datos bueno.
+
+**Sniffer NE185 NO probado aun** (se acabo la sesion). Pendiente #1 sigue: sniff
+del boton CHECK del NE187 (tanques agua) + luces ON/OFF. Plan paso a paso en
+`~/joint/victron/SNIFFER-PLAN.md`. Firmware HEAD de main ya flasheado al P4.
+
+## 2026-06-22 (autocaravana) — sniffer + master OK, casi todo operativo
+
+Sesion en vivo (P4 + NE187 + 220V), bucle cerrado pyserial. Resultados:
+- **Tanques confirmados en el bus**: limpia 1/4 -> b[5]=0x01, grises vacio -> b[6]=0x02.
+  Viajan en cada frame, NO hace falta CHECK (CHECK solo cambia cadencia a FF40 ~29s).
+- **Shore 230V corregido (commit 7f436b9)**: indicador real = b[16] bit0
+  (0x31 red / 0x30 sin red), NO b[15] bit7 (heartbeat del poll).
+- **Luces int/ext + bomba (b[15] bit0/1/2) validadas en vivo** las tres.
+- **Botones camper arreglados (commit 21630e0)**: el `row` (lv_obj_create) nacia
+  CLICKABLE en LVGL v8 y robaba el click; fix = clear_flag CLICKABLE.
+- **Master mode FUNCIONA con NE187 conectado, sin colision**: la UI togglea las
+  cargas fisicas (FF 41/42/44), confirmado por el watcher.
+- **Test strip de pruebas eliminado (commit e850c9a)**.
+- **Orion XS senal debil (commit a613a08)**: rssi -96..-99 dBm -> card DC/DC
+  parpadeaba a "--V"; mitigacion DCDC_TIMEOUT_MS=5min. Arreglo real = posicion Orion.
+
+PENDIENTES (usuario 2026-06-22): niveles de agua 2/4..4/4 y grises lleno (cambiar
+agua), bits 3-6 de b[15], ventiladores GPIO21 y DS18B20 GPIO26 (a CABLEAR).
+
+Relacionado: [[project-ne185-protocol]] - decodificacion protocolo, [[project-joint-autocaravana]] - paths, [[feedback-live-serial-sniffer-workflow]]
