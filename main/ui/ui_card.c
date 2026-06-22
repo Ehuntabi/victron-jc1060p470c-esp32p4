@@ -369,7 +369,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 {
     const lv_coord_t term_h   = 14;
     const lv_coord_t term_w   = width / 4;
-    const lv_coord_t volt_h   = 24;
+    const lv_coord_t volt_h   = 32;
     const lv_coord_t body_h   = height - term_h - volt_h - 4;
 
     /* Paleta realista: subida para contrastar con el card (0x141821) */
@@ -497,8 +497,8 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 
     /* Voltage debajo con separacion del cuerpo */
     lv_obj_t *volt_lbl = lv_label_create(box);
-    lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(volt_lbl, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(volt_lbl, lv_color_hex(0xffffff), 0);
     lv_obj_set_style_pad_top(volt_lbl, 8, 0);
     lv_label_set_text(volt_lbl, "--");
 

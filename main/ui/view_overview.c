@@ -434,6 +434,14 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * baseline del flex row para que quede mas alineado con el titulo. */
     lv_obj_set_style_translate_y(ov->arc_soc, -25, 0);
     ov->m_ttg         = ui_metric_create_compact(bat_row, "Autonomía");
+    /* Las dos metricas laterales con ancho base 0 + flex_grow=1: se reparten
+     * por igual el espacio a los lados del arc SoC (120 px fijo), asi su ancho
+     * NO depende del texto. Antes eran SIZE_CONTENT y, al cambiar el valor de
+     * corriente, SPACE_AROUND recolocaba y el icono de bateria se desplazaba. */
+    lv_obj_set_width(ov->m_bat_current, 0);
+    lv_obj_set_flex_grow(ov->m_bat_current, 1);
+    lv_obj_set_width(ov->m_ttg, 0);
+    lv_obj_set_flex_grow(ov->m_ttg, 1);
     /* Bajar fuentes para que las metricas no invadan el arc SoC en el ancho
      * disponible (col_center ~320 px, arc 120 px ⇒ ~95 px por metrica).
      * title 24→20, value 46→32, unit 24→20. Desplazar 10 px hacia abajo. */
@@ -449,7 +457,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                 if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_32, 0);
                 if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_20_es, 0);
             }
-            lv_obj_set_style_translate_y(metrics[i], 48, 0);
+            lv_obj_set_style_translate_y(metrics[i], 56, 0);
         }
     }
 
