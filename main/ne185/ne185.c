@@ -127,8 +127,11 @@ static bool checksum_ok(const uint8_t *b)
  *   12    : battery1 servicio  V = (byte - 30) / 10
  *   13    : battery2 motor     V = (byte - 30) / 10
  *   14    : variable (sensor/temperatura?, sin confirmar - logueado en verbose)
- *   15    : bitmap estados: bit0=lin, bit1=lout, bit2=pump, bit7=shore
- *   16..18: 30 00 00 constantes
+ *   15    : bitmap estados: bit0=lin, bit1=lout, bit2=pump
+ *           bit7 = heartbeat del poll (alterna con cmd FF00/FF40, NO es shore)
+ *   16    : bit0 = shore 230V conectado (0x31 red / 0x30 sin red).
+ *           Validado 2026-06-22 con test diferencial enchufar/desenchufar 220V.
+ *   17..18: 00 00 constantes
  *   19    : checksum
  */
 static void parse_frame(const uint8_t *b)
@@ -149,12 +152,14 @@ static void parse_frame(const uint8_t *b)
      * "aguas grises llena" reportado por user 2026-05-27 19:08. */
     bool is_native_ne185 = (b[5] == 0x7C && b[6] == 0xE0);
 
-    /* Estados bitmap (byte 15) */
+    /* Estados bitmap (byte 15): luces y bomba.
+     * El bit7 de b[15] NO es shore (es un heartbeat que alterna con el poll
+     * FF00/FF40); el shore real esta en b[16] bit0 (validado 2026-06-22). */
     uint8_t f = b[15];
     tmp.light_in  = (f & 0x01) != 0;
     tmp.light_out = (f & 0x02) != 0;
     tmp.pump      = (f & 0x04) != 0;
-    tmp.shore     = (f & 0x80) != 0;
+    tmp.shore     = (b[16] & 0x01) != 0;
 
     /* Baterias: voltaje = (byte - 30) / 10 */
     tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
@@ -563,6 +568,12 @@ static void ne185_self_test(void)
           { 0xFF, 0x44, 0x00, 0x00, 0x43, 0x01, 0x02, 0x00, 0x40, 0x69,
             0x00, 0xFF, 0x9A, 0xA6, 0xEC, 0x06, 0x30, 0x00, 0x00, 0x0D },
           false, true, true, false },
+        /* SHORE ON: IDLE con b[16]=0x31 (230V conectado). El checksum no
+         * incluye b[16], asi que b[19] sigue siendo 0x00. Validado 2026-06-22. */
+        { "IDLE response, SHORE 230V ON",
+          { 0xFF, 0x40, 0x00, 0x00, 0x3F, 0x03, 0x02, 0x00, 0x40, 0x5F,
+            0x00, 0xFF, 0x9A, 0xA6, 0xED, 0x00, 0x31, 0x00, 0x00, 0x00 },
+          false, false, false, true },
     };
     int n = sizeof(cases) / sizeof(cases[0]);
     int ok = 0;
