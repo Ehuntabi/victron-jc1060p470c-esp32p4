@@ -749,6 +749,11 @@ static void overview_render(ui_overview_view_t *ov)
     if (!ov) return;
     uint32_t now = now_ms();
     const uint32_t TIMEOUT_MS = 30000;
+    /* La card DC/DC (Orion XS) usa un timeout mucho mas largo: el Orion
+     * llega muy debil (rssi ~-96..-99 dBm) y anuncia de forma muy esporadica,
+     * asi que con 30s la card parpadeaba a "--V". Aguantamos el ultimo Vin/Vout
+     * 5 min para una lectura estable (el dato cambia despacio). */
+    const uint32_t DCDC_TIMEOUT_MS = 300000;
     char buf[24];
 
     bool bat_fresh   = ov->bat.has_data &&
@@ -793,7 +798,7 @@ static void overview_render(ui_overview_view_t *ov)
 
     /* ── DC/DC (Orion-Tr Smart): muestra V_in (motor) y V_out (servicio) ── */
     bool dcdc_fresh = ov->dcdc.has_data &&
-                      (now - ov->dcdc.last_update_ms) < TIMEOUT_MS;
+                      (now - ov->dcdc.last_update_ms) < DCDC_TIMEOUT_MS;
     if (dcdc_fresh) {
         /* V_in (batería motor) — métrica principal grande */
         snprintf(buf, sizeof(buf), "%u.%02u",
