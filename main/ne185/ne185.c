@@ -45,6 +45,12 @@ static const char *TAG = "ne185";
 #define RX_BUF_SIZE       1024
 #define TX_BUF_SIZE       256
 #define FRAME_LEN         20
+#define RX_READ_LEN       40   /* 2026-06-23: leer ~2 frames para sincronizar.
+                                * El read coge bytes en fase arbitraria del stream;
+                                * leyendo 40 (>=34) garantizamos un frame nativo
+                                * completo en cualquier offset -> el escaneo lo
+                                * encuentra. Antes con 20 la cabecera rara vez caia
+                                * en offset 0 y se descartaba ~39 de cada 40. */
 #define POLL_PERIOD_MS    100  /* subido de 60->100 el 2026-05-27: dar mas
                                 * tiempo al NE185 a procesar entre cmds. El
                                 * bus tiene bias correcto (placa user con
@@ -230,7 +236,7 @@ static void parse_frame(const uint8_t *b)
 static void rs485_task(void *arg)
 {
     (void)arg;
-    uint8_t buf[FRAME_LEN];
+    uint8_t buf[RX_READ_LEN];
 
     /* Estado del press hold */
     char current_press = 0;          /* 0 = idle, 'i'/'o'/'p' = pulsando */
@@ -430,63 +436,42 @@ watcher_skip:;
          * uart_read_bytes con timeout 200ms espera hasta FRAME_LEN(20) o
          * timeout. Si llegan 15 bytes y se queda esperando 5 mas, agota
          * el timeout y devuelve n=15. */
-        int n = uart_read_bytes(NE185_UART_NUM, buf, FRAME_LEN,
+        int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
                                 pdMS_TO_TICKS(READ_TIMEOUT_MS));
 
         bool ok = false;
         uint8_t frame20[FRAME_LEN];
 
-        if (n == FRAME_LEN && buf[0] == 0xFF && checksum_ok(buf)) {
-            /* Caso B: frame completo con echo (canonical NE187 sniff) */
-            memcpy(frame20, buf, FRAME_LEN);
-            ok = true;
-        } else if (n == 15) {
-            /* Caso A1: frame15 NATIVO NE185 (descubierto 2026-05-27).
-             * Cabecera 7C E0 00 40, contador en b[4].
-             *
-             * 2026-05-27 19:08: comprobado que el checksum NO es simple
-             * b[4] | 0xA0 como pensaba (solo coincidio por casualidad
-             * en una muestra). Hace falta mas data para reverse-engineer
-             * la formula real.
-             *
-             * Estrategia provisional: aceptar el frame solo por la
-             * CABECERA (7C E0 00 40) sin validar checksum. La probabilidad
-             * de que 4 bytes consecutivos coincidan por ruido en el bus
-             * es 1/(2^32) - despreciable. Si el frame es corrupto, los
-             * bytes parsed (bat, bitmap) seran "raros" pero no peligrosos.
-             *
-             * Reconstruimos canonical tx_cmd+buf para que parse_frame
-             * extraiga lo decodificable (bat servicio buf[7], bat motor
-             * buf[8], bitmap buf[10]). */
-            /* Aceptar TODAS las variantes de header observadas hasta ahora.
-             * El NE185 responde con headers distintos segun el cmd recibido:
-             *   - 7C E0: cmd legacy FF 40 00 00 3F (sniffer NE187 historico)
-             *   - FC E0: variante transitoria 0.4% de frames (poco frecuente)
-             *   - F8 E0: cmd moderno FF 40 00 80 BF (descubierto 2026-05-28)
-             *
-             * 2026-05-28 user reporto que con cmd nuevo el LED de la UI no se
-             * encendia. El header cambio a F8 E0 (bit 2 vs 7C tiene bit 2 ON
-             * y bit 7 OFF; F8 tiene bit 7 ON y bit 2 OFF; FC tiene ambos ON).
-             *
-             * Solucion mas robusta: aceptar cualquier b[0] con bit 6 set (todos
-             * los observados tienen bit 6 = 0x40 set: 7C=...111100, FC=...111100,
-             * F8=...111000 todos). Filtramos por bits 0-3 (b1 must be E0)
-             * y b[1]=0xE0 + b[2]=0x00 + (b[3] 0x40 or 0x00). */
-            if ((buf[0] & 0x40) != 0 &&        /* bit 6 set en TODOS los headers observados */
-                buf[1] == 0xE0 &&
-                buf[2] == 0x00 &&
-                (buf[3] == 0x40 || buf[3] == 0x00)) {
-                memcpy(frame20, tx_cmd, 5);
-                memcpy(frame20 + 5, buf, 15);
+        /* Sincronizacion de frame por ESCANEO (2026-06-23).
+         *
+         * Problema: el read coge RX_READ_LEN bytes en una fase arbitraria del
+         * stream continuo; la cabecera del frame casi nunca cae en offset 0.
+         * Antes solo se aceptaba n==20 con echo FF o n==15 limpio, asi que ~39
+         * de cada 40 frames se descartaban -> los estados (luz/bomba/shore)
+         * parpadeaban (se marcaban stale y reaparecian). Confirmado en vivo
+         * 2026-06-23 con NE187 desconectado: 703 rx20 fallidos vs 3 parseados.
+         *
+         * Solucion: escanear el buffer buscando un frame valido en CUALQUIER
+         * offset. Dos formatos posibles:
+         *   - canonical NE187 (modo sniff con NE187): FF ... + checksum_ok (20 B)
+         *   - nativo NE185 (master): cabecera [bit6][E0][00|04][40|00] (15 B).
+         *     El header nativo evoluciono 7C E0 00 40 -> F8 E0 04 40 (buf[2]
+         *     0x00->0x04). Se acepta por cabecera sin checksum (E0 es muy
+         *     discriminante: aparece 1 sola vez por frame -> bajo falso positivo).
+         * El primero valido gana. Para el nativo reconstruimos frame20 =
+         * tx_cmd(5) + nativo(15) para que parse_frame lea bitmap en b[15],
+         * shore en b[16], bat en b[12]/b[13]. */
+        for (int k = 0; k + 15 <= n && !ok; k++) {
+            if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
+                memcpy(frame20, buf + k, FRAME_LEN);
                 ok = true;
-            } else {
-                /* Caso A2: respuesta canonical sin echo (fallback antiguo).
-                 * Reconstruir con tx_cmd y validar checksum NE187. */
+            } else if ((buf[k] & 0x40) != 0 &&
+                       buf[k + 1] == 0xE0 &&
+                       (buf[k + 2] == 0x00 || buf[k + 2] == 0x04) &&
+                       (buf[k + 3] == 0x40 || buf[k + 3] == 0x00)) {
                 memcpy(frame20, tx_cmd, 5);
-                memcpy(frame20 + 5, buf, 15);
-                if (checksum_ok(frame20)) {
-                    ok = true;
-                }
+                memcpy(frame20 + 5, buf + k, 15);
+                ok = true;
             }
         }
 
