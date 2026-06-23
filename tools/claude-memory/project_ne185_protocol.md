@@ -39,8 +39,8 @@ Pos  Bytes    Significado
 3    00       constante
 4    eco cmd checksum (3F/40/41/43)
 5    nibble bajo = tank LIMPIO (0/1/3/7/F -> 0,1/4,2/4,3/4,4/4)
-6    bit 1 = tank GRISES (1 = vacio per observacion user; 0 = lleno hipotesis pendiente)
-7    00       constante
+6    0x02 constante (NO es grises - hipotesis previa DESCARTADA 2026-06-23)
+7    tank GRISES R1: 0x00 = vacio, 0x01 = lleno  <-- CONFIRMADO 2026-06-23 (test puente JP7 pin1<->pin2)
 8    40       constante (algun glitch ocasional con 00)
 9    variable (48 valores observados) - IGNORAR, no es info util pero entra en checksum
 10   00       constante
@@ -58,6 +58,27 @@ Pos  Bytes    Significado
 18   00       constante (posible reservado)
 19   checksum = (b[5] + b[9] + b[14] + b[15] + 0xB1) & 0xFF
 ```
+
+## Reverse-engineering tanques (sesion 2026-06-23, metodo diferencial)
+
+Setup: P4 en MASTER MODE sniff (naranja, read-only), NE187 poleando, Claude
+leyendo /dev/ttyACM0 en vivo (decoder que busca alineacion via checksum). Se
+puentea fisicamente cada sonda en el shunt NE185 y se observa que byte cambia.
+
+- **GRISES R1**: puente JP7 pin1(NEG)<->pin2(FULL) => b7 pasa de 0x00 a 0x01.
+  Doble verificado (303 tramas b7=01 con puente, 0 sin el). Fix aplicado en
+  ne185.c (antes leia mal de b6, que es 0x02 constante). El NE187 muestra el
+  chivato de lleno parpadeando (alarma tanque recuperacion) cuando R1 full.
+- **AGUA LIMPIA S1**: CONFIRMADO 2026-06-23 con puentes acumulados en header JP9
+  (pin1 NEG <-> pin2/3/4/5, termometro): vacio=nibble0, 1/4=1, 2/4=3, 3/4=7,
+  4/4=F. Coincide con lo que ya decodificaba el firmware (b5 ok, no se toco).
+- **R2/R3 NO EXISTEN** en esta autocaravana (solo S1 + R1). JP8 sin mapear, N/A.
+- Conectores tanques en borde izq del shunt: JP9(6via)=S1, JP8(4via)=R2/R3,
+  JP7(2via)=R1. Con conector desenchufado el nivel lee "vacio". Ver
+  [[feedback-p4-usb-brownout-5v]].
+- **b7 posible bitmap de tanques**: bit0=R1 grises lleno (confirmado). Con S1 a
+  4/4 se vio b7=0x04 (bit2) -> hipotesis "limpio lleno", sin verificar. El fix
+  usa mascara (b[7] & 0x01) asi que aisla R1 aunque bit2 se ponga.
 
 ## Cadencia
 

@@ -119,8 +119,8 @@ static bool checksum_ok(const uint8_t *b)
  * Layout (autopsia tramas reales NE185, 2026-05-21/26):
  *   0..4  : eco del cmd enviado
  *   5     : nibble bajo = nivel tanque LIMPIO (0/1/3/7/F -> 0/1/2/3/4 cuartos)
- *   6     : tanque GRISES (bit 1 set = vacio, 0 = lleno per observacion user)
- *   7..8  : 00 40 constantes
+ *   6     : constante 0x02 (NO es grises - hipotesis previa descartada 2026-06-23)
+ *   7     : tanque GRISES R1 (0x00 vacio, 0x01 lleno). b8=0x40 constante
  *   9     : variable (counter/sensor, sin confirmar - logueado en verbose)
  *   10    : 00 constante
  *   11    : FF constante
@@ -189,10 +189,12 @@ static void parse_frame(const uint8_t *b)
             default:  tmp.s1 = 0xFF; break;
         }
 
-        /* Tanque GRISES: bit 1 de byte 6 (user observo 0x02 con tanque vacio).
-         * Hipotesis: probe se moja cuando lleno -> bit 1 a 0; seco (vacio) -> bit 1 a 1.
+        /* Tanque GRISES R1: byte 7. Confirmado 2026-06-23 con test diferencial
+         * (puente JP7 pin1<->pin2 = FULL): b7=0x00 vacio, b7=0x01 lleno. Doble
+         * verificado (303 tramas b7=01 con puente, 0 sin el). El b6 (=0x02
+         * constante) era hipotesis erronea y nunca llegaba a marcar lleno.
          *   r1 = 0 vacio, 1 lleno. */
-        tmp.r1 = (b[6] & 0x02) ? 0 : 1;
+        tmp.r1 = (b[7] & 0x01) ? 1 : 0;
     }
 
     tmp.fresh = true;
