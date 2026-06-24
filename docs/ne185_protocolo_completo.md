@@ -285,14 +285,72 @@ Se conmuta desde **Settings → Logs → botón "MASTER MODE" ⟷ "SNIFF ON"**
 | 7 | En master, el NE185 degradaba a `F8 E0` (sin tanque) porque el P4 mandaba **solo `FF 40`**. |
 | 8 | **Solución:** replicar la **alternancia** de polls + filtro `b6==0x02`. → 73 tramas `b5=01` válidas vs ~5 `F8 E0` filtradas. **Tanques en pantalla.** |
 
+| 9 | **Arranque en frío:** tras un corte de batería el NE187 queda en standby (bus en idle `FF FF FF`, no sondea). Se captura que el **CHECK** del NE187 NO manda init especial: simplemente **empieza a sondear** (FF00 ~2s, luego FF40) y el NE185 responde con tanques desde el primer poll. |
+| 10 | Como el wake = "ponerse a sondear", el **P4 en master lo hace solo**: confirmado en vivo que el P4 (sin NE187, con bias) despierta la centralita tras ciclar batería. |
+| 11 | **Prueba real definitiva:** P4 a batería (USB fuera), ciclo off/on → el P4 arranca en frío, despierta la centralita y **auto-enciende luz int + bomba**. "Hay magia." 🎉 |
+
 ### Commits
 - `adacaa3` — modo captura de poll en sniff (POLL/RESP segmentado + timestamp).
 - `47f486f` — protocolo crackeado: poll `FF 40 00 00 3F` + checksum `suma(b5..18)` + reconstrucción resp 15B.
-- `c5ddeeb` — **final**: alternancia de polls (`CMD_IDLE2` + FSM 1/16) + filtro `b6==0x02`.
+- `c5ddeeb` — alternancia de polls (`CMD_IDLE2` + FSM 1/16) + filtro `b6==0x02` → tanques en master.
+- `0566261` — **auto-encendido** de luz int + bomba al arranque (toggle Settings + NVS).
 
 ---
 
-## 11. Pendientes / a confirmar
+## 11. Arranque en frío / función del CHECK
+
+Escenario real: en el garaje la batería se desconecta. Al reconectarla, la
+centralita queda dormida hasta que se le sondea.
+
+Capturado en vivo (P4 en sniff, NE187 conectado, ciclo de batería off/on):
+
+1. Tras reconectar, el NE187 queda en **STANDBY**: bus en idle puro `FF FF FF`,
+   **no sondea, no arranca solo**.
+2. Al pulsar **CHECK** en el NE187, el bus pasa de idle a sondeo:
+   - un flanco `80`,
+   - ~2 s sondeando con `FF 00 00 00 FF` → el NE185 responde `01 02…` con tanque
+     (`clean b5=1`) **desde el primer poll**,
+   - luego pasa a `FF 40 00 00 3F` en régimen estable.
+
+> **El CHECK NO manda ningún comando de init/wake especial. Solo hace que el
+> NE187 EMPIECE A SONDEAR** (FF00 de entrada para "cebar", luego FF40).
+
+Como eso es exactamente lo que hace el P4 en modo master (alternancia FF00/FF40),
+**el P4 despierta la centralita él solo** — sin NE187 ni CHECK. Confirmado en
+condiciones reales (P4 a batería, ciclo off/on): el P4 arranca en frío, despierta
+la centralita y muestra tanques + datos camper. **El P4 reemplaza al NE187 al
+100%, arranque en garaje incluido.**
+
+(Nota: el CHECK despierta la centralita pero **no** enciende cargas; `b15=00`.
+Encender luz/bomba es pulsar esos botones aparte — automatizado en §12.)
+
+---
+
+## 12. Auto-encendido de cargas al arranque (feature)
+
+Replica lo que el usuario hacía manualmente: al reconectar la batería en el
+garaje, encender luz interior + bomba. Ahora el P4 lo hace solo.
+
+**Comportamiento** (`ne185.c`):
+- Cuando el P4 arranca y la centralita despierta (**≥10 tramas buenas**, estado
+  fiable), si la función está activada **enciende luz int + bomba SI están
+  apagadas** (toggle condicional: nunca las apaga).
+- **One-shot por wake.** Se **rearma si el bus muere y vuelve** (`consec_timeouts
+  == BUS_DEAD_THRESH` → `s_autostart_done = false`), útil si el P4 sigue vivo por
+  USB y solo cae el bus.
+
+**Persistencia / UI:**
+- Flag en NVS (namespace `ne185`, key `autostart`), **default OFF**.
+  `load_autostart_loads()` / `save_autostart_loads()` en `config_storage`.
+- Toggle **`⏻ AUTO ON/OFF`** en **Settings → Consola** (junto a MASTER/SNIFF/LOG).
+- API: `ne185_set_autostart(bool)` (persiste) / `ne185_get_autostart()`.
+
+**Verificado en condiciones reales (2026-06-24):** P4 a batería, USB fuera, ciclo
+off/on → arranque en frío → luz int + bomba se encienden solas. ✅
+
+---
+
+## 13. Pendientes / a confirmar
 
 - Solo se ha visto en vivo el nivel de agua limpia **1/4** (`b5=0x01`). Los demás
   niveles (0, 2/4, 3/4, 4/4) y grises lleno usan el mismo mapeo ya validado en
@@ -302,4 +360,5 @@ Se conmuta desde **Settings → Logs → botón "MASTER MODE" ⟷ "SNIFF ON"**
 - ~5% de tramas siguen siendo `F8 E0` (filtradas) → refresco un pelín más lento,
   imperceptible en UI. El ratio de alternancia (1/16) es empírico; afinable.
 - Control de botones (luces/bomba) desde el P4: los comandos `FF 0X 00 C0`
-  están en el código pero no se han re-verificado en esta sesión de reemplazo.
+  están en el código y el auto-encendido los usa (luz int + bomba) con éxito;
+  falta re-verificar luz ext de forma aislada.
