@@ -108,6 +108,13 @@ bool ne185_get_polling_paused(void);
  * Solo envia UNA vez (no en loop). */
 void ne185_inject_custom_cmd(uint8_t b1);
 
+/* Auto-encendido de cargas al arranque: si esta activado, cuando la centralita
+ * despierta (lleva varias tramas buenas) el P4 enciende luz interior + bomba
+ * SI estan apagadas (toggle condicional, nunca las apaga). One-shot por
+ * arranque; se rearma si el bus muere y vuelve. Persiste en NVS. */
+void ne185_set_autostart(bool enabled);
+bool ne185_get_autostart(void);
+
 #ifdef __cplusplus
 }
 #endif

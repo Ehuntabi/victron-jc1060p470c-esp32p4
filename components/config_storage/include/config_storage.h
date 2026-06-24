@@ -71,6 +71,11 @@ esp_err_t save_relay_config(bool enabled,
 esp_err_t load_victron_debug(bool *enabled_out);
 esp_err_t save_victron_debug(bool enabled);
 
+// Auto-encender cargas (luz int + bomba) al arranque del NE185, si estan
+// apagadas. NVS namespace: "ne185". Default: deshabilitado (0).
+esp_err_t load_autostart_loads(bool *enabled_out);
+esp_err_t save_autostart_loads(bool enabled);
+
 // UI view mode selection (NVS namespace: "display")
 esp_err_t load_ui_view_mode(uint8_t *mode_out);
 esp_err_t save_ui_view_mode(uint8_t mode);

@@ -14,6 +14,7 @@ static lv_obj_t *s_ne185_counter_label = NULL;
 static lv_obj_t *s_ne185_raw_label = NULL;       /* raw bytes live para validacion */
 static lv_obj_t *s_verbose_toggle_btn_lbl = NULL;
 static lv_obj_t *s_sniff_toggle_btn_lbl = NULL;
+static lv_obj_t *s_autostart_toggle_btn_lbl = NULL;
 
 /* Cuenta log_*.txt en /sdcard. -1 si la SD no se puede abrir.
  * Corre en taskLVGL desde el callback del boton; no se llama en boot. */
@@ -187,6 +188,23 @@ static void btn_verbose_toggle_cb(lv_event_t *e)
         0);
 }
 
+/* Toggle auto-encendido de cargas (luz int + bomba) al arranque del P4. */
+static void btn_autostart_toggle_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    bool new_state = !ne185_get_autostart();
+    ne185_set_autostart(new_state);   /* persiste en NVS */
+    if (s_autostart_toggle_btn_lbl) {
+        lv_label_set_text(s_autostart_toggle_btn_lbl,
+                          new_state ? LV_SYMBOL_POWER "  AUTO ON"
+                                     : LV_SYMBOL_POWER "  AUTO OFF");
+    }
+    lv_obj_set_style_bg_color(btn,
+        new_state ? lv_color_hex(0x00C851)   /* verde activo */
+                   : lv_color_hex(0x607D8B), /* gris inactivo */
+        0);
+}
+
 static lv_obj_t *make_marker_btn(lv_obj_t *parent, const char *text,
                                   lv_color_t bg, const char *marker_str)
 {
@@ -260,6 +278,22 @@ void settings_logs_panel_create(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_color(s_sniff_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(s_sniff_toggle_btn_lbl);
     lv_obj_add_event_cb(btn_sniff, btn_sniff_toggle_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Toggle AUTO-ENCENDIDO de cargas (luz int + bomba) al arranque del P4.
+     * Estado inicial sincronizado con el flag NVS via ne185_get_autostart(). */
+    lv_obj_t *btn_autostart = lv_btn_create(row_actions);
+    lv_obj_set_size(btn_autostart, 220, 50);
+    bool autostart_now = ne185_get_autostart();
+    lv_obj_set_style_bg_color(btn_autostart,
+        autostart_now ? lv_color_hex(0x00C851) : lv_color_hex(0x607D8B), 0);
+    lv_obj_set_style_radius(btn_autostart, 10, 0);
+    s_autostart_toggle_btn_lbl = lv_label_create(btn_autostart);
+    lv_label_set_text(s_autostart_toggle_btn_lbl,
+        autostart_now ? LV_SYMBOL_POWER "  AUTO ON"
+                       : LV_SYMBOL_POWER "  AUTO OFF");
+    lv_obj_set_style_text_color(s_autostart_toggle_btn_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(s_autostart_toggle_btn_lbl);
+    lv_obj_add_event_cb(btn_autostart, btn_autostart_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     /* === Labels info compactos === */
     s_status_label = lv_label_create(cont);

@@ -39,6 +39,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "watchdog.h"
+#include "config_storage.h"
 
 static const char *TAG = "ne185";
 
@@ -114,6 +115,11 @@ static volatile uint8_t   s_custom_cmd_b1 = 0;       /* 0 = nada pendiente */
 static volatile bool      s_custom_cmd_set = false;
 static uint8_t            s_last_raw[FRAME_LEN];
 static SemaphoreHandle_t  s_raw_mutex;            /* protege s_last_raw */
+
+/* Auto-encendido de cargas al arranque (luz int + bomba). Ver ne185.h. */
+static volatile bool      s_autostart_enabled = false; /* leido de NVS en init */
+static bool               s_autostart_done    = false; /* one-shot por wake */
+static uint32_t           s_good_frames       = 0;     /* tramas OK desde wake */
 
 static uint32_t now_ms(void)
 {
@@ -567,10 +573,35 @@ watcher_skip:;
             }
             s_sniff_bursts++;
             consec_timeouts = 0;
+
+            /* Auto-encendido de cargas: cuando la centralita lleva ya unas
+             * cuantas tramas buenas (despierta y estado fiable), si la funcion
+             * esta activada encendemos luz int + bomba SI estan apagadas
+             * (toggle condicional: nunca las apaga). One-shot por wake. */
+            if (s_good_frames < 0xFFFFFFFF) s_good_frames++;
+            if (s_autostart_enabled && !s_autostart_done && s_good_frames >= 10) {
+                bool lin_off = false, pump_off = false;
+                if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE) {
+                    lin_off  = !s_data.light_in;
+                    pump_off = !s_data.pump;
+                    xSemaphoreGive(s_mutex);
+                }
+                char c;
+                if (lin_off)  { c = 'i'; xQueueSend(s_press_queue, &c, 0); }
+                if (pump_off) { c = 'p'; xQueueSend(s_press_queue, &c, 0); }
+                s_autostart_done = true;
+                ESP_LOGI(TAG, "autostart: luz_int=%s bomba=%s",
+                         lin_off ? "->ON" : "ya-on", pump_off ? "->ON" : "ya-on");
+            }
         } else {
             consec_timeouts++;
             s_frames_fail++;
             if (consec_timeouts == BUS_DEAD_THRESH) {
+                /* Bus muerto = centralita apagada. Rearmamos el autostart para
+                 * que vuelva a encender cargas cuando despierte de nuevo (util
+                 * si el P4 no resetea, p.ej. alimentado por USB). */
+                s_autostart_done = false;
+                s_good_frames = 0;
                 ESP_LOGW(TAG, "bus inactivo (%lu timeouts) - marcando stale",
                          consec_timeouts);
                 if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) == pdTRUE) {
@@ -703,6 +734,12 @@ void ne185_init(void)
     memset(&s_data, 0, sizeof(s_data));
     memset(s_last_raw, 0, sizeof(s_last_raw));
 
+    /* Auto-encendido de cargas al arranque: leer flag persistido. */
+    bool autostart = false;
+    load_autostart_loads(&autostart);
+    s_autostart_enabled = autostart;
+    ESP_LOGI(TAG, "autostart cargas al arranque: %s", autostart ? "ON" : "OFF");
+
     const uart_config_t cfg = {
         .baud_rate = NE185_UART_BAUD,
         .data_bits = UART_DATA_8_BITS,
@@ -783,6 +820,20 @@ void ne185_set_verbose(bool enable)
 bool ne185_get_verbose(void)
 {
     return s_verbose_log;
+}
+
+void ne185_set_autostart(bool enabled)
+{
+    s_autostart_enabled = enabled;
+    save_autostart_loads(enabled);
+    /* Rearmar para que, si ya estamos despiertos, se aplique en breve. */
+    if (enabled) s_autostart_done = false;
+    ESP_LOGW(TAG, ">>> AUTOSTART cargas %s <<<", enabled ? "ON" : "OFF");
+}
+
+bool ne185_get_autostart(void)
+{
+    return s_autostart_enabled;
 }
 
 void ne185_set_polling_paused(bool paused)
