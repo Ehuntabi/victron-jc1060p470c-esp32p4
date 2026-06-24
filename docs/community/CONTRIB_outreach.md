@@ -38,8 +38,6 @@ del repo.
 > Happy to turn this into a PR adding an `NE187`/`NE185` section to the repo if
 > you'd like.
 
-(Reemplaza `https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocol_EN.md` por la URL final del doc en GitHub.)
-
 ---
 
 ## B) Post para foros de autocaravana (español)
