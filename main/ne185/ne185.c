@@ -84,6 +84,10 @@ static const char *TAG = "ne185";
  * con tanques. Usamos FF 40 00 00 3F. El anterior FF 40 00 80 BF (b3=0x80)
  * era la "correccion" erronea de mayo que rompio la lectura. */
 static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x00, 0x3F};
+/* Segundo poll que el NE187 manda (dominante). Hipotesis 2026-06-24: el NE185
+ * solo entrega los tanques (trama 01 02...) si ve AMBOS polls alternados como
+ * el NE187; con FF40 solo, degrada a F8 E0 sin tanques. Replicamos la alternancia. */
+static const uint8_t CMD_IDLE2[]    = {0xFF, 0x00, 0x00, 0x00, 0xFF};
 static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x01, 0x00, 0xC0, 0xC0};
 static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x02, 0x00, 0xC0, 0xC1};
 static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x04, 0x00, 0xC0, 0xC3};
@@ -125,6 +129,13 @@ static uint32_t now_ms(void)
  * master se caia a la trama nativa degradada (sin tanques). */
 static bool checksum_ok(const uint8_t *b)
 {
+    /* Constante estructural del frame valido: descarta tramas PARASITAS
+     * (F8 E0 y derivadas) que aparecen en master y por azar cuadran el
+     * checksum -> daban b6=0xFF, bat=-3.0V y parpadeo. b6=0x02 confirmado en
+     * 2056 tramas y en el verbose (buena b6=02 / basura b6=FF). NOTA: NO usar
+     * b11 aqui - en master no siempre es 0xFF y rechazaba las tramas buenas
+     * (regresion 2026-06-24: 'no hay datos camper'). */
+    if (b[6] != 0x02) return false;
     uint16_t sum = 0;
     for (int i = 5; i <= 18; i++) sum += b[i];
     return (uint8_t)sum == b[19];
@@ -281,8 +292,14 @@ static void rs485_task(void *arg)
     while (1) {
         watchdog_heartbeat(WD_TASK_NE185);
         /* === FSM de cmd a enviar ====================================== */
-        const uint8_t *tx_cmd = CMD_IDLE;
-        size_t tx_len = sizeof(CMD_IDLE);
+        /* Idle poll: replica la alternancia del NE187. Manda FF 00 00 00 FF
+         * (dominante) y FF 40 00 00 3F 1 de cada 16. Si solo FF40, el NE185
+         * degrada a F8 E0 sin tanques (visto 2026-06-24). */
+        static uint32_t s_idle_cnt = 0;
+        const uint8_t *tx_cmd;
+        size_t tx_len;
+        if ((s_idle_cnt++ % 16) == 0) { tx_cmd = CMD_IDLE;  tx_len = sizeof(CMD_IDLE); }
+        else                          { tx_cmd = CMD_IDLE2; tx_len = sizeof(CMD_IDLE2); }
 
         if (press_frames_left > 0) {
             /* Continuar hold actual */
