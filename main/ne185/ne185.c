@@ -398,55 +398,60 @@ watcher_skip:;
          * Si s_polling_paused == true: no enviamos. Solo intentamos leer.
          * Util para detectar si el NE185 emite frames espontaneamente. */
         if (s_polling_paused) {
-            /* Leemos ~2 frames y ALINEAMOS igual que el path master (escaneo),
-             * en lugar de volcar 20 bytes en fase arbitraria. Objetivo: con el
-             * NE187 real de master, comparar b[5] (nibble de tanque) con CHECK
-             * pulsado vs soltado y confirmar si el dato esta en CADA trama "02"
-             * o solo durante la sesion activa del panel (~30s). Read-only: NO
-             * llamamos a parse_frame ni tocamos la UI. */
+            /* === CAPTURA DE POLL (modo sniff, NE187 = master) ==============
+             * Read-only: el ESP NO transmite (colisionaria con el NE187). En
+             * RS-485 de 2 hilos vemos AMBAS direcciones, asi que el buffer trae
+             * intercalados el POLL del NE187 (5 B) y la RESP del NE185 (20 B).
+             * Segmentamos todo el buffer y logueamos cada uno etiquetado con
+             * timestamp (ms desde boot), deduplicando: solo se loguea cuando
+             * cambian sus bytes (al pulsar/soltar o variar tanque) -> sin spam a
+             * ~16 Hz. Objetivo: descubrir los bytes EXACTOS del poll del NE187
+             * para replicarlos en CMD_IDLE y que el NE185 emita la trama de 20 B
+             * (con tanques) tambien en modo master. */
             int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
                                     pdMS_TO_TICKS(READ_TIMEOUT_MS));
 
-            uint8_t frame20[FRAME_LEN];
-            bool aligned = false;
-            for (int k = 0; k + 15 <= n && !aligned; k++) {
-                if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
-                    /* canonical NE187: FF + cmd echo + respuesta + checksum */
-                    memcpy(frame20, buf + k, FRAME_LEN);
-                    aligned = true;
-                } else if ((buf[k] & 0x40) != 0 && buf[k + 1] == 0xE0 &&
-                           (buf[k + 2] == 0x00 || buf[k + 2] == 0x04) &&
-                           (buf[k + 3] == 0x40 || buf[k + 3] == 0x00)) {
-                    /* nativo NE185 (sin echo de cmd): rellenar cabecera a 0 */
-                    memset(frame20, 0, 5);
-                    memcpy(frame20 + 5, buf + k, 15);
-                    aligned = true;
-                }
-            }
+            /* Sentinelas para forzar el primer log de cada tipo. */
+            static uint8_t lp[5]  = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
+            static uint8_t lr_b1 = 0xAA, lr_b5 = 0xAA, lr_b7 = 0xAA, lr_b15 = 0xAA;
 
-            if (aligned) {
-                s_sniff_bursts++;
-                /* Log SOLO cuando cambia algo relevante (cmd / tanque / grises /
-                 * bitmap): evita spam a 16Hz y resalta justo la transicion al
-                 * pulsar o soltar CHECK. Sentinela 0xAA para forzar primer log. */
-                static uint8_t l_b1 = 0xAA, l_b5 = 0xAA, l_b7 = 0xAA, l_b15 = 0xAA;
-                if (frame20[1] != l_b1 || frame20[5] != l_b5 ||
-                    frame20[7] != l_b7 || frame20[15] != l_b15) {
-                    ESP_LOGI(TAG, "sniff ALIGNED cmd=FF%02X clean(b5)=%02X grey(b7)=%02X "
-                                  "bitmap(b15)=%02X shore(b16)=%02X",
-                             frame20[1], frame20[5], frame20[7], frame20[15], frame20[16]);
-                    ESP_LOGI(TAG, "  full20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
-                             frame20[0],  frame20[1],  frame20[2],  frame20[3],  frame20[4],
-                             frame20[5],  frame20[6],  frame20[7],  frame20[8],  frame20[9],
-                             frame20[10], frame20[11], frame20[12], frame20[13], frame20[14],
-                             frame20[15], frame20[16], frame20[17], frame20[18], frame20[19]);
-                    l_b1 = frame20[1]; l_b5 = frame20[5];
-                    l_b7 = frame20[7]; l_b15 = frame20[15];
+            int k = 0;
+            while (k < n) {
+                uint32_t t = now_ms();
+                /* RESP primero: su checksum de 20 B es muy discriminante. Ojo:
+                 * sus 5 primeros bytes (eco del cmd) TAMBIEN pasarian el test de
+                 * poll, asi que consumir la trama entera evita el falso positivo. */
+                if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
+                    const uint8_t *r = buf + k;
+                    s_sniff_bursts++;
+                    if (r[1] != lr_b1 || r[5] != lr_b5 ||
+                        r[7] != lr_b7 || r[15] != lr_b15) {
+                        ESP_LOGI(TAG, "RESP t=%lu: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X  clean(b5)=%X grey(b7)=%X shore(b16)=%02X",
+                                 (unsigned long)t,
+                                 r[0],r[1],r[2],r[3],r[4], r[5],r[6],r[7],r[8],r[9],
+                                 r[10],r[11],r[12],r[13],r[14], r[15],r[16],r[17],r[18],r[19],
+                                 r[5] & 0x0F, r[7] & 0x01, r[16]);
+                        lr_b1 = r[1]; lr_b5 = r[5]; lr_b7 = r[7]; lr_b15 = r[15];
+                    }
+                    k += FRAME_LEN;
+                    continue;
                 }
-            } else if (n > 0 && s_verbose_log) {
-                /* Sin alinear: volcar inicio crudo para diagnostico de ruido. */
-                ESP_LOGI(TAG, "sniff raw n=%d: %02X %02X %02X %02X %02X %02X",
-                         n, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+                /* POLL: 5 B, FF + checksum simple (b0+b1+b2+b3)&0xFF == b4.
+                 * Es el patron de CMD_IDLE/CMD_BTN_* y, por hipotesis, del poll
+                 * real del NE187. Lo logueamos con nivel W para destacarlo. */
+                if (buf[k] == 0xFF && k + 5 <= n &&
+                    (uint8_t)(buf[k] + buf[k+1] + buf[k+2] + buf[k+3]) == buf[k+4]) {
+                    const uint8_t *p = buf + k;
+                    if (p[0]!=lp[0] || p[1]!=lp[1] || p[2]!=lp[2] ||
+                        p[3]!=lp[3] || p[4]!=lp[4]) {
+                        ESP_LOGW(TAG, "POLL t=%lu: %02X %02X %02X %02X %02X",
+                                 (unsigned long)t, p[0],p[1],p[2],p[3],p[4]);
+                        lp[0]=p[0]; lp[1]=p[1]; lp[2]=p[2]; lp[3]=p[3]; lp[4]=p[4];
+                    }
+                    k += 5;
+                    continue;
+                }
+                k++;
             }
             vTaskDelayUntil(&last_tick, pdMS_TO_TICKS(POLL_PERIOD_MS));
             continue;
