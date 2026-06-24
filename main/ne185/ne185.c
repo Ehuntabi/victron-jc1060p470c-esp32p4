@@ -398,24 +398,55 @@ watcher_skip:;
          * Si s_polling_paused == true: no enviamos. Solo intentamos leer.
          * Util para detectar si el NE185 emite frames espontaneamente. */
         if (s_polling_paused) {
-            int n = uart_read_bytes(NE185_UART_NUM, buf, FRAME_LEN,
+            /* Leemos ~2 frames y ALINEAMOS igual que el path master (escaneo),
+             * en lugar de volcar 20 bytes en fase arbitraria. Objetivo: con el
+             * NE187 real de master, comparar b[5] (nibble de tanque) con CHECK
+             * pulsado vs soltado y confirmar si el dato esta en CADA trama "02"
+             * o solo durante la sesion activa del panel (~30s). Read-only: NO
+             * llamamos a parse_frame ni tocamos la UI. */
+            int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
                                     pdMS_TO_TICKS(READ_TIMEOUT_MS));
-            if (n > 0) {
-                if (n == 15) {
-                    ESP_LOGI(TAG, "sniff rx15: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
-                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
-                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
-                             buf[10], buf[11], buf[12], buf[13], buf[14]);
-                } else if (n == 20) {
-                    ESP_LOGI(TAG, "sniff rx20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
-                             buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
-                             buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
-                             buf[10], buf[11], buf[12], buf[13], buf[14],
-                             buf[15], buf[16], buf[17], buf[18], buf[19]);
-                } else {
-                    ESP_LOGI(TAG, "sniff rx %d bytes b[0..4]=%02X %02X %02X %02X %02X",
-                             n, buf[0], buf[1], buf[2], buf[3], buf[4]);
+
+            uint8_t frame20[FRAME_LEN];
+            bool aligned = false;
+            for (int k = 0; k + 15 <= n && !aligned; k++) {
+                if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
+                    /* canonical NE187: FF + cmd echo + respuesta + checksum */
+                    memcpy(frame20, buf + k, FRAME_LEN);
+                    aligned = true;
+                } else if ((buf[k] & 0x40) != 0 && buf[k + 1] == 0xE0 &&
+                           (buf[k + 2] == 0x00 || buf[k + 2] == 0x04) &&
+                           (buf[k + 3] == 0x40 || buf[k + 3] == 0x00)) {
+                    /* nativo NE185 (sin echo de cmd): rellenar cabecera a 0 */
+                    memset(frame20, 0, 5);
+                    memcpy(frame20 + 5, buf + k, 15);
+                    aligned = true;
                 }
+            }
+
+            if (aligned) {
+                s_sniff_bursts++;
+                /* Log SOLO cuando cambia algo relevante (cmd / tanque / grises /
+                 * bitmap): evita spam a 16Hz y resalta justo la transicion al
+                 * pulsar o soltar CHECK. Sentinela 0xAA para forzar primer log. */
+                static uint8_t l_b1 = 0xAA, l_b5 = 0xAA, l_b7 = 0xAA, l_b15 = 0xAA;
+                if (frame20[1] != l_b1 || frame20[5] != l_b5 ||
+                    frame20[7] != l_b7 || frame20[15] != l_b15) {
+                    ESP_LOGI(TAG, "sniff ALIGNED cmd=FF%02X clean(b5)=%02X grey(b7)=%02X "
+                                  "bitmap(b15)=%02X shore(b16)=%02X",
+                             frame20[1], frame20[5], frame20[7], frame20[15], frame20[16]);
+                    ESP_LOGI(TAG, "  full20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                             frame20[0],  frame20[1],  frame20[2],  frame20[3],  frame20[4],
+                             frame20[5],  frame20[6],  frame20[7],  frame20[8],  frame20[9],
+                             frame20[10], frame20[11], frame20[12], frame20[13], frame20[14],
+                             frame20[15], frame20[16], frame20[17], frame20[18], frame20[19]);
+                    l_b1 = frame20[1]; l_b5 = frame20[5];
+                    l_b7 = frame20[7]; l_b15 = frame20[15];
+                }
+            } else if (n > 0 && s_verbose_log) {
+                /* Sin alinear: volcar inicio crudo para diagnostico de ruido. */
+                ESP_LOGI(TAG, "sniff raw n=%d: %02X %02X %02X %02X %02X %02X",
+                         n, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
             }
             vTaskDelayUntil(&last_tick, pdMS_TO_TICKS(POLL_PERIOD_MS));
             continue;

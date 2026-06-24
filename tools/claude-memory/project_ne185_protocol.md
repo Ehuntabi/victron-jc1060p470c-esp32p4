@@ -29,6 +29,26 @@ NE185 procesa el toggle al **2do frame FF 4X consecutivo** a 60ms. Un solo frame
 
 **Confirmado via busqueda web 2026-05-26**: el repo class142/ne-rs485 documenta el panel **NE334** explicitamente (cmd FF 0X, polling ~5s, "timing no importa"). El panel del user es **NE187** (otro modelo) con protocolo DIFERENTE (cmd FF 4X overlay, polling 60ms, hold semantic obligatorio). No existe doc publica del NE187 - este reverse engineering es probablemente la primera.
 
+**CORRECCION 2026-06-24** (investigacion en foros, 5 agentes convergentes): la
+separacion limpia "NE334=FF0X / NE187=FF4X / protocolos DIFERENTES" es ERRONEA.
+El spec del NE334 usa AMBAS familias en la MISMA unidad: `FF 4X` para
+init/idle/keep-alive (`FF400080BF`, `FF4000C0BF`) y `FF 0X`/`FF 8X` para control
+de cargas (`FF0100C0C0` luz, `FF0400C0C3` bomba, `FF8000007F` all-off). Es la
+MISMA familia de protocolo, no dos distintas. Coherente con nuestro propio
+codigo ACTUAL, que ya usa ese patron: `CMD_IDLE=FF40...` + botones
+`CMD_BTN_LIN=FF 01 00 C0 C0` (ne185.c:82-85) -> la frase de arriba "NE187 NUNCA
+envia FF 0X" quedo desmentida por el propio firmware. El NE334 es ademas el
+panel HERMANO de nuestro NE187 (mismo fabricante, misma unidad NE185), asi que
+su spec publico es el mejor proxy disponible. Validaciones cruzadas que SI
+transfieren del NE334: bateria `(hex-30)/10` V (identica a la nuestra), tanque
+como bitmask termometro acumulativo (NE334 full=0x7 con 3 sondas; nosotros
+0/1/3/7/F con 4 sondas, KIT-2006). NO transfieren: bytes de comando exactos,
+polling 5s, layout de 15 bytes, checksum (NE334 = suma mod128+2; el nuestro
+es parcial b5+b9+b14+b15+0xB1). CHECK: los manuales lo documentan como tecla
+de UI (mostrar estado ~30s y a standby), NUNCA como comando de bus. Ver
+[[project-ne185-implementation-status]] para el debate "dato continuo vs pagina
+por CHECK".
+
 ## Respuesta NE185 -> master (20 bytes)
 
 ```
