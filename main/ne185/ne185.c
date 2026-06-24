@@ -79,7 +79,11 @@ static const char *TAG = "ne185";
  *
  * Esto explica por que el NE185 sin NE187 nos respondia frame15 degradado
  * (7C E0 00 40...) cuando le mandabamos cmd con b3=0x00 - era invalido. */
-static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x80, 0xBF};
+/* POLL REAL del NE187 (sniff limpio 2026-06-24): el NE187 alterna
+ * FF 40 00 00 3F y FF 00 00 00 FF; ambos provocan la misma respuesta de 15B
+ * con tanques. Usamos FF 40 00 00 3F. El anterior FF 40 00 80 BF (b3=0x80)
+ * era la "correccion" erronea de mayo que rompio la lectura. */
+static const uint8_t CMD_IDLE[]     = {0xFF, 0x40, 0x00, 0x00, 0x3F};
 static const uint8_t CMD_BTN_LIN[]  = {0xFF, 0x01, 0x00, 0xC0, 0xC0};
 static const uint8_t CMD_BTN_LOUT[] = {0xFF, 0x02, 0x00, 0xC0, 0xC1};
 static const uint8_t CMD_BTN_PUMP[] = {0xFF, 0x04, 0x00, 0xC0, 0xC3};
@@ -112,13 +116,18 @@ static uint32_t now_ms(void)
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
 }
 
-/* Checksum derivado de tramas reales del NE185:
- *   b[19] = (b[5] + b[9] + b[14] + b[15] + 0xB1) & 0xFF
- * Validado en 5+ tramas distintas (IDLE, FF41, FF42, FF44 responses). */
+/* Checksum REAL del NE185 (descubierto 2026-06-24 por sniff limpio del poll
+ * del NE187, con NE187 conectado como master y ESP en sniff):
+ *   b[19] = (suma de b[5..18]) & 0xFF
+ * Verificado en multiples tramas: clean=01 02 00 40 ED 00 FF 9C AB ED 81 31
+ * 00 00 -> 0x15; con EC EC -> 0x13; con b15=01 -> 0x92. La formula anterior
+ * (b5+b9+b14+b15+0xB1) era erronea -> ningun RESP pasaba el checksum y en
+ * master se caia a la trama nativa degradada (sin tanques). */
 static bool checksum_ok(const uint8_t *b)
 {
-    uint8_t exp = (b[5] + b[9] + b[14] + b[15] + 0xB1) & 0xFF;
-    return exp == b[19];
+    uint16_t sum = 0;
+    for (int i = 5; i <= 18; i++) sum += b[i];
+    return (uint8_t)sum == b[19];
 }
 
 /* Decodifica trama valida y vuelca en s_data.
@@ -411,6 +420,23 @@ watcher_skip:;
             int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
                                     pdMS_TO_TICKS(READ_TIMEOUT_MS));
 
+            /* Volcado RAW del buffer completo (dedup vs lectura anterior) para
+             * VER la respuesta del NE185 al poll, sea cual sea su formato o
+             * checksum. Imprescindible para localizar los tanques: el poll de
+             * 5 B y el RESP canonico se segmentan abajo, pero si la respuesta
+             * usa otro formato/checksum quedaria invisible sin este raw. */
+            static uint8_t lastbuf[RX_READ_LEN];
+            static int     lastn = -1;
+            if (n > 0 && (n != lastn || memcmp(buf, lastbuf, n) != 0)) {
+                char hex[RX_READ_LEN * 3 + 1];
+                int o = 0;
+                for (int i = 0; i < n && o < (int)sizeof(hex) - 3; i++)
+                    o += snprintf(hex + o, sizeof(hex) - o, "%02X ", buf[i]);
+                ESP_LOGI(TAG, "RAW n=%d: %s", n, hex);
+                memcpy(lastbuf, buf, n);
+                lastn = n;
+            }
+
             /* Sentinelas para forzar el primer log de cada tipo. */
             static uint8_t lp[5]  = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
             static uint8_t lr_b1 = 0xAA, lr_b5 = 0xAA, lr_b7 = 0xAA, lr_b15 = 0xAA;
@@ -488,26 +514,30 @@ watcher_skip:;
          * 2026-06-23 con NE187 desconectado: 703 rx20 fallidos vs 3 parseados.
          *
          * Solucion: escanear el buffer buscando un frame valido en CUALQUIER
-         * offset. Dos formatos posibles:
-         *   - canonical NE187 (modo sniff con NE187): FF ... + checksum_ok (20 B)
-         *   - nativo NE185 (master): cabecera [bit6][E0][00|04][40|00] (15 B).
-         *     El header nativo evoluciono 7C E0 00 40 -> F8 E0 04 40 (buf[2]
-         *     0x00->0x04). Se acepta por cabecera sin checksum (E0 es muy
-         *     discriminante: aparece 1 sola vez por frame -> bajo falso positivo).
-         * El primero valido gana. Para el nativo reconstruimos frame20 =
-         * tx_cmd(5) + nativo(15) para que parse_frame lea bitmap en b[15],
-         * shore en b[16], bat en b[12]/b[13]. */
+         * offset. Con el poll correcto (FF 40 00 00 3F) el NE185 responde con
+         * la trama canonica de 20 B (tanques incluidos). Dos casos:
+         *   - Caso B (echo presente): el buffer trae [poll 5B][resp 15B] = 20 B
+         *     que empieza en FF y pasa checksum_ok directamente.
+         *   - Caso A (sin echo): solo llega la resp de 15 B (empieza por el
+         *     nibble de tanque, sin cabecera fija). Reconstruimos frame20 =
+         *     tx_cmd(5) + resp(15) y validamos con checksum_ok. El checksum
+         *     (suma b5..b18) es muy discriminante -> sin falsos positivos.
+         * El primero valido gana. (Se elimino el path "nativo F8 E0": era el
+         * artefacto de responder al poll erroneo; con el poll bueno no aparece.) */
         for (int k = 0; k + 15 <= n && !ok; k++) {
             if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
+                /* Caso B: trama completa de 20 B (echo del poll + respuesta). */
                 memcpy(frame20, buf + k, FRAME_LEN);
                 ok = true;
-            } else if ((buf[k] & 0x40) != 0 &&
-                       buf[k + 1] == 0xE0 &&
-                       (buf[k + 2] == 0x00 || buf[k + 2] == 0x04) &&
-                       (buf[k + 3] == 0x40 || buf[k + 3] == 0x00)) {
-                memcpy(frame20, tx_cmd, 5);
-                memcpy(frame20 + 5, buf + k, 15);
-                ok = true;
+            } else {
+                /* Caso A: respuesta de 15 B sin echo -> reconstruir y validar. */
+                uint8_t cand[FRAME_LEN];
+                memcpy(cand, tx_cmd, 5);
+                memcpy(cand + 5, buf + k, 15);
+                if (checksum_ok(cand)) {
+                    memcpy(frame20, cand, FRAME_LEN);
+                    ok = true;
+                }
             }
         }
 
