@@ -33,12 +33,12 @@ del repo.
 >   polling**; so a replacement MCU wakes the unit simply by polling.
 >
 > Full byte map, captures, gotchas and a working ESP-IDF implementation:
-> <LINK_AL_DOC_EN>
+> https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocol_EN.md
 >
 > Happy to turn this into a PR adding an `NE187`/`NE185` section to the repo if
 > you'd like.
 
-(Reemplaza `<LINK_AL_DOC_EN>` por la URL final del doc en GitHub.)
+(Reemplaza `https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocol_EN.md` por la URL final del doc en GitHub.)
 
 ---
 
@@ -59,7 +59,7 @@ del repo.
 >   `FF 00 00 00 FF`; la centralita responde con una trama de 15 bytes con todos
 >   los datos.
 > - Mapa de bytes completo, checksum, el truco de la alternancia de polls y cómo
->   sustituir el panel: <LINK_AL_DOC_ES>
+>   sustituir el panel: https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocolo_ES.md
 >
 > Si tienes otro modelo (NE334, etc.), comparte sus diferencias y ampliamos la doc.
 
@@ -72,7 +72,7 @@ del repo.
 > Common control unit in European campervans, zero public docs. Sniffed the bus,
 > mapped the whole protocol, and replaced the panel with an ESP32 (tank levels,
 > batteries, lights, pump, mains, cold-start wake). Full writeup, CC0:
-> <LINK_AL_DOC_EN>
+> https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocol_EN.md
 
 ---
 
@@ -84,9 +84,13 @@ para tener un enlace corto y fácil de encontrar por buscadores. Título del gis
 
 ---
 
+## URLs (ya en el repo público)
+
+- EN: https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocol_EN.md
+- ES: https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/blob/main/docs/community/NE185_NE187_RS485_protocolo_ES.md
+
 ## Antes de publicar
 
-- [ ] Sustituir `<LINK_AL_DOC_EN>` / `<LINK_AL_DOC_ES>` por las URLs reales (raw
-      de GitHub o el gist).
-- [ ] (Opcional) Revisar que no aparezcan MACs/claves/datos personales (no los hay
-      en estos docs).
+- [x] URLs reales rellenadas en los textos de arriba.
+- [x] Sin MACs/claves/datos personales en los docs comunitarios (revisado).
+- [ ] (Opcional) Crear gist público con el doc EN y usar su enlace corto.
