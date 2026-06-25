@@ -1389,6 +1389,10 @@ static void chart_screen_close_cb(lv_event_t *e)
 void ui_show_chart_screen(ui_state_t *ui)
 {
     if (!ui) return;
+    /* Guard anti doble-apertura: sin esto un segundo tap deja el overlay
+     * anterior huerfano (fuga de pantalla LVGL entera) y los s_* colgantes.
+     * Mismo patron que ui_show_battery_history_screen. */
+    if (s_chart_screen) return;
 
     /* Crear pantalla a pantalla completa */
     lv_obj_t *scr = lv_obj_create(lv_scr_act());
