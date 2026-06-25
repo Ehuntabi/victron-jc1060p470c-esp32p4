@@ -22,7 +22,7 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "ui/frigo_panel.h"
-#include "ui/settings_logs_panel.h"
+#include "ne185/ne185.h"
 #include "esp_chip_info.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -166,7 +166,6 @@ static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_display(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page);
-static void populate_consola(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_about(settings_page_ctx_t *ctx, lv_obj_t *page);
 
@@ -641,6 +640,15 @@ static void splash_dropdown_cb(lv_event_t *e)
     uint16_t idx = lv_dropdown_get_selected(dd);
     save_splash_mode((uint8_t)idx);
     ESP_LOGI(TAG_SETTINGS, "Splash mode -> %u", (unsigned)idx);
+}
+
+/* Switch de auto-encendido de cargas (luz interior + bomba de agua) al
+ * arrancar el P4. Persiste en NVS via ne185_set_autostart(). Reubicado desde
+ * la antigua pagina "Consola" (instrumental NE185 ya retirado). */
+static void autostart_switch_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    ne185_set_autostart(lv_obj_has_state(sw, LV_STATE_CHECKED));
 }
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
@@ -1176,6 +1184,35 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         lv_dropdown_set_selected(tz_dd, tz_index_from_posix(tz_now));
     }
     lv_obj_add_event_cb(tz_dd, tz_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* === Card Auto-encendido de cargas al arranque ===
+     * Reubicado desde la antigua pagina "Consola". Al arrancar el P4 enciende
+     * luz interior + bomba de agua via NE185. Estado persistido en NVS. */
+    lv_obj_t *card_auto = lv_obj_create(cont);
+    lv_obj_set_width(card_auto, lv_pct(100));
+    lv_obj_set_height(card_auto, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_auto, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
+    lv_obj_set_style_border_width(card_auto, 1, 0);
+    lv_obj_set_style_radius(card_auto, 12, 0);
+    lv_obj_set_style_pad_all(card_auto, 16, 0);
+    lv_obj_set_style_pad_gap(card_auto, 10, 0);
+    lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *auto_title = lv_label_create(card_auto);
+    lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
+
+    lv_obj_t *auto_sw = lv_switch_create(card_auto);
+    lv_obj_set_style_bg_color(auto_sw, lv_color_hex(0xFFAA00),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ne185_get_autostart()) lv_obj_add_state(auto_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(auto_sw, autostart_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
 
@@ -1756,7 +1793,6 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
     lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
-    lv_obj_t *page_consola = lv_menu_page_create(menu, "CONSOLA");
     lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y AVISOS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
@@ -1783,9 +1819,6 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_logs,
         "Logs",          "Histórico SD: batería y nevera",
         LV_SYMBOL_SAVE,       0xFFAA00, populate_logs);
-    settings_menu_add_entry(ui, main_page, menu, page_consola,
-        "Consola",       "Logs ESP_LOGx en tiempo real",
-        LV_SYMBOL_LIST,       0x8BC34A, populate_consola);
     settings_page_ctx_t *ctx_wifi = settings_menu_add_entry(
         ui, main_page, menu, page_wifi,
         "Wi-Fi",         "Modo AP y credenciales",
@@ -3073,9 +3106,6 @@ static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page) {
 }
 static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page) {
     create_logs_settings_page(ctx->ui, page);
-}
-static void populate_consola(settings_page_ctx_t *ctx, lv_obj_t *page) {
-    settings_logs_panel_create(ctx->ui, page);
 }
 static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page) {
     create_sound_settings_page(ctx->ui, page);
