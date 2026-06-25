@@ -603,18 +603,20 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
 
     if (kind == UI_TANK_CLEAN_H) {
-        /* Bargraph LED: 4 segmentos discretos (1/4..4/4), sin fill continuo
-         * ni texto. ui_tank_set enciende cian acumulativo segun nivel, o los
-         * 4 en rojo cuando esta vacio (Reserva). El color base es cian; el
-         * rojo de vacio se aplica en ui_tank_set. */
+        /* Bargraph LED vertical: 4 segmentos discretos (1/4..4/4) apilados,
+         * llenando de abajo (1/4) hacia arriba (4/4) como un nivel de
+         * deposito. COLUMN_REVERSE deja el hijo 0 abajo, asi el encendido
+         * acumulativo (i < lv en ui_tank_set) sube desde la base. Sin fill
+         * continuo ni texto; rojo de vacio (Reserva) se aplica en
+         * ui_tank_set. */
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_COLUMN_REVERSE);
         lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         for (int i = 0; i < 4; i++) {
             lv_obj_t *led = lv_obj_create(tank);
             lv_obj_remove_style_all(led);
-            lv_obj_set_size(led, lv_pct(22), lv_pct(80));
+            lv_obj_set_size(led, lv_pct(80), lv_pct(22));
             lv_obj_set_style_radius(led, 3, 0);
             lv_obj_set_style_bg_color(led, UI_COLOR_CYAN, 0);
             lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);

@@ -520,7 +520,12 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_pad_hor(bottom_region, 8, 0);
     lv_obj_clear_flag(bottom_region, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Card camper (izquierda, borde cian, ancho hasta ~Luz EXT) ── */
+    /* ── Card camper (izquierda, borde cian) ──────────────────────────
+     * 3 columnas a lo ancho, cada una a alto completo de la card:
+     *   1) Agua limpia: tanque VERTICAL (4 LEDs apilados, llena de abajo
+     *      a arriba), ocupa todo el alto.
+     *   2) Indicadores: Aguas grises arriba + pill 230V debajo.
+     *   3) Botones: [Luz INT + Bomba] arriba, Luz EXT debajo. ────────── */
     lv_obj_t *camper_card = lv_obj_create(bottom_region);
     lv_obj_remove_style_all(camper_card);
     lv_obj_set_flex_grow(camper_card, 1);
@@ -531,53 +536,44 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_border_width(camper_card, 2, 0);
     lv_obj_set_style_radius(camper_card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(camper_card, 8, 0);
-    lv_obj_set_style_pad_gap(camper_card, 6, 0);
+    lv_obj_set_style_pad_gap(camper_card, 12, 0);
     lv_obj_set_layout(camper_card, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(camper_card, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(camper_card, LV_FLEX_ALIGN_CENTER,
+    lv_obj_set_flex_flow(camper_card, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(camper_card, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(camper_card, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Fila indicadores: Agua limpia + Aguas grises + 230V */
-    lv_obj_t *ind_row = lv_obj_create(camper_card);
-    lv_obj_remove_style_all(ind_row);
-    lv_obj_set_width(ind_row, lv_pct(100));
-    lv_obj_set_flex_grow(ind_row, 1);
-    lv_obj_set_layout(ind_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(ind_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(ind_row, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(ind_row, 12, 0);
-    lv_obj_clear_flag(ind_row, LV_OBJ_FLAG_SCROLLABLE);
-
-    ov->tank_s1 = ui_tank_create(ind_row, lv_pct(33), 1,
+    /* ── Columna 1: Agua limpia vertical (alto completo) ── */
+    ov->tank_s1 = ui_tank_create(camper_card, 100, 1,
                                  "Agua limpia", UI_COLOR_CYAN, UI_TANK_CLEAN_H);
     lv_obj_set_height(ov->tank_s1, lv_pct(100));
-    lv_obj_set_flex_grow(ov->tank_s1, 1);
+    lv_obj_set_width(ov->tank_s1, 100);
     lv_obj_add_flag(ov->tank_s1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_s1, alarm_mute_s1_cb, LV_EVENT_CLICKED, ov);
 
-    /* Aguas grises: solo un LED rojo -> ancho al contenido (no mas que su
-     * texto "Aguas grises"), sin flex_grow. */
-    ov->tank_r1 = ui_tank_create(ind_row, LV_SIZE_CONTENT, 1,
+    /* ── Columna 2: Aguas grises (arriba) + 230V (debajo) ── */
+    lv_obj_t *ind_col = lv_obj_create(camper_card);
+    lv_obj_remove_style_all(ind_col);
+    lv_obj_set_height(ind_col, lv_pct(100));
+    lv_obj_set_width(ind_col, LV_SIZE_CONTENT);
+    lv_obj_set_layout(ind_col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ind_col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(ind_col, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(ind_col, 12, 0);
+    lv_obj_clear_flag(ind_col, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Aguas grises: 1 LED rojo, ancho al contenido; alto fijo para que
+     * deje sitio al pill 230V debajo. */
+    ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
                                  "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
-    lv_obj_set_height(ov->tank_r1, lv_pct(100));
+    lv_obj_set_height(ov->tank_r1, 90);
     lv_obj_set_width(ov->tank_r1, LV_SIZE_CONTENT);
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
 
     {
-        lv_obj_t *wrap = lv_obj_create(ind_row);
-        lv_obj_remove_style_all(wrap);
-        lv_obj_set_height(wrap, lv_pct(100));
-        lv_obj_set_flex_grow(wrap, 1);
-        lv_obj_set_layout(wrap, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(wrap, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(wrap, LV_FLEX_ALIGN_CENTER,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
-
-        lv_obj_t *pill = lv_obj_create(wrap);
+        lv_obj_t *pill = lv_obj_create(ind_col);
         lv_obj_remove_style_all(pill);
         lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_set_style_radius(pill, 14, 0);
@@ -596,34 +592,34 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->pill_shore = pill;
     }
 
-    /* Fila botones: [Luz INT + Bomba]  ...  [Luz EXT] (SPACE_BETWEEN) */
-    lv_obj_t *btn_row = lv_obj_create(camper_card);
-    lv_obj_remove_style_all(btn_row);
-    lv_obj_set_width(btn_row, lv_pct(100));
-    lv_obj_set_height(btn_row, LV_SIZE_CONTENT);
-    lv_obj_set_layout(btn_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* ── Columna 3: botones [Luz INT + Bomba] arriba, Luz EXT debajo ── */
+    lv_obj_t *btn_col = lv_obj_create(camper_card);
+    lv_obj_remove_style_all(btn_col);
+    lv_obj_set_height(btn_col, lv_pct(100));
+    lv_obj_set_width(btn_col, LV_SIZE_CONTENT);
+    lv_obj_set_layout(btn_col, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(btn_col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(btn_col, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_hor(btn_row, 4, 0);
-    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_gap(btn_col, 12, 0);
+    lv_obj_clear_flag(btn_col, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *left_group = lv_obj_create(btn_row);
-    lv_obj_remove_style_all(left_group);
-    lv_obj_set_size(left_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(left_group, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(left_group, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(left_group, LV_FLEX_ALIGN_CENTER,
+    lv_obj_t *top_group = lv_obj_create(btn_col);
+    lv_obj_remove_style_all(top_group);
+    lv_obj_set_size(top_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(top_group, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(top_group, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(top_group, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(left_group, 20, 0);
-    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_gap(top_group, 20, 0);
+    lv_obj_clear_flag(top_group, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Icono bombilla FA5 (0xF0EB) en UTF-8 = "\xEF\x83\xAB" */
-    ov->btn_lin  = camper_make_button(left_group, "\xEF\x83\xAB", "Luz INT", 'i',
+    ov->btn_lin  = camper_make_button(top_group, "\xEF\x83\xAB", "Luz INT", 'i',
                                        UI_COLOR_YELLOW);
-    ov->btn_pump = camper_make_button(left_group, LV_SYMBOL_TINT, "Bomba",   'p',
+    ov->btn_pump = camper_make_button(top_group, LV_SYMBOL_TINT, "Bomba",   'p',
                                        UI_COLOR_CYAN);
-    ov->btn_lout = camper_make_button(btn_row, "\xEF\x83\xAB", "Luz EXT", 'o',
+    ov->btn_lout = camper_make_button(btn_col, "\xEF\x83\xAB", "Luz EXT", 'o',
                                        UI_COLOR_YELLOW);
 
     /* ── Card frigo (derecha, mas alta: rellena el alto de la fila;
