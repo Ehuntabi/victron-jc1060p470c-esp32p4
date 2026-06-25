@@ -1336,6 +1336,12 @@ void ui_refresh_victron_device_list(void)
 
 ui_state_t *ui_get_state(void) { return &g_ui; }
 
+/* Estado de la alarma del congelador, calculado con el criterio robusto
+ * (subiendo >=N min + T>umbral) en main.c::frigo_update_cb. Es la unica
+ * fuente de verdad: la vista Overview lo lee via ui_get_freezer_alarm()
+ * en lugar de re-evaluar el umbral por su cuenta. */
+static bool s_freezer_alarm_active = false;
+
 void ui_set_freezer_alarm(ui_state_t *ui, bool active)
 {
     /* La alarma del congelador ya se senaliza dentro de la vista Overview:
@@ -1343,7 +1349,13 @@ void ui_set_freezer_alarm(ui_state_t *ui, bool active)
      * sonoro (con mute al pulsar). No usamos borde a pantalla completa
      * para no tapar el resto de la UI. */
     (void)ui;
+    s_freezer_alarm_active = active;
     if (active) ESP_LOGW("UI", "ALARMA CONGELADOR activa");
+}
+
+bool ui_get_freezer_alarm(void)
+{
+    return s_freezer_alarm_active;
 }
 
 /* ── Pantalla gráfica temperaturas ─────────────────────────── */

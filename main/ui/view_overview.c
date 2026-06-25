@@ -985,8 +985,10 @@ static void overview_render(ui_overview_view_t *ov)
             ov->alarm_r1_last_sound_ms = 0;
         }
 
-        /* === Alarma SOC < 30 % === */
-        bool alarm_soc = ov->bat.has_data && ov->bat.soc_deci < 300;
+        /* === Alarma SOC bajo: usa el umbral critico configurable (NVS,
+         * default 30 %), no un valor fijo. soc_deci esta en deci-% === */
+        bool alarm_soc = ov->bat.has_data
+                         && ov->bat.soc_deci < alerts_get_soc_critical() * 10;
         if (!alarm_soc && ov->prev_alarm_soc) ov->alarm_soc_muted = false;
         ov->prev_alarm_soc = alarm_soc;
         /* Parpadeo visual del card de bateria */
@@ -1006,10 +1008,10 @@ static void overview_render(ui_overview_view_t *ov)
             ov->alarm_soc_last_sound_ms = 0;
         }
 
-        /* === Alarma Frigo: T_Congelador > umbral (NVS, default -2 C) === */
-        const frigo_state_t *fs_a = frigo_get_state();
-        bool alarm_freezer = fs_a && fs_a->T_Congelador > -120.0f
-                             && fs_a->T_Congelador > alerts_get_freezer_temp_c();
+        /* === Alarma Frigo: criterio robusto unico (subiendo >=N min +
+         * T>umbral), calculado en main.c::frigo_update_cb. Aqui solo se
+         * lee el estado para no duplicar el criterio. === */
+        bool alarm_freezer = ui_get_freezer_alarm();
         if (!alarm_freezer && ov->prev_alarm_freezer) ov->alarm_freezer_muted = false;
         ov->prev_alarm_freezer = alarm_freezer;
         if (alarm_freezer && !ov->alarm_freezer_muted && s_alarm_queue) {

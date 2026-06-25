@@ -38,6 +38,9 @@ bool ui_screensaver_is_active(void);
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
+/* Estado actual de la alarma del congelador (criterio robusto de main.c).
+ * La vista Overview lo consulta en vez de re-evaluar el umbral. */
+bool ui_get_freezer_alarm(void);
 void ui_show_chart_screen(ui_state_t *ui);
 void ui_show_battery_history_screen(ui_state_t *ui);
 
