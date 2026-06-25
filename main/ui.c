@@ -347,8 +347,10 @@ void ui_init(void) {
      * (tab_live/tab_settings) ocupe toda la pantalla. */
     lv_obj_add_flag(tab_btns, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(tab_btns, 0);
-    /* Reserva inferior para que ninguna card invada la bottom_bar (50 px + 12) */
-    lv_obj_set_style_pad_bottom(ui->tab_live, 62, 0);
+    /* Reserva inferior = altura exacta de la bottom_bar (50 px), sin margen
+     * muerto, para que el overview aproveche toda la pantalla. El pequeno
+     * colchon sobre la barra lo da el pad_bottom del root del overview. */
+    lv_obj_set_style_pad_bottom(ui->tab_live, 50, 0);
     lv_obj_set_style_pad_bottom(ui->tab_settings, 62, 0);
 
     /* Reloj en barra superior — esquina derecha */

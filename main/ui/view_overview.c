@@ -325,6 +325,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_bg_opa(ov->base.root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(ov->base.root, 0, 0);
     lv_obj_set_style_pad_all(ov->base.root, 8, 0);
+    /* Aprovechar la pantalla: pad superior e inferior minimos (los laterales
+     * mantienen 8). Asi la rejilla gana alto arriba y abajo. */
+    lv_obj_set_style_pad_top(ov->base.root, 4, 0);
+    lv_obj_set_style_pad_bottom(ov->base.root, 3, 0);
     lv_obj_set_style_pad_gap(ov->base.root, 8, 0);
     lv_obj_set_layout(ov->base.root, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ov->base.root, LV_FLEX_FLOW_COLUMN);
@@ -532,7 +536,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_height(camper_card, lv_pct(100));
     lv_obj_set_style_bg_color(camper_card, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(camper_card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(camper_card, UI_COLOR_CYAN, 0);
+    lv_obj_set_style_border_color(camper_card, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(camper_card, 2, 0);
     lv_obj_set_style_radius(camper_card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(camper_card, 8, 0);
@@ -543,11 +547,15 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(camper_card, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Columna 1: Agua limpia vertical (alto completo) ── */
-    ov->tank_s1 = ui_tank_create(camper_card, 100, 1,
+    /* ── Columna 1: Agua limpia vertical (alto completo) ──
+     * Ancho de la caja al contenido para que el titulo "Agua limpia" entre
+     * entero. El contenedor del bargraph lleva ancho fijo propio (ver
+     * UI_TANK_CLEAN_H en ui_card.c), por eso aqui SIZE_CONTENT ya no colapsa
+     * la escala. */
+    ov->tank_s1 = ui_tank_create(camper_card, LV_SIZE_CONTENT, 1,
                                  "Agua limpia", UI_COLOR_CYAN, UI_TANK_CLEAN_H);
     lv_obj_set_height(ov->tank_s1, lv_pct(100));
-    lv_obj_set_width(ov->tank_s1, 100);
+    lv_obj_set_width(ov->tank_s1, LV_SIZE_CONTENT);
     lv_obj_add_flag(ov->tank_s1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_s1, alarm_mute_s1_cb, LV_EVENT_CLICKED, ov);
 
@@ -563,15 +571,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_pad_gap(ind_col, 12, 0);
     lv_obj_clear_flag(ind_col, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Aguas grises: 1 LED rojo, ancho al contenido; alto fijo para que
-     * deje sitio al pill 230V debajo. */
-    ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
-                                 "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
-    lv_obj_set_height(ov->tank_r1, 90);
-    lv_obj_set_width(ov->tank_r1, LV_SIZE_CONTENT);
-    lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
-
+    /* 230V arriba */
     {
         lv_obj_t *pill = lv_obj_create(ind_col);
         lv_obj_remove_style_all(pill);
@@ -591,6 +591,14 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_center(ov->pill_shore_lbl);
         ov->pill_shore = pill;
     }
+
+    /* Aguas grises debajo: 1 LED rojo, ancho al contenido; alto fijo. */
+    ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
+                                 "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
+    lv_obj_set_height(ov->tank_r1, 90);
+    lv_obj_set_width(ov->tank_r1, LV_SIZE_CONTENT);
+    lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
 
     /* ── Columna 3: botones [Luz INT + Bomba] arriba, Luz EXT debajo ── */
     lv_obj_t *btn_col = lv_obj_create(camper_card);
@@ -631,7 +639,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_height(card_fridge, lv_pct(100));
         lv_obj_set_style_bg_color(card_fridge, UI_COLOR_CARD, 0);
         lv_obj_set_style_bg_opa(card_fridge, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(card_fridge, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_border_color(card_fridge, UI_COLOR_ICE, 0);
         lv_obj_set_style_border_width(card_fridge, 2, 0);
         lv_obj_set_style_radius(card_fridge, UI_RADIUS_CARD, 0);
         lv_obj_set_style_pad_hor(card_fridge, 14, 0);

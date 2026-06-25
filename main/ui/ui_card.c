@@ -603,20 +603,56 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
 
     if (kind == UI_TANK_CLEAN_H) {
-        /* Bargraph LED vertical: 4 segmentos discretos (1/4..4/4) apilados,
-         * llenando de abajo (1/4) hacia arriba (4/4) como un nivel de
-         * deposito. COLUMN_REVERSE deja el hijo 0 abajo, asi el encendido
-         * acumulativo (i < lv en ui_tank_set) sube desde la base. Sin fill
-         * continuo ni texto; rojo de vacio (Reserva) se aplica en
-         * ui_tank_set. */
+        /* Bargraph LED vertical con escala a la izquierda. El cuerpo es una
+         * fila: [escala 4/4..1/4 | columna de LEDs]. Los 4 LEDs se apilan en
+         * COLUMN_REVERSE (hijo 0 abajo) y llenan de abajo (1/4) a arriba
+         * (4/4); el encendido acumulativo (i < lv) sube desde la base. Sin
+         * fill continuo; el rojo de vacio (Reserva) se aplica en ui_tank_set.
+         * IMPORTANTE: ui_tank_set lee los LEDs desde tank.child(1) (la
+         * columna de LEDs), no directamente de tank. */
+        /* Ancho fijo y estrecho del contenedor (anula el width pct(100)
+         * generico): asi la barra no es ancha y la escala tiene sitio fijo
+         * garantizado. El box exterior va a SIZE_CONTENT (lo marca el titulo)
+         * y centra este contenedor debajo. */
+        lv_obj_set_width(tank, 116);
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_COLUMN_REVERSE);
-        lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_SPACE_BETWEEN,
+        lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_START,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(tank, 4, 0);
+
+        /* Escala 4/4 (arriba) .. 1/4 (abajo), alineada con cada LED. Ancho
+         * fijo para reservar sitio siempre; color claro para que se lea. */
+        lv_obj_t *scale = lv_obj_create(tank);
+        lv_obj_remove_style_all(scale);
+        lv_obj_set_size(scale, 32, lv_pct(100));
+        lv_obj_set_layout(scale, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(scale, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(scale, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(scale, LV_OBJ_FLAG_SCROLLABLE);
+        static const char *ticks[4] = { "4/4", "3/4", "2/4", "1/4" };
         for (int i = 0; i < 4; i++) {
-            lv_obj_t *led = lv_obj_create(tank);
+            lv_obj_t *t = lv_label_create(scale);
+            lv_obj_set_style_text_font(t, &lv_font_montserrat_14_es, 0);
+            lv_obj_set_style_text_color(t, UI_COLOR_TEXT, 0);
+            lv_label_set_text(t, ticks[i]);
+        }
+
+        /* Columna de LEDs (llena de abajo a arriba) */
+        lv_obj_t *leds = lv_obj_create(tank);
+        lv_obj_remove_style_all(leds);
+        lv_obj_set_height(leds, lv_pct(100));
+        lv_obj_set_flex_grow(leds, 1);
+        lv_obj_set_layout(leds, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(leds, LV_FLEX_FLOW_COLUMN_REVERSE);
+        lv_obj_set_flex_align(leds, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(leds, LV_OBJ_FLAG_SCROLLABLE);
+        for (int i = 0; i < 4; i++) {
+            lv_obj_t *led = lv_obj_create(leds);
             lv_obj_remove_style_all(led);
-            lv_obj_set_size(led, lv_pct(80), lv_pct(22));
+            lv_obj_set_size(led, lv_pct(100), lv_pct(22));
             lv_obj_set_style_radius(led, 3, 0);
             lv_obj_set_style_bg_color(led, UI_COLOR_CYAN, 0);
             lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
@@ -624,15 +660,18 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
             lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
         }
     } else if (kind == UI_TANK_GREY_H) {
-        /* 1 LED rojo grande que ocupa casi todo el contenedor (mismo alto
-         * que CLEAN_H ya garantizado por el flex_grow del tank padre). */
+        /* Indicador CUADRADO: fijamos el contenedor con borde a un cuadrado
+         * (anula el width pct(100)/flex_grow genericos, que lo hacian seguir
+         * el ancho del titulo) y el LED rojo lo rellena. */
+        lv_obj_set_flex_grow(tank, 0);
+        lv_obj_set_size(tank, 56, 56);
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_t *led = lv_obj_create(tank);
         lv_obj_remove_style_all(led);
-        lv_obj_set_size(led, lv_pct(96), lv_pct(90));
+        lv_obj_set_size(led, lv_pct(100), lv_pct(100));
         lv_obj_set_style_radius(led, 4, 0);
         lv_obj_set_style_bg_color(led, UI_COLOR_RED, 0);
         lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
@@ -712,8 +751,11 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
         bool no_data = (level_0_to_3 == 0xFF);
         bool empty   = (level_0_to_3 == 0);
         uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
+        /* tank.child(0) = escala 4/4..1/4 ; tank.child(1) = columna de LEDs */
+        lv_obj_t *leds = lv_obj_get_child(tank, 1);
+        if (!leds) return;
         for (int i = 0; i < 4; i++) {
-            lv_obj_t *led = lv_obj_get_child(tank, i);
+            lv_obj_t *led = lv_obj_get_child(leds, i);
             if (!led) continue;
             if (no_data) {
                 lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);

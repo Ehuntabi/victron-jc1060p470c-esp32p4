@@ -21,6 +21,8 @@ extern "C" {
 #define UI_COLOR_RED_DARK     lv_color_hex(0xCC3333)
 #define UI_COLOR_YELLOW       lv_color_hex(0xFFD54F)
 #define UI_COLOR_BLUE         lv_color_hex(0x4FC3F7)
+#define UI_COLOR_VIOLET       lv_color_hex(0xB388FF)  /* card camper (zona habitable) */
+#define UI_COLOR_ICE          lv_color_hex(0x64B5F6)  /* card frigo (congelador, frio) */
 
 #define UI_RADIUS_CARD        16
 #define UI_PAD_CARD           20
