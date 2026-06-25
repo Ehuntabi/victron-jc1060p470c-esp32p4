@@ -90,18 +90,25 @@ static void tx_task(void *arg)
 {
     (void)arg;
 
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0) {
-        ESP_LOGE(TAG, "socket() falló: errno=%d", errno);
-        vTaskDelete(NULL);
-        return;
-    }
-    int yes = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes)) < 0) {
-        ESP_LOGE(TAG, "SO_BROADCAST falló: errno=%d", errno);
-        close(sock);
-        vTaskDelete(NULL);
-        return;
+    /* Crear (o recrear) el socket con reintento. Antes un fallo al arranque
+     * hacia vTaskDelete -> la tarea moria para siempre y el display mini se
+     * quedaba mudo hasta reboot. Ahora reintentamos cada 5 s. */
+    int sock = -1;
+    while (sock < 0) {
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock < 0) {
+            ESP_LOGE(TAG, "socket() fallo: errno=%d (reintento en 5s)", errno);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+        int yes = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes)) < 0) {
+            ESP_LOGE(TAG, "SO_BROADCAST fallo: errno=%d (reintento en 5s)", errno);
+            close(sock);
+            sock = -1;
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
     }
 
     struct sockaddr_in dest = {0};

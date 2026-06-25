@@ -22,6 +22,7 @@
 #include "esp_timer.h"
 #include "mbedtls/base64.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -356,8 +357,10 @@ esp_err_t wifi_ap_init(void)
     strncpy((char*)ap_cfg.ap.ssid, ssid, sizeof(ap_cfg.ap.ssid));
     strncpy((char*)ap_cfg.ap.password, pass, sizeof(ap_cfg.ap.password));
 
-    ESP_LOGI(TAG, "AP cfg: ssid='%s' pass='%s' ch=%d auth=WPA_WPA2_PSK",
-             ssid, pass, ap_cfg.ap.channel);
+    /* pass en DEBUG para no persistir la credencial en los logs de SD/serie */
+    ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA_WPA2_PSK",
+             ssid, ap_cfg.ap.channel);
+    ESP_LOGD(TAG, "AP pass='%s'", pass);
 
     /* IMPORTANTE: set_config ANTES de start. Si invertimos el orden, en
      * esp_hosted el slave dispara un ciclo STOP+START al recibir set_config
@@ -610,6 +613,7 @@ static esp_err_t handle_keys(httpd_req_t *req)
 
 // Static files catch-all
 static esp_err_t handle_static(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     return serve_from_spiffs(req, req->uri);
 }
 
@@ -701,8 +705,9 @@ static esp_err_t post_save(httpd_req_t *req) {
     
     ESP_LOGI(TAG, "Parsed MAC address: %02X:%02X:%02X:%02X:%02X:%02X", 
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    ESP_LOGI(TAG, "Parsed AES key:"); 
-    ESP_LOG_BUFFER_HEX(TAG, key, 16);
+    /* clave AES solo en DEBUG: no debe quedar en los logs persistidos en SD */
+    ESP_LOGD(TAG, "Parsed AES key:");
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, key, 16, ESP_LOG_DEBUG);
     
     // Save to Victron devices configuration
     esp_err_t err = add_victron_device(mac, key);
@@ -1063,6 +1068,24 @@ static void fmt_axis(char *out, size_t cap, float v)
     else                 snprintf(out, cap, "%.2f", v);
 }
 
+/* Append seguro con formato a 'buf' (tamaño 'cap') a partir de 'sp'. Devuelve
+ * el nuevo 'sp'. Sustituye al idiom inseguro 'sp += snprintf(buf+sp, cap-sp,..)':
+ * snprintf devuelve lo que HABRIA escrito, no lo truncado, asi que al llenarse
+ * el buffer 'sp' superaba 'cap' y el siguiente 'cap - sp' (size_t) hacia
+ * underflow a ~SIZE_MAX -> escritura fuera del heap. Aqui clampamos: una vez
+ * lleno se devuelve 'cap' y los appends siguientes no escriben nada. */
+static size_t svg_vappend(char *buf, size_t cap, size_t sp, const char *fmt, ...)
+{
+    if (sp >= cap) return cap;
+    va_list ap;
+    va_start(ap, fmt);
+    int w = vsnprintf(buf + sp, cap - sp, fmt, ap);
+    va_end(ap);
+    if (w < 0) return sp;
+    if ((size_t)w >= cap - sp) return cap;  /* truncado: marcar buffer lleno */
+    return sp + w;
+}
+
 static void build_frigo_html(const char *csv,
                              char **rows_html, char **svg_inner)
 {
@@ -1152,7 +1175,7 @@ static void build_frigo_html(const char *csv,
     #define Y_FAN_AS(f)  (pad_t + (int)((float)gh * (100.0f - (f)) / 100.0f))
 
     /* Cabecera SVG + grid */
-    sp += snprintf(svg + sp, svg_cap - sp,
+    sp = svg_vappend(svg, svg_cap, sp,
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%' style='max-width:100%%'>"
         "<rect x='0' y='0' width='%d' height='%d' fill='#111' rx='8'/>",
         W, H, W, H);
@@ -1165,23 +1188,23 @@ static void build_frigo_html(const char *csv,
         if (v < t_min - step * 0.01f) continue;
         int yy = Y_TEMP_AS(v);
         if (yy < pad_t || yy > H - pad_b) continue;
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
             pad_l, yy, W - pad_r, yy);
         fmt_axis(num, sizeof(num), v);
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s°</text>",
             pad_l - 4, yy + 4, num);
     }
     /* Eje derecho fan 0/50/100 */
     for (int v = 0; v <= 100; v += 25) {
         int yy = Y_FAN_AS(v);
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<text x='%d' y='%d' fill='#FFAA00' font-size='11'>%d%%</text>",
             W - pad_r + 4, yy + 4, v);
     }
     /* Ejes principales */
-    sp += snprintf(svg + sp, svg_cap - sp,
+    sp = svg_vappend(svg, svg_cap, sp,
         "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#555'/>"
         "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#555'/>",
         pad_l, pad_t, pad_l, H - pad_b,
@@ -1192,17 +1215,17 @@ static void build_frigo_html(const char *csv,
     ts_series_t *all[4]            = { &s_aletas, &s_cong, &s_ext, &s_fan };
     for (int k = 0; k < 4; k++) {
         if (all[k]->n == 0) continue;
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<polyline fill='none' stroke='%s' stroke-width='2' points='", colors[k]);
         for (int i = 0; i < all[k]->n; i++) {
             int x = X_FRIGO(all[k]->x[i]);
             int y = (k == 3) ? Y_FAN_AS(all[k]->y[i]) : Y_TEMP_AS(all[k]->y[i]);
             if (sp + 24 >= svg_cap) break;
-            sp += snprintf(svg + sp, svg_cap - sp, "%d,%d ", x, y);
+            sp = svg_vappend(svg, svg_cap, sp, "%d,%d ", x, y);
         }
-        sp += snprintf(svg + sp, svg_cap - sp, "'/>");
+        sp = svg_vappend(svg, svg_cap, sp, "'/>");
     }
-    sp += snprintf(svg + sp, svg_cap - sp, "</svg>");
+    sp = svg_vappend(svg, svg_cap, sp, "</svg>");
 
     ts_free(&s_aletas); ts_free(&s_cong); ts_free(&s_ext); ts_free(&s_fan);
     *svg_inner = svg;
@@ -1210,6 +1233,7 @@ static void build_frigo_html(const char *csv,
 
 static esp_err_t handle_data_frigo(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
 
     /* Intentar SD: primero el CSV de hoy, luego el más reciente */
@@ -1288,6 +1312,7 @@ static esp_err_t handle_data_frigo(httpd_req_t *req)
 
 static esp_err_t handle_data_frigo_csv(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     char path[64];
     get_today_csv_path("frigo", path, sizeof path);
     size_t csv_len = 0;
@@ -1396,7 +1421,7 @@ static void build_bateria_html(const char *csv,
     #define X_BAT_AS(xv) (pad_l + (int)((float)gw * (xv) / (float)((total > 1) ? (total - 1) : 1)))
     #define Y_BAT_AS(a)  (pad_t + (int)((float)gh * (a_max - (a)) / a_range))
 
-    sp += snprintf(svg + sp, svg_cap - sp,
+    sp = svg_vappend(svg, svg_cap, sp,
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%' style='max-width:100%%'>"
         "<rect x='0' y='0' width='%d' height='%d' fill='#111' rx='8'/>",
         W, H, W, H);
@@ -1408,23 +1433,23 @@ static void build_bateria_html(const char *csv,
         if (v < a_min - step * 0.01f) continue;
         int yy = Y_BAT_AS(v);
         if (yy < pad_t || yy > H - pad_b) continue;
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
             pad_l, yy, W - pad_r, yy);
         fmt_axis(num, sizeof(num), v);
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s A</text>",
             pad_l - 4, yy + 4, num);
     }
     /* Eje cero destacado */
     if (a_min < 0 && a_max > 0) {
         int y0 = Y_BAT_AS(0);
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#666' stroke-dasharray='4,4'/>",
             pad_l, y0, W - pad_r, y0);
     }
     /* Ejes */
-    sp += snprintf(svg + sp, svg_cap - sp,
+    sp = svg_vappend(svg, svg_cap, sp,
         "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#555'/>"
         "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#555'/>",
         pad_l, pad_t, pad_l, H - pad_b,
@@ -1447,7 +1472,7 @@ static void build_bateria_html(const char *csv,
             if (s_src[k].y_max[i] != s_src[k].y_min[i]) { has_range = true; break; }
         }
         if (has_range) {
-            sp += snprintf(svg + sp, svg_cap - sp,
+            sp = svg_vappend(svg, svg_cap, sp,
                 "<polygon fill='%s' fill-opacity='0.18' stroke='none' points='",
                 colors[k]);
             /* Subida por max (bin) */
@@ -1458,7 +1483,7 @@ static void build_bateria_html(const char *csv,
                 int x = X_BAT_AS(s_src[k].x[i]);
                 int y = Y_BAT_AS(mx);
                 if (sp + 24 >= svg_cap) break;
-                sp += snprintf(svg + sp, svg_cap - sp, "%d,%d ", x, y);
+                sp = svg_vappend(svg, svg_cap, sp, "%d,%d ", x, y);
             }
             /* Bajada por min (bin) en orden inverso */
             int last_bin_start = ((n - 1) / step) * step;
@@ -1469,12 +1494,12 @@ static void build_bateria_html(const char *csv,
                 int x = X_BAT_AS(s_src[k].x[i]);
                 int y = Y_BAT_AS(mn);
                 if (sp + 24 >= svg_cap) break;
-                sp += snprintf(svg + sp, svg_cap - sp, "%d,%d ", x, y);
+                sp = svg_vappend(svg, svg_cap, sp, "%d,%d ", x, y);
             }
-            sp += snprintf(svg + sp, svg_cap - sp, "'/>");
+            sp = svg_vappend(svg, svg_cap, sp, "'/>");
         }
         /* Línea principal del avg (bin) */
-        sp += snprintf(svg + sp, svg_cap - sp,
+        sp = svg_vappend(svg, svg_cap, sp,
             "<polyline fill='none' stroke='%s' stroke-width='2' points='", colors[k]);
         for (int i = 0; i < n; i += step) {
             int end = (i + step < n) ? i + step : n;
@@ -1484,11 +1509,11 @@ static void build_bateria_html(const char *csv,
             int x = X_BAT_AS(s_src[k].x[i]);
             int y = Y_BAT_AS(avg);
             if (sp + 24 >= svg_cap) break;
-            sp += snprintf(svg + sp, svg_cap - sp, "%d,%d ", x, y);
+            sp = svg_vappend(svg, svg_cap, sp, "%d,%d ", x, y);
         }
-        sp += snprintf(svg + sp, svg_cap - sp, "'/>");
+        sp = svg_vappend(svg, svg_cap, sp, "'/>");
     }
-    sp += snprintf(svg + sp, svg_cap - sp, "</svg>");
+    sp = svg_vappend(svg, svg_cap, sp, "</svg>");
 
     for (int k = 0; k < BH_SRC_COUNT; k++) ts_free(&s_src[k]);
     *svg_inner = svg;
@@ -1496,6 +1521,7 @@ static void build_bateria_html(const char *csv,
 
 static esp_err_t handle_data_bateria(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
 
     char path[96];
@@ -1568,6 +1594,7 @@ static esp_err_t handle_data_bateria(httpd_req_t *req)
 
 static esp_err_t handle_data_bateria_csv(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     char path[64];
     get_today_csv_path("bateria", path, sizeof path);
     size_t csv_len = 0;
@@ -1782,11 +1809,13 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
 
 static esp_err_t handle_data_frigo_tar(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     return handle_tar_dir(req, "/sdcard/frigo", "frigo.tar");
 }
 
 static esp_err_t handle_data_bateria_tar(httpd_req_t *req)
 {
+    REQUIRE_AUTH(req);
     return handle_tar_dir(req, "/sdcard/bateria", "bateria.tar");
 }
 
