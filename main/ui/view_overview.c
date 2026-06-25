@@ -641,12 +641,14 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_pad_ver(card_fridge, 6, 0);
         lv_obj_set_style_pad_gap(card_fridge, 14, 0);
         lv_obj_set_layout(card_fridge, LV_LAYOUT_FLEX);
-        lv_obj_set_flex_flow(card_fridge, LV_FLEX_FLOW_ROW);
+        /* Disposicion vertical: Congelador (icono+texto+temp) arriba y el
+         * ventilador debajo, ambos centrados. */
+        lv_obj_set_flex_flow(card_fridge, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(card_fridge, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(card_fridge, LV_OBJ_FLAG_SCROLLABLE);
 
-        /* Congelador (izquierda dentro de la card) — clickable para
+        /* Congelador (arriba dentro de la card) — clickable para
          * silenciar la alarma. */
         lv_obj_t *col_freezer = lv_obj_create(card_fridge);
         lv_obj_remove_style_all(col_freezer);
@@ -682,11 +684,13 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_text_color(t_lbl, UI_COLOR_CYAN, 0);
         lv_label_set_text(t_lbl, "Congelador");
         ov->lbl_freezer_temp = lv_label_create(col_freezer);
-        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_28_es, 0);
+        /* Temperatura un tamano mayor. Solo las fuentes _es (Inter) incluyen el
+         * glifo ° ; la siguiente disponible con ° es la 46. */
+        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_46, 0);
         lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
         lv_label_set_text(ov->lbl_freezer_temp, "-- \xc2\xb0""C");
 
-        /* Ventilador (derecha dentro de la card) */
+        /* Ventilador (debajo dentro de la card) */
         ov->img_fan = lv_img_create(card_fridge);
         lv_img_set_src(ov->img_fan, &icon_fan);
         lv_img_set_pivot(ov->img_fan, 40, 40);
