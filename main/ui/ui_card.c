@@ -603,19 +603,20 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_clear_flag(tank, LV_OBJ_FLAG_SCROLLABLE);
 
     if (kind == UI_TANK_CLEAN_H) {
-        /* Bargraph LED: 5 segmentos discretos (1 rojo + 4 verdes), sin
-         * fill continuo ni texto. ui_tank_set apaga/enciende segun nivel. */
+        /* Bargraph LED: 4 segmentos discretos (1/4..4/4), sin fill continuo
+         * ni texto. ui_tank_set enciende cian acumulativo segun nivel, o los
+         * 4 en rojo cuando esta vacio (Reserva). El color base es cian; el
+         * rojo de vacio se aplica en ui_tank_set. */
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             lv_obj_t *led = lv_obj_create(tank);
             lv_obj_remove_style_all(led);
-            lv_obj_set_size(led, lv_pct(18), lv_pct(80));
+            lv_obj_set_size(led, lv_pct(22), lv_pct(80));
             lv_obj_set_style_radius(led, 3, 0);
-            lv_obj_set_style_bg_color(led,
-                (i == 0) ? UI_COLOR_RED : UI_COLOR_GREEN, 0);
+            lv_obj_set_style_bg_color(led, UI_COLOR_CYAN, 0);
             lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
             lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
@@ -700,20 +701,28 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
 
     ui_tank_kind_t kind = (ui_tank_kind_t)(intptr_t)lv_obj_get_user_data(tank_box);
 
-    /* Modo bargraph LED CLEAN_H: 5 LEDs (1 rojo + 4 verdes).
-     * level 0 = Reserva → solo el rojo enciende
-     * level 1..4 = 1/4..4/4 → enciende N verdes (LEDs 1..level), rojo off */
+    /* Modo bargraph LED CLEAN_H: 4 LEDs (1/4..4/4).
+     * level 0 = Reserva (vacio) → los 4 en rojo (el parpadeo lo aplica el
+     *   widget desde view_overview alternando la opacidad cuando s1==0).
+     * level 1..4 = 1/4..4/4 → enciende los LEDs 1..level en cian (acumulativo).
+     * level 0xFF = sin dato → todos apagados. */
     if (kind == UI_TANK_CLEAN_H) {
-        uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
-        bool reserve = (level_0_to_3 == 0);
         bool no_data = (level_0_to_3 == 0xFF);
-        for (int i = 0; i < 5; i++) {
+        bool empty   = (level_0_to_3 == 0);
+        uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
+        for (int i = 0; i < 4; i++) {
             lv_obj_t *led = lv_obj_get_child(tank, i);
             if (!led) continue;
-            bool on = no_data ? false :
-                      (i == 0) ? reserve :
-                      (i <= lv);
-            lv_obj_set_style_bg_opa(led, on ? LV_OPA_COVER : LV_OPA_20, 0);
+            if (no_data) {
+                lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
+            } else if (empty) {
+                lv_obj_set_style_bg_color(led, UI_COLOR_RED, 0);
+                lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
+            } else {
+                bool on = (i < lv);   /* acumulativo: LEDs 0..lv-1 encendidos */
+                lv_obj_set_style_bg_color(led, UI_COLOR_CYAN, 0);
+                lv_obj_set_style_bg_opa(led, on ? LV_OPA_COVER : LV_OPA_20, 0);
+            }
         }
         return;
     }
