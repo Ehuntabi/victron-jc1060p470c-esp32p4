@@ -93,7 +93,9 @@ static void btn_mode_cb(lv_event_t *e)
  * SIN disparar sus VALUE_CHANGED (para no entrar en recursion via swap). */
 static void refresh_dd_selections(void)
 {
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     s_suppress_dd_cb = true;
     if (s_dd_aletas)     lv_dropdown_set_selected(s_dd_aletas,     st->assignment[FRIGO_SLOT_ALETAS]);
     if (s_dd_congelador) lv_dropdown_set_selected(s_dd_congelador, st->assignment[FRIGO_SLOT_CONGELADOR]);
@@ -106,7 +108,9 @@ static void refresh_dd_selections(void)
  * permutacion 1:1. */
 static void apply_assignment_with_swap(frigo_slot_t target, uint8_t new_idx)
 {
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     uint8_t prev_in_target = st->assignment[target];
     for (int s = 0; s < 3; ++s) {
         if (s == (int)target) continue;
@@ -144,7 +148,9 @@ static void dd_exterior_cb(lv_event_t *e)
 static void btn_tmin_minus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     uint8_t t = st->T_min;
     if (t > 30) t -= 5;
     frigo_set_thresholds(t, st->T_max);
@@ -156,7 +162,9 @@ static void btn_tmin_minus_cb(lv_event_t *e)
 static void btn_tmin_plus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     uint8_t t = st->T_min;
     if (t + 5 <= st->T_max) t += 5;
     frigo_set_thresholds(t, st->T_max);
@@ -168,7 +176,9 @@ static void btn_tmin_plus_cb(lv_event_t *e)
 static void btn_tmax_minus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     uint8_t t = st->T_max;
     if (t - 5 >= st->T_min) t -= 5;
     frigo_set_thresholds(st->T_min, t);
@@ -180,7 +190,9 @@ static void btn_tmax_minus_cb(lv_event_t *e)
 static void btn_tmax_plus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
     uint8_t t = st->T_max;
     if (t < 50) t += 5;
     frigo_set_thresholds(st->T_min, t);
@@ -276,7 +288,9 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
 void ui_frigo_panel_init(ui_state_t *ui)
 {
     s_ui = ui;
-    const frigo_state_t *st = frigo_get_state();
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
 
     lv_obj_t *tab = ui->frigo_page;
     lv_obj_set_layout(tab, LV_LAYOUT_FLEX);

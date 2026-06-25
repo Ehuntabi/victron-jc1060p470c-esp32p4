@@ -55,7 +55,9 @@ static void build_msg(mini_msg_t *out)
     }
 
     /* Frigo */
-    const frigo_state_t *fr = frigo_get_state();
+    frigo_state_t fr_copy;
+    frigo_get_state_copy(&fr_copy);
+    const frigo_state_t *fr = &fr_copy;
     if (fr && fr->T_Congelador > -100.0f) {
         float v = fr->T_Congelador * 100.0f;
         if (v >  32767.0f) v =  32767.0f;

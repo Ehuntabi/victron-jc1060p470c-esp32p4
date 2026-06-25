@@ -49,7 +49,12 @@ typedef struct {
 typedef void (*frigo_update_cb_t)(const frigo_state_t *state);
 
 esp_err_t frigo_init(frigo_update_cb_t cb);
-const frigo_state_t *frigo_get_state(void);
+
+/* Copia atomica del estado bajo mutex. Sustituye al antiguo frigo_get_state()
+ * que devolvia un puntero al estado interno: los lectores (UI, udp_tx) podian
+ * leer campos a medio actualizar por frigo_task/sim (datos rasgados entre
+ * campos). Copiar bajo lock garantiza una foto coherente. */
+void frigo_get_state_copy(frigo_state_t *out);
 
 /* Hook de "estoy vivo": frigo_task lo invoca en cada iteracion de su bucle.
  * Permite a la app vigilar la tarea (watchdog) sin que el componente frigo

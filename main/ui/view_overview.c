@@ -217,7 +217,9 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     /* Igual que en camper_tick_cb: si el screensaver esta activo no rotamos
      * la imagen para no agotar el heap LVGL con buffers de rotacion. */
     if (ov->base.ui && ov->base.ui->screensaver.active) return;
-    const frigo_state_t *fs = frigo_get_state();
+    frigo_state_t fs_copy;
+    frigo_get_state_copy(&fs_copy);
+    const frigo_state_t *fs = &fs_copy;
     if (!fs) return;
     uint8_t p = fs->fan_percent;
     if (p == 0) return;
@@ -1065,7 +1067,9 @@ static void overview_render(ui_overview_view_t *ov)
 
     /* ── Frigo: T_Congelador y % ventilador ─────────────────── */
     {
-        const frigo_state_t *fs = frigo_get_state();
+        frigo_state_t fs_copy;
+        frigo_get_state_copy(&fs_copy);
+        const frigo_state_t *fs = &fs_copy;
         if (fs && ov->lbl_freezer_temp) {
             char fbuf[16];
             float thr = alerts_get_freezer_temp_c();

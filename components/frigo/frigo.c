@@ -271,7 +271,17 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
     return ESP_OK;
 }
 
-const frigo_state_t *frigo_get_state(void) { return &s_state; }
+void frigo_get_state_copy(frigo_state_t *out)
+{
+    if (!out) return;
+    if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        *out = s_state;
+        xSemaphoreGive(s_mutex);
+    } else {
+        /* best-effort si el mutex no esta listo o esta ocupado >50 ms */
+        *out = s_state;
+    }
+}
 
 void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb) { s_hb_cb = cb; }
 
