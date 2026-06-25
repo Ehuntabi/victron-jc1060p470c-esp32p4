@@ -66,7 +66,8 @@ typedef struct {
     lv_obj_t *pill_shore;        /* indicador 230 V (debajo de Bateria) */
     lv_obj_t *pill_shore_lbl;    /* texto interno del pill (ON/OFF) */
     /* ── Widgets frigo (DS18B20 + ventilador PWM) ─────────────── */
-    lv_obj_t *lbl_freezer_temp;  /* T_Congelador (junto a tank limpia) */
+    lv_obj_t *lbl_freezer_temp;  /* T_Congelador valor numerico (fuente grande) */
+    lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
     lv_obj_t *img_fan;           /* icono ventilador (animado, debajo 230V) */
     int       fan_angle_deci;    /* angulo actual rotacion (0..3599) */
     /* ── Alarmas (S1 vacio / R1 lleno / SOC < 30 % / Frigo > umbral) ── */
@@ -683,12 +684,30 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_text_font(t_lbl, &lv_font_montserrat_24_es, 0);
         lv_obj_set_style_text_color(t_lbl, UI_COLOR_CYAN, 0);
         lv_label_set_text(t_lbl, "Congelador");
-        ov->lbl_freezer_temp = lv_label_create(col_freezer);
-        /* Temperatura un tamano mayor. Solo las fuentes _es (Inter) incluyen el
-         * glifo ° ; la siguiente disponible con ° es la 46. */
+        /* Valor + unidad en una fila: el numero va grande (46, solo digitos
+         * que esa fuente si tiene) y la unidad "C" en 28_es, que incluye el
+         * glifo grado (la 46 no lo lleva). Alineados por abajo. */
+        lv_obj_t *temp_row = lv_obj_create(col_freezer);
+        lv_obj_remove_style_all(temp_row);
+        lv_obj_set_size(temp_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_layout(temp_row, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(temp_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(temp_row, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(temp_row, 4, 0);
+
+        ov->lbl_freezer_temp = lv_label_create(temp_row);
         lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_46, 0);
         lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
-        lv_label_set_text(ov->lbl_freezer_temp, "-- \xc2\xb0""C");
+        lv_label_set_text(ov->lbl_freezer_temp, " --");
+
+        ov->lbl_freezer_unit = lv_label_create(temp_row);
+        lv_obj_set_style_text_font(ov->lbl_freezer_unit, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(ov->lbl_freezer_unit, UI_COLOR_TEXT, 0);
+        lv_label_set_text(ov->lbl_freezer_unit, "\xc2\xb0""C");
+        /* Pequeno margen inferior para que la unidad case con la base del
+         * numero grande en vez de pegarse al fondo del row. */
+        lv_obj_set_style_pad_bottom(ov->lbl_freezer_unit, 6, 0);
 
         /* Ventilador (debajo dentro de la card) */
         ov->img_fan = lv_img_create(card_fridge);
@@ -1048,26 +1067,38 @@ static void overview_render(ui_overview_view_t *ov)
             float thr = alerts_get_freezer_temp_c();
             bool over = fs->T_Congelador > -120.0f
                         && fs->T_Congelador > thr;
+            lv_color_t col;
+            lv_opa_t opa;
             if (fs->T_Congelador > -120.0f) {
-                snprintf(fbuf, sizeof(fbuf), "%.1f \xc2\xb0""C",
-                         fs->T_Congelador);
+                /* Reservar siempre la columna del signo: con el numero
+                 * centrado, sin esto "salta" lateralmente al pasar de
+                 * positivo (sin '-') a negativo (con '-'). Para positivos
+                 * anteponemos un espacio para igualar el ancho. La unidad
+                 * "C" va aparte (label propio en fuente _es con glifo grado). */
+                float t = fs->T_Congelador;
+                if (t < 0.0f)
+                    snprintf(fbuf, sizeof(fbuf), "-%.1f", -t);
+                else
+                    snprintf(fbuf, sizeof(fbuf), " %.1f", t);
                 /* Color: rojo si supera umbral, blanco si OK.
                  * Parpadeo (alfa 30% / 100%) si la alarma esta activa y
                  * sin mutear, para que destaque sobre la barra inferior. */
-                lv_obj_set_style_text_color(ov->lbl_freezer_temp,
-                    over ? UI_COLOR_RED : UI_COLOR_TEXT, 0);
-                lv_opa_t opa = (over && !ov->alarm_freezer_muted
-                                && ov->blink_phase)
+                col = over ? UI_COLOR_RED : UI_COLOR_TEXT;
+                opa = (over && !ov->alarm_freezer_muted && ov->blink_phase)
                     ? LV_OPA_30 : LV_OPA_COVER;
-                lv_obj_set_style_text_opa(ov->lbl_freezer_temp, opa, 0);
             } else {
-                snprintf(fbuf, sizeof(fbuf), "-- \xc2\xb0""C");
-                lv_obj_set_style_text_color(ov->lbl_freezer_temp,
-                                            UI_COLOR_TEXT_DIM, 0);
-                lv_obj_set_style_text_opa(ov->lbl_freezer_temp,
-                                          LV_OPA_COVER, 0);
+                snprintf(fbuf, sizeof(fbuf), " --");
+                col = UI_COLOR_TEXT_DIM;
+                opa = LV_OPA_COVER;
             }
             lv_label_set_text(ov->lbl_freezer_temp, fbuf);
+            /* Mismo color y parpadeo en numero y unidad para que vayan a una. */
+            lv_obj_set_style_text_color(ov->lbl_freezer_temp, col, 0);
+            lv_obj_set_style_text_opa(ov->lbl_freezer_temp, opa, 0);
+            if (ov->lbl_freezer_unit) {
+                lv_obj_set_style_text_color(ov->lbl_freezer_unit, col, 0);
+                lv_obj_set_style_text_opa(ov->lbl_freezer_unit, opa, 0);
+            }
         }
         if (fs && ov->img_fan) {
             uint8_t p = fs->fan_percent;
