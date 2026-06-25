@@ -141,6 +141,7 @@ static const victron_product_name_entry_t kProductNames[] = {
     { 0xA389, "SmartShunt 500A/50mV" },
     { 0xA38A, "SmartShunt 1000A/50mV" },
     { 0xA38B, "SmartShunt 2000A/50mV" },
+    { 0xA3D0, "Orion-Tr Smart DC-DC" },
     { 0xA3F0, "Smart BuckBoost 12V/12V-50A" },
 };
 
