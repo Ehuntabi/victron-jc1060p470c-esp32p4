@@ -1376,17 +1376,21 @@ static char s_frigo_dates[LOG_BROWSER_MAX_DATES][LOG_BROWSER_DATE_LEN];
 static float s_frigo_win_a = 0.0f;
 static float s_frigo_win_b = 1.0f;
 
+/* Estado del gesto tactil (arrastrar = pan, doble-toque = zoom, manten = 1x) */
+static int32_t s_frigo_drag_last_x  = 0;
+static int32_t s_frigo_drag_moved   = 0;
+static bool    s_frigo_dragging     = false;
+static int64_t s_frigo_last_apply_us = 0;
+static int64_t s_frigo_last_click_us = 0;
+
 /* Buffer estatico para parsear CSV de un dia. 1440 muestras = 1 min cada una. */
 #define FRIGO_LOG_MAX_ENTRIES   1500
 static frigo_log_entry_t s_frigo_buf[FRIGO_LOG_MAX_ENTRIES];
 
 static void frigo_chart_load_day(void);
 static void frigo_chart_gesture_cb(lv_event_t *e);
-static void frigo_zoom_in_cb(lv_event_t *e);
-static void frigo_zoom_out_cb(lv_event_t *e);
-static void frigo_pan_left_cb(lv_event_t *e);
-static void frigo_pan_right_cb(lv_event_t *e);
-static void frigo_reset_view_cb(lv_event_t *e);
+static void frigo_chart_touch_cb(lv_event_t *e);
+static void frigo_apply_window(void);
 static void frigo_update_zoom_label(void);
 
 static void chart_screen_close_cb(lv_event_t *e)
@@ -1419,10 +1423,10 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     /* Título */
     lv_obj_t *lbl_title = lv_label_create(scr);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
     lv_label_set_text(lbl_title, "Temperaturas");
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 8);
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 12);
 
     /* Fecha del log mostrado (centrada arriba) */
     s_frigo_lbl_date = lv_label_create(scr);
@@ -1476,45 +1480,34 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_obj_set_pos(lbl, 30 + i * 120, 50);
     }
 
-    /* Fila de controles: pan izq, zoom -, etiqueta, zoom +, pan dcha, reset */
     s_frigo_win_a = 0.0f;
     s_frigo_win_b = 1.0f;
+
+    /* Etiqueta de nivel de zoom (derecha, bajo el boton Cerrar) */
+    s_frigo_lbl_zoom = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_frigo_lbl_zoom, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_frigo_lbl_zoom, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(s_frigo_lbl_zoom, "1x");
+    lv_obj_align(s_frigo_lbl_zoom, LV_ALIGN_TOP_RIGHT, -16, 80);
+
+    /* Pista de uso tactil (zoom/pan sin botones) */
     {
-        struct { const char *txt; lv_event_cb_t cb; } btns[] = {
-            { LV_SYMBOL_LEFT,    frigo_pan_left_cb  },
-            { LV_SYMBOL_MINUS,   frigo_zoom_out_cb  },
-            { LV_SYMBOL_PLUS,    frigo_zoom_in_cb   },
-            { LV_SYMBOL_RIGHT,   frigo_pan_right_cb },
-            { LV_SYMBOL_REFRESH, frigo_reset_view_cb},
-        };
-        int x = -((int)(sizeof(btns)/sizeof(btns[0])) * 56 + 80) / 2;
-        for (size_t i = 0; i < sizeof(btns)/sizeof(btns[0]); ++i) {
-            lv_obj_t *b = lv_btn_create(scr);
-            lv_obj_set_size(b, 48, 44);
-            lv_obj_set_style_bg_color(b, lv_color_hex(0x2A3340), 0);
-            lv_obj_set_style_radius(b, 8, 0);
-            lv_obj_align(b, LV_ALIGN_TOP_MID, x, 92);
-            lv_obj_t *l = lv_label_create(b);
-            lv_label_set_text(l, btns[i].txt);
-            lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-            lv_obj_center(l);
-            lv_obj_add_event_cb(b, btns[i].cb, LV_EVENT_CLICKED, NULL);
-            x += 56;
-            if (i == 1) {
-                s_frigo_lbl_zoom = lv_label_create(scr);
-                lv_obj_set_style_text_color(s_frigo_lbl_zoom, lv_color_white(), 0);
-                lv_obj_set_style_text_font(s_frigo_lbl_zoom, &lv_font_montserrat_20_es, 0);
-                lv_label_set_text(s_frigo_lbl_zoom, "1x");
-                lv_obj_align(s_frigo_lbl_zoom, LV_ALIGN_TOP_MID, x + 28, 102);
-                x += 70;
-            }
-        }
+        lv_obj_t *hint = lv_label_create(scr);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x8A93A6), 0);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_14_es, 0);
+        lv_label_set_text(hint,
+            "Arrastra: mover  -  2 toques: zoom  -  manten: 1x");
+        lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 16, 84);
     }
 
     /* Gráfica */
     s_chart = lv_chart_create(scr);
-    lv_obj_set_size(s_chart, LV_HOR_RES - 20, LV_VER_RES - 180);
+    /* Estrechado para dejar margen a las etiquetas de los dos ejes Y (LVGL las
+     * dibuja fuera del borde del chart): temp a la izquierda, fan% a la derecha. */
+    lv_obj_set_size(s_chart, LV_HOR_RES - 150, LV_VER_RES - 140);
     lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -30);
+    lv_obj_clear_flag(s_chart, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(s_chart, frigo_chart_touch_cb, LV_EVENT_ALL, NULL);
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(s_chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(s_chart, LV_OPA_COVER, 0);
@@ -1523,12 +1516,14 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_set_style_line_color(s_chart, lv_color_hex(0x333333), LV_PART_MAIN);
 
     lv_chart_set_range(s_chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
-    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_PRIMARY_Y,   8, 4, 5, 1, true, 50);
-    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_SECONDARY_Y, 8, 4, 5, 1, true, 50);
-    lv_obj_set_style_pad_left(s_chart, 50, 0);
-    lv_obj_set_style_pad_right(s_chart, 50, 0);
+    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_PRIMARY_Y,   8, 4, 5, 1, true, 60);
+    lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_SECONDARY_Y, 8, 4, 5, 1, true, 60);
+    lv_obj_set_style_pad_left(s_chart, 8, 0);
+    lv_obj_set_style_pad_right(s_chart, 8, 0);
+    /* Hueco arriba para que la etiqueta Y superior (fuente 20) no se recorte. */
+    lv_obj_set_style_pad_top(s_chart, 16, 0);
     lv_obj_set_style_text_color(s_chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
-    lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_14_es, LV_PART_TICKS);
+    lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_20_es, LV_PART_TICKS);
 
     s_ser_aletas     = lv_chart_add_series(s_chart, colores[0], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
@@ -1538,7 +1533,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Contenedor de labels horarios bajo el chart */
     s_frigo_xlabels = lv_obj_create(scr);
     lv_obj_remove_style_all(s_frigo_xlabels);
-    lv_obj_set_size(s_frigo_xlabels, LV_HOR_RES - 20, 22);
+    lv_obj_set_size(s_frigo_xlabels, LV_HOR_RES - 150, 28);
     lv_obj_align_to(s_frigo_xlabels, s_chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
     lv_obj_set_layout(s_frigo_xlabels, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(s_frigo_xlabels, LV_FLEX_FLOW_ROW);
@@ -1547,7 +1542,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(s_frigo_xlabels);
         lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_text(l, "--:--");
     }
 
@@ -1628,8 +1623,8 @@ static void frigo_apply_temp_range(float t_min, float t_max)
     if (t_min > t_max) { t_min = -20.0f; t_max = 15.0f; }
     float span = t_max - t_min;
     if (span < 1.0f) span = 1.0f;
-    int y_min = (int)(t_min - span * 0.10f);
-    int y_max = (int)(t_max + span * 0.10f) + 1;
+    int y_min = (int)(t_min - span * 0.05f);
+    int y_max = (int)(t_max + span * 0.05f) + 1;
     if (y_min == y_max) { y_min--; y_max++; }
     lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, y_min, y_max);
 }
@@ -1741,70 +1736,80 @@ static void frigo_apply_window(void)
     frigo_chart_load_day();
 }
 
-static void frigo_zoom_in_cb(lv_event_t *e)
+/* Gesto tactil sobre el chart: arrastrar = desplazar (pan), doble-toque =
+ * zoom in centrado en el punto, mantener pulsado = volver a 1x. El cambio de
+ * dia se hace con swipe (gesture_cb) solo cuando estamos en 1x. */
+static void frigo_chart_touch_cb(lv_event_t *e)
 {
-    (void)e;
-    float w = s_frigo_win_b - s_frigo_win_a;
-    float c = (s_frigo_win_a + s_frigo_win_b) * 0.5f;
-    w *= 0.5f;
-    s_frigo_win_a = c - w * 0.5f;
-    s_frigo_win_b = c + w * 0.5f;
-    frigo_apply_window();
-}
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p; lv_indev_get_point(indev, &p);
 
-static void frigo_zoom_out_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_frigo_win_b - s_frigo_win_a;
-    float c = (s_frigo_win_a + s_frigo_win_b) * 0.5f;
-    w *= 2.0f;
-    if (w >= 1.0f) { s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f; }
-    else {
-        s_frigo_win_a = c - w * 0.5f;
-        s_frigo_win_b = c + w * 0.5f;
+    if (code == LV_EVENT_PRESSED) {
+        s_frigo_drag_last_x = p.x;
+        s_frigo_drag_moved  = 0;
+        s_frigo_dragging    = false;
+    } else if (code == LV_EVENT_PRESSING) {
+        int32_t dx = p.x - s_frigo_drag_last_x;
+        s_frigo_drag_last_x = p.x;
+        s_frigo_drag_moved += dx < 0 ? -dx : dx;
+        if (s_frigo_drag_moved < 6) return;   /* umbral para no confundir tap */
+        s_frigo_dragging = true;
+        float win_w = s_frigo_win_b - s_frigo_win_a;
+        lv_area_t ca; lv_obj_get_content_coords(s_chart, &ca);
+        int cw = ca.x2 - ca.x1 + 1; if (cw < 1) cw = 1;
+        float shift = -(float)dx / (float)cw * win_w;
+        s_frigo_win_a += shift; s_frigo_win_b += shift;
         if (s_frigo_win_a < 0.0f) { s_frigo_win_b -= s_frigo_win_a; s_frigo_win_a = 0.0f; }
         if (s_frigo_win_b > 1.0f) { s_frigo_win_a -= (s_frigo_win_b - 1.0f); s_frigo_win_b = 1.0f; }
+        int64_t now = esp_timer_get_time();
+        if (now - s_frigo_last_apply_us > 120000) {  /* throttle recarga ~8/s */
+            s_frigo_last_apply_us = now;
+            frigo_update_zoom_label();
+            frigo_chart_load_day();
+        }
+    } else if (code == LV_EVENT_RELEASED) {
+        if (s_frigo_dragging) {
+            frigo_update_zoom_label();
+            frigo_chart_load_day();           /* recarga final tras soltar */
+            s_frigo_dragging = false;
+        }
+    } else if (code == LV_EVENT_LONG_PRESSED) {
+        if (!s_frigo_dragging) {              /* mantener pulsado = reset a 1x */
+            s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
+            frigo_apply_window();
+        }
+    } else if (code == LV_EVENT_SHORT_CLICKED) {
+        if (s_frigo_dragging) return;
+        int64_t now = esp_timer_get_time();
+        if (now - s_frigo_last_click_us < 350000) {   /* doble-toque = zoom in */
+            s_frigo_last_click_us = 0;
+            float win_w = s_frigo_win_b - s_frigo_win_a;
+            lv_area_t ca; lv_obj_get_content_coords(s_chart, &ca);
+            int cw = ca.x2 - ca.x1 + 1; if (cw < 1) cw = 1;
+            float rel = (float)(p.x - ca.x1) / (float)cw;
+            if (rel < 0) rel = 0;
+            if (rel > 1) rel = 1;
+            float center = s_frigo_win_a + rel * win_w;
+            float nw = win_w * 0.5f;
+            s_frigo_win_a = center - rel * nw;
+            s_frigo_win_b = s_frigo_win_a + nw;
+            frigo_apply_window();
+        } else {
+            s_frigo_last_click_us = now;
+        }
     }
-    frigo_apply_window();
-}
-
-static void frigo_pan_left_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_frigo_win_b - s_frigo_win_a;
-    float d = w * 0.25f;
-    if (s_frigo_win_a - d < 0.0f) d = s_frigo_win_a;
-    s_frigo_win_a -= d;
-    s_frigo_win_b -= d;
-    frigo_apply_window();
-}
-
-static void frigo_pan_right_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_frigo_win_b - s_frigo_win_a;
-    float d = w * 0.25f;
-    if (s_frigo_win_b + d > 1.0f) d = 1.0f - s_frigo_win_b;
-    s_frigo_win_a += d;
-    s_frigo_win_b += d;
-    frigo_apply_window();
-}
-
-static void frigo_reset_view_cb(lv_event_t *e)
-{
-    (void)e;
-    s_frigo_win_a = 0.0f;
-    s_frigo_win_b = 1.0f;
-    frigo_apply_window();
 }
 
 static void frigo_chart_gesture_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    /* Zoomeado: el pan se hace arrastrando (frigo_chart_touch_cb); ignoramos
+     * el swipe para no cambiar de dia sin querer. */
     bool zoomed = (s_frigo_win_a > 0.0001f) || (s_frigo_win_b < 0.9999f);
+    if (zoomed) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (zoomed && dir == LV_DIR_LEFT)  { frigo_pan_right_cb(NULL); return; }
-    if (zoomed && dir == LV_DIR_RIGHT) { frigo_pan_left_cb(NULL);  return; }
     if (dir == LV_DIR_RIGHT) {
         if (s_frigo_day_idx == -1) {
             if (s_frigo_n_dates > 0) s_frigo_day_idx = s_frigo_n_dates - 1;
@@ -1834,6 +1839,11 @@ static lv_obj_t *s_bh_xlabels  = NULL;
 static lv_obj_t *s_bh_lbl_zoom = NULL;
 static lv_obj_t *s_bh_totals[BH_SRC_COUNT] = {NULL};
 static lv_chart_series_t *s_bh_series[BH_SRC_COUNT] = {NULL};
+/* Nombres cortos para la fila de totales (cabe en una sola linea). El nombre
+ * completo (battery_history_source_name) se sigue usando en el CSV. */
+static const char *s_bh_short_names[BH_SRC_COUNT] = {
+    "Bateria", "Solar", "OrionTR", "AC",
+};
 static int  s_bh_day_idx = -1;
 static int  s_bh_n_dates = 0;
 static char s_bh_dates[LOG_BROWSER_MAX_DATES][LOG_BROWSER_DATE_LEN];
@@ -1846,16 +1856,20 @@ static float s_bh_win_b = 1.0f;
 static bool s_bh_show_voltage = false;
 static lv_obj_t *s_bh_lbl_mode = NULL;
 
+/* Estado del gesto tactil (arrastrar = pan, doble-toque = zoom, manten = 1x) */
+static int32_t s_bh_drag_last_x   = 0;
+static int32_t s_bh_drag_moved    = 0;
+static bool    s_bh_dragging      = false;
+static int64_t s_bh_last_apply_us = 0;
+static int64_t s_bh_last_click_us = 0;
+
 #define BH_LOG_MAX_ENTRIES   2200   /* ~24h cada ~10s + margen */
 static battery_log_entry_t s_bh_buf[BH_LOG_MAX_ENTRIES];
 
 static void bh_chart_load_day(void);
 static void bh_chart_gesture_cb(lv_event_t *e);
-static void bh_zoom_in_cb(lv_event_t *e);
-static void bh_zoom_out_cb(lv_event_t *e);
-static void bh_pan_left_cb(lv_event_t *e);
-static void bh_pan_right_cb(lv_event_t *e);
-static void bh_reset_view_cb(lv_event_t *e);
+static void bh_chart_touch_cb(lv_event_t *e);
+static void bh_apply_window(void);
 static void bh_update_zoom_label(void);
 
 /* Cerrar overlays para rotacion del salvapantallas */
@@ -1953,8 +1967,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_t *lbl_title = lv_label_create(scr);
     lv_label_set_text(lbl_title, "HISTORICO BATERIA");
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 14);
+    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_20_es, 0);
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 16);
 
     s_bh_lbl_date = lv_label_create(scr);
     lv_obj_set_style_text_font(s_bh_lbl_date, &lv_font_montserrat_24_es, 0);
@@ -1973,15 +1987,15 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_label_set_text(bh_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(bh_arr_r, LV_ALIGN_TOP_MID, 150, 18);
 
-    /* Totales: 2 filas x 2 columnas, una linea por celda */
+    /* Totales: una sola fila con las 4 fuentes (nombres cortos para que
+     * quepan en horizontal sin envolver). */
     lv_obj_t *totals_cont = lv_obj_create(scr);
     lv_obj_remove_style_all(totals_cont);
-    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 70);
-    lv_obj_align(totals_cont, LV_ALIGN_TOP_LEFT, 16, 70);
+    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 26);
+    lv_obj_align(totals_cont, LV_ALIGN_TOP_LEFT, 16, 52);
     lv_obj_set_layout(totals_cont, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(totals_cont, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_style_pad_column(totals_cont, 24, 0);
-    lv_obj_set_style_pad_row(totals_cont, 4, 0);
+    lv_obj_set_flex_flow(totals_cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(totals_cont, 8, 0);
 
     static const uint32_t colors[BH_SRC_COUNT] = {
         0x4FC3F7, /* BM cyan */
@@ -1989,25 +2003,26 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         0xFF8A65, /* Orion orange */
         0xAED581, /* AC green */
     };
-
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         lv_obj_t *l = lv_label_create(totals_cont);
-        lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 2 - 4);
+        lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 4);
         lv_obj_set_style_text_color(l, lv_color_hex(colors[i]), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
-        lv_label_set_text_fmt(l, "%s  +0.0 / -0.0 Ah",
-                              battery_history_source_name((bh_source_t)i));
+        lv_label_set_text_fmt(l, "%s +0.0/-0.0 Ah", s_bh_short_names[i]);
         s_bh_totals[i] = l;
     }
 
-    /* Boton de modo: alterna Corriente / Tension (esquina superior izquierda) */
+    s_bh_win_a = 0.0f;
+    s_bh_win_b = 1.0f;
+
+    /* Boton de modo: alterna Corriente / Tension (izquierda) */
     {
         lv_obj_t *bmode = lv_btn_create(scr);
-        lv_obj_set_size(bmode, 140, 44);
+        lv_obj_set_size(bmode, 140, 40);
         lv_obj_set_style_bg_color(bmode, lv_color_hex(0x2A3340), 0);
         lv_obj_set_style_radius(bmode, 8, 0);
-        lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 152);
+        lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 84);
         s_bh_lbl_mode = lv_label_create(bmode);
         lv_label_set_text(s_bh_lbl_mode,
                           s_bh_show_voltage ? "Tension" : "Corriente");
@@ -2016,46 +2031,32 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         lv_obj_add_event_cb(bmode, bh_toggle_mode_cb, LV_EVENT_CLICKED, NULL);
     }
 
-    /* Chart */
-    /* Fila de controles: pan izq, zoom -, etiqueta nivel, zoom +, pan dcha, reset */
-    s_bh_win_a = 0.0f;
-    s_bh_win_b = 1.0f;
+    /* Pista de uso tactil (zoom/pan sin botones) */
     {
-        struct { const char *txt; lv_event_cb_t cb; } btns[] = {
-            { LV_SYMBOL_LEFT,    bh_pan_left_cb  },
-            { LV_SYMBOL_MINUS,   bh_zoom_out_cb  },
-            { LV_SYMBOL_PLUS,    bh_zoom_in_cb   },
-            { LV_SYMBOL_RIGHT,   bh_pan_right_cb },
-            { LV_SYMBOL_REFRESH, bh_reset_view_cb},
-        };
-        int x = -((int)(sizeof(btns)/sizeof(btns[0])) * 56 + 80) / 2;
-        for (size_t i = 0; i < sizeof(btns)/sizeof(btns[0]); ++i) {
-            lv_obj_t *b = lv_btn_create(scr);
-            lv_obj_set_size(b, 48, 44);
-            lv_obj_set_style_bg_color(b, lv_color_hex(0x2A3340), 0);
-            lv_obj_set_style_radius(b, 8, 0);
-            lv_obj_align(b, LV_ALIGN_TOP_MID, x, 152);
-            lv_obj_t *l = lv_label_create(b);
-            lv_label_set_text(l, btns[i].txt);
-            lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
-            lv_obj_center(l);
-            lv_obj_add_event_cb(b, btns[i].cb, LV_EVENT_CLICKED, NULL);
-            x += 56;
-            /* Hueco para la etiqueta de zoom entre el boton "−" y el "+" */
-            if (i == 1) {
-                s_bh_lbl_zoom = lv_label_create(scr);
-                lv_obj_set_style_text_color(s_bh_lbl_zoom, lv_color_white(), 0);
-                lv_obj_set_style_text_font(s_bh_lbl_zoom, &lv_font_montserrat_20_es, 0);
-                lv_label_set_text(s_bh_lbl_zoom, "1x");
-                lv_obj_align(s_bh_lbl_zoom, LV_ALIGN_TOP_MID, x + 28, 162);
-                x += 70;
-            }
-        }
+        lv_obj_t *hint = lv_label_create(scr);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x8A93A6), 0);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_14_es, 0);
+        lv_label_set_text(hint,
+            "Arrastra: mover  -  2 toques: zoom  -  manten: 1x");
+        lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 94);
     }
 
+    /* Etiqueta de nivel de zoom (derecha) */
+    s_bh_lbl_zoom = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_bh_lbl_zoom, lv_color_white(), 0);
+    lv_obj_set_style_text_font(s_bh_lbl_zoom, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(s_bh_lbl_zoom, "1x");
+    lv_obj_align(s_bh_lbl_zoom, LV_ALIGN_TOP_RIGHT, -16, 92);
+
     lv_obj_t *chart = lv_chart_create(scr);
-    lv_obj_set_size(chart, LV_HOR_RES - 40, LV_VER_RES - 250);
-    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -40);
+    /* Estrechamos el chart para dejar ~75 px libres a cada lado: LVGL dibuja
+     * las etiquetas del eje Y a la IZQUIERDA del borde del chart (x_ofs =
+     * coords.x1), asi que si el chart llega al borde de pantalla las etiquetas
+     * se salen. Con el chart centrado y mas estrecho, caben en pantalla. */
+    lv_obj_set_size(chart, LV_HOR_RES - 150, LV_VER_RES - 178);
+    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -44);
+    lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(chart, bh_chart_touch_cb, LV_EVENT_ALL, NULL);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
@@ -2076,10 +2077,16 @@ void ui_show_battery_history_screen(ui_state_t *ui)
      * Con point_count=1440 antes, la 3a llamada a lv_chart_add_series
      * cuelga taskLVGL > 5s (WDT). El set_point_count(1440) final
      * redimensiona las 4 a la vez de forma controlada. */
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 50);
-    lv_obj_set_style_pad_left(chart, 50, 0);
+    /* Hueco Y holgado: en corriente las etiquetas llegan a "-120.0" (6 chars)
+     * a fuente 20 y se recortaba el signo con menos espacio. */
+    /* draw_size 80: permite dibujar las etiquetas Y fuera (a la izquierda) del
+     * area del chart sin que se recorten. */
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 80);
+    lv_obj_set_style_pad_left(chart, 8, 0);
+    /* Hueco arriba para que la etiqueta Y superior (fuente 20) no se recorte. */
+    lv_obj_set_style_pad_top(chart, 16, 0);
     lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
-    lv_obj_set_style_text_font(chart, &lv_font_montserrat_14_es, LV_PART_TICKS);
+    lv_obj_set_style_text_font(chart, &lv_font_montserrat_20_es, LV_PART_TICKS);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_CIRCULAR);
     /* Etiquetas del eje Y con 1 decimal (deci-A / deci-V) */
     lv_obj_add_event_cb(chart, bh_y_tick_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
@@ -2094,7 +2101,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* Labels horarios bajo el chart (5 huecos, refrescados al cambiar de dia) */
     s_bh_xlabels = lv_obj_create(scr);
     lv_obj_remove_style_all(s_bh_xlabels);
-    lv_obj_set_size(s_bh_xlabels, LV_HOR_RES - 40, 22);
+    lv_obj_set_size(s_bh_xlabels, LV_HOR_RES - 150, 28);
     lv_obj_align_to(s_bh_xlabels, chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
     lv_obj_set_layout(s_bh_xlabels, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(s_bh_xlabels, LV_FLEX_FLOW_ROW);
@@ -2103,7 +2110,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(s_bh_xlabels);
         lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_text(l, "--:--");
     }
 
@@ -2269,8 +2276,8 @@ static void bh_chart_load_day(void)
                 battery_history_get_totals((bh_source_t)s, &ch, &dis);
                 if (s_bh_totals[s]) {
                     lv_label_set_text_fmt(s_bh_totals[s],
-                        "%s  +%.1f / -%.1f Ah",
-                        battery_history_source_name((bh_source_t)s), ch, dis);
+                        "%s +%.1f/-%.1f Ah",
+                        s_bh_short_names[s], ch, dis);
                 }
                 /* Yield al scheduler tras cada serie para que IDLE0 corra y
                  * el task_wdt no salte. Con 4 series x ~1500 puntos y un
@@ -2285,7 +2292,7 @@ static void bh_chart_load_day(void)
         }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           bmin - span / 10 - 1, bmax + span / 10 + 1);
+                           bmin - span / 20 - 1, bmax + span / 20 + 1);
         if (old_ts_g == INT32_MAX) old_ts_g = 0;
         if (new_ts_g == INT32_MIN) new_ts_g = 0;
         bh_update_xlabels_today(old_ts_g, new_ts_g);
@@ -2344,7 +2351,7 @@ static void bh_chart_load_day(void)
         }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           bmin - span / 10 - 1, bmax + span / 10 + 1);
+                           bmin - span / 20 - 1, bmax + span / 20 + 1);
         bh_update_xlabels_from_buf(n);
         /* Totales: solo BM tiene datos. Asumimos sample medio de 10 s. */
         float ch = (float)(total_ch_ma_s  * 10) / (1000.0f * 3600.0f);
@@ -2353,12 +2360,12 @@ static void bh_chart_load_day(void)
             if (!s_bh_totals[s]) continue;
             if (s == BH_SRC_BATTERY_MONITOR) {
                 lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s  +%.1f / -%.1f Ah",
-                    battery_history_source_name((bh_source_t)s), ch, ds);
+                    "%s +%.1f/-%.1f Ah",
+                    s_bh_short_names[s], ch, ds);
             } else {
                 lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s  (sin datos en SD)",
-                    battery_history_source_name((bh_source_t)s));
+                    "%s (s/d)",
+                    s_bh_short_names[s]);
             }
         }
         if (s_bh_lbl_date) lv_label_set_text(s_bh_lbl_date, date);
@@ -2369,12 +2376,11 @@ static void bh_chart_load_day(void)
 static void bh_chart_gesture_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
-    /* Si estamos zoomeados, el swipe horizontal se interpreta como pan
-     * dentro del dia actual, no como cambio de dia. */
+    /* Zoomeado: el pan se hace arrastrando (bh_chart_touch_cb); ignoramos el
+     * swipe para no cambiar de dia sin querer. */
     bool zoomed = (s_bh_win_a > 0.0001f) || (s_bh_win_b < 0.9999f);
+    if (zoomed) return;
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (zoomed && dir == LV_DIR_LEFT)  { bh_pan_right_cb(NULL); return; }
-    if (zoomed && dir == LV_DIR_RIGHT) { bh_pan_left_cb(NULL);  return; }
     if (dir == LV_DIR_RIGHT) {
         if (s_bh_day_idx == -1) {
             if (s_bh_n_dates > 0) s_bh_day_idx = s_bh_n_dates - 1;
@@ -2424,61 +2430,70 @@ static void bh_apply_window(void)
     bh_chart_load_day();
 }
 
-static void bh_zoom_in_cb(lv_event_t *e)
+/* Gesto tactil sobre el chart: arrastrar = desplazar (pan), doble-toque =
+ * zoom in centrado en el punto, mantener pulsado = volver a 1x. El cambio de
+ * dia se hace con swipe (gesture_cb) solo cuando estamos en 1x. */
+static void bh_chart_touch_cb(lv_event_t *e)
 {
-    (void)e;
-    float w = s_bh_win_b - s_bh_win_a;
-    float c = (s_bh_win_a + s_bh_win_b) * 0.5f;
-    w *= 0.5f;
-    s_bh_win_a = c - w * 0.5f;
-    s_bh_win_b = c + w * 0.5f;
-    bh_apply_window();
-}
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p; lv_indev_get_point(indev, &p);
 
-static void bh_zoom_out_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_bh_win_b - s_bh_win_a;
-    float c = (s_bh_win_a + s_bh_win_b) * 0.5f;
-    w *= 2.0f;
-    if (w >= 1.0f) { s_bh_win_a = 0.0f; s_bh_win_b = 1.0f; }
-    else {
-        s_bh_win_a = c - w * 0.5f;
-        s_bh_win_b = c + w * 0.5f;
+    if (code == LV_EVENT_PRESSED) {
+        s_bh_drag_last_x = p.x;
+        s_bh_drag_moved  = 0;
+        s_bh_dragging    = false;
+    } else if (code == LV_EVENT_PRESSING) {
+        int32_t dx = p.x - s_bh_drag_last_x;
+        s_bh_drag_last_x = p.x;
+        s_bh_drag_moved += dx < 0 ? -dx : dx;
+        if (s_bh_drag_moved < 6) return;      /* umbral para no confundir tap */
+        s_bh_dragging = true;
+        float win_w = s_bh_win_b - s_bh_win_a;
+        lv_area_t ca; lv_obj_get_content_coords(s_bh_chart, &ca);
+        int cw = ca.x2 - ca.x1 + 1; if (cw < 1) cw = 1;
+        float shift = -(float)dx / (float)cw * win_w;
+        s_bh_win_a += shift; s_bh_win_b += shift;
         if (s_bh_win_a < 0.0f) { s_bh_win_b -= s_bh_win_a; s_bh_win_a = 0.0f; }
         if (s_bh_win_b > 1.0f) { s_bh_win_a -= (s_bh_win_b - 1.0f); s_bh_win_b = 1.0f; }
+        int64_t now = esp_timer_get_time();
+        if (now - s_bh_last_apply_us > 120000) {  /* throttle recarga ~8/s */
+            s_bh_last_apply_us = now;
+            bh_update_zoom_label();
+            bh_chart_load_day();
+        }
+    } else if (code == LV_EVENT_RELEASED) {
+        if (s_bh_dragging) {
+            bh_update_zoom_label();
+            bh_chart_load_day();              /* recarga final tras soltar */
+            s_bh_dragging = false;
+        }
+    } else if (code == LV_EVENT_LONG_PRESSED) {
+        if (!s_bh_dragging) {                 /* mantener pulsado = reset a 1x */
+            s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
+            bh_apply_window();
+        }
+    } else if (code == LV_EVENT_SHORT_CLICKED) {
+        if (s_bh_dragging) return;
+        int64_t now = esp_timer_get_time();
+        if (now - s_bh_last_click_us < 350000) {   /* doble-toque = zoom in */
+            s_bh_last_click_us = 0;
+            float win_w = s_bh_win_b - s_bh_win_a;
+            lv_area_t ca; lv_obj_get_content_coords(s_bh_chart, &ca);
+            int cw = ca.x2 - ca.x1 + 1; if (cw < 1) cw = 1;
+            float rel = (float)(p.x - ca.x1) / (float)cw;
+            if (rel < 0) rel = 0;
+            if (rel > 1) rel = 1;
+            float center = s_bh_win_a + rel * win_w;
+            float nw = win_w * 0.5f;
+            s_bh_win_a = center - rel * nw;
+            s_bh_win_b = s_bh_win_a + nw;
+            bh_apply_window();
+        } else {
+            s_bh_last_click_us = now;
+        }
     }
-    bh_apply_window();
-}
-
-static void bh_pan_left_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_bh_win_b - s_bh_win_a;
-    float d = w * 0.25f;
-    if (s_bh_win_a - d < 0.0f) d = s_bh_win_a;
-    s_bh_win_a -= d;
-    s_bh_win_b -= d;
-    bh_apply_window();
-}
-
-static void bh_pan_right_cb(lv_event_t *e)
-{
-    (void)e;
-    float w = s_bh_win_b - s_bh_win_a;
-    float d = w * 0.25f;
-    if (s_bh_win_b + d > 1.0f) d = 1.0f - s_bh_win_b;
-    s_bh_win_a += d;
-    s_bh_win_b += d;
-    bh_apply_window();
-}
-
-static void bh_reset_view_cb(lv_event_t *e)
-{
-    (void)e;
-    s_bh_win_a = 0.0f;
-    s_bh_win_b = 1.0f;
-    bh_apply_window();
 }
 
 static void ble_indicator_timer_cb(lv_timer_t *t)

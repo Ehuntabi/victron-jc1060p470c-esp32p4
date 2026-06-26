@@ -67,7 +67,7 @@ static bh_flush_slot_t s_flush_snapshot[BH_SRC_COUNT];
 static const char *s_source_names[BH_SRC_COUNT] = {
     "BatteryMonitor",
     "SolarCharger",
-    "OrionXS",
+    "OrionTR",
     "ACCharger",
 };
 
