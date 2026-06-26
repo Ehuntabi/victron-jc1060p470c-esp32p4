@@ -25,13 +25,17 @@ typedef struct {
     int32_t milli_amps;      /* avg en el intervalo (signed; +=charging) */
     int32_t milli_amps_max;  /* máximo del intervalo */
     int32_t milli_amps_min;  /* mínimo del intervalo */
+    int32_t centi_volts;     /* avg tension en el intervalo (centivoltios); 0 = sin dato */
     bool    valid;
 } bh_point_t;
 
 esp_err_t battery_history_init(void);
 
-/* Latest reading from a source (called from ui_on_panel_data hook) */
-void battery_history_update_latest(bh_source_t src, int32_t milli_amps);
+/* Latest reading from a source (called from ui_on_panel_data hook).
+ * centi_volts: tension de bateria en centivoltios; pasar 0 si la fuente no la
+ * aporta (solo el BatteryMonitor se grafica como tension). */
+void battery_history_update_latest(bh_source_t src, int32_t milli_amps,
+                                   int32_t centi_volts);
 
 /* Get full series (caller-allocated array of BH_POINTS).
  * Returns the number of valid points and out_oldest_ts/out_newest_ts. */

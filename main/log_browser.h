@@ -29,11 +29,12 @@ typedef struct {
 int  log_browser_load_frigo(const char *path,
                             frigo_log_entry_t *out, int max);
 
-/* Bateria: solo se carga BM (source == "BM"). Devuelve nº de entradas. */
+/* Bateria: solo se carga BM (source == "BatteryMonitor"). Devuelve nº de entradas. */
 typedef struct {
     int     hh;
     int     mm;
     int32_t milli_amps;
+    int32_t centi_volts;   /* 0 si el CSV no tiene columna de tension (formato viejo) */
 } battery_log_entry_t;
 
 int  log_browser_load_battery(const char *path,

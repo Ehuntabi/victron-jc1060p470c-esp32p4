@@ -27,6 +27,11 @@ typedef struct {
     int32_t    acc_max_ma;
     int32_t    acc_min_ma;
     int32_t    last_milli;
+    /* Acumulador de tension (centivoltios). Cuenta aparte porque no todas las
+     * muestras de corriente traen tension (centi_volts > 0). */
+    int64_t    acc_sum_cv;
+    uint32_t   acc_count_cv;
+    int32_t    last_centi_volts;
     bool       has_latest;
     int32_t    last_sample_ts;
 } bh_buffer_t;
@@ -82,18 +87,21 @@ static int32_t now_seconds(void)
     return (int32_t)t;
 }
 
-static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t avg, int32_t mx, int32_t mn, bool valid)
+static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t avg, int32_t mx,
+                        int32_t mn, int32_t cv, bool valid)
 {
     b->points[b->write_idx].ts = ts;
     b->points[b->write_idx].milli_amps = avg;
     b->points[b->write_idx].milli_amps_max = mx;
     b->points[b->write_idx].milli_amps_min = mn;
+    b->points[b->write_idx].centi_volts = cv;
     b->points[b->write_idx].valid = valid;
     b->write_idx = (b->write_idx + 1) % BH_POINTS;
     if (b->write_idx == 0) b->wrapped = true;
 }
 
-void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
+void battery_history_update_latest(bh_source_t src, int32_t milli_amps,
+                                   int32_t centi_volts)
 {
     if (src >= BH_SRC_COUNT || !s_bufs) return;
     BH_LOCK();
@@ -108,6 +116,11 @@ void battery_history_update_latest(bh_source_t src, int32_t milli_amps)
     b->acc_sum_ma += milli_amps;
     b->acc_count++;
     b->last_milli = milli_amps;
+    if (centi_volts > 0) {
+        b->acc_sum_cv += centi_volts;
+        b->acc_count_cv++;
+        b->last_centi_volts = centi_volts;
+    }
     b->has_latest = true;
     BH_UNLOCK();
 }
@@ -119,21 +132,28 @@ static void sample_timer_cb(void *arg)
     BH_LOCK();
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         bh_buffer_t *b = &s_bufs[i];
+        /* Tension media del intervalo: avg si hubo muestras, si no repite la
+         * ultima conocida (0 = nunca hubo dato de tension para esta fuente). */
+        int32_t cv = (b->acc_count_cv > 0)
+            ? (int32_t)(b->acc_sum_cv / (int64_t)b->acc_count_cv)
+            : b->last_centi_volts;
         if (b->acc_count > 0) {
             int32_t avg = (int32_t)(b->acc_sum_ma / (int64_t)b->acc_count);
-            buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, true);
+            buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, cv, true);
             b->last_sample_ts = ts;
         } else if (b->has_latest) {
             /* Sin nuevas muestras este intervalo: repite el último valor */
-            buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, true);
+            buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, cv, true);
         } else {
-            buffer_push(b, ts, 0, 0, 0, false);
+            buffer_push(b, ts, 0, 0, 0, 0, false);
         }
         /* Reset acumulador del siguiente intervalo */
         b->acc_sum_ma = 0;
         b->acc_count = 0;
         b->acc_max_ma = 0;
         b->acc_min_ma = 0;
+        b->acc_sum_cv = 0;
+        b->acc_count_cv = 0;
     }
     BH_UNLOCK();
 }
@@ -251,7 +271,7 @@ static void bh_flush_to_sd_impl(void)
     }
     bool io_error = false;
     if (need_header) {
-        if (fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min\n") < 0) {
+        if (fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min,centi_volts\n") < 0) {
             io_error = true;
         }
     }
@@ -274,12 +294,13 @@ static void bh_flush_to_sd_impl(void)
             } else {
                 snprintf(ts_str, sizeof ts_str, "BOOT+%ld", (long)pt);
             }
-            int r = fprintf(f, "%s,%s,%ld,%ld,%ld\n",
+            int r = fprintf(f, "%s,%s,%ld,%ld,%ld,%ld\n",
                             ts_str,
                             battery_history_source_name((bh_source_t)s),
                             (long)p->milli_amps,
                             (long)p->milli_amps_max,
-                            (long)p->milli_amps_min);
+                            (long)p->milli_amps_min,
+                            (long)p->centi_volts);
             if (r < 0 || ferror(f)) { io_error = true; break; }
             total_written++;
         }

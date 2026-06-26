@@ -610,7 +610,8 @@ void ui_on_panel_data(const victron_data_t *d) {
     switch (d->type) {
         case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
             battery_history_update_latest(BH_SRC_BATTERY_MONITOR,
-                d->record.battery.battery_current_milli);
+                d->record.battery.battery_current_milli,
+                d->record.battery.battery_voltage_centi);
             /* Deteccion cruce de SoC */
             uint16_t soc_dp = d->record.battery.soc_deci_percent;
             if (soc_dp != 0xFFFF) {
@@ -641,16 +642,16 @@ void ui_on_panel_data(const victron_data_t *d) {
         }
         case VICTRON_BLE_RECORD_SOLAR_CHARGER:
             battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
-                (int32_t)d->record.solar.battery_current_deci * 100);
+                (int32_t)d->record.solar.battery_current_deci * 100, 0);
             break;
         case VICTRON_BLE_RECORD_ORION_XS:
             /* Output current = into battery side */
             battery_history_update_latest(BH_SRC_ORION_XS,
-                (int32_t)d->record.orion.output_current_deci * 100);
+                (int32_t)d->record.orion.output_current_deci * 100, 0);
             break;
         case VICTRON_BLE_RECORD_AC_CHARGER:
             battery_history_update_latest(BH_SRC_AC_CHARGER,
-                (int32_t)d->record.ac_charger.battery_current_1_deci * 100);
+                (int32_t)d->record.ac_charger.battery_current_1_deci * 100, 0);
             break;
         default:
             break;
@@ -1839,6 +1840,11 @@ static char s_bh_dates[LOG_BROWSER_MAX_DATES][LOG_BROWSER_DATE_LEN];
 /* Ventana de visualizacion sobre los datos del dia (fraccion 0..1). */
 static float s_bh_win_a = 0.0f;
 static float s_bh_win_b = 1.0f;
+/* Modo de la grafica: false = corriente (4 fuentes), true = tension BM (12-14V).
+ * Los valores del chart se guardan en decimas de unidad (deci-A / deci-V) para
+ * conservar 1 decimal; bh_y_tick_draw_cb formatea el eje dividiendo por 10. */
+static bool s_bh_show_voltage = false;
+static lv_obj_t *s_bh_lbl_mode = NULL;
 
 #define BH_LOG_MAX_ENTRIES   2200   /* ~24h cada ~10s + margen */
 static battery_log_entry_t s_bh_buf[BH_LOG_MAX_ENTRIES];
@@ -1883,6 +1889,36 @@ static void bh_screen_close_cb(lv_event_t *e)
 {
     (void)e;
     ui_close_battery_history_screen();
+}
+
+/* Formatea las etiquetas del eje Y con 1 decimal: los valores del chart se
+ * guardan en decimas (deci-A en modo corriente, deci-V en modo tension), asi
+ * que dividimos por 10. Ej: 132 -> "13.2", -5 -> "-0.5". */
+static void bh_y_tick_draw_cb(lv_event_t *e)
+{
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+    if (!lv_obj_draw_part_check_type(dsc, &lv_chart_class,
+                                     LV_CHART_DRAW_PART_TICK_LABEL))
+        return;
+    if (dsc->id != LV_CHART_AXIS_PRIMARY_Y || !dsc->text) return;
+    int32_t v = dsc->value;
+    int32_t whole = v / 10;
+    int32_t frac = v % 10;
+    if (frac < 0) frac = -frac;
+    const char *sign = (v < 0 && whole == 0) ? "-" : "";
+    lv_snprintf(dsc->text, dsc->text_length, "%s%ld.%ld",
+                sign, (long)whole, (long)frac);
+}
+
+/* Alterna la grafica entre modo corriente (4 fuentes) y tension (BM, 12-14V). */
+static void bh_toggle_mode_cb(lv_event_t *e)
+{
+    (void)e;
+    s_bh_show_voltage = !s_bh_show_voltage;
+    if (s_bh_lbl_mode)
+        lv_label_set_text(s_bh_lbl_mode,
+                          s_bh_show_voltage ? "Tension" : "Corriente");
+    bh_chart_load_day();
 }
 
 void ui_show_battery_history_screen(ui_state_t *ui)
@@ -1965,6 +2001,21 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         s_bh_totals[i] = l;
     }
 
+    /* Boton de modo: alterna Corriente / Tension (esquina superior izquierda) */
+    {
+        lv_obj_t *bmode = lv_btn_create(scr);
+        lv_obj_set_size(bmode, 140, 44);
+        lv_obj_set_style_bg_color(bmode, lv_color_hex(0x2A3340), 0);
+        lv_obj_set_style_radius(bmode, 8, 0);
+        lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 152);
+        s_bh_lbl_mode = lv_label_create(bmode);
+        lv_label_set_text(s_bh_lbl_mode,
+                          s_bh_show_voltage ? "Tension" : "Corriente");
+        lv_obj_set_style_text_font(s_bh_lbl_mode, &lv_font_montserrat_20_es, 0);
+        lv_obj_center(s_bh_lbl_mode);
+        lv_obj_add_event_cb(bmode, bh_toggle_mode_cb, LV_EVENT_CLICKED, NULL);
+    }
+
     /* Chart */
     /* Fila de controles: pan izq, zoom -, etiqueta nivel, zoom +, pan dcha, reset */
     s_bh_win_a = 0.0f;
@@ -2030,6 +2081,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
     lv_obj_set_style_text_font(chart, &lv_font_montserrat_14_es, LV_PART_TICKS);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_CIRCULAR);
+    /* Etiquetas del eje Y con 1 decimal (deci-A / deci-V) */
+    lv_obj_add_event_cb(chart, bh_y_tick_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     s_bh_chart = chart;
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         s_bh_series[i] = lv_chart_add_series(chart,
@@ -2182,22 +2235,34 @@ static void bh_chart_load_day(void)
                     if (wb > (int)n) wb = (int)n;
                     if (wa >= (int)n) wa = (int)n - 1;
                 }
-                int idx = 0;
-                for (int k = wa; k < wb && idx < chart_pts; k += chart_step) {
-                    int64_t sum = 0; int cnt = 0;
-                    int end = (k + chart_step < wb) ? k + chart_step : wb;
-                    for (int j = k; j < end; j++) {
-                        if (pts[j].valid) { sum += pts[j].milli_amps; cnt++; }
+                /* En modo tension solo se grafica el BatteryMonitor; las
+                 * demas series quedan vacias (ya limpiadas). */
+                if (!s_bh_show_voltage || s == BH_SRC_BATTERY_MONITOR) {
+                    int idx = 0;
+                    for (int k = wa; k < wb && idx < chart_pts; k += chart_step) {
+                        int64_t sum = 0; int cnt = 0;
+                        int end = (k + chart_step < wb) ? k + chart_step : wb;
+                        for (int j = k; j < end; j++) {
+                            if (!pts[j].valid) continue;
+                            if (s_bh_show_voltage) {
+                                if (pts[j].centi_volts > 0) { sum += pts[j].centi_volts; cnt++; }
+                            } else {
+                                sum += pts[j].milli_amps; cnt++;
+                            }
+                        }
+                        if (cnt > 0) {
+                            /* deci-V (centi/10) en tension, deci-A (milli/100) en corriente */
+                            int32_t a = s_bh_show_voltage
+                                ? (int32_t)((sum / cnt) / 10)
+                                : (int32_t)((sum / cnt) / 100);
+                            if (a < bmin) bmin = a;
+                            if (a > bmax) bmax = a;
+                            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, (lv_coord_t)a);
+                        } else {
+                            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, LV_CHART_POINT_NONE);
+                        }
+                        idx++;
                     }
-                    if (cnt > 0) {
-                        int32_t a = (int32_t)((sum / cnt) / 1000);
-                        if (a < bmin) bmin = a;
-                        if (a > bmax) bmax = a;
-                        lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, (lv_coord_t)a);
-                    } else {
-                        lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, LV_CHART_POINT_NONE);
-                    }
-                    idx++;
                 }
                 /* Totales: siempre del dia completo (no de la ventana visible) */
                 float ch = 0, dis = 0;
@@ -2214,7 +2279,10 @@ static void bh_chart_load_day(void)
             }
             /* pts es estatico: no liberar */
         }
-        if (bmin == INT32_MAX) { bmin = -40; bmax = 40; }
+        if (bmin == INT32_MAX) {
+            if (s_bh_show_voltage) { bmin = 120; bmax = 140; }  /* 12.0-14.0 V */
+            else                   { bmin = -40; bmax = 40; }
+        }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
                            bmin - span / 10 - 1, bmax + span / 10 + 1);
@@ -2251,15 +2319,29 @@ static void bh_chart_load_day(void)
         int32_t bmin = INT32_MAX, bmax = INT32_MIN;
         int idx = 0;
         for (int i = wa; i < wb; i += step) {
-            int32_t ma = s_bh_buf[i].milli_amps;
-            int a = ma / 1000;
+            int32_t a;
+            if (s_bh_show_voltage) {
+                int32_t cv = s_bh_buf[i].centi_volts;
+                if (cv <= 0) {   /* CSV viejo sin columna de tension */
+                    lv_chart_set_value_by_id(s_bh_chart, s_bh_series[0], idx,
+                                             LV_CHART_POINT_NONE);
+                    idx++;
+                    continue;
+                }
+                a = cv / 10;                     /* centi-V -> deci-V */
+            } else {
+                a = s_bh_buf[i].milli_amps / 100; /* milli-A -> deci-A */
+            }
             if (a < bmin) bmin = a;
             if (a > bmax) bmax = a;
             lv_chart_set_value_by_id(s_bh_chart, s_bh_series[0], idx, (lv_coord_t)a);
             idx++;
         }
         /* Las otras 3 series quedan en LV_CHART_POINT_NONE */
-        if (bmin == INT32_MAX) { bmin = -40; bmax = 40; }
+        if (bmin == INT32_MAX) {
+            if (s_bh_show_voltage) { bmin = 120; bmax = 140; }  /* 12.0-14.0 V */
+            else                   { bmin = -40; bmax = 40; }
+        }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
                            bmin - span / 10 - 1, bmax + span / 10 + 1);

@@ -126,11 +126,15 @@ int log_browser_load_battery(const char *path,
         char *fields[8] = {0};
         int nf = csv_split(line, fields, 8);
         if (nf < 3) continue;
-        /* Solo BM (Battery Monitor) — los otros sources se ignoran en el grafico */
-        if (strcmp(fields[1], "BM") != 0) continue;
+        /* Solo BM (Battery Monitor) — los otros sources se ignoran en el grafico.
+         * El CSV escribe el nombre completo "BatteryMonitor" (no "BM"). */
+        if (strcmp(fields[1], "BatteryMonitor") != 0) continue;
         battery_log_entry_t *e = &out[n];
         if (!parse_hhmm(fields[0], &e->hh, &e->mm)) continue;
         e->milli_amps = fields[2][0] ? (int32_t)strtol(fields[2], NULL, 10) : 0;
+        /* Columna de tension (centivoltios) opcional: ausente en CSV antiguos */
+        e->centi_volts = (nf >= 6 && fields[5][0])
+            ? (int32_t)strtol(fields[5], NULL, 10) : 0;
         n++;
     }
     fclose(f);
