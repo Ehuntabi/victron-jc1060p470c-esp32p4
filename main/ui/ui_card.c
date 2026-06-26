@@ -752,6 +752,19 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
         bool empty   = (level_0_to_3 == 0);
         uint8_t lv = level_0_to_3 > 4 ? 4 : level_0_to_3;
         /* tank.child(0) = escala 4/4..1/4 ; tank.child(1) = columna de LEDs */
+        /* Resaltar en ambar la etiqueta de la escala del nivel actual. La
+         * escala va 4/4(idx0)..1/4(idx3); nivel 1..4 -> idx (4-lv). En
+         * reserva/sin dato no se resalta ninguna. */
+        lv_obj_t *scale = lv_obj_get_child(tank, 0);
+        if (scale) {
+            int active = (!no_data && !empty && lv >= 1 && lv <= 4) ? (4 - lv) : -1;
+            for (int i = 0; i < 4; i++) {
+                lv_obj_t *t = lv_obj_get_child(scale, i);
+                if (!t) continue;
+                lv_obj_set_style_text_color(
+                    t, (i == active) ? UI_COLOR_YELLOW : UI_COLOR_TEXT, 0);
+            }
+        }
         lv_obj_t *leds = lv_obj_get_child(tank, 1);
         if (!leds) return;
         for (int i = 0; i < 4; i++) {
