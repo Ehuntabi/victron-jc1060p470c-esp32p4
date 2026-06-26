@@ -80,7 +80,9 @@ typedef struct {
     bool      prev_alarm_soc;
     bool      prev_alarm_freezer;
     uint32_t  alarm_s1_last_sound_ms;
+    uint32_t  alarm_s1_pending_since_ms; /* inicio condicion vacio (debounce 1 min) */
     uint32_t  alarm_r1_last_sound_ms;
+    uint32_t  alarm_r1_pending_since_ms; /* inicio condicion lleno (debounce 1 min) */
     uint32_t  alarm_soc_last_sound_ms;
     uint32_t  alarm_freezer_last_sound_ms;
     uint8_t   blink_phase;           /* alterna 0/1 cada tick para parpadeo */
@@ -936,9 +938,35 @@ static void overview_render(ui_overview_view_t *ov)
         if (ov->tank_r1) ui_tank_set(ov->tank_r1, cd.fresh ? cd.r1 : 0xFF);
 
         /* ── Alarmas de tanque ─────────────────────────────── */
-        bool alarm_s1 = cd.fresh && cd.s1 == 0;   /* limpio en reserva */
-        bool alarm_r1 = cd.fresh && cd.r1 == 1;   /* grises lleno (NE185 real: 0=vacio, 1=lleno) */
         uint32_t now_ms_val = (uint32_t)(lv_tick_get());
+
+        /* Limpio en reserva: con el tanque a 1/4 y la autocaravana en
+         * movimiento el agua chapotea y el sensor lee "vacio" un instante.
+         * Para evitar falsas alarmas exigimos que la condicion se mantenga
+         * 1 minuto continuo antes de dispararla. */
+        const uint32_t ALARM_S1_DEBOUNCE_MS = 60 * 1000;
+        bool raw_s1 = cd.fresh && cd.s1 == 0;
+        if (raw_s1) {
+            if (ov->alarm_s1_pending_since_ms == 0)
+                ov->alarm_s1_pending_since_ms = now_ms_val ? now_ms_val : 1;
+        } else {
+            ov->alarm_s1_pending_since_ms = 0;
+        }
+        bool alarm_s1 = raw_s1 && ov->alarm_s1_pending_since_ms != 0 &&
+            (now_ms_val - ov->alarm_s1_pending_since_ms) >= ALARM_S1_DEBOUNCE_MS;
+
+        /* Grises lleno (NE185 real: 0=vacio, 1=lleno): mismo debounce de 1 min
+         * que limpias para evitar falsas alarmas por chapoteo en movimiento. */
+        const uint32_t ALARM_R1_DEBOUNCE_MS = 60 * 1000;
+        bool raw_r1 = cd.fresh && cd.r1 == 1;
+        if (raw_r1) {
+            if (ov->alarm_r1_pending_since_ms == 0)
+                ov->alarm_r1_pending_since_ms = now_ms_val ? now_ms_val : 1;
+        } else {
+            ov->alarm_r1_pending_since_ms = 0;
+        }
+        bool alarm_r1 = raw_r1 && ov->alarm_r1_pending_since_ms != 0 &&
+            (now_ms_val - ov->alarm_r1_pending_since_ms) >= ALARM_R1_DEBOUNCE_MS;
 
         /* Auto-reset del mute al volver a estado normal */
         if (!alarm_s1 && ov->prev_alarm_s1) ov->alarm_s1_muted = false;
