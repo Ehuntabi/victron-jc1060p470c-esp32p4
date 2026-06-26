@@ -90,6 +90,7 @@ typedef struct {
     lv_obj_t *btn_lin;
     lv_obj_t *btn_lout;
     lv_obj_t *btn_pump;
+    bool      grey_aligned;      /* one-shot: ancho 230V + base alineada a limpias */
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -596,7 +597,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         ov->pill_shore = pill;
     }
 
-    /* Aguas grises debajo: 1 LED rojo, ancho al contenido; alto fijo. */
+    /* Aguas grises debajo: 1 LED rojo, ancho al contenido; alto fijo.
+     * Se queda en el flujo (asi la columna conserva su ancho y el 230V su
+     * sitio). Mas abajo, en build_camper, se le aplica un translate_y para
+     * bajarla hasta que su base coincida con la del nivel de aguas limpias,
+     * sin afectar al resto (translate es solo visual). */
     ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
                                  "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
     lv_obj_set_height(ov->tank_r1, 90);
@@ -1172,9 +1177,43 @@ static void overview_render(ui_overview_view_t *ov)
     }
 }
 
+/* Una sola vez, con el layout ya resuelto: hace el indicador de aguas grises
+ * rectangular con el mismo ancho que el pill de 230V, y lo baja (con su titulo)
+ * para que su base coincida con la base del nivel de aguas limpias. El
+ * translate_y es solo visual: no mueve el 230V ni nada mas, y al estar en el
+ * flujo el ancho de la columna no cambia (el texto no se recorta). */
+static void overview_align_grey(ui_overview_view_t *ov)
+{
+    if (!ov || ov->grey_aligned) return;
+    if (!ov->tank_r1 || !ov->tank_s1 || !ov->pill_shore) return;
+
+    lv_obj_update_layout(ov->base.root);
+    lv_coord_t pill_w = lv_obj_get_width(ov->pill_shore);
+    if (pill_w < 24) return;  /* layout aun no resuelto: reintenta en otro show */
+
+    lv_obj_t *grey_body  = lv_obj_get_child(ov->tank_r1, 1);
+    lv_obj_t *clean_body = lv_obj_get_child(ov->tank_s1, 1);
+    if (!grey_body || !clean_body) return;
+
+    /* Forma rectangular: ancho como el 230V (alto sin tocar). */
+    lv_obj_set_width(grey_body, pill_w);
+    lv_obj_update_layout(ov->base.root);
+
+    /* Bajar el tanque gris hasta igualar su base con la del nivel limpio. */
+    lv_area_t ca, ga;
+    lv_obj_get_coords(clean_body, &ca);
+    lv_obj_get_coords(grey_body, &ga);
+    lv_coord_t delta = ca.y2 - ga.y2;
+    if (delta > 0) lv_obj_set_style_translate_y(ov->tank_r1, delta, 0);
+    ov->grey_aligned = true;
+}
+
 static void overview_show(ui_device_view_t *view)
 {
-    if (view && view->root) lv_obj_clear_flag(view->root, LV_OBJ_FLAG_HIDDEN);
+    if (view && view->root) {
+        lv_obj_clear_flag(view->root, LV_OBJ_FLAG_HIDDEN);
+        overview_align_grey((ui_overview_view_t *)view);
+    }
 }
 
 static void overview_hide(ui_device_view_t *view)
