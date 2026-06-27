@@ -437,8 +437,8 @@ void ui_init(void) {
         lv_obj_set_style_text_color(ui->lbl_wifi,
             en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
     }
-    /* Health score: pill compacto (verde/ambar/rojo) que combina alarmas
-     * Victron, SoC, freezer, PZEM, BLE timeout, etc. */
+    /* Health score: pill compacto (verde/ambar/rojo) que combina el SoC de
+     * bateria y la alarma del congelador (el BLE tiene su propio icono). */
     ui->lbl_health = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_health, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(ui->lbl_health, lv_color_white(), 0);
@@ -1884,6 +1884,11 @@ void ui_close_chart_screen(void)
 
 static lv_obj_t *s_bh_chart  = NULL;
 
+/* Rango Y actual del chart (deci-A en corriente / deci-V en tension). Lo
+ * guardamos al fijar el rango para poder dibujar la linea del 0 en pixeles. */
+static int32_t s_bh_y_min = 0;
+static int32_t s_bh_y_max = 0;
+
 static lv_obj_t *s_bh_prev_screen = NULL;
 
 void ui_close_battery_history_screen(void)
@@ -1924,6 +1929,33 @@ static void bh_y_tick_draw_cb(lv_event_t *e)
     const char *sign = (v < 0 && whole == 0) ? "-" : "";
     lv_snprintf(dsc->text, dsc->text_length, "%s%ld.%ld",
                 sign, (long)whole, (long)frac);
+}
+
+/* Dibuja una raya fina en el valor 0 (solo en modo Corriente) para ver de un
+ * vistazo si esta cargando (por encima) o descargando (por debajo). En modo
+ * Tension no aplica y no se dibuja. */
+static void bh_zero_line_draw_cb(lv_event_t *e)
+{
+    if (s_bh_show_voltage) return;
+    int32_t range = s_bh_y_max - s_bh_y_min;
+    if (range <= 0) return;
+    if (s_bh_y_min > 0 || s_bh_y_max < 0) return;  /* el 0 cae fuera del rango */
+
+    lv_obj_t *chart = lv_event_get_target(e);
+    lv_area_t a;
+    lv_obj_get_content_coords(chart, &a);
+    lv_coord_t h = a.y2 - a.y1;
+    lv_coord_t y0 = a.y2 - (lv_coord_t)((int64_t)(0 - s_bh_y_min) * h / range);
+
+    lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
+    lv_draw_line_dsc_t line_dsc;
+    lv_draw_line_dsc_init(&line_dsc);
+    line_dsc.color = lv_color_hex(0x9AA0A6);
+    line_dsc.width = 2;
+    line_dsc.opa = LV_OPA_COVER;
+    lv_point_t p1 = { a.x1, y0 };
+    lv_point_t p2 = { a.x2, y0 };
+    lv_draw_line(draw_ctx, &line_dsc, &p1, &p2);
 }
 
 /* Alterna la grafica entre modo corriente (4 fuentes) y tension (BM, 12-14V). */
@@ -2092,6 +2124,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_CIRCULAR);
     /* Etiquetas del eje Y con 1 decimal (deci-A / deci-V) */
     lv_obj_add_event_cb(chart, bh_y_tick_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    /* Raya del 0 (carga/descarga) por encima de la rejilla y las series. */
+    lv_obj_add_event_cb(chart, bh_zero_line_draw_cb, LV_EVENT_DRAW_POST_END, NULL);
     s_bh_chart = chart;
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
         s_bh_series[i] = lv_chart_add_series(chart,
@@ -2305,8 +2339,10 @@ static void bh_chart_load_day(void)
             else                   { bmin = -40; bmax = 40; }
         }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
+        s_bh_y_min = bmin - span / 20 - 1;
+        s_bh_y_max = bmax + span / 20 + 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           bmin - span / 20 - 1, bmax + span / 20 + 1);
+                           s_bh_y_min, s_bh_y_max);
         if (old_ts_g == INT32_MAX) old_ts_g = 0;
         if (new_ts_g == INT32_MIN) new_ts_g = 0;
         bh_update_xlabels_today(old_ts_g, new_ts_g);
@@ -2368,8 +2404,10 @@ static void bh_chart_load_day(void)
             else                   { bmin = -40; bmax = 40; }
         }
         int32_t span = bmax - bmin; if (span < 1) span = 1;
+        s_bh_y_min = bmin - span / 20 - 1;
+        s_bh_y_max = bmax + span / 20 + 1;
         lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           bmin - span / 20 - 1, bmax + span / 20 + 1);
+                           s_bh_y_min, s_bh_y_max);
         bh_update_xlabels_from_buf(n);
         /* Totales: solo BM tiene datos. Asumimos sample medio de 10 s. */
         float ch = (float)(total_ch_ma_s  * 10) / (1000.0f * 3600.0f);

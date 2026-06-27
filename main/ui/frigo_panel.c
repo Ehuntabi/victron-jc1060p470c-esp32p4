@@ -545,18 +545,26 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_thermo_icon, &font_thermo_with_fallback, 0);
     lv_obj_set_style_text_color(lbl_thermo_icon, lv_color_hex(0x00BFFF), 0);
     lv_label_set_text(lbl_thermo_icon, "\xef\x8b\x89");
+    /* Texto fijo "Exterior:" pegado al icono del termometro (no cambia, asi
+     * que no se desplaza). El numero va aparte, en su propia caja. */
+    lv_obj_t *lbl_ext_prefix = lv_label_create(overlay_cont);
+    lv_obj_add_style(lbl_ext_prefix, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(lbl_ext_prefix, lv_color_hex(0x00BFFF), 0);
+    lv_label_set_text(lbl_ext_prefix, "Exterior:");
+
+    /* Solo el valor: caja de ancho fijo alineada a la DERECHA. Asi el "\xc2\xb0""C"
+     * queda clavado en el borde derecho y, al crecer el numero (o aparecer el
+     * '-'), crece hacia la izquierda sin que los digitos se desplacen. El
+     * ancho fijo evita ademas que la barra inferior se reflowee al cambiar el
+     * valor. Ajustado a "%+5.1f" (caso peor "-55.0 \xc2\xb0""C", rango exterior)
+     * para que el icono y "Exterior:" no queden lejos del valor. */
     s_lbl_exterior_overlay = lv_label_create(overlay_cont);
     lv_obj_add_style(s_lbl_exterior_overlay, &ui->styles.small, 0);
     lv_obj_set_style_text_color(s_lbl_exterior_overlay, lv_color_hex(0x00BFFF), 0);
-    /* Ancho fijo del label + alineacion izquierda + clip: como la fuente
-     * Montserrat es proporcional, "+22.4" y "+5.4" no ocupan exactamente lo
-     * mismo aunque ambos sean 6 caracteres. Fijar el ancho del label hace
-     * que el container y la barra inferior no se reflowee al cambiar valor.
-     * Caso peor: "Exterior: -120.5 \xc2\xb0""C" en montserrat 28. */
-    lv_obj_set_width(s_lbl_exterior_overlay, 290);
+    lv_obj_set_width(s_lbl_exterior_overlay, 124);
     lv_label_set_long_mode(s_lbl_exterior_overlay, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_LEFT, 0);
-    lv_label_set_text(s_lbl_exterior_overlay, "Exterior:   --.- \xc2\xb0""C");
+    lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(s_lbl_exterior_overlay, "--.- \xc2\xb0""C");
 
     ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
 }
@@ -645,12 +653,13 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
     }
     if (s_lbl_exterior_overlay) {
         char buf[32];
-        /* Ancho del numero fijo (%+6.1f -> 6 chars: " +22.4", "-120.5") para
-         * que el label no cambie de tamano y la barra inferior no se desplace. */
+        /* Solo el valor (el prefijo "Exterior:" es un label fijo aparte).
+         * Ancho del numero fijo (%+5.1f -> 5 chars: " +5.4", "-12.5", "-55.0")
+         * para que el label no cambie de tamano y la barra no se desplace. */
         if (state->T_Exterior < -120.0f)
-            snprintf(buf, sizeof(buf), "Exterior:   --.- \xc2\xb0""C");
+            snprintf(buf, sizeof(buf), "--.- \xc2\xb0""C");
         else
-            snprintf(buf, sizeof(buf), "Exterior: %+6.1f \xc2\xb0""C", state->T_Exterior);
+            snprintf(buf, sizeof(buf), "%+5.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior_overlay, buf);
     }
 }

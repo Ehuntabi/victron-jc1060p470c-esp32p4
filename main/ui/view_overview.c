@@ -22,6 +22,7 @@ typedef struct {
     /* Cards */
     lv_obj_t *card_solar;
     lv_obj_t *m_solar_w;
+    lv_obj_t *pill_solar_state;   /* pastilla estado MPPT (Bulk/Float/...) */
     /* Card central Bateria */
     lv_obj_t *card_bat;
     lv_obj_t *arc_soc;
@@ -29,6 +30,7 @@ typedef struct {
     /* Card DC/DC (Orion-Tr Smart, carga desde batería motor) */
     lv_obj_t *card_loads;      /* nombre mantenido por compatibilidad */
     lv_obj_t *m_loads_w;       /* V_in: tensión batería motor */
+    lv_obj_t *pill_dcdc_state; /* pastilla estado Orion (Bulk/Float/...) */
     /* Métricas extra dentro de cada card */
     lv_obj_t *m_ttg;          /* dentro de card_bat: Autonomía */
     lv_obj_t *m_solar_kwh;    /* dentro de card_solar: kWh hoy */
@@ -54,6 +56,7 @@ typedef struct {
     } bat;
     struct {
         bool has_data;
+        uint8_t  state;       /* device_state: 0=off, otros=activos */
         uint16_t pv_w;
         int16_t  load_current_deci;
         uint16_t voltage_centi;
@@ -99,6 +102,146 @@ static void overview_hide(ui_device_view_t *view);
 static void overview_destroy(ui_device_view_t *view);
 static void overview_render(ui_overview_view_t *ov);
 static uint32_t now_ms(void) { return lv_tick_get(); }
+
+/* ── Estado Victron (device_state): texto, color y explicacion ──────
+ * Mismo criterio de color que la pantalla de detalle del MPPT. Se usa en las
+ * pastillas de estado de las cards Solar (MPPT) y DC/DC (Orion). */
+static const char *ov_state_name(uint8_t s)
+{
+    switch (s) {
+    case 0:  return "Apagado";
+    case 1:  return "Bajo consumo";
+    case 2:  return "Fallo";
+    case 3:  return "Bulk";
+    case 4:  return "Absorcion";
+    case 5:  return "Float";
+    case 6:  return "Storage";
+    case 7:  return "Eq. manual";
+    case 8:  return "Eq. auto";
+    case 9:  return "Inversor";
+    case 10: return "Fuente";
+    case 11: return "Iniciando";
+    default: return "-";
+    }
+}
+
+static lv_color_t ov_state_color(uint8_t s)
+{
+    switch (s) {
+    case 3:  return UI_COLOR_ORANGE;   /* Bulk */
+    case 4:  return UI_COLOR_YELLOW;   /* Absorcion */
+    case 5:                            /* Float */
+    case 6:  return UI_COLOR_GREEN;    /* Storage */
+    case 2:  return UI_COLOR_RED;      /* Fallo */
+    default: return UI_COLOR_TEXT_DIM;
+    }
+}
+
+static const char *ov_state_help(uint8_t s)
+{
+    switch (s) {
+    case 0:  return "En reposo: no esta cargando ni entregando energia.";
+    case 1:  return "Modo de bajo consumo (reposo).";
+    case 2:  return "Hay un fallo. Conviene revisar el equipo.";
+    case 3:  return "Carga rapida (Bulk): mete toda la corriente disponible "
+                    "para subir la bateria lo antes posible.";
+    case 4:  return "Absorcion: la bateria esta casi llena; mantiene la "
+                    "tension para terminar de cargarla sin forzarla.";
+    case 5:  return "Float: la bateria esta llena; solo la mantiene a flote "
+                    "sin sobrecargar.";
+    case 6:  return "Storage: bateria llena y en reposo, con una carga minima "
+                    "de mantenimiento.";
+    case 7:  return "Ecualizacion manual: carga alta puntual para equilibrar "
+                    "las celdas de la bateria.";
+    case 8:  return "Ecualizacion automatica: carga alta puntual para "
+                    "equilibrar las celdas de la bateria.";
+    case 9:  return "Generando 230 V desde la bateria (inversor).";
+    case 10: return "Modo fuente de alimentacion (tension fija).";
+    case 11: return "Arrancando...";
+    default: return "Estado no disponible.";
+    }
+}
+
+/* Cierra (async) el modal de info; el modal va como user_data. */
+static void ov_info_modal_close_cb(lv_event_t *e)
+{
+    lv_obj_t *modal = lv_event_get_user_data(e);
+    if (modal) lv_obj_del_async(modal);
+}
+
+/* Aviso a pantalla completa explicando en cristiano el estado actual. */
+static void ov_show_state_info(uint8_t state)
+{
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(modal, ov_info_modal_close_cb, LV_EVENT_CLICKED, modal);
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, ov_state_color(state), 0);
+    lv_obj_set_style_border_width(dlg, 3, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(dlg, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title, ov_state_color(state), 0);
+    lv_label_set_text(title, ov_state_name(state));
+
+    lv_obj_t *msg = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, lv_pct(100));
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg, ov_state_help(state));
+
+    lv_obj_t *btn = lv_btn_create(dlg);
+    lv_obj_set_style_bg_color(btn, ov_state_color(state), 0);
+    lv_obj_add_event_cb(btn, ov_info_modal_close_cb, LV_EVENT_CLICKED, modal);
+    lv_obj_t *btn_lbl = lv_label_create(btn);
+    lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(btn_lbl, "Entendido");
+    lv_obj_center(btn_lbl);
+}
+
+static void ov_solar_state_pill_cb(lv_event_t *e)
+{
+    ui_overview_view_t *ov = lv_event_get_user_data(e);
+    if (ov) ov_show_state_info(ov->solar.state);
+}
+static void ov_dcdc_state_pill_cb(lv_event_t *e)
+{
+    ui_overview_view_t *ov = lv_event_get_user_data(e);
+    if (ov) ov_show_state_info(ov->dcdc.state);
+}
+
+/* Pastilla de estado pequena (fuente 14 + poco relleno), pulsable. Se crea
+ * como ultimo hijo de la card para que quede al fondo, bajo los valores. */
+static lv_obj_t *ov_make_state_pill(lv_obj_t *card)
+{
+    lv_obj_t *pill = ui_pill_create(card, "-", UI_COLOR_TEXT_DIM);
+    lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_pad_hor(pill, 10, 0);
+    lv_obj_set_style_pad_ver(pill, 3, 0);
+    lv_obj_t *lbl = lv_obj_get_child(pill, 0);
+    if (lbl) lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
+    return pill;
+}
 
 static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
                                   const char *title, lv_color_t accent,
@@ -399,6 +542,13 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ui_metric_set(ov->m_solar_w, "--", "A", UI_COLOR_TEXT);
     ov->m_solar_kwh = ui_metric_create_compact(ov->card_solar, "Hoy");
     ui_metric_set(ov->m_solar_kwh, "--", "kWh", UI_COLOR_TEXT_DIM);
+    /* Valores a 28 (no 46) para dejar sitio a la pastilla de estado del fondo
+     * sin que se corte ningun dato. Pastilla pulsable al final de la card. */
+    ui_metric_set_value_font(ov->m_solar_w,   &lv_font_montserrat_28_es);
+    ui_metric_set_value_font(ov->m_solar_kwh, &lv_font_montserrat_28_es);
+    ov->pill_solar_state = ov_make_state_pill(ov->card_solar);
+    lv_obj_add_event_cb(ov->pill_solar_state, ov_solar_state_pill_cb,
+                        LV_EVENT_CLICKED, ov);
 
     /* (Agua limpia movida a la fila de indicadores de abajo) */
 
@@ -445,7 +595,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(bat_row, LV_OBJ_FLAG_SCROLLABLE);
     ov->m_bat_current = ui_metric_create_compact(bat_row, "Corriente");
-    ov->arc_soc       = ui_battery_soc_create(bat_row, 120, 112);
+    ov->arc_soc       = ui_battery_soc_create(bat_row, 150, 148);
     /* Subir el widget de bateria visual (arc SoC) un poco respecto al
      * baseline del flex row para que quede mas alineado con el titulo. */
     lv_obj_set_style_translate_y(ov->arc_soc, -25, 0);
@@ -476,6 +626,15 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
             lv_obj_set_style_translate_y(metrics[i], 56, 0);
         }
     }
+    /* La caja de bateria mas ancha deja menos sitio a los lados: bajar la
+     * fuente del valor de Autonomia (texto largo tipo "12h 30m") para que no
+     * se corte a la derecha. */
+    {
+        lv_obj_t *ttg_row = lv_obj_get_child(ov->m_ttg, 1);
+        lv_obj_t *ttg_val = ttg_row ? lv_obj_get_child(ttg_row, 0) : NULL;
+        if (ttg_val)
+            lv_obj_set_style_text_font(ttg_val, &lv_font_montserrat_24_es, 0);
+    }
 
     /* (Aguas grises movida a la fila de indicadores de abajo) */
 
@@ -505,6 +664,13 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ui_metric_set(ov->m_loads_w, "--", "V", UI_COLOR_TEXT);
     ov->m_loads_kwh = ui_metric_create_compact(ov->card_loads, "Servicio");
     ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
+    /* Valores a 28 (no 46) para dejar sitio a la pastilla del fondo sin que se
+     * corte ningun dato. Pastilla pulsable al final de la card. */
+    ui_metric_set_value_font(ov->m_loads_w,   &lv_font_montserrat_28_es);
+    ui_metric_set_value_font(ov->m_loads_kwh, &lv_font_montserrat_28_es);
+    ov->pill_dcdc_state = ov_make_state_pill(ov->card_loads);
+    lv_obj_add_event_cb(ov->pill_dcdc_state, ov_dcdc_state_pill_cb,
+                        LV_EVENT_CLICKED, ov);
 
     /* (230V movido a la fila de indicadores de abajo) */
 
@@ -821,6 +987,7 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
             case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
                 const victron_record_solar_charger_t *s = &data->record.solar;
                 ov->solar.has_data = true;
+                ov->solar.state = s->device_state;
                 ov->solar.pv_w = s->pv_power_w;
                 ov->solar.load_current_deci = s->load_current_deci;
                 ov->solar.voltage_centi = s->battery_voltage_centi;
@@ -877,6 +1044,12 @@ static void overview_render(ui_overview_view_t *ov)
     } else {
         ui_metric_set(ov->m_solar_w, "--", "A", UI_COLOR_TEXT_DIM);
     }
+    /* Pastilla de estado MPPT (pulsable para ver su explicacion). */
+    if (solar_fresh)
+        ui_pill_set(ov->pill_solar_state, ov_state_name(ov->solar.state),
+                    ov_state_color(ov->solar.state));
+    else
+        ui_pill_set(ov->pill_solar_state, "-", UI_COLOR_TEXT_DIM);
 
     /* (Las flechas Solar→Bat / Bat→DC se eliminaron al pasar a layout
      * de 3 columnas verticales. El flujo se infiere de los colores.) */
@@ -904,7 +1077,8 @@ static void overview_render(ui_overview_view_t *ov)
         bool active = ov->dcdc.state != 0;
         ui_metric_set(ov->m_loads_w, buf, "V",
                       active ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
-        /* V_out (batería servicio) — métrica pequeña */
+        /* V_out (batería servicio). Si esta a 0 V no ponemos "APAGADO": la
+         * pastilla de estado ya indica que el convertidor esta apagado. */
         snprintf(buf, sizeof(buf), "%u.%02u",
                  ov->dcdc.vout_centi / 100, ov->dcdc.vout_centi % 100);
         ui_metric_set(ov->m_loads_kwh, buf, "V",
@@ -913,6 +1087,12 @@ static void overview_render(ui_overview_view_t *ov)
         ui_metric_set(ov->m_loads_w,   "--", "V", UI_COLOR_TEXT_DIM);
         ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);
     }
+    /* Pastilla de estado Orion (mismos criterios que el MPPT; pulsable). */
+    if (dcdc_fresh)
+        ui_pill_set(ov->pill_dcdc_state, ov_state_name(ov->dcdc.state),
+                    ov_state_color(ov->dcdc.state));
+    else
+        ui_pill_set(ov->pill_dcdc_state, "-", UI_COLOR_TEXT_DIM);
 
     /* ── TTG ──────────────────────────────────────────────────── */
     if (bat_fresh && ov->bat.ttg_min != 0xFFFFFFFF && ov->bat.ttg_min > 0) {

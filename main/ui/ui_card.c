@@ -235,6 +235,15 @@ void ui_metric_set(lv_obj_t *metric, const char *value_str,
     if (unit) lv_label_set_text(unit, unit_str ? unit_str : "");
 }
 
+void ui_metric_set_value_font(lv_obj_t *metric, const lv_font_t *font)
+{
+    if (!metric || !font) return;
+    lv_obj_t *row = lv_obj_get_child(metric, 1);
+    if (!row) return;
+    lv_obj_t *value = lv_obj_get_child(row, 0);
+    if (value) lv_obj_set_style_text_font(value, font, 0);
+}
+
 void ui_metric_set_label(lv_obj_t *metric, const char *label_text,
                          lv_color_t label_color)
 {
@@ -489,7 +498,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 
     /* SOC% sobre el cuerpo — ULTIMO hijo de body (mas al frente) */
     lv_obj_t *soc_lbl = lv_label_create(body);
-    lv_obj_set_style_text_font(soc_lbl, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(soc_lbl, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_color(soc_lbl, UI_COLOR_TEXT, 0);
     lv_obj_set_style_text_color(soc_lbl, lv_color_hex(0xffffff), 0);
     lv_label_set_text(soc_lbl, "--");
@@ -497,7 +506,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 
     /* Voltage debajo con separacion del cuerpo */
     lv_obj_t *volt_lbl = lv_label_create(box);
-    lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_28_es, 0);
     lv_obj_set_style_text_color(volt_lbl, lv_color_hex(0xffffff), 0);
     lv_obj_set_style_pad_top(volt_lbl, 8, 0);
     lv_label_set_text(volt_lbl, "--");

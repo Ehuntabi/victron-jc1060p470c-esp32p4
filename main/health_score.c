@@ -3,53 +3,41 @@
 #include <string.h>
 #include <stdio.h>
 #include "dashboard_state.h"
-#include "pzem004t.h"
-#include "frigo.h"
 #include "alerts.h"
-#include "victron_alarms.h"
+#include "ui.h"   /* ui_get_freezer_alarm(): verdad robusta de main.c */
 
-#define BLE_TIMEOUT_S   30      /* sin records BLE > 30 s -> WARN */
-
-static int64_t s_last_ble_ts_us(void)
-{
-    /* La verdad la guardamos en ui.c::s_last_ble_data_us pero no esta expuesta.
-     * Para no acoplar usamos un truco: el dashboard snapshot recibe un record
-     * cada vez que llega BLE, asi que si todos los flags has=false durante
-     * mucho tiempo asumimos timeout. Implementacion simple: si ningun
-     * dispositivo tiene has=true, devolvemos -1 (no hay). */
-    return -1;
-}
-
-static bool any_victron_alarm(const char **reason)
-{
-    pzem_data_t pz; pzem_get(&pz);
-    if (pz.has_data && pz.alarm) { if (reason) *reason = "PZEM alarma"; return true; }
-    /* dashboard_state no expone alarm fields publicamente pero el flag
-     * de alarma del BMV se ve a traves de victron_alarms helpers en la
-     * UI. Aqui simplificamos: si una serie esta en alarma, se vera ya en
-     * la UI (pill rojo "FALLO"). El health_score se centra en estados
-     * agregables (SoC, freezer, BLE). */
-    return false;
-}
-
+/* Semaforo de salud de la barra inferior. Combina los estados que NO tienen
+ * ya su propio indicador en la barra:
+ *   - SoC de bateria (umbrales configurables en alerts)
+ *   - Alarma del congelador (criterio robusto calculado en main.c)
+ * El estado BLE tiene su propio icono Bluetooth en la barra, asi que no se
+ * duplica aqui. */
 health_level_t health_score_evaluate(char *reason_out, size_t maxlen)
 {
     health_level_t level = HEALTH_OK;
-    const char *reason = "OK";
+    char reason[28] = "OK";
 
-    /* 1. Alarmas Victron (PZEM por ahora) -> ALARM */
-    const char *r = NULL;
-    if (any_victron_alarm(&r)) { reason = r ? r : "Alarma"; level = HEALTH_ALARM; goto out; }
+    dashboard_snapshot_t snap;
+    dashboard_state_snapshot(&snap);
+    /* Truncamiento /10 para coincidir con la logica de alarma SoC de ui.c. */
+    int soc = snap.bat_has ? snap.soc_deci / 10 : -1;
 
-    /* La alarma del congelador no se duplica en la barra inferior:
-     * el propio overview parpadea la temperatura T_Congelador en rojo y
-     * dispara la alarma sonora (con mute al pulsar). */
+    /* --- ALARMAS (rojo) --- */
+    if (soc >= 0 && soc <= alerts_get_soc_critical()) {
+        snprintf(reason, sizeof reason, "Bateria %d%%", soc);
+        level = HEALTH_ALARM;
+    } else if (ui_get_freezer_alarm()) {
+        strcpy(reason, "Congelador");
+        level = HEALTH_ALARM;
+    /* --- AVISOS (ambar) --- */
+    } else if (soc >= 0 && soc <= alerts_get_soc_warning()) {
+        snprintf(reason, sizeof reason, "Bateria %d%%", soc);
+        level = HEALTH_WARN;
+    }
 
-out:
     if (reason_out && maxlen > 0) {
         strncpy(reason_out, reason, maxlen - 1);
         reason_out[maxlen - 1] = 0;
     }
-    (void)s_last_ble_ts_us;
     return level;
 }
