@@ -165,7 +165,7 @@ esp_err_t watchdog_init(void)
 
     /* Task monitor de salud de LVGL */
     BaseType_t ok = xTaskCreate(wd_monitor_task, "wd_monitor",
-                                2048, NULL, 2, NULL);
+                                4096, NULL, 2, NULL);
     return (ok == pdPASS) ? ESP_OK : ESP_FAIL;
 }
 
