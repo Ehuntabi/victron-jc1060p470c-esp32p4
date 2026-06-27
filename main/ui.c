@@ -2197,14 +2197,32 @@ static void bh_chart_load_day(void)
     if (s_bh_day_idx < 0) {
         /* HOY: usa el ring buffer en RAM (4 fuentes). Aplica ventana [a, b). */
         const int CHART_MAX_PTS = 300;  /* ver nota en show_battery_history_screen */
-        int win_a_i = (int)(s_bh_win_a * BH_POINTS);
-        int win_b_i = (int)(s_bh_win_b * BH_POINTS);
+
+        /* Buffer estatico en PSRAM para no fragmentar al cambiar de dia. */
+        static bh_point_t *pts = NULL;
+        if (pts == NULL) {
+            pts = heap_caps_malloc(sizeof(bh_point_t) * BH_POINTS,
+                                   MALLOC_CAP_SPIRAM);
+        }
+
+        /* Numero REAL de muestras en el ring (no la capacidad BH_POINTS).
+         * Todas las fuentes avanzan a la vez en sample_timer_cb, asi que el
+         * conteo del BatteryMonitor sirve para las cuatro. El ancho/paso del
+         * chart DEBE calcularse sobre estas muestras reales: si se usa
+         * BH_POINTS (24h) cuando el equipo lleva pocas horas encendido, la
+         * serie se comprime a la izquierda y la franja reciente queda vacia. */
+        int n_avail = 0;
+        if (pts) {
+            int32_t t0 = 0, t1 = 0;
+            n_avail = (int)battery_history_get_series(BH_SRC_BATTERY_MONITOR,
+                                                      pts, &t0, &t1);
+        }
+        int win_a_i = (int)(s_bh_win_a * n_avail);
+        int win_b_i = (int)(s_bh_win_b * n_avail);
         if (win_b_i <= win_a_i) win_b_i = win_a_i + 1;
-        if (win_b_i > BH_POINTS) win_b_i = BH_POINTS;
+        if (win_b_i > n_avail) win_b_i = n_avail;
         int win_count = win_b_i - win_a_i;
-        /* Guardia defensiva: con apply_window el minimo es 0.005*BH_POINTS=43,
-         * pero si BH_POINTS bajara mucho podriamos llegar a 0 y dividir por 0
-         * en el calculo de chart_step. */
+        /* Guardia defensiva para no dividir por 0 en chart_step (ring vacio). */
         if (win_count < 2) win_count = 2;
         int chart_pts = (win_count > CHART_MAX_PTS) ? CHART_MAX_PTS : win_count;
         int chart_step = (win_count + chart_pts - 1) / chart_pts;
@@ -2213,12 +2231,6 @@ static void bh_chart_load_day(void)
         if (chart_pts < 2) chart_pts = 2;
         lv_chart_set_point_count(s_bh_chart, chart_pts);
 
-        /* Buffer estatico en PSRAM para no fragmentar al cambiar de dia. */
-        static bh_point_t *pts = NULL;
-        if (pts == NULL) {
-            pts = heap_caps_malloc(sizeof(bh_point_t) * BH_POINTS,
-                                   MALLOC_CAP_SPIRAM);
-        }
         int32_t bmin = INT32_MAX, bmax = INT32_MIN;
         int32_t old_ts_g = INT32_MAX, new_ts_g = INT32_MIN;
         if (pts) {
