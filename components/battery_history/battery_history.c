@@ -12,6 +12,8 @@
 #include <errno.h>
 
 static void bh_flush_to_sd_impl(void);
+static void bh_flush_to_sd_dated(time_t file_date);
+static void bh_reset_for_new_day(void);
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
 #define BH_LOG_DIR "/sdcard/bateria"
@@ -54,6 +56,10 @@ static bool   s_bh_last_flushed_wrapped[BH_SRC_COUNT] = {false};
  * En fichero scope (no static dentro de la funcion) para que sea reutilizable
  * y reseteable cuando time() pasa a estar sincronizado. */
 static int32_t s_last_flushed_ts[BH_SRC_COUNT] = {0};
+
+/* Dia local actual (anio*366+yday) para detectar el cambio de dia natural y
+ * cerrar el dia en SD + reiniciar el ring. -1 = aun sin hora sincronizada. */
+static int s_last_local_day = -1;
 
 /* Snapshot por flush para evitar mantener BH_LOCK durante la I/O a SD.
  * Capacidad por fuente generosa frente a las 6 muestras tipicas (60 s / 10 s). */
@@ -125,9 +131,43 @@ void battery_history_update_latest(bh_source_t src, int32_t milli_amps,
     BH_UNLOCK();
 }
 
+static void bh_reset_for_new_day(void)
+{
+    if (!s_bufs) return;
+    BH_LOCK();
+    for (int i = 0; i < BH_SRC_COUNT; ++i) {
+        bh_buffer_t *b = &s_bufs[i];
+        b->write_idx = 0;
+        b->wrapped = false;
+        b->acc_sum_ma = 0; b->acc_count = 0;
+        b->acc_max_ma = 0; b->acc_min_ma = 0;
+        b->acc_sum_cv = 0; b->acc_count_cv = 0;
+        /* Se conservan last_milli/last_centi_volts/has_latest para que la
+         * grafica del nuevo dia arranque con continuidad desde el ultimo valor. */
+    }
+    BH_UNLOCK();
+    ESP_LOGI(TAG, "Nuevo dia natural: buffer RAM reiniciado");
+}
+
 static void sample_timer_cb(void *arg)
 {
     if (!s_bufs) return;
+    /* Cierre de dia natural: al cambiar la fecha local, volcar lo que quede
+     * del dia anterior a SU fichero (fechado a 23:59:59 de ayer) y reiniciar
+     * el ring para que la vista HOY sea el dia natural, no las ultimas 24h.
+     * Solo con hora sincronizada (sin RTC/NTP no hay concepto de medianoche). */
+    time_t now_w = time(NULL);
+    if (now_w >= 1704067200) {
+        struct tm lt;
+        localtime_r(&now_w, &lt);
+        int day_id = (lt.tm_year + 1900) * 366 + lt.tm_yday;
+        if (s_last_local_day >= 0 && day_id != s_last_local_day) {
+            time_t yest = now_w - lt.tm_hour * 3600 - lt.tm_min * 60 - lt.tm_sec - 1;
+            bh_flush_to_sd_dated(yest);
+            bh_reset_for_new_day();
+        }
+        s_last_local_day = day_id;
+    }
     int32_t ts = now_seconds();
     BH_LOCK();
     for (int i = 0; i < BH_SRC_COUNT; ++i) {
@@ -162,9 +202,8 @@ static void sample_timer_cb(void *arg)
  * con eso cada 15 min. Los datos sobreviven en SD vía bh_flush_to_sd_impl. */
 
 
-static void bh_get_day_filename(char *buf, size_t len)
+static void bh_get_day_filename(time_t t, char *buf, size_t len)
 {
-    time_t t = time(NULL);
     struct tm tm_local;
     localtime_r(&t, &tm_local);
     if (tm_local.tm_year > 100) {
@@ -182,8 +221,15 @@ void battery_history_flush(void)
     bh_flush_to_sd_impl();
 }
 
-static void bh_flush_to_sd_impl(void);
 static void bh_flush_to_sd_impl(void)
+{
+    bh_flush_to_sd_dated(0);
+}
+
+/* file_date: fecha (time_t) para elegir el fichero diario destino; 0 = ahora.
+ * Se usa el valor != 0 al cerrar el dia anterior justo tras medianoche, para
+ * que los ultimos puntos de ayer caigan en el fichero de ayer y no en el nuevo. */
+static void bh_flush_to_sd_dated(time_t file_date)
 {
     if (!s_bufs) return;
     /* Comprobar si /sdcard existe (datalogger lo monta) */
@@ -208,7 +254,7 @@ static void bh_flush_to_sd_impl(void)
     }
 
     char path[64];
-    bh_get_day_filename(path, sizeof path);
+    bh_get_day_filename(file_date ? file_date : time(NULL), path, sizeof path);
     bool need_header = (stat(path, &st) != 0);
 
     /* === FASE 1: Snapshot bajo lock, sin I/O. ===

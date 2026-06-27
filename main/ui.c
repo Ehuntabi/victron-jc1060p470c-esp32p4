@@ -1863,8 +1863,10 @@ static bool    s_bh_dragging      = false;
 static int64_t s_bh_last_apply_us = 0;
 static int64_t s_bh_last_click_us = 0;
 
-#define BH_LOG_MAX_ENTRIES   2200   /* ~24h cada ~10s + margen */
-static battery_log_entry_t s_bh_buf[BH_LOG_MAX_ENTRIES];
+#define BH_LOG_MAX_ENTRIES   8800   /* 24h completas @10s (8640) + margen */
+/* En PSRAM: 8800 x 16 B ~= 140 KB, demasiado para RAM interna estatica.
+ * Se aloja una vez (lazy) al consultar un dia historico. */
+static battery_log_entry_t *s_bh_buf = NULL;
 
 static void bh_chart_load_day(void);
 static void bh_chart_gesture_cb(lv_event_t *e);
@@ -2314,7 +2316,11 @@ static void bh_chart_load_day(void)
         const char *date = s_bh_dates[s_bh_day_idx];
         char path[64];
         snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
-        int n = log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES);
+        if (s_bh_buf == NULL) {
+            s_bh_buf = heap_caps_malloc(sizeof(battery_log_entry_t) * BH_LOG_MAX_ENTRIES,
+                                        MALLOC_CAP_SPIRAM);
+        }
+        int n = s_bh_buf ? log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES) : 0;
 
         /* Totales calculados sobre el dia completo (no afectados por la ventana). */
         int64_t total_ch_ma_s = 0, total_dis_ma_s = 0;
