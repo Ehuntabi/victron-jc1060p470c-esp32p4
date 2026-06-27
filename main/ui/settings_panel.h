@@ -28,6 +28,13 @@ void ui_force_view_update(void);
  * Home para que la proxima entrada empiece siempre arriba del todo. */
 void ui_settings_panel_go_to_main(void);
 
+/* Navegacion programatica de sub-paginas de Ajustes (para el tour de
+ * capturas). page_count devuelve cuantas hay; show_page(idx) navega a la
+ * pagina idx y la popula la primera vez. Orden = orden de creacion:
+ * 0=Frigo 1=Logs 2=Wi-Fi 3=Display 4=Sonido 5=Victron Keys 6=About. */
+int  ui_settings_panel_page_count(void);
+void ui_settings_panel_show_page(int idx);
+
 /* Mostrar el diálogo modal "Cambio en Wi-Fi — requiere reiniciar".
  * El caller ya debe haber guardado el nuevo estado en NVS antes de llamar.
  * El botón Cancelar revierte el NVS al opuesto y sincroniza el checkbox

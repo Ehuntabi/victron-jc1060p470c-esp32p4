@@ -150,6 +150,7 @@ typedef struct settings_page_ctx_s settings_page_ctx_t;
 struct settings_page_ctx_s {
     uint32_t accent;
     ui_state_t *ui;
+    lv_obj_t *page;   /* pagina de menu asociada (para navegacion programatica) */
     void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page);
     bool populated;
     /* Extras (solo Wi-Fi los usa) */
@@ -3136,12 +3137,33 @@ static settings_page_ctx_t *settings_menu_add_entry(
         memset(ctx, 0, sizeof(*ctx));
         ctx->accent = accent;
         ctx->ui = ui;
+        ctx->page = target_page;
         ctx->populate = populate;
         lv_obj_set_user_data(target_page, ctx);
     }
 
     lv_menu_set_load_page_event(menu, cont, target_page);
     return ctx;
+}
+
+/* ── Navegacion programatica de sub-paginas (tour de capturas) ─────────── */
+int ui_settings_panel_page_count(void)
+{
+    return (int)s_page_ctx_count;
+}
+
+void ui_settings_panel_show_page(int idx)
+{
+    if (idx < 0 || (size_t)idx >= s_page_ctx_count) return;
+    settings_page_ctx_t *ctx = &s_page_ctxs[idx];
+    if (!s_settings_menu || !ctx->page) return;
+    lv_menu_set_page(s_settings_menu, ctx->page);
+    /* Asegurar el populate perezoso por si lv_menu_set_page no disparo el
+     * evento de cambio de pagina (el flag 'populated' evita duplicar). */
+    if (!ctx->populated && ctx->populate) {
+        ctx->populate(ctx, ctx->page);
+        ctx->populated = true;
+    }
 }
 
 /* Card clickable con la misma estetica que settings_menu_add_entry pero con

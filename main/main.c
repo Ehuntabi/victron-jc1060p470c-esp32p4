@@ -310,6 +310,10 @@ void app_main(void)
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
 
+    /* Recorrido automatico de capturas de pantalla: ~60 s tras boot, una sola
+     * vez (marcador en la SD), guarda un BMP por pantalla en la microSD. */
+    ui_start_screenshot_tour();
+
     /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
     {
         char tz_buf[48];

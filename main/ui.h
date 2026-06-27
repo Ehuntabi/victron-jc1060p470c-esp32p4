@@ -37,6 +37,11 @@ bool ui_screensaver_is_active(void);
 /* Forzar un refresco inmediato del label de la hora.
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);
+
+/* Arranca (en una tarea) el recorrido automatico de capturas: ~60 s tras el
+ * boot recorre las pantallas principales y guarda un BMP por pantalla en
+ * /sdcard/screenshots/. Se ejecuta una sola vez (marcador en la SD). */
+void ui_start_screenshot_tour(void);
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 /* Estado actual de la alarma del congelador (criterio robusto de main.c).
  * La vista Overview lo consulta en vez de re-evaluar el umbral. */
