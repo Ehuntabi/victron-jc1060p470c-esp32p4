@@ -12,8 +12,8 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 - Touch GT911, RTC RX8130, microSD slot 0 IOMUX
 - Codec audio ES8311 + amplificador NS4150 (GPIO11 PA_CTRL)
 - Pines I2S: MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9
-- Ventilador frigo PWM en GPIO21
-- Bus 1-Wire DS18B20 en GPIO26 (pullup 4.7K)
+- Ventilador frigo PWM en GPIO5 (JP1 pin 15)
+- Bus 1-Wire DS18B20 en GPIO4 (JP1 pin 13, pullup 4.7K a 3.3V)
 
 ## Stack
 - ESP-IDF v5.4.4
