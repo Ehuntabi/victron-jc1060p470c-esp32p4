@@ -83,7 +83,7 @@ static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, 
  * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
  * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
  * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
-#define CAM_GAMMA 0.72f
+#define CAM_GAMMA 0.85f
 static uint8_t s_gamma_lut[256];
 static bool    s_gamma_ready = false;
 static void gamma_init(void)
@@ -99,20 +99,21 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     if (!s_gamma_ready) gamma_init();
     uint32_t stride = bytes / SRC_H;   /* ~2410 para RAW10 1928 packed */
 
-    /* Pase 1: balance de blancos gray-world. Medias de cada canal (muestra coarse)
-     * -> ganancias para igualar R y B al verde. Quita el tinte (rojizo con luz
-     * calida). En lineal, ANTES de la gamma. */
+    /* Pase 1: balance de blancos gray-world (medias de canal) + histograma de luma
+     * para auto-niveles. Muestra coarse (1 de cada 4x4). */
     uint64_t sB = 0, sG = 0, sR = 0;
     uint32_t n = 0;
+    uint32_t hist[256] = {0};
     for (int oy = 0; oy < THUMB_H; oy += 4) {
         int sy = (oy * SRC_H / THUMB_H) & ~1;
         for (int ox = 0; ox < THUMB_W; ox += 4) {
             int sx = (ox * SRC_W / THUMB_W) & ~1;
-            sB += raw_px(p, bytes, stride, sx, sy);
-            sG += ((int)raw_px(p, bytes, stride, sx + 1, sy) +
-                   (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
-            sR += raw_px(p, bytes, stride, sx + 1, sy + 1);
-            n++;
+            int b = raw_px(p, bytes, stride, sx, sy);
+            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
+                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
+            int r = raw_px(p, bytes, stride, sx + 1, sy + 1);
+            sB += b; sG += g; sR += r; n++;
+            hist[(b + 2 * g + r) / 4]++;   /* luma aprox */
         }
     }
     float mB = n ? (float)sB / n : 1, mG = n ? (float)sG / n : 1, mR = n ? (float)sR / n : 1;
@@ -123,7 +124,18 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     if (gR > 4.0f) gR = 4.0f;
     if (gR < 0.25f) gR = 0.25f;
 
-    /* Pase 2: debayer + ganancias WB + gamma. */
+    /* Auto-niveles: percentiles 2% (lo) y 98% (hi) del histograma -> estirar a
+     * 0-255. Sube brillo Y contraste adaptandose a la luz de la escena. */
+    uint32_t lo_th = n / 50, hi_th = n - n / 50;   /* 2% / 98% */
+    int lo = 0, hi = 255;
+    uint32_t acc = 0;
+    for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= lo_th) { lo = i; break; } }
+    acc = 0;
+    for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n - hi_th) { hi = i; break; } }
+    if (hi <= lo) hi = lo + 1;
+    float lscale = 255.0f / (float)(hi - lo);
+
+    /* Pase 2: debayer + WB + auto-niveles + gamma. */
     for (int oy = 0; oy < THUMB_H; oy++) {
         int sy = (oy * SRC_H / THUMB_H) & ~1;   /* alinear al inicio de la celda 2x2 */
         for (int ox = 0; ox < THUMB_W; ox++) {
@@ -132,10 +144,18 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
                      (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
             int r = (int)(raw_px(p, bytes, stride, sx + 1, sy + 1) * gR);
+            /* auto-niveles (estiramiento por percentiles) */
+            b = (int)((b - lo) * lscale);
+            g = (int)((g - lo) * lscale);
+            r = (int)((r - lo) * lscale);
+            if (b < 0) b = 0;
             if (b > 255) b = 255;
+            if (g < 0) g = 0;
+            if (g > 255) g = 255;
+            if (r < 0) r = 0;
             if (r > 255) r = 255;
             uint8_t *d = &dst[((uint32_t)oy * THUMB_W + ox) * 3];
-            d[0] = s_gamma_lut[b]; d[1] = s_gamma_lut[g]; d[2] = s_gamma_lut[r];   /* BGR + WB + gamma */
+            d[0] = s_gamma_lut[b]; d[1] = s_gamma_lut[g]; d[2] = s_gamma_lut[r];   /* BGR + WB + niveles + gamma */
         }
     }
 }
