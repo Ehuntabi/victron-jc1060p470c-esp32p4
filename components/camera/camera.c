@@ -24,6 +24,12 @@ static const char *TAG = "camera";
 #define CAM_DEV_PATH    "/dev/video0"
 #define CAM_STREAM_BUFS 2
 
+/* THROTTLE de la camara: NO streamea a tope (su DMA continuo bloquea la SD). Con un
+ * STREAMON unico, se consume 1 frame y se duerme: los buffers se llenan y el GDMA de
+ * la camara se para por contrapresion -> SD libre entre frames. Tunear aqui. */
+#define CAM_IDLE_MS       2000 /* sleep normal entre frames -> GDMA parado -> SD libre */
+#define CAM_SURV_IDLE_MS  250  /* sleep en vigilancia (movimiento muestreado ~cada 0.3s) */
+
 /* Brillo del sensor (controles V4L2, no software). Exposicion en lineas
  * (VTS 2-lane = 2328 -> max util ~2320) y ganancia analogica (rango OV02C10
  * 0x10-0xf8 = 1x-15.5x). Subidos para que la foto no salga oscura. Tunear aqui. */
@@ -265,9 +271,23 @@ void camera_set_surveillance(bool on)
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
-/* Tarea de streaming continuo: mantiene el stream RAW10 abierto, mide luminosidad
- * (auto-brillo), refresca el thumbnail (snapshot HTTP) y, en modo vigilancia,
- * detecta movimiento y guarda fotos a SD. */
+/* Arranca/para el stream RAW10. En modo A DEMANDA se ciclan para que el DMA de la
+ * camara NO este siempre activo: el DMA continuo de la camara bloquea el bus DMA de
+ * la SD -> timeouts 0x107 en lecturas/escrituras (root cause de "la SD no va con la
+ * camara"). Entre frames el stream se para y la SD queda libre. */
+static bool cam_stream_start(int fd, int type)
+{
+    for (int i = 0; i < CAM_STREAM_BUFS; i++) {
+        struct v4l2_buffer qb = { .type = type, .memory = V4L2_MEMORY_MMAP, .index = i };
+        ioctl(fd, VIDIOC_QBUF, &qb);
+    }
+    return ioctl(fd, VIDIOC_STREAMON, &type) == 0;
+}
+
+/* Tarea de captura A DEMANDA: en modo normal coge una rafaga corta de frames cada
+ * ~2s (mide luminosidad para auto-brillo + refresca thumbnail) y PARA el stream para
+ * dejar la SD libre. En modo vigilancia (ausente) si streamea seguido para detectar
+ * movimiento, parando el stream solo para guardar cada foto a SD. */
 static void camera_stream_task(void *arg)
 {
     int fd = open(CAM_DEV_PATH, O_RDONLY);
@@ -316,18 +336,7 @@ static void camera_stream_task(void *arg)
         if (buf[i] == MAP_FAILED) { close(fd); vTaskDelete(NULL); return; }
         ioctl(fd, VIDIOC_QBUF, &b);
     }
-    if (ioctl(fd, VIDIOC_STREAMON, &type) != 0) {
-        ESP_LOGE(TAG, "stream: STREAMON falla");
-        close(fd);
-        vTaskDelete(NULL);
-        return;
-    }
-    ESP_LOGI(TAG, "stream: capturando RAW10 para luma/vigilancia");
-
-    /* Subir exposicion y ganancia del sensor para que la imagen no salga oscura.
-     * La ganancia del OV02C10 se fija por INDICE con V4L2_CID_GAIN. */
-    cam_set_ctrl(fd, V4L2_CID_EXPOSURE, CAM_EXPOSURE, "exposure");
-    cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_GAIN_IDX, "gain(idx)");
+    ESP_LOGI(TAG, "stream: modo A DEMANDA (no continuo) para no bloquear la SD");
 
     /* Thumbnails RGB (BGR) para el snapshot HTTP (doble buffer en PSRAM). Si falla
      * la reserva, seguimos solo con la luma. */
@@ -336,10 +345,32 @@ static void camera_stream_task(void *arg)
     /* Acumulador para promediado temporal (quita grano). Si falla, seguimos sin el. */
     s_accum = heap_caps_calloc(THUMB_W * THUMB_H * 3, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
 
+    /* UN solo STREAMON. Ciclar STREAMON/STREAMOFF crashea el driver CSI de esp_video
+     * (esp_cam_ctlr_csi_start -> dw_gdma set_src_addr sobre canal ya liberado -> Store
+     * access fault). En su lugar: THROTTLE. Con 2 buffers, si consumimos despacio
+     * (DQBUF/QBUF + sleep), los buffers se llenan y el GDMA de la camara se PARA solo
+     * por contrapresion -> la SD queda libre entre frames. Mismo efecto, sin crash. */
+    if (!cam_stream_start(fd, type)) {
+        ESP_LOGE(TAG, "stream: STREAMON falla");
+        close(fd);
+        vTaskDelete(NULL);
+        return;
+    }
+    cam_set_ctrl(fd, V4L2_CID_EXPOSURE, CAM_EXPOSURE, "exposure");
+    cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_GAIN_IDX, "gain(idx)");
+
     uint32_t ema = 0;
     bool first = true;
-    uint32_t fcount = 0;
+
+    /* Estado de vigilancia (persiste entre frames). */
+    static uint8_t  prev_grid[MOT_GW * MOT_GH];
+    static bool     have_prev = false;
+    static int64_t  last_photo_us = 0;
+    static int      photo_count = 0;
+
     while (1) {
+        bool surv = s_surveillance;
+
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -347,58 +378,21 @@ static void camera_stream_task(void *arg)
         }
         if (b.flags & V4L2_BUF_FLAG_DONE) {
             uint8_t luma = frame_luma(buf[b.index], b.bytesused);
-            /* EMA fuerte (cte ~32 frames ~0.9s): el brillo ambiente cambia lento;
-             * evita parpadeos por ruido o por una mano que pasa. */
+            /* EMA suave: el brillo ambiente cambia lento. Una muestra cada ~2s ->
+             * cte ~8 estabiliza en unos segundos. */
             if (first) { ema = luma; first = false; }
-            else       { ema = (ema * 31 + luma) / 32; }
+            else       { ema = (ema * 7 + luma) / 8; }
             s_luma = (uint8_t)ema;
             s_luma_valid = true;
 
-            /* Refrescar el thumbnail cada 8 frames (~4.6 Hz; el debayer 964x546 es
-             * mas pesado, y para snapshot bajo demanda sobra). */
-            if (s_thumb[0] && s_thumb[1] && (++fcount & 7) == 0) {
+            if (s_thumb[0] && s_thumb[1]) {
                 int back = (s_thumb_act == 0) ? 1 : 0;
                 downscale_rgb(buf[b.index], b.bytesused, s_thumb[back]);
                 s_thumb_act = back;   /* publicar */
             }
 
-            /* DIAGNOSTICO one-shot: a los ~40 frames, log de stats del thumbnail
-             * + guardar BMP a SD. Si min<max la captura trae imagen real. */
-            static bool s_snap_done = false;
-            if (!s_snap_done && s_thumb_act >= 0 && fcount >= 40) {
-                s_snap_done = true;
-                const uint8_t *t = s_thumb[s_thumb_act];
-                const int n = THUMB_W * THUMB_H * 3;   /* BGR */
-                uint8_t mn = 255, mx = 0;
-                uint32_t sum = 0;
-                for (int i = 0; i < n; i++) {
-                    if (t[i] < mn) mn = t[i];
-                    if (t[i] > mx) mx = t[i];
-                    sum += t[i];
-                }
-                ESP_LOGI(TAG, "snapshot stats(color): %dx%d min=%u max=%u mean=%u",
-                         THUMB_W, THUMB_H, mn, mx, (unsigned)(sum / n));
-                uint8_t *bmp = NULL;
-                size_t blen = 0;
-                if (camera_snapshot_bmp(&bmp, &blen)) {
-                    FILE *f = fopen("/sdcard/snapshot_boot.bmp", "wb");
-                    if (f) {
-                        fwrite(bmp, 1, blen, f);
-                        fclose(f);
-                        ESP_LOGI(TAG, "snapshot guardado /sdcard/snapshot_boot.bmp (%u B)", (unsigned)blen);
-                    } else {
-                        ESP_LOGW(TAG, "no pude abrir /sdcard/snapshot_boot.bmp");
-                    }
-                    free(bmp);
-                }
-            }
-
             /* Vigilancia (modo ausente): deteccion de movimiento + foto a SD. */
-            if (s_surveillance && (fcount & 3) == 0) {
-                static uint8_t  prev_grid[MOT_GW * MOT_GH];
-                static bool     have_prev = false;
-                static int64_t  last_photo_us = 0;
-                static int      photo_count = 0;
+            if (surv) {
                 uint32_t stride = b.bytesused / SRC_H;
                 uint8_t grid[MOT_GW * MOT_GH];
                 for (int gy = 0; gy < MOT_GH; gy++) {
@@ -416,10 +410,8 @@ static void camera_stream_task(void *arg)
                         if (d < 0) d = -d;
                         if (d > MOT_CELL_DIFF) changed++;
                     }
-                    /* DIAGNOSTICO: cada ~1.7s confirma que la vigilancia corre y el
-                     * nivel de movimiento medido. */
                     static int s_diag = 0;
-                    if ((++s_diag & 15) == 0)
+                    if ((++s_diag & 7) == 0)
                         ESP_LOGI(TAG, "vigilancia activa: movimiento=%d celdas (captura si >=%d)",
                                  changed, MOT_CELL_COUNT);
                     int64_t now = esp_timer_get_time();
@@ -451,8 +443,7 @@ static void camera_stream_task(void *arg)
                             }
                             free(bmp);
                         }
-                        /* TODO(video): ademas de la foto, arrancar grabacion H.264 de N
-                         * segundos aqui (esp_h264) -> /sdcard/vigilancia/...h264. */
+                        /* TODO(video): grabacion H.264 de N seg aqui (esp_h264). */
                     }
                 }
                 memcpy(prev_grid, grid, sizeof(grid));
@@ -460,6 +451,10 @@ static void camera_stream_task(void *arg)
             }
         }
         ioctl(fd, VIDIOC_QBUF, &b);
+
+        /* THROTTLE: con los buffers llenos el GDMA de la camara se para por
+         * contrapresion -> la SD queda libre. Normal ~2s; vigilancia ~250ms. */
+        vTaskDelay(pdMS_TO_TICKS(surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS));
     }
 }
 

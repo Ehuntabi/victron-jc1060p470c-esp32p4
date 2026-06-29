@@ -264,6 +264,11 @@ void app_main(void)
     /* Antes que nada para capturar todo el boot. Ringbuffer en PSRAM ~120 KB. */
     log_capture_init();
 
+    /* Motivo del ULTIMO reinicio (diagnostico de reinicios espontaneos por la
+     * camara). La ROM no saca el motivo por USB-Serial-JTAG; lo imprime la app.
+     * 1=POWERON 2=EXT 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT 7=WDT 9=BROWNOUT 10=SDIO */
+    ESP_LOGW(TAG, "### MOTIVO ULTIMO REINICIO: %d ###", (int)esp_reset_reason());
+
     /* --- Chip info --- */
     logSection("LVGL init start");
     esp_chip_info_t chip_info;

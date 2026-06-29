@@ -87,7 +87,10 @@ static esp_err_t mount_sd(void)
             ESP_LOGW(TAG, "ldo_acquire ch4 failed: %s", esp_err_to_name(ldo_err));
         } else {
             ESP_LOGI(TAG, "TF_VCC LDO ch4 @ 3300 mV ON");
-            vTaskDelay(pdMS_TO_TICKS(10));
+            /* 100 ms para que el rail 3V3 de la SD estabilice ANTES de montar.
+             * 10 ms era muy poco: en arranques marginales la tarjeta aun no
+             * respondia -> timeout intermitente. (La camara dejo el rail justo.) */
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -272,10 +275,10 @@ esp_err_t datalogger_init(void)
     if (mount_sd() == ESP_OK) {
         s_sd_mounted = true;
         start_flush_timer();
-    } else {
-        /* UN intento diferido a 15s (sin hammering, fuera del arranque del C6). */
-        xTaskCreate(sd_deferred_mount_task, "sd_defer", 4096, NULL, 2, NULL);
     }
+    /* NO reintentar (ni diferido ni en background): cualquier acceso a la SD
+     * mientras el C6 usa el bus SDMMC compartido lo desestabiliza. Si la SD no
+     * monta este arranque, montara en el siguiente. */
 
     ESP_LOGI(TAG, "Datalogger iniciado (RAM %d entradas, SD %s)",
              DATALOGGER_MAX_ENTRIES, s_sd_mounted ? "OK" : "no disponible");
