@@ -1,8 +1,27 @@
 #include "camera.h"
 #include "esp_video_init.h"
+#include "esp_cam_sensor_detect.h"
 #include "esp_log.h"
 
 static const char *TAG = "camera";
+
+/* SENSOR REAL DE ESTA BOARD: OmniVision OV02C10 (NO es un SC2336; la doc previa
+ * estaba equivocada). Identificado por bring-up:
+ *   - I2C (SCCB) en 0x36   (confirmado por el scan de abajo)
+ *   - chip ID 0x5602 en los registros 0x300A/0x300B
+ *   - salida RAW10 1920x1080, MIPI-CSI 2 lanes, ISP del P4
+ * El driver SC2336 leia SUS registros (0x3107/0x3108) y obtenia basura (0x2101),
+ * por eso fallaba la deteccion.
+ *
+ * PROBLEMA: esp_cam_sensor NO trae driver OV02C10 (verificado en v2.2.0 y en el
+ * master de esp-video-components). Hay que portarlo (sub-proyecto aparte). Cuando
+ * exista ov02c10_detect(), se enganchara con el MISMO mecanismo validado aqui:
+ *   extern esp_cam_sensor_device_t *ov02c10_detect(esp_cam_sensor_config_t *cfg);
+ *   ESP_CAM_SENSOR_DETECT_FN(ov02c10_jc036, ESP_CAM_SENSOR_MIPI_CSI, 0x36) {
+ *       return ov02c10_detect(config);
+ *   }
+ * (esp_video itera estos registros y usa detect->sccb_addr para crear el SCCB.)
+ * El auto-detect del SC2336 queda desactivado en sdkconfig para no ensuciar logs. */
 
 esp_err_t camera_init(i2c_master_bus_handle_t i2c)
 {
