@@ -13,6 +13,7 @@
 #include "esp_heap_caps.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -20,6 +21,12 @@ static const char *TAG = "camera";
 
 #define CAM_DEV_PATH    "/dev/video0"
 #define CAM_STREAM_BUFS 2
+
+/* Brillo del sensor (controles V4L2, no software). Exposicion en lineas
+ * (VTS 2-lane = 2328 -> max util ~2320) y ganancia analogica (rango OV02C10
+ * 0x10-0xf8 = 1x-15.5x). Subidos para que la foto no salga oscura. Tunear aqui. */
+#define CAM_EXPOSURE  1600
+#define CAM_AGAIN     0x60
 
 /* Luminosidad media del frame (0-255), suavizada. La actualiza camera_stream_task
  * y la consume el auto-brillo. s_luma_valid=true cuando hay al menos un frame. */
@@ -51,26 +58,80 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
     return cnt ? (uint8_t)((sum / cnt) >> 2) : 0;  /* 0-1023 -> 0-255 */
 }
 
-/* ── Thumbnail en escala de grises (para snapshot HTTP) ──────────────────────
+/* ── Thumbnail en COLOR (debayer BGGR -> RGB, para snapshot HTTP) ─────────────
  * El frame es RAW10 MIPI-packed: 4 pixeles en 5 bytes; los 4 primeros bytes de
- * cada grupo son los 8 MSB de 4 pixeles consecutivos -> los usamos como gris.
- * Doble buffer en PSRAM: la tarea escribe en el inactivo y publica el indice. */
+ * cada grupo son los 8 MSB de 4 pixeles -> los usamos (8 bits limpios).
+ * Bayer BGGR: en la celda 2x2 -> B(par,par) G(impar,par)+(par,impar) R(impar,impar).
+ * Guardamos en orden BGR (el de BMP), 3 bytes/px, doble buffer en PSRAM. */
 #define SRC_W    1928
 #define SRC_H    1092
 #define THUMB_W  482
 #define THUMB_H  273
-static uint8_t      *s_thumb[2]   = { NULL, NULL };
-static volatile int  s_thumb_act  = -1;   /* -1 = aun sin frame */
+static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
+static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
 
-static void downscale_gray(const uint8_t *p, uint32_t bytes, uint8_t *dst)
+/* Byte MSB (8 bits) del pixel (x,y) del RAW10 MIPI-packed. */
+static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
 {
+    uint32_t off = (uint32_t)y * stride + (uint32_t)(x >> 2) * 5 + (uint32_t)(x & 3);
+    return (off < bytes) ? p[off] : 0;
+}
+
+/* LUT de gamma (~0.5, raiz cuadrada) para SUBIR las sombras de la foto sin
+ * reventar las altas luces. Solo afecta a la imagen mostrada, NO al frame_luma
+ * (que lee el frame crudo) -> el auto-brillo no se ve afectado. */
+static uint8_t s_gamma_lut[256];
+static bool    s_gamma_ready = false;
+static void gamma_init(void)
+{
+    for (int i = 0; i < 256; i++) {
+        s_gamma_lut[i] = (uint8_t)(sqrtf((float)i / 255.0f) * 255.0f + 0.5f);
+    }
+    s_gamma_ready = true;
+}
+
+static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
+{
+    if (!s_gamma_ready) gamma_init();
     uint32_t stride = bytes / SRC_H;   /* ~2410 para RAW10 1928 packed */
+
+    /* Pase 1: balance de blancos gray-world. Medias de cada canal (muestra coarse)
+     * -> ganancias para igualar R y B al verde. Quita el tinte (rojizo con luz
+     * calida). En lineal, ANTES de la gamma. */
+    uint64_t sB = 0, sG = 0, sR = 0;
+    uint32_t n = 0;
+    for (int oy = 0; oy < THUMB_H; oy += 4) {
+        int sy = (oy * SRC_H / THUMB_H) & ~1;
+        for (int ox = 0; ox < THUMB_W; ox += 4) {
+            int sx = (ox * SRC_W / THUMB_W) & ~1;
+            sB += raw_px(p, bytes, stride, sx, sy);
+            sG += ((int)raw_px(p, bytes, stride, sx + 1, sy) +
+                   (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
+            sR += raw_px(p, bytes, stride, sx + 1, sy + 1);
+            n++;
+        }
+    }
+    float mB = n ? (float)sB / n : 1, mG = n ? (float)sG / n : 1, mR = n ? (float)sR / n : 1;
+    float gB = (mB > 1.0f) ? mG / mB : 1.0f;
+    float gR = (mR > 1.0f) ? mG / mR : 1.0f;
+    if (gB > 4.0f) gB = 4.0f;
+    if (gB < 0.25f) gB = 0.25f;
+    if (gR > 4.0f) gR = 4.0f;
+    if (gR < 0.25f) gR = 0.25f;
+
+    /* Pase 2: debayer + ganancias WB + gamma. */
     for (int oy = 0; oy < THUMB_H; oy++) {
-        int sy = oy * SRC_H / THUMB_H;
+        int sy = (oy * SRC_H / THUMB_H) & ~1;   /* alinear al inicio de la celda 2x2 */
         for (int ox = 0; ox < THUMB_W; ox++) {
-            int sx = ox * SRC_W / THUMB_W;
-            uint32_t off = (uint32_t)sy * stride + (uint32_t)(sx >> 2) * 5 + (sx & 3);
-            dst[oy * THUMB_W + ox] = (off < bytes) ? p[off] : 0;
+            int sx = (ox * SRC_W / THUMB_W) & ~1;
+            int b = (int)(raw_px(p, bytes, stride, sx, sy) * gB);
+            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
+                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
+            int r = (int)(raw_px(p, bytes, stride, sx + 1, sy + 1) * gR);
+            if (b > 255) b = 255;
+            if (r > 255) r = 255;
+            uint8_t *d = &dst[((uint32_t)oy * THUMB_W + ox) * 3];
+            d[0] = s_gamma_lut[b]; d[1] = s_gamma_lut[g]; d[2] = s_gamma_lut[r];   /* BGR + WB + gamma */
         }
     }
 }
@@ -79,11 +140,11 @@ bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
 {
     int act = s_thumb_act;
     if (act < 0 || s_thumb[act] == NULL) return false;
-    const uint8_t *src = s_thumb[act];
+    const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 bytes por fila */
 
-    const uint32_t row_padded = (THUMB_W + 3) & ~3u;       /* filas a multiplo de 4 */
-    const uint32_t pal        = 256 * 4;
-    const uint32_t off_bits   = 14 + 40 + pal;
+    const uint32_t row_bytes  = (uint32_t)THUMB_W * 3;
+    const uint32_t row_padded = (row_bytes + 3) & ~3u;    /* filas a multiplo de 4 */
+    const uint32_t off_bits   = 14 + 40;                  /* 24-bit: sin paleta */
     const uint32_t img_size   = row_padded * THUMB_H;
     const uint32_t file_size  = off_bits + img_size;
 
@@ -102,24 +163,32 @@ bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
     bmp[18] = THUMB_W & 0xff; bmp[19] = (THUMB_W >> 8) & 0xff;
     bmp[22] = THUMB_H & 0xff; bmp[23] = (THUMB_H >> 8) & 0xff;
     bmp[26] = 1;                 /* planes */
-    bmp[28] = 8;                 /* bpp */
+    bmp[28] = 24;                /* bpp (color BGR) */
     bmp[34] = img_size & 0xff; bmp[35] = (img_size >> 8) & 0xff;
     bmp[36] = (img_size >> 16) & 0xff; bmp[37] = (img_size >> 24) & 0xff;
-    bmp[46] = 0; bmp[47] = 1;    /* clrUsed = 256 */
-    /* Paleta de grises */
-    for (int i = 0; i < 256; i++) {
-        uint8_t *e = &bmp[54 + i * 4];
-        e[0] = e[1] = e[2] = (uint8_t)i; e[3] = 0;
-    }
-    /* Pixeles, bottom-up */
+    /* clrUsed = 0 (24-bit no usa paleta) */
+
+    /* Pixeles, bottom-up, BGR */
     for (int y = 0; y < THUMB_H; y++) {
         uint8_t *row = &bmp[off_bits + (uint32_t)(THUMB_H - 1 - y) * row_padded];
-        memcpy(row, &src[y * THUMB_W], THUMB_W);
+        memcpy(row, &src[(uint32_t)y * row_bytes], row_bytes);
     }
 
     *out = bmp;
     *out_len = file_size;
     return true;
+}
+
+/* Fija un control V4L2 del sensor (exposicion/ganancia) y loguea el resultado. */
+static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
+{
+    struct v4l2_ext_control c = { .id = id, .value = val };
+    struct v4l2_ext_controls cs = { .ctrl_class = V4L2_CTRL_CLASS_USER, .count = 1, .controls = &c };
+    if (ioctl(fd, VIDIOC_S_EXT_CTRLS, &cs) == 0) {
+        ESP_LOGI(TAG, "ctrl %s=%ld OK", name, (long)val);
+    } else {
+        ESP_LOGW(TAG, "ctrl %s=%ld no aplicado (errno=%d)", name, (long)val, errno);
+    }
 }
 
 /* Tarea de streaming continuo: mantiene el stream RAW10 abierto y mide la
@@ -181,10 +250,21 @@ static void camera_stream_task(void *arg)
     }
     ESP_LOGI(TAG, "stream: capturando RAW10 para luma/vigilancia");
 
-    /* Thumbnails para el snapshot HTTP (doble buffer en PSRAM). Si falla la
-     * reserva, seguimos solo con la luma. */
-    s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H, MALLOC_CAP_SPIRAM);
-    s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H, MALLOC_CAP_SPIRAM);
+    /* Subir exposicion y ganancia del sensor para que la imagen no salga oscura. */
+    cam_set_ctrl(fd, V4L2_CID_EXPOSURE, CAM_EXPOSURE, "exposure");
+    if (ioctl(fd, VIDIOC_S_EXT_CTRLS, &(struct v4l2_ext_controls){
+                  .ctrl_class = V4L2_CTRL_CLASS_USER, .count = 1,
+                  .controls = &(struct v4l2_ext_control){ .id = V4L2_CID_ANALOGUE_GAIN, .value = CAM_AGAIN } }) == 0) {
+        ESP_LOGI(TAG, "ctrl anag=0x%x OK", CAM_AGAIN);
+    } else {
+        /* Algunos pipelines exponen la ganancia como V4L2_CID_GAIN. */
+        cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_AGAIN, "gain");
+    }
+
+    /* Thumbnails RGB (BGR) para el snapshot HTTP (doble buffer en PSRAM). Si falla
+     * la reserva, seguimos solo con la luma. */
+    s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
+    s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
 
     uint32_t ema = 0;
     bool first = true;
@@ -207,7 +287,7 @@ static void camera_stream_task(void *arg)
             /* Refrescar el thumbnail cada 4 frames (~9 Hz, de sobra para snapshot). */
             if (s_thumb[0] && s_thumb[1] && (++fcount & 3) == 0) {
                 int back = (s_thumb_act == 0) ? 1 : 0;
-                downscale_gray(buf[b.index], b.bytesused, s_thumb[back]);
+                downscale_rgb(buf[b.index], b.bytesused, s_thumb[back]);
                 s_thumb_act = back;   /* publicar */
             }
 
@@ -217,15 +297,16 @@ static void camera_stream_task(void *arg)
             if (!s_snap_done && s_thumb_act >= 0 && fcount >= 40) {
                 s_snap_done = true;
                 const uint8_t *t = s_thumb[s_thumb_act];
+                const int n = THUMB_W * THUMB_H * 3;   /* BGR */
                 uint8_t mn = 255, mx = 0;
                 uint32_t sum = 0;
-                for (int i = 0; i < THUMB_W * THUMB_H; i++) {
+                for (int i = 0; i < n; i++) {
                     if (t[i] < mn) mn = t[i];
                     if (t[i] > mx) mx = t[i];
                     sum += t[i];
                 }
-                ESP_LOGI(TAG, "snapshot stats: %dx%d min=%u max=%u mean=%u",
-                         THUMB_W, THUMB_H, mn, mx, (unsigned)(sum / (THUMB_W * THUMB_H)));
+                ESP_LOGI(TAG, "snapshot stats(color): %dx%d min=%u max=%u mean=%u",
+                         THUMB_W, THUMB_H, mn, mx, (unsigned)(sum / n));
                 uint8_t *bmp = NULL;
                 size_t blen = 0;
                 if (camera_snapshot_bmp(&bmp, &blen)) {
