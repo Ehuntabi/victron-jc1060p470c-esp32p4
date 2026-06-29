@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
+#include <sys/stat.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -242,9 +244,30 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
     }
 }
 
-/* Tarea de streaming continuo: mantiene el stream RAW10 abierto y mide la
- * luminosidad media por frame (con suavizado EMA). Es la base del auto-brillo y
- * (proxima iteracion) de la deteccion de movimiento del modo vigilancia. */
+/* ── Vigilancia por movimiento (modo ausente) ───────────────────────────────
+ * Rejilla de luma muestreada del frame; se compara con la anterior contando
+ * celdas que cambian mas de MOT_CELL_DIFF (robusto al grano). Si bastantes
+ * celdas cambian -> movimiento -> foto a SD (rate-limited por cooldown). */
+#define MOT_GW            32
+#define MOT_GH            18
+#define MOT_CELL_DIFF     35     /* diff por celda (0-255) que cuenta como cambio */
+#define MOT_CELL_COUNT    12     /* nº de celdas cambiadas para declarar movimiento */
+#define MOT_COOLDOWN_MS   4000   /* min entre fotos */
+#define MOT_MAX_PHOTOS    300    /* tope por sesion (no llenar la SD) */
+
+static volatile bool s_surveillance = false;
+static volatile bool s_mot_reset    = false;
+
+void camera_set_surveillance(bool on)
+{
+    s_surveillance = on;
+    s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
+    ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
+}
+
+/* Tarea de streaming continuo: mantiene el stream RAW10 abierto, mide luminosidad
+ * (auto-brillo), refresca el thumbnail (snapshot HTTP) y, en modo vigilancia,
+ * detecta movimiento y guarda fotos a SD. */
 static void camera_stream_task(void *arg)
 {
     int fd = open(CAM_DEV_PATH, O_RDONLY);
@@ -368,6 +391,66 @@ static void camera_stream_task(void *arg)
                     }
                     free(bmp);
                 }
+            }
+
+            /* Vigilancia (modo ausente): deteccion de movimiento + foto a SD. */
+            if (s_surveillance && (fcount & 3) == 0) {
+                static uint8_t  prev_grid[MOT_GW * MOT_GH];
+                static bool     have_prev = false;
+                static int64_t  last_photo_us = 0;
+                static int      photo_count = 0;
+                uint32_t stride = b.bytesused / SRC_H;
+                uint8_t grid[MOT_GW * MOT_GH];
+                for (int gy = 0; gy < MOT_GH; gy++) {
+                    int y = gy * SRC_H / MOT_GH;
+                    for (int gx = 0; gx < MOT_GW; gx++) {
+                        int x = gx * SRC_W / MOT_GW;
+                        grid[gy * MOT_GW + gx] = raw_px(buf[b.index], b.bytesused, stride, x, y);
+                    }
+                }
+                if (s_mot_reset) { have_prev = false; s_mot_reset = false; }
+                if (have_prev) {
+                    int changed = 0;
+                    for (int i = 0; i < MOT_GW * MOT_GH; i++) {
+                        int d = (int)grid[i] - (int)prev_grid[i];
+                        if (d < 0) d = -d;
+                        if (d > MOT_CELL_DIFF) changed++;
+                    }
+                    int64_t now = esp_timer_get_time();
+                    if (changed >= MOT_CELL_COUNT &&
+                        (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
+                        photo_count < MOT_MAX_PHOTOS) {
+                        last_photo_us = now;
+                        uint8_t *bmp = NULL;
+                        size_t blen = 0;
+                        if (camera_snapshot_bmp(&bmp, &blen)) {
+                            mkdir("/sdcard/vigilancia", 0777);
+                            time_t t = time(NULL);
+                            struct tm tmv;
+                            localtime_r(&t, &tmv);
+                            char path[80];
+                            snprintf(path, sizeof(path),
+                                     "/sdcard/vigilancia/%04d%02d%02d-%02d%02d%02d.bmp",
+                                     tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+                                     tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+                            FILE *f = fopen(path, "wb");
+                            if (f) {
+                                fwrite(bmp, 1, blen, f);
+                                fclose(f);
+                                photo_count++;
+                                ESP_LOGI(TAG, "vigilancia: movimiento (%d celdas) -> foto %d %s",
+                                         changed, photo_count, path);
+                            } else {
+                                ESP_LOGW(TAG, "vigilancia: no pude guardar %s", path);
+                            }
+                            free(bmp);
+                        }
+                        /* TODO(video): ademas de la foto, arrancar grabacion H.264 de N
+                         * segundos aqui (esp_h264) -> /sdcard/vigilancia/...h264. */
+                    }
+                }
+                memcpy(prev_grid, grid, sizeof(grid));
+                have_prev = true;
             }
         }
         ioctl(fd, VIDIOC_QBUF, &b);

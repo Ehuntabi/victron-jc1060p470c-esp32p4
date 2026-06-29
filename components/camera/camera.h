@@ -23,10 +23,13 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);
 
-/* Genera un BMP de 8 bits en escala de grises (thumbnail del ultimo frame) en un
- * buffer recien reservado (PSRAM). El que llama debe hacer free(*out). Devuelve
- * false si aun no hay frame. Util para verificar la captura desde HTTP. */
+/* Genera un BMP de 8/24 bits del ultimo frame en un buffer recien reservado
+ * (PSRAM). El que llama debe hacer free(*out). false si aun no hay frame. */
 bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
+
+/* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta
+ * movimiento y guarda fotos a /sdcard/vigilancia. Lo llama el modo ausente. */
+void camera_set_surveillance(bool on);
 
 #ifdef __cplusplus
 }

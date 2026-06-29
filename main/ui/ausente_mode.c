@@ -1,6 +1,7 @@
 #include "ausente_mode.h"
 #include "esp_log.h"
 #include <lvgl.h>
+#include "camera.h"
 
 /* Definido en main.c: re-aplica el brillo segun la arbitracion actual
  * (night_mode_timer_cb). Lo llamamos al entrar/salir para efecto inmediato. */
@@ -82,9 +83,10 @@ static void activate(void)
     clear_countdown();
     create_guard();
     brightness_apply_now();  /* -> night_mode_timer_cb pone brillo 0 (ausente_is_active) */
-    ESP_LOGI(TAG, "modo ausente ACTIVO (pantalla apagada)");
-    /* TODO(vigilancia): arrancar aqui la deteccion de movimiento + captura de
-     * foto/video (reusar camera_stream_task; engancha cuando ausente_is_active()). */
+    camera_set_surveillance(true);   /* movimiento -> foto a /sdcard/vigilancia */
+    ESP_LOGI(TAG, "modo ausente ACTIVO (pantalla apagada, vigilancia ON)");
+    /* TODO(video): la captura de FOTO ya va; falta arrancar tambien grabacion de
+     * video H.264 por evento (ver TODO en camera_stream_task). */
 }
 
 static void countdown_cb(lv_timer_t *t)
@@ -136,8 +138,8 @@ void ausente_request(bool on)
             s_state = AUS_OFF;
             destroy_guard();
             brightness_apply_now();  /* restaura el brillo normal */
+            camera_set_surveillance(false);   /* parar vigilancia */
             ESP_LOGI(TAG, "modo ausente DESACTIVADO (4 toques esquina)");
-            /* TODO(vigilancia): parar deteccion de movimiento + captura. */
         }
     }
 }
