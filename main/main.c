@@ -96,7 +96,10 @@ static bool s_auto_brightness = true;
 static int luma_to_brightness(uint8_t luma)
 {
     const int MINB  = 12;   /* nunca por debajo (visibilidad) */
-    const int SCALE = 150;  /* luma a la que se alcanza el 100% (calibrable) */
+    /* SCALE = luma a la que se alcanza el 100%. La camara va con ganancia ~7x
+     * (para la foto), que sube la luma -> SCALE alto para no saturar el brillo.
+     * Recalibrar si se cambia la ganancia. La direccion (tenue->tenue) se mantiene. */
+    const int SCALE = 300;
     int b = MINB + (int)luma * (100 - MINB) / SCALE;
     if (b > 100) b = 100;
     if (b < MINB) b = MINB;
