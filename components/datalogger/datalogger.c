@@ -112,15 +112,28 @@ static esp_err_t mount_sd(void)
      * una ventana en que el C6 esta libre. (La SD y el guardado funcionan; era solo
      * la fiabilidad del montaje.) */
     esp_err_t err = ESP_FAIL;
-    for (int i = 0; i < 8 && err != ESP_OK; i++) {
-        err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "SD mount intento %d/8: %s", i + 1, esp_err_to_name(err));
-            vTaskDelay(pdMS_TO_TICKS(250));
+    for (int batch = 0; batch < 3 && err != ESP_OK; batch++) {
+        if (batch > 0 && s_sd_ldo) {
+            /* Power-cycle de la SD (LDO ch4 off/on): da un arranque limpio de la
+             * tarjeta si el bus quedo en mal estado por la contienda con el C6. */
+            esp_ldo_release_channel(s_sd_ldo);
+            s_sd_ldo = NULL;
+            vTaskDelay(pdMS_TO_TICKS(80));
+            esp_ldo_channel_config_t ldo_cfg = { .chan_id = 4, .voltage_mv = 3300 };
+            if (esp_ldo_acquire_channel(&ldo_cfg, &s_sd_ldo) == ESP_OK) {
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+        }
+        for (int i = 0; i < 5 && err != ESP_OK; i++) {
+            err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "SD mount b%d/i%d: %s", batch + 1, i + 1, esp_err_to_name(err));
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }
         }
     }
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "SD mount failed tras 8 intentos: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "SD mount failed tras 15 intentos: %s", esp_err_to_name(err));
         return err;
     }
     ESP_LOGI(TAG, "SD montada OK");
