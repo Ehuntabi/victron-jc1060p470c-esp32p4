@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Arranque de sesion de desarrollo (ejecutar al sentarte en CUALQUIER PC).
+# Sincroniza con GitHub y deja el entorno listo para compilar de forma consistente.
+#   Uso:  ./dev-start.sh
+set -euo pipefail
+cd "$(dirname "$0")"
+
+REL='path: components/espressif__esp_hosted'
+# El esp_hosted local se guarda con ruta RELATIVA en el lock; cada build la
+# absolutiza a la ruta de su maquina. La re-relativizamos para que el pull no choque.
+sed -i -E "s#path: .*/components/espressif__esp_hosted#${REL}#" dependencies.lock 2>/dev/null || true
+
+# Si queda algo sin commitear (p.ej. sdkconfig de un build), apartarlo para poder pull.
+STASHED=0
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "[dev-start] hay cambios locales sin guardar -> git stash temporal"
+  git stash push -u -m "dev-start auto" >/dev/null && STASHED=1
+fi
+
+echo "[dev-start] git pull --rebase..."
+before=$(git rev-parse HEAD)
+git pull --rebase
+after=$(git rev-parse HEAD)
+
+[ "$STASHED" = 1 ] && { echo "[dev-start] recuperando cambios (stash pop)"; git stash pop || true; }
+
+# Si el pull trajo cambios en las dependencias o el sdkconfig, regenerar componentes.
+if [ "$before" != "$after" ] && git diff --name-only "$before" "$after" | grep -qE '^(dependencies\.lock|sdkconfig)$'; then
+  echo "[dev-start] cambiaron dependencies.lock/sdkconfig -> borrando managed_components + build (se regeneran)"
+  rm -rf managed_components build
+fi
+
+echo "[dev-start] LISTO. Para compilar/flashear:"
+echo "    . ~/.espressif/esp-idf-5.4/export.sh   # (o tu export del IDF)"
+echo "    idf.py build && idf.py -p /dev/ttyACM0 flash monitor"

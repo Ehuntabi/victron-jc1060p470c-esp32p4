@@ -43,7 +43,7 @@ dependencies:
   espressif/esp_hosted:
     dependencies: []
     source:
-      path: /home/db3/joint/victron/components/espressif__esp_hosted
+      path: components/espressif__esp_hosted
       type: local
     version: 0.0.27
   espressif/esp_lcd_touch:
