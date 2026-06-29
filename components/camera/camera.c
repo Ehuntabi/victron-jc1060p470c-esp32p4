@@ -409,16 +409,20 @@ static void camera_stream_task(void *arg)
                 }
                 if (s_mot_reset) { have_prev = false; s_mot_reset = false; }
                 if (have_prev) {
-                    int changed = 0;
+                    int changed = 0, maxd = 0, sumv = 0;
                     for (int i = 0; i < MOT_GW * MOT_GH; i++) {
                         int d = (int)grid[i] - (int)prev_grid[i];
                         if (d < 0) d = -d;
                         if (d > MOT_CELL_DIFF) changed++;
+                        if (d > maxd) maxd = d;
+                        sumv += grid[i];
                     }
-                    static int s_diag = 0;
-                    if ((++s_diag & 7) == 0)
-                        ESP_LOGI(TAG, "vigilancia activa: movimiento=%d celdas (captura si >=%d)",
-                                 changed, MOT_CELL_COUNT);
+                    /* DIAGNOSTICO rico (cada frame de vigilancia ~1.5s): mov=celdas que
+                     * cambian, maxdiff=mayor cambio de una celda (vs umbral MOT_CELL_DIFF),
+                     * brillo=valor medio (si ~0 la escena esta oscura). */
+                    ESP_LOGI(TAG, "vig: mov=%d(>=%d capta) maxdiff=%d(umbral %d) brillo=%d",
+                             changed, MOT_CELL_COUNT, maxd, MOT_CELL_DIFF,
+                             sumv / (MOT_GW * MOT_GH));
                     int64_t now = esp_timer_get_time();
                     if (changed >= MOT_CELL_COUNT &&
                         (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
