@@ -34,7 +34,8 @@ idf_component_register(
     json                 # cJSON para backup/restore de configuracion
     mbedtls              # base64 encode para BasicAuth HTTP
     esp_app_format       # esp_app_get_description() para la pagina About
-    camera               # MIPI-CSI SC2336 (Hito 1: bring-up + auto-brillo)
+    camera               # MIPI-CSI (Hito 1: bring-up + auto-brillo)
+    ov02c10              # driver local del sensor OV02C10 (detect a 0x36)
 )
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE

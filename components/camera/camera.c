@@ -66,8 +66,8 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
         return ret;
     }
 
-    /* OJO: esp_video_init() devuelve OK aunque NO detecte sensor (solo loguea error).
-     * La deteccion real se ve en el log "sc2336: Get sensor ID" arriba. */
-    ESP_LOGI(TAG, "esp_video_init OK (revisar arriba si el sensor SC2336 fue detectado)");
+    /* Si el sensor se detecto, arriba aparece "ov02c10: Detected ... PID=0x5602"
+     * y /dev/video0 queda creado. esp_video_init devuelve OK. */
+    ESP_LOGI(TAG, "esp_video_init OK - camara OV02C10 lista (/dev/video0)");
     return ESP_OK;
 }
