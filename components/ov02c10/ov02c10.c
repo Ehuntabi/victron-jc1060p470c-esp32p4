@@ -116,7 +116,8 @@ static const esp_cam_sensor_format_t ov02c10_format_info_mipi[] = {
         .fps = 30,
         .isp_info = &ov02c10_isp_info_mipi,
         .mipi_info = {
-            .mipi_clk = 400000000,  /* clock lane = data_rate/2 (DDR): 800 Mbps/lane -> 400 MHz */
+            .mipi_clk = 800000000,  /* esp_video usa este campo como BIT RATE del lane (/1e6 -> Mbps).
+                                       OV02C10 2-lane = 800 Mbps/lane. (NO es la freq del clock lane.) */
             .lane_num = 2,
             .line_sync_en = false,
         },
@@ -306,6 +307,8 @@ static esp_err_t ov02c10_query_support_capability(esp_cam_sensor_device_t *dev, 
     return 0;
 }
 
+static esp_err_t ov02c10_soft_reset(esp_cam_sensor_device_t *dev);
+
 static esp_err_t ov02c10_set_format(esp_cam_sensor_device_t *dev, const esp_cam_sensor_format_t *format)
 {
     ESP_CAM_SENSOR_NULL_POINTER_CHECK(TAG, dev);
@@ -315,6 +318,11 @@ static esp_err_t ov02c10_set_format(esp_cam_sensor_device_t *dev, const esp_cam_
     if (format == NULL) {
         format = &ov02c10_format_info_mipi[0];
     }
+
+    /* Soft-reset (0x0103=0x01) antes del init: el driver Linux hace reset HW antes
+     * de configurar; aqui reset_pin=-1, asi que ponemos el sensor en estado conocido
+     * por SCCB. Sin esto puede quedar con la salida MIPI deshabilitada. */
+    ov02c10_soft_reset(dev);
 
     ret = ov02c10_write_array(dev->sccb_handle, (const ov02c10_reginfo_t *)format->regs);
     if (ret != ESP_OK) {

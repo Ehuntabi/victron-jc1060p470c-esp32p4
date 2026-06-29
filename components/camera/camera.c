@@ -204,7 +204,9 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
         },
         .reset_pin     = -1,
         .pwdn_pin      = -1,
-        .dont_init_ldo = false,
+        /* El DSI ya enciende el LDO MIPI compartido (ch3 @ 2.5V). Que esp_video NO
+         * lo reinicialice (evita doble-acquire del LDO del CSI D-PHY). */
+        .dont_init_ldo = true,
     };
 
     const esp_video_init_config_t cfg = {
@@ -222,11 +224,8 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
      * y /dev/video0 queda creado. esp_video_init devuelve OK. */
     ESP_LOGI(TAG, "esp_video_init OK - camara OV02C10 lista (/dev/video0)");
 
-    /* Self-test de captura DESACTIVADO: el sensor se detecta (chip ID 0x5602) y el
-     * pipeline CSI se arma bien, pero el sensor aun NO entrega frames por MIPI
-     * (bring-up de streaming pendiente; ver memoria/commit). Cuando se resuelva,
-     * reactivar: xTaskCreate(camera_selftest_task, "cam_selftest", 6144, NULL, 4, NULL); */
-    (void)camera_selftest_task;
+    /* Self-test de captura (validacion de bring-up de streaming). */
+    xTaskCreate(camera_selftest_task, "cam_selftest", 6144, NULL, 4, NULL);
 
     return ESP_OK;
 }
