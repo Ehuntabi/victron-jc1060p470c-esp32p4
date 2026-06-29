@@ -26,7 +26,9 @@ static const char *TAG = "camera";
  * (VTS 2-lane = 2328 -> max util ~2320) y ganancia analogica (rango OV02C10
  * 0x10-0xf8 = 1x-15.5x). Subidos para que la foto no salga oscura. Tunear aqui. */
 #define CAM_EXPOSURE  1600
-#define CAM_AGAIN     0x60
+/* Ganancia del OV02C10 = INDICE en su mapa (ov02c10_again_map, 0..58 = 1x..15.5x),
+ * se fija con V4L2_CID_GAIN. 24 ~= 7x (sube el sujeto a contraluz). Tunear aqui. */
+#define CAM_GAIN_IDX  24
 
 /* Luminosidad media del frame (0-255), suavizada. La actualiza camera_stream_task
  * y la consume el auto-brillo. s_luma_valid=true cuando hay al menos un frame. */
@@ -83,7 +85,7 @@ static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, 
  * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
  * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
  * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
-#define CAM_GAMMA 0.85f
+#define CAM_GAMMA 0.65f
 static uint8_t s_gamma_lut[256];
 static bool    s_gamma_ready = false;
 static void gamma_init(void)
@@ -100,13 +102,17 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     uint32_t stride = bytes / SRC_H;   /* ~2410 para RAW10 1928 packed */
 
     /* Pase 1: balance de blancos gray-world (medias de canal) + histograma de luma
-     * para auto-niveles. Muestra coarse (1 de cada 4x4). */
+     * para auto-niveles. Muestra coarse (1 de cada 4x4) y SOLO de la zona CENTRAL
+     * (50% central): medicion ponderada al centro -> expone para el sujeto del
+     * primer plano e ignora un contraluz/ventana de los bordes. */
     uint64_t sB = 0, sG = 0, sR = 0;
     uint32_t n = 0;
     uint32_t hist[256] = {0};
-    for (int oy = 0; oy < THUMB_H; oy += 4) {
+    const int cy0 = THUMB_H / 4, cy1 = THUMB_H - THUMB_H / 4;
+    const int cx0 = THUMB_W / 4, cx1 = THUMB_W - THUMB_W / 4;
+    for (int oy = cy0; oy < cy1; oy += 4) {
         int sy = (oy * SRC_H / THUMB_H) & ~1;
-        for (int ox = 0; ox < THUMB_W; ox += 4) {
+        for (int ox = cx0; ox < cx1; ox += 4) {
             int sx = (ox * SRC_W / THUMB_W) & ~1;
             int b = raw_px(p, bytes, stride, sx, sy);
             int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
@@ -274,16 +280,10 @@ static void camera_stream_task(void *arg)
     }
     ESP_LOGI(TAG, "stream: capturando RAW10 para luma/vigilancia");
 
-    /* Subir exposicion y ganancia del sensor para que la imagen no salga oscura. */
+    /* Subir exposicion y ganancia del sensor para que la imagen no salga oscura.
+     * La ganancia del OV02C10 se fija por INDICE con V4L2_CID_GAIN. */
     cam_set_ctrl(fd, V4L2_CID_EXPOSURE, CAM_EXPOSURE, "exposure");
-    if (ioctl(fd, VIDIOC_S_EXT_CTRLS, &(struct v4l2_ext_controls){
-                  .ctrl_class = V4L2_CTRL_CLASS_USER, .count = 1,
-                  .controls = &(struct v4l2_ext_control){ .id = V4L2_CID_ANALOGUE_GAIN, .value = CAM_AGAIN } }) == 0) {
-        ESP_LOGI(TAG, "ctrl anag=0x%x OK", CAM_AGAIN);
-    } else {
-        /* Algunos pipelines exponen la ganancia como V4L2_CID_GAIN. */
-        cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_AGAIN, "gain");
-    }
+    cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_GAIN_IDX, "gain(idx)");
 
     /* Thumbnails RGB (BGR) para el snapshot HTTP (doble buffer en PSRAM). Si falla
      * la reserva, seguimos solo con la luma. */
