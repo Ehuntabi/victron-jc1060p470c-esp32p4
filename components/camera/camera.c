@@ -28,7 +28,12 @@ static const char *TAG = "camera";
  * STREAMON unico, se consume 1 frame y se duerme: los buffers se llenan y el GDMA de
  * la camara se para por contrapresion -> SD libre entre frames. Tunear aqui. */
 #define CAM_IDLE_MS       2000 /* sleep normal entre frames -> GDMA parado -> SD libre */
-#define CAM_SURV_IDLE_MS  250  /* sleep en vigilancia (movimiento muestreado ~cada 0.3s) */
+/* Vigilancia: a 250ms el DMA de la camara era 8x mas frecuente -> chocaba con las
+ * escrituras de fondo a SD (datalogger/bathist/log_save) y un comando SD atascado
+ * retenia un spinlock >300ms -> INT WDT (reinicio). 1500ms da contension parecida al
+ * modo normal (probado estable). Movimiento muestreado cada ~1.5s (vale para detectar
+ * que alguien entra; cooldown entre fotos ya son 4s). */
+#define CAM_SURV_IDLE_MS  1500
 
 /* Brillo del sensor (controles V4L2, no software). Exposicion en lineas
  * (VTS 2-lane = 2328 -> max util ~2320) y ganancia analogica (rango OV02C10
