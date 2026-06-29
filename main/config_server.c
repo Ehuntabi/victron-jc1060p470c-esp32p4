@@ -601,6 +601,63 @@ static esp_err_t handle_snapshot(httpd_req_t *req) {
     return r;
 }
 
+// GET /vigilancia -> lista las capturas de movimiento; /vigilancia/<archivo> -> sirve el BMP.
+#define VIG_DIR "/sdcard/vigilancia"
+static esp_err_t handle_vigilancia(httpd_req_t *req) {
+    const char *uri = req->uri;
+    const char *fname = NULL;
+    if (strncmp(uri, "/vigilancia/", 12) == 0 && uri[12] != '\0') fname = uri + 12;
+
+    if (fname) {
+        /* Servir un fichero concreto. Validar nombre (sin .. ni /). */
+        if (strstr(fname, "..") || strchr(fname, '/')) {
+            httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
+            return ESP_FAIL;
+        }
+        char path[300];
+        snprintf(path, sizeof(path), "%s/%.240s", VIG_DIR, fname);
+        FILE *f = fopen(path, "rb");
+        if (!f) { httpd_resp_send_404(req); return ESP_FAIL; }
+        httpd_resp_set_type(req, "image/bmp");
+        char buf[4096]; size_t r;
+        while ((r = fread(buf, 1, sizeof(buf), f))) {
+            if (httpd_resp_send_chunk(req, buf, r) != ESP_OK) { fclose(f); return ESP_FAIL; }
+        }
+        fclose(f);
+        httpd_resp_send_chunk(req, NULL, 0);
+        return ESP_OK;
+    }
+
+    /* Listado HTML. */
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_sendstr_chunk(req,
+        "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>Vigilancia</title><style>body{font-family:sans-serif;background:#111;color:#eee;margin:0;"
+        "padding:12px}h2{margin:8px 0}a{color:#4FC3F7;display:block;padding:8px 0;border-bottom:1px solid "
+        "#333;text-decoration:none}</style></head><body><h2>Capturas de vigilancia</h2>");
+    DIR *d = opendir(VIG_DIR);
+    if (!d) {
+        httpd_resp_sendstr_chunk(req, "<p>Aun no hay capturas. Activa el modo ausente y muevete delante de la camara.</p>");
+    } else {
+        struct dirent *e; int count = 0; char line[400];
+        while ((e = readdir(d)) != NULL) {
+            const char *nm = e->d_name; size_t l = strlen(nm);
+            if (l > 4 && strcmp(nm + l - 4, ".bmp") == 0) {
+                snprintf(line, sizeof(line), "<a href='/vigilancia/%.120s'>%.120s</a>", nm, nm);
+                httpd_resp_sendstr_chunk(req, line);
+                count++;
+            }
+        }
+        closedir(d);
+        if (count == 0) httpd_resp_sendstr_chunk(req, "<p>Carpeta vacia: sin capturas aun.</p>");
+        else { snprintf(line, sizeof(line), "<p>%d capturas (nombre = fecha-hora).</p>", count);
+               httpd_resp_sendstr_chunk(req, line); }
+    }
+    httpd_resp_sendstr_chunk(req, "</body></html>");
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
     REQUIRE_AUTH(req);
@@ -1920,6 +1977,11 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_frigo_tar);
     httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
     httpd_register_uri_handler(server, &uri_data_bat_tar);
+    httpd_uri_t uri_vig = { .uri = "/vigilancia", .method = HTTP_GET, .handler = handle_vigilancia };
+    httpd_register_uri_handler(server, &uri_vig);
+    httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
+    httpd_register_uri_handler(server, &uri_vigf);
+
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
 
