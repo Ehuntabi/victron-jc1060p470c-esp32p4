@@ -73,8 +73,11 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
 #define THUMB_H  546
 static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
-/* Acumulador para promediado temporal (media movil ~8 frames): quita grano sin
- * perder brillo ni nitidez. Guarda el valor de display en 12.4 fijo (valor<<4). */
+/* Acumulador para promediado temporal (media movil anti-grano). Guarda el valor
+ * de display en 12.4 fijo (valor<<4). La constante = 2^CAM_EMA_SHIFT frames:
+ * mas = menos grano pero mas arrastre de movimiento. 8 arrastraba ("movida"),
+ * 4 es el compromiso. 1 = sin promediado. Tunear aqui. */
+#define CAM_EMA_SHIFT 2
 static uint16_t     *s_accum      = NULL;
 
 /* Byte MSB (8 bits) del pixel (x,y) del RAW10 MIPI-packed. */
@@ -169,9 +172,9 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             if (s_accum) {
                 /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. */
                 uint16_t *a = &s_accum[idx];
-                a[0] = a[0] - (a[0] >> 3) + (uint16_t)(fb << 1);
-                a[1] = a[1] - (a[1] >> 3) + (uint16_t)(fg << 1);
-                a[2] = a[2] - (a[2] >> 3) + (uint16_t)(fr << 1);
+                a[0] = a[0] - (a[0] >> CAM_EMA_SHIFT) + (uint16_t)(fb << (4 - CAM_EMA_SHIFT));
+                a[1] = a[1] - (a[1] >> CAM_EMA_SHIFT) + (uint16_t)(fg << (4 - CAM_EMA_SHIFT));
+                a[2] = a[2] - (a[2] >> CAM_EMA_SHIFT) + (uint16_t)(fr << (4 - CAM_EMA_SHIFT));
                 d[0] = a[0] >> 4;
                 d[1] = a[1] >> 4;
                 d[2] = a[2] >> 4;
