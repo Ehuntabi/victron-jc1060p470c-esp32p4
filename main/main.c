@@ -25,6 +25,7 @@
 #include "datalogger.h"
 #include "ui/frigo_panel.h"
 #include "camera.h"
+#include "ui/ausente_mode.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
@@ -106,40 +107,42 @@ static void night_mode_timer_cb(void *arg)
 {
     ui_state_t *ui = (ui_state_t *)arg;
     if (!ui) return;
-    /* El screensaver tiene precedencia: si está activo (incl. pantalla apagada),
-     * no pisamos su brillo. */
-    if (ui->screensaver.active) return;
 
-    /* Precedencia de brillo:
-     *   1) franja nocturna (atenuacion por horario) -> brillo nocturno.
-     *   2) auto-brillo por luminosidad de la camara.
-     *   3) brillo manual del usuario.
-     * El modo noche NUNCA lo pisa el auto-brillo (requisito del usuario). */
-    bool night_win = false;
-    if (ui->night_mode.enabled) {
-        time_t now = time(NULL);
-        if (now >= 1000000000L) {
-            struct tm tm_local;
-            localtime_r(&now, &tm_local);
-            night_win = night_hour_in_window(tm_local.tm_hour,
-                                             ui->night_mode.start_h,
-                                             ui->night_mode.end_h);
+    /* Solo aplicamos si el objetivo cambia (evita reescribir el duty del LEDC). */
+    static int s_last_target = -1;
+    int target;
+
+    if (ausente_is_active()) {
+        /* Modo ausente: precedencia MAXIMA -> pantalla apagada y se mantiene asi. */
+        target = 0;
+    } else if (ui->screensaver.active) {
+        /* El screensaver gestiona su propio brillo. */
+        return;
+    } else {
+        /* Precedencia: franja nocturna (atenuacion por horario) > auto-brillo por
+         * luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
+         * el auto-brillo (requisito del usuario). */
+        bool night_win = false;
+        if (ui->night_mode.enabled) {
+            time_t now = time(NULL);
+            if (now >= 1000000000L) {
+                struct tm tm_local;
+                localtime_r(&now, &tm_local);
+                night_win = night_hour_in_window(tm_local.tm_hour,
+                                                 ui->night_mode.start_h,
+                                                 ui->night_mode.end_h);
+            }
+        }
+        uint8_t luma;
+        if (night_win) {
+            target = ui->night_mode.brightness;
+        } else if (s_auto_brightness && camera_get_luma(&luma)) {
+            target = luma_to_brightness(luma);
+        } else {
+            target = ui->brightness;
         }
     }
 
-    int target;
-    uint8_t luma;
-    if (night_win) {
-        target = ui->night_mode.brightness;
-    } else if (s_auto_brightness && camera_get_luma(&luma)) {
-        target = luma_to_brightness(luma);
-    } else {
-        target = ui->brightness;
-    }
-
-    /* Solo aplicar si cambia: bsp_display_brightness_set actualiza el duty del
-     * LEDC; llamarlo con el mismo valor es trabajo inutil. */
-    static int s_last_target = -1;
     if (target == s_last_target) return;
     s_last_target = target;
     bsp_display_brightness_set(target);
@@ -147,6 +150,14 @@ static void night_mode_timer_cb(void *arg)
 
 /* ── Estado UI global ────────────────────────────────────────── */
 static ui_state_t *s_ui = NULL;
+
+/* Re-aplica el brillo segun la arbitracion actual (night_mode_timer_cb). Lo usa
+ * el modo ausente para apagar/restaurar la pantalla al instante, sin esperar al
+ * tick de 4 s del timer. */
+void brightness_apply_now(void)
+{
+    if (s_ui) night_mode_timer_cb(s_ui);
+}
 
 /* ── Callback frigo: actualiza UI + log cada 5 min ──────────── */
 /* Latido del watchdog para frigo_task. Lo invoca frigo_task en cada

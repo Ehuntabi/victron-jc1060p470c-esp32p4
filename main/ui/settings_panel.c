@@ -1,6 +1,7 @@
 #include "settings_panel.h"
 #include "ui.h"
 #include "ui_card.h"
+#include "ausente_mode.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "alerts.h"
@@ -2266,6 +2267,8 @@ static void screensaver_timer_cb(lv_timer_t *timer)
     if (ui == NULL) {
         return;
     }
+    /* El modo ausente ya gestiona la pantalla (apagada): no activar screensaver. */
+    if (ausente_is_active()) return;
     if (!ui->screensaver.enabled || ui->screensaver.active) return;
 
     ESP_LOGI("SAVER", "timer fired mode=%d period=%d", ui->screensaver.mode, ui->screensaver.rotate_period_min);
@@ -2303,6 +2306,8 @@ static void screensaver_wake(ui_state_t *ui)
     if (ui == NULL || ui->screensaver.timer == NULL) {
         return;
     }
+    /* En modo ausente el toque normal NO despierta la pantalla. */
+    if (ausente_is_active()) return;
     if (ui->screensaver.enabled) {
         lv_timer_reset(ui->screensaver.timer);
         if (ui->screensaver.active) {
@@ -3356,6 +3361,15 @@ static void sound_mute_changed_cb(lv_event_t *e)
 }
 
 
+/* Switch del modo ausente/vigilancia: al activar, ausente_request inicia la
+ * cuenta atras de 10 s; al desactivar, cancela (la salida real del modo activo
+ * es con 4 toques en la esquina superior izquierda, no por este switch). */
+static void ausente_switch_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    ausente_request(lv_obj_has_state(sw, LV_STATE_CHECKED));
+}
+
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
@@ -3439,6 +3453,46 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
+
+    /* === Card: Modo ausente / vigilancia === */
+    lv_obj_t *card_aus = lv_obj_create(cont);
+    lv_obj_set_width(card_aus, lv_pct(100));
+    lv_obj_set_height(card_aus, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_aus, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_aus, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card_aus, 1, 0);
+    lv_obj_set_style_radius(card_aus, 12, 0);
+    lv_obj_set_style_pad_all(card_aus, 16, 0);
+    lv_obj_set_style_pad_gap(card_aus, 8, 0);
+    lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *aus_row = lv_obj_create(card_aus);
+    lv_obj_remove_style_all(aus_row);
+    lv_obj_set_size(aus_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(aus_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(aus_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(aus_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *aus_title = lv_label_create(aus_row);
+    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
+
+    lv_obj_t *aus_sw = lv_switch_create(aus_row);
+    lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *aus_hint = lv_label_create(card_aus);
+    lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(aus_hint, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_width(aus_hint, lv_pct(100));
+    lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(aus_hint,
+                      "Apaga la pantalla y vigila por movimiento. Se activa tras 10 s.\n"
+                      "Para salir: 4 toques en la esquina superior izquierda.");
 
     /* === Card 2: Bateria === */
     lv_obj_t *card2 = lv_obj_create(cont);
