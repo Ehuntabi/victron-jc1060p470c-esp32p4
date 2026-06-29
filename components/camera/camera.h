@@ -23,6 +23,11 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);
 
+/* Genera un BMP de 8 bits en escala de grises (thumbnail del ultimo frame) en un
+ * buffer recien reservado (PSRAM). El que llama debe hacer free(*out). Devuelve
+ * false si aun no hay frame. Util para verificar la captura desde HTTP. */
+bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
+
 #ifdef __cplusplus
 }
 #endif

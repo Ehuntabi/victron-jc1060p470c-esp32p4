@@ -16,6 +16,7 @@
 #include "esp_wifi_netif.h"
 #include "esp_private/wifi.h"
 #include "esp_http_server.h"
+#include "camera.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -571,6 +572,27 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
 #define REQUIRE_AUTH(req) do { \
     if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
 } while (0)
+
+// GET /snapshot -> foto BMP (grises) del ultimo frame de la camara. Sin auth
+// (endpoint de verificacion de la captura). Tambien guarda copia en /sdcard.
+static esp_err_t handle_snapshot(httpd_req_t *req) {
+    uint8_t *bmp = NULL;
+    size_t   len = 0;
+    if (!camera_snapshot_bmp(&bmp, &len)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_sendstr(req, "camara sin frame todavia");
+        return ESP_OK;
+    }
+    /* Copia a SD (best-effort, no bloquea la respuesta si falla). */
+    FILE *f = fopen("/sdcard/snapshot.bmp", "wb");
+    if (f) { fwrite(bmp, 1, len, f); fclose(f); }
+
+    httpd_resp_set_type(req, "image/bmp");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    esp_err_t r = httpd_resp_send(req, (const char *)bmp, len);
+    free(bmp);
+    return r;
+}
 
 // Handler for GET /
 static esp_err_t handle_root(httpd_req_t *req) {
@@ -1843,6 +1865,9 @@ esp_err_t config_server_start(void) {
 
     httpd_uri_t uri_root = { .uri = "/",    .method = HTTP_GET,  .handler = handle_root };
     httpd_register_uri_handler(server, &uri_root);
+
+    httpd_uri_t uri_snapshot = { .uri = "/snapshot", .method = HTTP_GET, .handler = handle_snapshot };
+    httpd_register_uri_handler(server, &uri_snapshot);
 
     httpd_uri_t uri_save = { .uri = "/save", .method = HTTP_POST, .handler = post_save };
     httpd_register_uri_handler(server, &uri_save);

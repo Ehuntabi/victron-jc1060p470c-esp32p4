@@ -10,6 +10,9 @@
 #include <sys/mman.h>
 #include "linux/videodev2.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include <stdlib.h>
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -46,6 +49,77 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
         sum += px;
     }
     return cnt ? (uint8_t)((sum / cnt) >> 2) : 0;  /* 0-1023 -> 0-255 */
+}
+
+/* ── Thumbnail en escala de grises (para snapshot HTTP) ──────────────────────
+ * El frame es RAW10 MIPI-packed: 4 pixeles en 5 bytes; los 4 primeros bytes de
+ * cada grupo son los 8 MSB de 4 pixeles consecutivos -> los usamos como gris.
+ * Doble buffer en PSRAM: la tarea escribe en el inactivo y publica el indice. */
+#define SRC_W    1928
+#define SRC_H    1092
+#define THUMB_W  482
+#define THUMB_H  273
+static uint8_t      *s_thumb[2]   = { NULL, NULL };
+static volatile int  s_thumb_act  = -1;   /* -1 = aun sin frame */
+
+static void downscale_gray(const uint8_t *p, uint32_t bytes, uint8_t *dst)
+{
+    uint32_t stride = bytes / SRC_H;   /* ~2410 para RAW10 1928 packed */
+    for (int oy = 0; oy < THUMB_H; oy++) {
+        int sy = oy * SRC_H / THUMB_H;
+        for (int ox = 0; ox < THUMB_W; ox++) {
+            int sx = ox * SRC_W / THUMB_W;
+            uint32_t off = (uint32_t)sy * stride + (uint32_t)(sx >> 2) * 5 + (sx & 3);
+            dst[oy * THUMB_W + ox] = (off < bytes) ? p[off] : 0;
+        }
+    }
+}
+
+bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
+{
+    int act = s_thumb_act;
+    if (act < 0 || s_thumb[act] == NULL) return false;
+    const uint8_t *src = s_thumb[act];
+
+    const uint32_t row_padded = (THUMB_W + 3) & ~3u;       /* filas a multiplo de 4 */
+    const uint32_t pal        = 256 * 4;
+    const uint32_t off_bits   = 14 + 40 + pal;
+    const uint32_t img_size   = row_padded * THUMB_H;
+    const uint32_t file_size  = off_bits + img_size;
+
+    uint8_t *bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
+    if (!bmp) return false;
+    memset(bmp, 0, file_size);
+
+    /* BITMAPFILEHEADER */
+    bmp[0] = 'B'; bmp[1] = 'M';
+    bmp[2] = file_size & 0xff; bmp[3] = (file_size >> 8) & 0xff;
+    bmp[4] = (file_size >> 16) & 0xff; bmp[5] = (file_size >> 24) & 0xff;
+    bmp[10] = off_bits & 0xff; bmp[11] = (off_bits >> 8) & 0xff;
+    bmp[12] = (off_bits >> 16) & 0xff; bmp[13] = (off_bits >> 24) & 0xff;
+    /* BITMAPINFOHEADER */
+    bmp[14] = 40;
+    bmp[18] = THUMB_W & 0xff; bmp[19] = (THUMB_W >> 8) & 0xff;
+    bmp[22] = THUMB_H & 0xff; bmp[23] = (THUMB_H >> 8) & 0xff;
+    bmp[26] = 1;                 /* planes */
+    bmp[28] = 8;                 /* bpp */
+    bmp[34] = img_size & 0xff; bmp[35] = (img_size >> 8) & 0xff;
+    bmp[36] = (img_size >> 16) & 0xff; bmp[37] = (img_size >> 24) & 0xff;
+    bmp[46] = 0; bmp[47] = 1;    /* clrUsed = 256 */
+    /* Paleta de grises */
+    for (int i = 0; i < 256; i++) {
+        uint8_t *e = &bmp[54 + i * 4];
+        e[0] = e[1] = e[2] = (uint8_t)i; e[3] = 0;
+    }
+    /* Pixeles, bottom-up */
+    for (int y = 0; y < THUMB_H; y++) {
+        uint8_t *row = &bmp[off_bits + (uint32_t)(THUMB_H - 1 - y) * row_padded];
+        memcpy(row, &src[y * THUMB_W], THUMB_W);
+    }
+
+    *out = bmp;
+    *out_len = file_size;
+    return true;
 }
 
 /* Tarea de streaming continuo: mantiene el stream RAW10 abierto y mide la
@@ -107,8 +181,14 @@ static void camera_stream_task(void *arg)
     }
     ESP_LOGI(TAG, "stream: capturando RAW10 para luma/vigilancia");
 
+    /* Thumbnails para el snapshot HTTP (doble buffer en PSRAM). Si falla la
+     * reserva, seguimos solo con la luma. */
+    s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H, MALLOC_CAP_SPIRAM);
+    s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H, MALLOC_CAP_SPIRAM);
+
     uint32_t ema = 0;
     bool first = true;
+    uint32_t fcount = 0;
     while (1) {
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
@@ -123,6 +203,43 @@ static void camera_stream_task(void *arg)
             else       { ema = (ema * 31 + luma) / 32; }
             s_luma = (uint8_t)ema;
             s_luma_valid = true;
+
+            /* Refrescar el thumbnail cada 4 frames (~9 Hz, de sobra para snapshot). */
+            if (s_thumb[0] && s_thumb[1] && (++fcount & 3) == 0) {
+                int back = (s_thumb_act == 0) ? 1 : 0;
+                downscale_gray(buf[b.index], b.bytesused, s_thumb[back]);
+                s_thumb_act = back;   /* publicar */
+            }
+
+            /* DIAGNOSTICO one-shot: a los ~40 frames, log de stats del thumbnail
+             * + guardar BMP a SD. Si min<max la captura trae imagen real. */
+            static bool s_snap_done = false;
+            if (!s_snap_done && s_thumb_act >= 0 && fcount >= 40) {
+                s_snap_done = true;
+                const uint8_t *t = s_thumb[s_thumb_act];
+                uint8_t mn = 255, mx = 0;
+                uint32_t sum = 0;
+                for (int i = 0; i < THUMB_W * THUMB_H; i++) {
+                    if (t[i] < mn) mn = t[i];
+                    if (t[i] > mx) mx = t[i];
+                    sum += t[i];
+                }
+                ESP_LOGI(TAG, "snapshot stats: %dx%d min=%u max=%u mean=%u",
+                         THUMB_W, THUMB_H, mn, mx, (unsigned)(sum / (THUMB_W * THUMB_H)));
+                uint8_t *bmp = NULL;
+                size_t blen = 0;
+                if (camera_snapshot_bmp(&bmp, &blen)) {
+                    FILE *f = fopen("/sdcard/snapshot_boot.bmp", "wb");
+                    if (f) {
+                        fwrite(bmp, 1, blen, f);
+                        fclose(f);
+                        ESP_LOGI(TAG, "snapshot guardado /sdcard/snapshot_boot.bmp (%u B)", (unsigned)blen);
+                    } else {
+                        ESP_LOGW(TAG, "no pude abrir /sdcard/snapshot_boot.bmp");
+                    }
+                    free(bmp);
+                }
+            }
         }
         ioctl(fd, VIDIOC_QBUF, &b);
     }
