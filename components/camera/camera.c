@@ -11,6 +11,17 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
         return ESP_ERR_INVALID_ARG;
     }
 
+    /* DIAGNOSTICO Fase 1: escanear el bus I2C. Touch GT911 y RTC responden seguro;
+     * si el SC2336 esta vivo aparecera (0x30 o 0x36). Si solo salen touch/RTC,
+     * el sensor esta apagado (reset/pwdn/MCLK), no es problema de direccion. */
+    ESP_LOGI(TAG, "--- scan I2C ---");
+    for (uint8_t a = 0x08; a < 0x78; a++) {
+        if (i2c_master_probe(i2c, a, 50) == ESP_OK) {
+            ESP_LOGI(TAG, "  I2C 0x%02X responde", a);
+        }
+    }
+    ESP_LOGI(TAG, "--- fin scan ---");
+
     /* Reutilizar el bus I2C del proyecto (init_sccb=false -> usar i2c_handle).
      * SC2336 en SCCB 0x30 sobre ese bus. reset/pwdn -1 (este board no los cablea
      * a GPIO de control; a validar en hardware por la deteccion del chip). */
@@ -36,6 +47,8 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
         return ret;
     }
 
-    ESP_LOGI(TAG, "camara MIPI-CSI inicializada (esp_video OK, SC2336 detectado)");
+    /* OJO: esp_video_init() devuelve OK aunque NO detecte sensor (solo loguea error).
+     * La deteccion real se ve en el log "sc2336: Get sensor ID" arriba. */
+    ESP_LOGI(TAG, "esp_video_init OK (revisar arriba si el sensor SC2336 fue detectado)");
     return ESP_OK;
 }
