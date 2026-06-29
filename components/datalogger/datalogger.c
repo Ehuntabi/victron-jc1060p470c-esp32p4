@@ -107,10 +107,20 @@ static esp_err_t mount_sd(void)
     /* Pines via IOMUX en slot 0 del P4: 43,44,39,40,41,42 */
     slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-    esp_err_t err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config,
-                                            &mount_config, &s_card);
+    /* El montaje es INTERMITENTE: el C6 (WiFi) comparte el periferico SDMMC y, si
+     * esta ocupado cuando la SD intenta leer, da timeout (0x107). Reintentar pilla
+     * una ventana en que el C6 esta libre. (La SD y el guardado funcionan; era solo
+     * la fiabilidad del montaje.) */
+    esp_err_t err = ESP_FAIL;
+    for (int i = 0; i < 8 && err != ESP_OK; i++) {
+        err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "SD mount intento %d/8: %s", i + 1, esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(250));
+        }
+    }
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "SD mount failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "SD mount failed tras 8 intentos: %s", esp_err_to_name(err));
         return err;
     }
     ESP_LOGI(TAG, "SD montada OK");
