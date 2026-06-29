@@ -227,6 +227,15 @@ static void flush_timer_cb(void *arg)
     flush_pending_to_sd_impl();
 }
 
+static void start_flush_timer(void)
+{
+    const esp_timer_create_args_t args = { .callback = flush_timer_cb, .name = "dl_flush" };
+    if (esp_timer_create(&args, &s_flush_timer) == ESP_OK) {
+        esp_timer_start_periodic(s_flush_timer, (uint64_t)FLUSH_INTERVAL_MS * 1000ULL);
+        ESP_LOGI(TAG, "Flush timer iniciado (%d ms)", FLUSH_INTERVAL_MS);
+    }
+}
+
 esp_err_t datalogger_init(void)
 {
     s_mutex = xSemaphoreCreateMutex();
@@ -242,17 +251,13 @@ esp_err_t datalogger_init(void)
     s_pending_first = 0;
     s_pending_count = 0;
 
-    /* Intentar montar SD */
+    /* Intentar montar SD (3 intentos cortos). NOTA: reintentar agresivamente
+     * (incluido en segundo plano) hammerea el bus SDMMC compartido con el C6 y
+     * lo desestabiliza (reboots) -> no hacerlo. El montaje es intermitente; si
+     * falla este arranque, montara en el siguiente. */
     if (mount_sd() == ESP_OK) {
         s_sd_mounted = true;
-        const esp_timer_create_args_t args = {
-            .callback = flush_timer_cb,
-            .name = "dl_flush",
-        };
-        if (esp_timer_create(&args, &s_flush_timer) == ESP_OK) {
-            esp_timer_start_periodic(s_flush_timer, (uint64_t)FLUSH_INTERVAL_MS * 1000ULL);
-            ESP_LOGI(TAG, "Flush timer iniciado (%d ms)", FLUSH_INTERVAL_MS);
-        }
+        start_flush_timer();
     }
 
     ESP_LOGI(TAG, "Datalogger iniciado (RAM %d entradas, SD %s)",
