@@ -116,7 +116,7 @@ static const esp_cam_sensor_format_t ov02c10_format_info_mipi[] = {
         .fps = 30,
         .isp_info = &ov02c10_isp_info_mipi,
         .mipi_info = {
-            .mipi_clk = 800000000,  /* 800 Mbps/lane (link 400MHz DDR) */
+            .mipi_clk = 400000000,  /* clock lane = data_rate/2 (DDR): 800 Mbps/lane -> 400 MHz */
             .lane_num = 2,
             .line_sync_en = false,
         },
