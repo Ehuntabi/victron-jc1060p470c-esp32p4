@@ -92,7 +92,10 @@ static esp_err_t mount_sd(void)
     }
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
-        .max_files = 4,
+        /* 8: el datalogger/battery_history/logs ya tenian abiertos los 4 handles
+         * -> las fotos de vigilancia (y el snapshot del boot) no podian abrir un
+         * 5o fichero y fallaban ("no pude guardar"). Con 8 hay margen. */
+        .max_files = 8,
         .allocation_unit_size = 16 * 1024,
     };
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();

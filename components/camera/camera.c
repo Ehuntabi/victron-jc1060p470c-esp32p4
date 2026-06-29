@@ -416,6 +416,12 @@ static void camera_stream_task(void *arg)
                         if (d < 0) d = -d;
                         if (d > MOT_CELL_DIFF) changed++;
                     }
+                    /* DIAGNOSTICO: cada ~1.7s confirma que la vigilancia corre y el
+                     * nivel de movimiento medido. */
+                    static int s_diag = 0;
+                    if ((++s_diag & 15) == 0)
+                        ESP_LOGI(TAG, "vigilancia activa: movimiento=%d celdas (captura si >=%d)",
+                                 changed, MOT_CELL_COUNT);
                     int64_t now = esp_timer_get_time();
                     if (changed >= MOT_CELL_COUNT &&
                         (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
