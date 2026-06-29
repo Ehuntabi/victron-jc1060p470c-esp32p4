@@ -1,24 +1,50 @@
 #!/usr/bin/env bash
-# Cierre de sesion de desarrollo (ejecutar al terminar en CUALQUIER PC).
-# Normaliza el lock (portable), commitea TODO tu trabajo y lo sube a GitHub.
-#   Uso:  ./termino ["mensaje de commit"]
+# TERMINO — al acabar en CUALQUIER PC: commitea TODO (Claude redacta el mensaje), sube a GitHub
+# y verifica que NO queda nada al aire para continuar en el otro equipo.
+#   Uso:  ./termino                  (Claude escribe el mensaje del commit)
+#         ./termino "mensaje propio"  (usa tu mensaje)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 REL='path: components/espressif__esp_hosted'
-# Re-relativizar la ruta del esp_hosted local (el build la deja absoluta por maquina).
-# Asi el lock commiteado es portable entre PCs.
+# Re-relativizar la ruta del esp_hosted local (el build la deja absoluta por maquina) -> lock portable.
 sed -i -E "s#path: .*/components/espressif__esp_hosted#${REL}#" dependencies.lock 2>/dev/null || true
 
 git add -A
 if git diff --cached --quiet; then
-  echo "[termino] Nada nuevo que commitear."
+  echo "[termino] nada nuevo que commitear"
 else
-  msg="${1:-wip $(date '+%Y-%m-%d %H:%M')}"
+  if [ -n "${1:-}" ]; then
+    msg="$1"
+  elif command -v claude >/dev/null 2>&1; then
+    echo "[termino] Claude redactando el mensaje de commit..."
+    msg=$(git diff --cached --stat | timeout 90 claude -p "Escribe UN mensaje de commit conciso de UNA sola linea (estilo conventional commits, en espanol, sin comillas ni explicacion) para estos cambios. Responde SOLO con la linea del mensaje." 2>/dev/null | grep -m1 -v '^$' | tr -d '"' || true)
+    [ -z "${msg:-}" ] && msg="trabajo $(date '+%Y-%m-%d %H:%M')"
+  else
+    msg="trabajo $(date '+%Y-%m-%d %H:%M')"
+  fi
   git commit -m "$msg"
   echo "[termino] commit: $msg"
 fi
 
 echo "[termino] git push..."
-git push
-echo "[termino] HECHO. Ya puedes cambiar de PC y hacer ./dev-start.sh alli."
+if ! git push --follow-tags 2>/dev/null; then
+  echo "[termino] el remoto avanzo -> git pull --rebase y reintento"
+  git pull --rebase --tags
+  git push --follow-tags
+fi
+
+# -------- Comprobacion final: que NO quede NADA al aire --------
+ahead=$(git rev-list --count '@{u}'..HEAD 2>/dev/null || echo '?')
+dirty=$(git status --porcelain)
+ndirty=$([ -z "$dirty" ] && echo 0 || printf '%s\n' "$dirty" | wc -l | tr -d ' ')
+stashes=$(git stash list | wc -l | tr -d ' ')
+echo "[termino] -------- comprobacion final --------"
+echo "  commits sin subir : $ahead"
+echo "  cambios sin commit: $ndirty"
+echo "  stashes guardados : $stashes"
+if [ "$ahead" = 0 ] && [ "$ndirty" = 0 ] && [ "$stashes" = 0 ]; then
+  echo "[termino] TODO SUBIDO Y LIMPIO. Cambia de PC y haz ./empiezo."
+else
+  echo "[termino] !! ATENCION: queda algo sin sincronizar (ver arriba). NO cambies de PC sin resolverlo."
+fi

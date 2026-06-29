@@ -1,35 +1,48 @@
 #!/usr/bin/env bash
-# Arranque de sesion de desarrollo (ejecutar al sentarte en CUALQUIER PC).
-# Sincroniza con GitHub y deja el entorno listo para compilar de forma consistente.
-#   Uso:  ./empiezo
+# EMPIEZO — al sentarte en CUALQUIER PC: sincroniza, deja el entorno listo y abre Claude.
+#   Uso:  ./empiezo            (sincroniza y abre Claude Code)
+#         ./empiezo --no-claude (solo sincroniza, no abre Claude)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 REL='path: components/espressif__esp_hosted'
-# El esp_hosted local se guarda con ruta RELATIVA en el lock; cada build la
-# absolutiza a la ruta de su maquina. La re-relativizamos para que el pull no choque.
+# El esp_hosted local se guarda RELATIVO en el lock; cada build lo absolutiza. Re-relativizar
+# (idempotente) para que el pull no choque.
 sed -i -E "s#path: .*/components/espressif__esp_hosted#${REL}#" dependencies.lock 2>/dev/null || true
 
-# Si queda algo sin commitear (p.ej. sdkconfig de un build), apartarlo para poder pull.
+# Apartar cualquier cambio local para no perderlo y poder hacer pull.
 STASHED=0
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "[empiezo] hay cambios locales sin guardar -> git stash temporal"
-  git stash push -u -m "dev-start auto" >/dev/null && STASHED=1
+if [ -n "$(git status --porcelain)" ]; then
+  echo "[empiezo] tienes cambios locales -> los aparto (git stash) para hacer pull"
+  git stash push -u -m "empiezo auto $(date '+%F %H:%M')" >/dev/null && STASHED=1
 fi
 
-echo "[empiezo] git pull --rebase..."
 before=$(git rev-parse HEAD)
-git pull --rebase
+echo "[empiezo] git pull --rebase..."
+git pull --rebase --tags
 after=$(git rev-parse HEAD)
 
-[ "$STASHED" = 1 ] && { echo "[empiezo] recuperando cambios (stash pop)"; git stash pop || true; }
+if [ "$STASHED" = 1 ]; then
+  echo "[empiezo] recupero tus cambios (git stash pop)"
+  if ! git stash pop; then
+    echo "[empiezo] !! CONFLICTO al recuperar tus cambios. Resuelvelos (git status). No se pierde nada: estan en el stash."
+    exit 1
+  fi
+fi
 
-# Si el pull trajo cambios en las dependencias o el sdkconfig, regenerar componentes.
+# Si el pull trajo cambios en deps/sdkconfig, regenerar componentes desde el lock.
 if [ "$before" != "$after" ] && git diff --name-only "$before" "$after" | grep -qE '^(dependencies\.lock|sdkconfig)$'; then
-  echo "[empiezo] cambiaron dependencies.lock/sdkconfig -> borrando managed_components + build (se regeneran)"
+  echo "[empiezo] cambiaron dependencies.lock/sdkconfig -> borro managed_components + build (se regeneran en el build)"
   rm -rf managed_components build
 fi
 
-echo "[empiezo] LISTO. Para compilar/flashear:"
-echo "    . ~/.espressif/esp-idf-5.4/export.sh   # (o tu export del IDF)"
-echo "    idf.py build && idf.py -p /dev/ttyACM0 flash monitor"
+echo "[empiezo] al dia con GitHub: $(git status -sb | head -1)"
+
+# Abrir Claude Code (salvo --no-claude). Asi te sientas, ./empiezo, y sigues trabajando conmigo.
+if [ "${1:-}" != "--no-claude" ] && command -v claude >/dev/null 2>&1; then
+  echo "[empiezo] abriendo Claude Code..."
+  exec claude
+else
+  echo "[empiezo] LISTO. Para compilar/flashear:"
+  echo "    . ~/.espressif/esp-idf-5.4/export.sh && idf.py build && idf.py -p /dev/ttyACM0 flash monitor"
+fi
