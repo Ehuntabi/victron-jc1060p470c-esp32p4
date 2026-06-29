@@ -42,9 +42,9 @@ PINS = {
     10: (C_USE, "GPIO 47 Touch", "EN USO — Touch interno", C_TXT_DARK),
     11: (C_FREE, "GPIO 3", "", C_TXT_WHITE),
     12: (C_FREE, "GPIO 46", "", C_TXT_WHITE),
-    13: (C_USE, "GPIO 4 1-W", "EN USO — Frigo", C_TXT_DARK),
+    13: (C_USE, "GPIO 4", "DS18B20 Frigo", C_TXT_DARK),
     14: (C_FREE, "GPIO 45", "", C_TXT_WHITE),
-    15: (C_USE, "GPIO 5 PWM", "EN USO — Frigo", C_TXT_DARK),
+    15: (C_USE, "GPIO 5", "Fan PWM Frigo", C_TXT_DARK),
     16: (C_GND, "GND", "", C_TXT_WHITE),
     17: (C_FREE, "GPIO 20 ADC", "", C_TXT_WHITE),
     18: (C_3V3, "VCC3V3", "", C_TXT_WHITE),
@@ -62,7 +62,7 @@ PINS = {
 IMG_W = 750
 MARGIN = 30
 CARD_W = 320
-CARD_H = 75
+CARD_H = 84
 CARD_GAP_X = 10  # espacio centro entre las 2 columnas
 CARD_GAP_Y = 10
 RADIUS = 12
@@ -85,9 +85,9 @@ def font(size, bold=False):
     return ImageFont.load_default()
 
 F_TITLE = font(34, bold=True)
-F_NAME  = font(20, bold=True)
-F_SUB   = font(13)
-F_PIN   = font(12, bold=True)
+F_NAME  = font(24, bold=True)
+F_SUB   = font(20)
+F_PIN   = font(22, bold=True)
 F_LEG   = font(13)
 
 img = Image.new("RGB", (IMG_W, IMG_H), C_BG)
@@ -119,13 +119,13 @@ def draw_card(x, y, pin, data, pin_align_right):
     nbox = d.textbbox((0, 0), name, font=F_NAME)
     nw = nbox[2] - nbox[0]
     nh = nbox[3] - nbox[1]
-    name_y = y + (CARD_H - nh) // 2 - (8 if sub else 0)
+    name_y = y + (CARD_H - nh) // 2 - (14 if sub else 0)
     d.text((x + (CARD_W - nw) // 2, name_y), name, font=F_NAME, fill=tcol)
     # Subtítulo centrado debajo
     if sub:
         sbox = d.textbbox((0, 0), sub, font=F_SUB)
         sw = sbox[2] - sbox[0]
-        d.text((x + (CARD_W - sw) // 2, name_y + nh + 4), sub,
+        d.text((x + (CARD_W - sw) // 2, name_y + nh + 10), sub,
                font=F_SUB, fill=tcol)
 
 y = HDR_H + MARGIN

@@ -172,7 +172,7 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <h2>8. Frigorífico — sensores y ventilador</h2>
 <table>
 <tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup 4.7 kΩ a 3.3 V</td></tr>
+<tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup a 3.3 V: <b>4.7 kΩ</b> con cable corto. Con <b>cable largo (~2 m)</b> bajar a <b>1 kΩ</b> (más capacidad de bus → 4.7 kΩ se queda flojo y falla la lectura).</td></tr>
 <tr><td>Ventilador PWM</td><td>GPIO 5</td><td>JP1 pin 15</td><td>LEDC 25 kHz, control por T_Aletas</td></tr>
 </table>
 
@@ -211,7 +211,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
 <tr><td>0</td><td>GPIO out</td><td>Reset panel JD9165BA (LCD_RST según esquemático real)</td></tr>
-<tr><td>4</td><td>1-Wire</td><td>DS18B20 (JP1 pin 13, pullup 4.7 kΩ)</td></tr>
+<tr><td>4</td><td>1-Wire</td><td>DS18B20 (JP1 pin 13, pullup 4.7 kΩ; 1 kΩ si cable ~2 m)</td></tr>
 <tr><td>5</td><td>LEDC PWM</td><td>Ventilador frigo (JP1 pin 15, 25 kHz)</td></tr>
 <tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
 <tr><td>8</td><td>I2C SCL</td><td></td></tr>
@@ -356,11 +356,9 @@ en gris hasta conectar el cable del NE185 al J5)</li>
 <div class="nota">
 <strong>[!]</strong> Pendiente conexión física:
 <ul>
-<li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V)</li>
+<li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V; con cable largo ~2 m usar 1 kΩ)</li>
 <li>Ventilador PWM en GPIO 5 → JP1 pin 15</li>
-<li>PZEM-004T → JP1 pin 7 (GPIO 1 TX) y pin 9 (GPIO 2 RX) — pares 4 y 5, lo más arriba posible del IDC 2x10</li>
-<li><strong>NE185 RS-485 → conector J5</strong> (MX 1.25 4P, conector #11). Cable 4 hilos del derivador NE185: A, B, GND, +5V. NO se necesita caja ni hardware externo.</li>
-</ul>
+<li>PZEM-004T → JP1 pin 7 (GPIO 1 TX) y pin 9 (GPIO 2 RX) — pares 4 y 5, lo más arriba posible del IDC 2x10</li></ul>
 </div>
 <p class="small">
 <strong>Bug del fabricante:</strong> el esquemático Guition indica RX8130CE como RTC pero la
