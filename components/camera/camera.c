@@ -73,6 +73,9 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
 #define THUMB_H  546
 static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
+/* Acumulador para promediado temporal (media movil ~8 frames): quita grano sin
+ * perder brillo ni nitidez. Guarda el valor de display en 12.4 fijo (valor<<4). */
+static uint16_t     *s_accum      = NULL;
 
 /* Byte MSB (8 bits) del pixel (x,y) del RAW10 MIPI-packed. */
 static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
@@ -160,8 +163,23 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             if (g > 255) g = 255;
             if (r < 0) r = 0;
             if (r > 255) r = 255;
-            uint8_t *d = &dst[((uint32_t)oy * THUMB_W + ox) * 3];
-            d[0] = s_gamma_lut[b]; d[1] = s_gamma_lut[g]; d[2] = s_gamma_lut[r];   /* BGR + WB + niveles + gamma */
+            uint32_t idx = ((uint32_t)oy * THUMB_W + ox) * 3;
+            uint8_t *d = &dst[idx];
+            int fb = s_gamma_lut[b], fg = s_gamma_lut[g], fr = s_gamma_lut[r];  /* valor display */
+            if (s_accum) {
+                /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. */
+                uint16_t *a = &s_accum[idx];
+                a[0] = a[0] - (a[0] >> 3) + (uint16_t)(fb << 1);
+                a[1] = a[1] - (a[1] >> 3) + (uint16_t)(fg << 1);
+                a[2] = a[2] - (a[2] >> 3) + (uint16_t)(fr << 1);
+                d[0] = a[0] >> 4;
+                d[1] = a[1] >> 4;
+                d[2] = a[2] >> 4;
+            } else {
+                d[0] = fb;
+                d[1] = fg;
+                d[2] = fr;
+            }
         }
     }
 }
@@ -289,6 +307,8 @@ static void camera_stream_task(void *arg)
      * la reserva, seguimos solo con la luma. */
     s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
     s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
+    /* Acumulador para promediado temporal (quita grano). Si falla, seguimos sin el. */
+    s_accum = heap_caps_calloc(THUMB_W * THUMB_H * 3, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
 
     uint32_t ema = 0;
     bool first = true;
