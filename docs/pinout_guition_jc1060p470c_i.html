@@ -67,7 +67,7 @@
   .keep { page-break-inside: avoid; }
   .jp1-grid {
     display: grid;
-    grid-template-columns: 35% 1fr;
+    grid-template-columns: 60% 1fr;
     gap: 10px;
     align-items: start;
   }
@@ -330,7 +330,7 @@ Conector secundario para alimentación 5 V y/o consola UART0. Frontend protegido
 <tr><td>4</td><td>ES_I2C_SDA</td></tr>
 </table>
 
-<h2 style="page-break-before: always; break-before: page;">18. Alimentación</h2>
+<h2>18. Alimentación</h2>
 <p>
 Tensión nominal: 5 V DC. Consumo ~600 mA (pico ~1 A con backlight máximo).<br>
 Cadena: USB-C / CN2 VIN → IP5306 (cargador Li + booster) → VOUT-BAT (5 V regulado) →
@@ -349,8 +349,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>LDO interno PHY MIPI-DSI</li>
 <li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
-compilado y flasheado; UART1 GPIO 26/27, conector J5; widgets visibles en vista Overview
-en gris hasta conectar el cable del NE185 al J5)</li>
+compilado y flasheado; UART1 GPIO 26/27, conector J5; conectado y funcionando — control de luces y bomba operativo)</li>
 </ul>
 </div>
 <div class="nota">
