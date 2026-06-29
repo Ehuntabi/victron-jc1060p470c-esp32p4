@@ -101,7 +101,10 @@ enum {
 /* without alignment */
 #define MALLOC(x)                        malloc(x)
 
-/* This is [malloc + aligned DMA] */
+/* This is [malloc + aligned DMA]. Primero intenta RAM interna DMA; si esta
+ * agotada (p.ej. por la camara MIPI-CSI/esp_video), cae a PSRAM DMA-capable
+ * (en el P4 la PSRAM admite DMA con alineacion). Asi el SDIO no se queda sin
+ * buffers -> evita el assert sdio_rx_get_buffer (*buf) y el crash. */
 #define MEM_ALLOC(x)       ({                                       \
 	esp_dma_mem_info_t dma_mem_info = {                             \
 		.extra_heap_caps = 0,                                       \
@@ -109,9 +112,13 @@ enum {
 	};                                                              \
 	void *tmp_buf = NULL;                                           \
 	size_t actual_size = 0;                                         \
-	esp_err_t err = ESP_OK;                                         \
-	err = esp_dma_capable_malloc((x), &dma_mem_info, &tmp_buf, &actual_size);\
-	if (err) tmp_buf = NULL;                                        \
+	if (esp_dma_capable_malloc((x), &dma_mem_info, &tmp_buf, &actual_size)) \
+		tmp_buf = NULL;                                            \
+	if (!tmp_buf) {                                                 \
+		dma_mem_info.extra_heap_caps = MALLOC_CAP_SPIRAM;          \
+		if (esp_dma_capable_malloc((x), &dma_mem_info, &tmp_buf, &actual_size)) \
+			tmp_buf = NULL;                                        \
+	}                                                              \
 	tmp_buf;})
 
 #define FREE(x)                          free(x);
