@@ -8,14 +8,14 @@ Para que dé igual el equipo que uses y NO tengas que acordarte de comandos.
 
 ## Al EMPEZAR a trabajar (en cualquier PC)
 ```bash
-./dev-start.sh
+./empiezo
 ```
 Hace: `git pull` + (si cambiaron deps/sdkconfig) borra `managed_components/`+`build/` para
 regenerarlos desde el lock compartido. Te deja listo para `idf.py build`.
 
 ## Al TERMINAR (en cualquier PC)
 ```bash
-./dev-end.sh "lo que hice"     # el mensaje es opcional
+./termino "lo que hice"     # el mensaje es opcional
 ```
 Hace: normaliza la ruta del componente local `esp_hosted` (portable) + `git add -A` + commit + push.
 
@@ -26,6 +26,6 @@ en el otro PC. Por eso el lock se **commitea con ruta relativa** (`components/es
 y los scripts la re-relativizan automaticamente al cerrar. Tu no tienes que hacer nada.
 
 ## Si algo falla (raro)
-- Conflicto en `git pull`: resuelvelo y reintenta `./dev-start.sh`.
+- Conflicto en `git pull`: resuelvelo y reintenta `./empiezo`.
 - Build con error de Kconfig/componentes: `rm -rf managed_components build && idf.py reconfigure`.
 - Volver al ultimo estado bueno: `git tag` lista los `sdkconfig-known-good-*`.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cierre de sesion de desarrollo (ejecutar al terminar en CUALQUIER PC).
 # Normaliza el lock (portable), commitea TODO tu trabajo y lo sube a GitHub.
-#   Uso:  ./dev-end.sh ["mensaje de commit"]
+#   Uso:  ./termino ["mensaje de commit"]
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -12,13 +12,13 @@ sed -i -E "s#path: .*/components/espressif__esp_hosted#${REL}#" dependencies.loc
 
 git add -A
 if git diff --cached --quiet; then
-  echo "[dev-end] Nada nuevo que commitear."
+  echo "[termino] Nada nuevo que commitear."
 else
   msg="${1:-wip $(date '+%Y-%m-%d %H:%M')}"
   git commit -m "$msg"
-  echo "[dev-end] commit: $msg"
+  echo "[termino] commit: $msg"
 fi
 
-echo "[dev-end] git push..."
+echo "[termino] git push..."
 git push
-echo "[dev-end] HECHO. Ya puedes cambiar de PC y hacer ./dev-start.sh alli."
+echo "[termino] HECHO. Ya puedes cambiar de PC y hacer ./dev-start.sh alli."
