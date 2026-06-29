@@ -65,8 +65,10 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
  * Guardamos en orden BGR (el de BMP), 3 bytes/px, doble buffer en PSRAM. */
 #define SRC_W    1928
 #define SRC_H    1092
-#define THUMB_W  482
-#define THUMB_H  273
+/* Resolucion nativa del debayer 2x2 (cada pixel = una celda Bayer): maxima
+ * nitidez sin interpolar. 964x546 = 1928x1092 / 2. */
+#define THUMB_W  964
+#define THUMB_H  546
 static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
 
@@ -77,15 +79,17 @@ static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, 
     return (off < bytes) ? p[off] : 0;
 }
 
-/* LUT de gamma (~0.5, raiz cuadrada) para SUBIR las sombras de la foto sin
- * reventar las altas luces. Solo afecta a la imagen mostrada, NO al frame_luma
- * (que lee el frame crudo) -> el auto-brillo no se ve afectado. */
+/* LUT de gamma para subir las sombras de la foto sin reventar las altas luces.
+ * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
+ * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
+ * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
+#define CAM_GAMMA 0.72f
 static uint8_t s_gamma_lut[256];
 static bool    s_gamma_ready = false;
 static void gamma_init(void)
 {
     for (int i = 0; i < 256; i++) {
-        s_gamma_lut[i] = (uint8_t)(sqrtf((float)i / 255.0f) * 255.0f + 0.5f);
+        s_gamma_lut[i] = (uint8_t)(powf((float)i / 255.0f, CAM_GAMMA) * 255.0f + 0.5f);
     }
     s_gamma_ready = true;
 }
@@ -284,8 +288,9 @@ static void camera_stream_task(void *arg)
             s_luma = (uint8_t)ema;
             s_luma_valid = true;
 
-            /* Refrescar el thumbnail cada 4 frames (~9 Hz, de sobra para snapshot). */
-            if (s_thumb[0] && s_thumb[1] && (++fcount & 3) == 0) {
+            /* Refrescar el thumbnail cada 8 frames (~4.6 Hz; el debayer 964x546 es
+             * mas pesado, y para snapshot bajo demanda sobra). */
+            if (s_thumb[0] && s_thumb[1] && (++fcount & 7) == 0) {
                 int back = (s_thumb_act == 0) ? 1 : 0;
                 downscale_rgb(buf[b.index], b.bytesused, s_thumb[back]);
                 s_thumb_act = back;   /* publicar */
