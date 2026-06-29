@@ -24,6 +24,7 @@
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
 #include "ui/frigo_panel.h"
+#include "camera.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
@@ -455,6 +456,10 @@ void app_main(void)
         splash_hide();
         lvgl_port_unlock();
     }
+
+    /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
+     * Si falla, el resto del firmware sigue normal (aislado). */
+    camera_init(bsp_i2c_get_handle());
 
     logSection("Setup complete");
 }
