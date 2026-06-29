@@ -86,33 +86,59 @@ static bool night_hour_in_window(int now_h, uint8_t start_h, uint8_t end_h)
     return now_h >= start_h || now_h < end_h;
 }
 
+/* Auto-brillo por luminosidad de la camara. TODO(loop): toggle en Settings. */
+static bool s_auto_brightness = true;
+
+/* Mapea luminosidad ambiente (0-255) a brillo de pantalla (%). Suelo de
+ * seguridad para que la pantalla nunca quede ilegible, y cuantizado a pasos de
+ * 5% para que no parpadee con variaciones pequenas de luz. */
+static int luma_to_brightness(uint8_t luma)
+{
+    const int MINB  = 12;   /* nunca por debajo (visibilidad) */
+    const int SCALE = 150;  /* luma a la que se alcanza el 100% (calibrable) */
+    int b = MINB + (int)luma * (100 - MINB) / SCALE;
+    if (b > 100) b = 100;
+    if (b < MINB) b = MINB;
+    return (b / 5) * 5;     /* pasos de 5% -> sin parpadeo */
+}
+
 static void night_mode_timer_cb(void *arg)
 {
     ui_state_t *ui = (ui_state_t *)arg;
     if (!ui) return;
-    /* El screensaver tiene precedencia: si está activo en modo Dim, no
-     * pisamos su brillo atenuado. */
+    /* El screensaver tiene precedencia: si está activo (incl. pantalla apagada),
+     * no pisamos su brillo. */
     if (ui->screensaver.active) return;
 
-    /* Brillo objetivo: el del usuario, salvo que estemos en la franja
-     * nocturna configurada -> usar el brillo nocturno. Antes solo se
-     * aplicaba si night_mode.enabled, lo que dejaba el brillo en el 80%
-     * de boot hasta que se abria Settings. */
-    int target = ui->brightness;
+    /* Precedencia de brillo:
+     *   1) franja nocturna (atenuacion por horario) -> brillo nocturno.
+     *   2) auto-brillo por luminosidad de la camara.
+     *   3) brillo manual del usuario.
+     * El modo noche NUNCA lo pisa el auto-brillo (requisito del usuario). */
+    bool night_win = false;
     if (ui->night_mode.enabled) {
         time_t now = time(NULL);
         if (now >= 1000000000L) {
             struct tm tm_local;
             localtime_r(&now, &tm_local);
-            if (night_hour_in_window(tm_local.tm_hour,
-                                     ui->night_mode.start_h,
-                                     ui->night_mode.end_h)) {
-                target = ui->night_mode.brightness;
-            }
+            night_win = night_hour_in_window(tm_local.tm_hour,
+                                             ui->night_mode.start_h,
+                                             ui->night_mode.end_h);
         }
     }
-    /* Solo aplicar si cambia: bsp_display_brightness_set actualiza el duty
-     * del LEDC; llamarlo cada minuto con el mismo valor es trabajo inutil. */
+
+    int target;
+    uint8_t luma;
+    if (night_win) {
+        target = ui->night_mode.brightness;
+    } else if (s_auto_brightness && camera_get_luma(&luma)) {
+        target = luma_to_brightness(luma);
+    } else {
+        target = ui->brightness;
+    }
+
+    /* Solo aplicar si cambia: bsp_display_brightness_set actualiza el duty del
+     * LEDC; llamarlo con el mismo valor es trabajo inutil. */
     static int s_last_target = -1;
     if (target == s_last_target) return;
     s_last_target = target;
@@ -447,8 +473,10 @@ void app_main(void)
         .name            = "night_mode",
     };
     esp_timer_create(&night_args, &night_timer);
-    esp_timer_start_periodic(night_timer, 60ULL * 1000000ULL);
-    /* Aplicación inmediata para no esperar 1 min al arrancar */
+    /* Cada 4 s: suficiente para que el auto-brillo siga la luz ambiente con
+     * fluidez (la luma ya va suavizada) sin trabajo inutil (aplica solo si cambia). */
+    esp_timer_start_periodic(night_timer, 4ULL * 1000000ULL);
+    /* Aplicación inmediata para no esperar al arrancar */
     night_mode_timer_cb(s_ui);
 
     /* Splash visible al menos 1.5 s desde su creacion, luego ocultar. */
