@@ -2,6 +2,8 @@
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "pzem004t.h"
+#include "ne185/ne185.h"   /* camper: luces/bomba/tanques/230V para /api/state */
+#include "frigo.h"         /* congelador: temp/ventilador para /api/state */
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include <stdio.h>
@@ -233,5 +235,23 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
         pz.voltage_v, pz.current_a, pz.power_w,
         (unsigned)pz.energy_wh, pz.freq_hz, pz.power_factor,
         pz.alarm ? "true" : "false");
+
+    /* Añadir camper (NE185) y frigo, que el Overview lee por dentro y la app
+     * necesita por HTTP. Se insertan dentro del objeto raiz: retroceder sobre el
+     * '}' final y volver a cerrarlo tras los dos objetos nuevos. */
+    if (n > 0 && (size_t)n < maxlen && buf[n - 1] == '}') {
+        n--;
+        ne185_data_t cd; ne185_get(&cd);
+        frigo_state_t fs; frigo_get_state_copy(&fs);
+        n += snprintf(buf + n, maxlen - n,
+            ",\"camper\":{\"luz_int\":%s,\"luz_ext\":%s,\"bomba\":%s,\"shore\":%s,"
+            "\"tank_limpia\":%u,\"tank_grises\":%u,\"bat_servicio_v\":%.2f,\"fresh\":%s}"
+            ",\"frigo\":{\"temp_c\":%.1f,\"fan_pct\":%u,\"mode\":%u,\"t_min\":%u,\"t_max\":%u}}",
+            cd.light_in ? "true" : "false", cd.light_out ? "true" : "false",
+            cd.pump ? "true" : "false", cd.shore ? "true" : "false",
+            (unsigned)cd.s1, (unsigned)cd.r1, cd.battery1_v, cd.fresh ? "true" : "false",
+            fs.T_Congelador, (unsigned)fs.fan_percent, (unsigned)fs.mode,
+            (unsigned)fs.T_min, (unsigned)fs.T_max);
+    }
     return (n > 0 && (size_t)n < maxlen) ? (size_t)n : 0;
 }

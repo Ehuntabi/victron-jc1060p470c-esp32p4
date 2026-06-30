@@ -35,6 +35,8 @@
 #include "rtc_rx8025t.h"
 #include "ui.h"
 #include "ui/ausente_mode.h"   /* salida de emergencia del modo ausente por HTTP */
+#include "ne185/ne185.h"       /* control de luces/bomba (POST /control) */
+#include "frigo.h"             /* control del ventilador (POST /control) */
 #include "esp_bsp.h"           /* bsp_display_lock/unlock para tocar LVGL desde httpd */
 #include <sys/time.h>
 #include <time.h>
@@ -685,17 +687,53 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
     char q[24] = {0};
     httpd_req_get_url_query_str(req, q, sizeof(q));
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
-    if (strstr(q, "off")) {
+    if (strstr(q, "off") || strstr(q, "on")) {
+        bool on = strstr(q, "on") != NULL;   /* "off" contiene "o" pero no "on" */
         bool done = false;
         if (bsp_display_lock(300)) {
-            ausente_request(false);   /* cancela cuenta atras o sale del modo activo */
+            ausente_request(on);   /* on: cuenta atras+vigilancia; off: cancela/sale */
             bsp_display_unlock();
             done = true;
         }
-        httpd_resp_sendstr(req, done ? "Modo ausente desactivado"
-                                     : "No pude tomar el lock de pantalla, reintenta");
+        httpd_resp_sendstr(req, !done ? "No pude tomar el lock de pantalla, reintenta"
+                                : on ? "Modo ausente/vigilancia activado"
+                                     : "Modo ausente desactivado");
     } else {
-        httpd_resp_sendstr(req, "Modo ausente. Usa /ausente?off para salir (emergencia).");
+        httpd_resp_sendstr(req, "Usa /ausente?on para activar vigilancia, /ausente?off para salir.");
+    }
+    return ESP_OK;
+}
+
+/* POST /control: control de cargas para la app. body urlencoded:
+ *   dev=luz_int|luz_ext|bomba   -> toggle via NE185 (ne185_send_cmd 'i'/'o'/'p')
+ *   dev=fan&mode=auto|off|50|100 -> modo del ventilador del frigo (frigo_set_mode)
+ * Solo red, no toca DSI. */
+static esp_err_t handle_control(httpd_req_t *req) {
+    char body[80] = {0};
+    int total = req->content_len < (int)sizeof(body) - 1 ? req->content_len : (int)sizeof(body) - 1;
+    int got = 0;
+    while (got < total) {
+        int r = httpd_req_recv(req, body + got, total - got);
+        if (r <= 0) break;
+        got += r;
+    }
+    body[got] = 0;
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+
+    if      (strstr(body, "dev=luz_int")) { ne185_send_cmd('i'); httpd_resp_sendstr(req, "ok luz_int"); }
+    else if (strstr(body, "dev=luz_ext")) { ne185_send_cmd('o'); httpd_resp_sendstr(req, "ok luz_ext"); }
+    else if (strstr(body, "dev=bomba"))   { ne185_send_cmd('p'); httpd_resp_sendstr(req, "ok bomba"); }
+    else if (strstr(body, "dev=fan")) {
+        frigo_mode_t m = FRIGO_MODE_AUTO;
+        if      (strstr(body, "mode=off"))  m = FRIGO_MODE_OFF;
+        else if (strstr(body, "mode=50"))   m = FRIGO_MODE_50;
+        else if (strstr(body, "mode=100"))  m = FRIGO_MODE_100;
+        else if (strstr(body, "mode=auto")) m = FRIGO_MODE_AUTO;
+        frigo_set_mode(m);
+        httpd_resp_sendstr(req, "ok fan");
+    } else {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "dev? (luz_int|luz_ext|bomba|fan)");
     }
     return ESP_OK;
 }
@@ -861,7 +899,7 @@ static esp_err_t post_save(httpd_req_t *req) {
 static esp_err_t handle_api_state(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
-    char buf[1024];
+    char buf[1408];   /* ampliado: ahora /api/state incluye camper + frigo */
     size_t n = dashboard_state_to_json(buf, sizeof(buf));
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -2025,6 +2063,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_vigf);
     httpd_uri_t uri_ausente = { .uri = "/ausente", .method = HTTP_GET, .handler = handle_ausente };
     httpd_register_uri_handler(server, &uri_ausente);
+    httpd_uri_t uri_control = { .uri = "/control", .method = HTTP_POST, .handler = handle_control };
+    httpd_register_uri_handler(server, &uri_control);
 
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
