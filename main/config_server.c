@@ -603,55 +603,57 @@ static esp_err_t handle_snapshot(httpd_req_t *req) {
 
 // GET /vigilancia -> lista las capturas de movimiento; /vigilancia/<archivo> -> sirve el BMP.
 #define VIG_DIR "/sdcard/vigilancia"
+/* Galeria de vigilancia servida desde el anillo en RAM (PSRAM) de camera.c.
+ * No se usa la SD: el bus SDMMC se satura con la camara + el C6 durante la
+ * vigilancia. Las capturas se pierden al reiniciar (encaja con "modo ausente"). */
+#define VIG_MAX 16
 static esp_err_t handle_vigilancia(httpd_req_t *req) {
     const char *uri = req->uri;
-    const char *fname = NULL;
-    if (strncmp(uri, "/vigilancia/", 12) == 0 && uri[12] != '\0') fname = uri + 12;
+    const char *idstr = NULL;
+    if (strncmp(uri, "/vigilancia/", 12) == 0 && uri[12] != '\0') idstr = uri + 12;
 
-    if (fname) {
-        /* Servir un fichero concreto. Validar nombre (sin .. ni /). */
-        if (strstr(fname, "..") || strchr(fname, '/')) {
-            httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
-            return ESP_FAIL;
-        }
-        char path[300];
-        snprintf(path, sizeof(path), "%s/%.240s", VIG_DIR, fname);
-        FILE *f = fopen(path, "rb");
-        if (!f) { httpd_resp_send_404(req); return ESP_FAIL; }
-        httpd_resp_set_type(req, "image/bmp");
-        char buf[4096]; size_t r;
-        while ((r = fread(buf, 1, sizeof(buf), f))) {
-            if (httpd_resp_send_chunk(req, buf, r) != ESP_OK) { fclose(f); return ESP_FAIL; }
-        }
-        fclose(f);
-        httpd_resp_send_chunk(req, NULL, 0);
-        return ESP_OK;
+    if (idstr) {
+        /* Servir una captura concreta por id (entero). */
+        uint32_t id = (uint32_t)strtoul(idstr, NULL, 10);
+        uint8_t *jpg = NULL; size_t jlen = 0;
+        if (id == 0 || !camera_vig_fetch(id, &jpg, &jlen)) { httpd_resp_send_404(req); return ESP_FAIL; }
+        httpd_resp_set_type(req, "image/jpeg");
+        esp_err_t r = httpd_resp_send(req, (const char *)jpg, jlen);
+        free(jpg);
+        return r;
     }
 
-    /* Listado HTML. */
+    /* Listado HTML con miniaturas en linea. */
+    uint32_t ids[VIG_MAX]; time_t ts[VIG_MAX]; size_t lens[VIG_MAX];
+    int n = camera_vig_list(ids, ts, lens, VIG_MAX);
+
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr_chunk(req,
         "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
         "<title>Vigilancia</title><style>body{font-family:sans-serif;background:#111;color:#eee;margin:0;"
-        "padding:12px}h2{margin:8px 0}a{color:#4FC3F7;display:block;padding:8px 0;border-bottom:1px solid "
-        "#333;text-decoration:none}</style></head><body><h2>Capturas de vigilancia</h2>");
-    DIR *d = opendir(VIG_DIR);
-    if (!d) {
-        httpd_resp_sendstr_chunk(req, "<p>Aun no hay capturas. Activa el modo ausente y muevete delante de la camara.</p>");
+        "padding:12px}h2{margin:8px 0}a{color:#4FC3F7;text-decoration:none}"
+        "img{max-width:100%;display:block;margin:6px 0;border:1px solid #333}"
+        ".cap{padding:8px 0;border-bottom:1px solid #333}.t{color:#9e9e9e;font-size:13px}"
+        "</style></head><body><h2>Capturas de vigilancia</h2>");
+    if (n == 0) {
+        httpd_resp_sendstr_chunk(req, "<p>Aun no hay capturas. Activa el modo ausente y muevete "
+                                      "delante de la camara.</p>");
     } else {
-        struct dirent *e; int count = 0; char line[400];
-        while ((e = readdir(d)) != NULL) {
-            const char *nm = e->d_name; size_t l = strlen(nm);
-            if (l > 4 && strcmp(nm + l - 4, ".bmp") == 0) {
-                snprintf(line, sizeof(line), "<a href='/vigilancia/%.120s'>%.120s</a>", nm, nm);
-                httpd_resp_sendstr_chunk(req, line);
-                count++;
-            }
+        char line[400];
+        for (int i = 0; i < n; i++) {
+            struct tm tmv; localtime_r(&ts[i], &tmv);
+            char when[32];
+            strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tmv);
+            snprintf(line, sizeof(line),
+                     "<div class=cap><div class=t>%s &middot; %u KB</div>"
+                     "<a href='/vigilancia/%u'><img src='/vigilancia/%u' loading=lazy></a></div>",
+                     when, (unsigned)(lens[i] / 1024), (unsigned)ids[i], (unsigned)ids[i]);
+            httpd_resp_sendstr_chunk(req, line);
         }
-        closedir(d);
-        if (count == 0) httpd_resp_sendstr_chunk(req, "<p>Carpeta vacia: sin capturas aun.</p>");
-        else { snprintf(line, sizeof(line), "<p>%d capturas (nombre = fecha-hora).</p>", count);
-               httpd_resp_sendstr_chunk(req, line); }
+        char foot[160];
+        snprintf(foot, sizeof(foot), "<p class=t>%d capturas en RAM (las mas recientes; "
+                                     "se pierden al reiniciar).</p>", n);
+        httpd_resp_sendstr_chunk(req, foot);
     }
     httpd_resp_sendstr_chunk(req, "</body></html>");
     httpd_resp_sendstr_chunk(req, NULL);

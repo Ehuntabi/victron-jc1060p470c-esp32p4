@@ -27,9 +27,23 @@ bool camera_get_luma(uint8_t *out_luma);
  * (PSRAM). El que llama debe hacer free(*out). false si aun no hay frame. */
 bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
 
+/* Codifica el ultimo frame a JPEG por HW (recorte 960x544). Devuelve un puntero
+ * a un buffer PERSISTENTE interno (NO hacer free) y su tamano. false si no hay
+ * frame o falla el encoder. Salida ~80KB -> escritura corta que no choca con la
+ * camara en el bus de la SD (a diferencia del BMP de 1.5MB). */
+bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);
+
 /* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta
- * movimiento y guarda fotos a /sdcard/vigilancia. Lo llama el modo ausente. */
+ * movimiento y guarda las fotos JPEG en un anillo en RAM (no SD; el bus SDMMC se
+ * satura con la camara+C6). Se ven por HTTP en /vigilancia. Lo llama el modo ausente. */
 void camera_set_surveillance(bool on);
+
+/* Anillo de capturas de vigilancia en RAM (servido por el HTTP /vigilancia). */
+#include <time.h>
+/* Lista las capturas (mas nueva primero). Rellena ids/ts/lens hasta max -> count. */
+int  camera_vig_list(uint32_t *ids, time_t *ts, size_t *lens, int max);
+/* Copia el JPEG de la captura 'id' a un buffer nuevo (caller hace free). false si rotada. */
+bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len);
 
 #ifdef __cplusplus
 }

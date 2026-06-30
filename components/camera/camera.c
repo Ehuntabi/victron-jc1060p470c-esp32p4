@@ -11,6 +11,8 @@
 #include "linux/videodev2.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
+#include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -42,6 +44,11 @@ static const char *TAG = "camera";
 /* Ganancia del OV02C10 = INDICE en su mapa (ov02c10_again_map, 0..58 = 1x..15.5x),
  * se fija con V4L2_CID_GAIN. 24 ~= 7x (sube el sujeto a contraluz). Tunear aqui. */
 #define CAM_GAIN_IDX  24
+/* En VIGILANCIA la pantalla esta apagada -> escena oscura (brillo ~24). Subimos
+ * exposicion y ganancia para fotos mas claras. Exposicion cerca del max (VTS~2320)
+ * y un punto mas de ganancia. (Compromiso: algo mas de grano / posible movido). */
+#define CAM_EXPOSURE_SURV  2300   /* mas luz via tiempo (no mete ruido como la ganancia) */
+#define CAM_GAIN_IDX_SURV  26     /* 26 (no 32): el auto-niveles ya sube brillo -> menos grano */
 
 /* Luminosidad media del frame (0-255), suavizada. La actualiza camera_stream_task
  * y la consume el auto-brillo. s_luma_valid=true cuando hay al menos un frame. */
@@ -92,6 +99,7 @@ static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
  * 4 es el compromiso. 1 = sin promediado. Tunear aqui. */
 #define CAM_EMA_SHIFT 2
 static uint16_t     *s_accum      = NULL;
+static volatile bool s_no_temporal = false;  /* en vigilancia: sin promediado (mas nitido) */
 
 /* Byte MSB (8 bits) del pixel (x,y) del RAW10 MIPI-packed. */
 static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
@@ -104,7 +112,7 @@ static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, 
  * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
  * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
  * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
-#define CAM_GAMMA 0.65f
+#define CAM_GAMMA 0.55f   /* mas bajo: levanta sombras (sujeto a contraluz menos oscuro) */
 static uint8_t s_gamma_lut[256];
 static bool    s_gamma_ready = false;
 static void gamma_init(void)
@@ -125,7 +133,7 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
      * (50% central): medicion ponderada al centro -> expone para el sujeto del
      * primer plano e ignora un contraluz/ventana de los bordes. */
     uint64_t sB = 0, sG = 0, sR = 0;
-    uint32_t n = 0;
+    uint32_t n = 0, nwb = 0;
     uint32_t hist[256] = {0};
     const int cy0 = THUMB_H / 4, cy1 = THUMB_H - THUMB_H / 4;
     const int cx0 = THUMB_W / 4, cx1 = THUMB_W - THUMB_W / 4;
@@ -137,11 +145,14 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
                      (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
             int r = raw_px(p, bytes, stride, sx + 1, sy + 1);
-            sB += b; sG += g; sR += r; n++;
-            hist[(b + 2 * g + r) / 4]++;   /* luma aprox */
+            n++;
+            hist[(b + 2 * g + r) / 4]++;   /* luma aprox (todos, para auto-niveles) */
+            /* WB gray-world SOLO con pixeles bien expuestos: los quemados (ventana a
+             * contraluz) desvian las medias y meten dominante (verde/magenta). */
+            if (b < 200 && g < 200 && r < 200) { sB += b; sG += g; sR += r; nwb++; }
         }
     }
-    float mB = n ? (float)sB / n : 1, mG = n ? (float)sG / n : 1, mR = n ? (float)sR / n : 1;
+    float mB = nwb ? (float)sB / nwb : 1, mG = nwb ? (float)sG / nwb : 1, mR = nwb ? (float)sR / nwb : 1;
     float gB = (mB > 1.0f) ? mG / mB : 1.0f;
     float gR = (mR > 1.0f) ? mG / mR : 1.0f;
     if (gB > 4.0f) gB = 4.0f;
@@ -182,8 +193,10 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             uint32_t idx = ((uint32_t)oy * THUMB_W + ox) * 3;
             uint8_t *d = &dst[idx];
             int fb = s_gamma_lut[b], fg = s_gamma_lut[g], fr = s_gamma_lut[r];  /* valor display */
-            if (s_accum) {
-                /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. */
+            if (s_accum && !s_no_temporal) {
+                /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. En
+                 * vigilancia se desactiva (s_no_temporal): con movimiento el promediado
+                 * deja 'fantasmas'; un frame fresco sale mas nitido (a costa de grano). */
                 uint16_t *a = &s_accum[idx];
                 a[0] = a[0] - (a[0] >> CAM_EMA_SHIFT) + (uint16_t)(fb << (4 - CAM_EMA_SHIFT));
                 a[1] = a[1] - (a[1] >> CAM_EMA_SHIFT) + (uint16_t)(fg << (4 - CAM_EMA_SHIFT));
@@ -243,6 +256,150 @@ bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
     return true;
 }
 
+/* ── JPEG por hardware (ESP32-P4) para las fotos de vigilancia ───────────────
+ * El BMP de 1.5MB chocaba con la camara en el bus de la SD (escritura larga).
+ * El JPEG por HW codifica en PSRAM (no toca la SD) y deja una salida ~80KB ->
+ * escritura corta como las del datalogger -> NO choca. Sigue el ejemplo oficial
+ * esp-idf/examples/peripherals/jpeg/jpeg_encode. */
+#define JPEG_W        960   /* recorte del thumbnail 964 -> 960 (multiplo de 16) */
+#define JPEG_H        544   /* recorte del thumbnail 546 -> 544 (multiplo de 16) */
+/* 85: mejora sobre 80 sin disparar el tamano. 92+YUV444 daba ~500KB/foto -> el
+ * tráfico del encoder (2D-DMA) + servir esas imagenes por WiFi saturaba el bus -> INT WDT. */
+#define JPEG_QUALITY  85
+static jpeg_encoder_handle_t s_jpeg_enc = NULL;
+static uint8_t  *s_jpeg_in  = NULL;     /* RGB888 (jpeg_alloc_encoder_mem) */
+static uint8_t  *s_jpeg_out = NULL;     /* bitstream JPEG (jpeg_alloc_encoder_mem) */
+static size_t    s_jpeg_in_sz = 0, s_jpeg_out_sz = 0;
+
+static bool camera_jpeg_init(void)
+{
+    if (s_jpeg_enc) return true;        /* ya inicializado */
+    jpeg_encode_engine_cfg_t eng = { .timeout_ms = 200 };
+    if (jpeg_new_encoder_engine(&eng, &s_jpeg_enc) != ESP_OK) {
+        ESP_LOGE(TAG, "jpeg: no pude crear el motor HW");
+        s_jpeg_enc = NULL;
+        return false;
+    }
+    jpeg_encode_memory_alloc_cfg_t in_cfg  = { .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER };
+    jpeg_encode_memory_alloc_cfg_t out_cfg = { .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER };
+    s_jpeg_in  = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3, &in_cfg,  &s_jpeg_in_sz);
+    s_jpeg_out = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3 / 3, &out_cfg, &s_jpeg_out_sz); /* ~1/3 sobra */
+    if (!s_jpeg_in || !s_jpeg_out) {
+        ESP_LOGE(TAG, "jpeg: sin memoria para buffers");
+        return false;
+    }
+    ESP_LOGI(TAG, "jpeg: motor HW listo (in=%u out=%u)", (unsigned)s_jpeg_in_sz, (unsigned)s_jpeg_out_sz);
+    return true;
+}
+
+/* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
+ * Devuelve puntero al buffer PERSISTENTE s_jpeg_out (NO hacer free) y su tamano. */
+bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
+{
+    if (!camera_jpeg_init()) return false;
+    int act = s_thumb_act;
+    if (act < 0 || s_thumb[act] == NULL) return false;
+    const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
+
+    /* Copiar el recorte 960x544 a la entrada RGB888 (swap B<->R). */
+    for (int y = 0; y < JPEG_H; y++) {
+        const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
+        uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
+        for (int x = 0; x < JPEG_W; x++) {
+            d[x*3 + 0] = s[x*3 + 2];   /* R <- src.R (BGR[2]) */
+            d[x*3 + 1] = s[x*3 + 1];   /* G */
+            d[x*3 + 2] = s[x*3 + 0];   /* B <- src.B (BGR[0]) */
+        }
+    }
+
+    jpeg_encode_cfg_t cfg = {
+        .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
+        .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,   /* equilibrio calidad/tamano (croma 4:2:2) */
+        .image_quality = JPEG_QUALITY,
+        .width         = JPEG_W,
+        .height        = JPEG_H,
+    };
+    uint32_t jlen = 0;
+    esp_err_t e = jpeg_encoder_process(s_jpeg_enc, &cfg, s_jpeg_in, s_jpeg_in_sz,
+                                       s_jpeg_out, s_jpeg_out_sz, &jlen);
+    if (e != ESP_OK) {
+        ESP_LOGW(TAG, "jpeg: encode fallo: %s", esp_err_to_name(e));
+        return false;
+    }
+    *out = s_jpeg_out;
+    *out_len = jlen;
+    return true;
+}
+
+/* ── Anillo de capturas de vigilancia en RAM (PSRAM) ─────────────────────────
+ * Escribir las fotos a la SD durante la vigilancia NO es viable en esta placa: el
+ * DMA de la camara + el sondeo SDIO del C6 saturan el controlador SDMMC compartido
+ * (timeouts 0x107; probado a fondo). Solucion: guardar las ultimas N fotos JPEG en
+ * PSRAM y servirlas por HTTP (/vigilancia). No se toca la SD -> cero conflicto. Se
+ * pierden al reiniciar (encaja con "modo ausente ahora"). */
+#define VIG_RING 16
+typedef struct { uint8_t *buf; size_t len; time_t ts; uint32_t id; } vig_slot_t;
+static vig_slot_t       s_vig[VIG_RING];
+static int              s_vig_head = 0;        /* proxima posicion de escritura */
+static uint32_t         s_vig_seq  = 0;        /* contador global -> id unico */
+static SemaphoreHandle_t s_vig_mtx = NULL;
+
+/* Guarda una copia del JPEG en el anillo (la mas antigua se libera). Llamada desde
+ * la tarea de camara. Copia los bytes -> s_jpeg_out se puede reusar luego. */
+static void camera_vig_store(const uint8_t *jpg, size_t len, time_t ts)
+{
+    if (!s_vig_mtx) { s_vig_mtx = xSemaphoreCreateMutex(); if (!s_vig_mtx) return; }
+    uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+    if (!copy) { ESP_LOGW(TAG, "vig: sin PSRAM para la captura"); return; }
+    memcpy(copy, jpg, len);
+    xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    vig_slot_t *sl = &s_vig[s_vig_head];
+    if (sl->buf) free(sl->buf);
+    sl->buf = copy; sl->len = len; sl->ts = ts; sl->id = ++s_vig_seq;
+    s_vig_head = (s_vig_head + 1) % VIG_RING;
+    xSemaphoreGive(s_vig_mtx);
+}
+
+/* Lista las capturas (mas NUEVA primero). Rellena ids/ts/lens hasta max. -> count. */
+int camera_vig_list(uint32_t *ids, time_t *ts, size_t *lens, int max)
+{
+    if (!s_vig_mtx) return 0;
+    int n = 0;
+    xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    for (int k = 0; k < VIG_RING && n < max; k++) {
+        int idx = (s_vig_head - 1 - k + VIG_RING) % VIG_RING;
+        if (s_vig[idx].buf) {
+            if (ids)  ids[n]  = s_vig[idx].id;
+            if (ts)   ts[n]   = s_vig[idx].ts;
+            if (lens) lens[n] = s_vig[idx].len;
+            n++;
+        }
+    }
+    xSemaphoreGive(s_vig_mtx);
+    return n;
+}
+
+/* Copia el JPEG de la captura 'id' a un buffer nuevo (PSRAM); el que llama hace
+ * free(*out). false si ya no existe (rotada). */
+bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
+{
+    if (!s_vig_mtx) return false;
+    bool ok = false;
+    xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    for (int i = 0; i < VIG_RING; i++) {
+        if (s_vig[i].buf && s_vig[i].id == id) {
+            uint8_t *copy = heap_caps_malloc(s_vig[i].len, MALLOC_CAP_SPIRAM);
+            if (copy) {
+                memcpy(copy, s_vig[i].buf, s_vig[i].len);
+                *out = copy; *out_len = s_vig[i].len; ok = true;
+            }
+            break;
+        }
+    }
+    xSemaphoreGive(s_vig_mtx);
+    return ok;
+}
+
 /* Fija un control V4L2 del sensor (exposicion/ganancia) y loguea el resultado. */
 static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 {
@@ -271,11 +428,14 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 
 static volatile bool s_surveillance = false;
 static volatile bool s_mot_reset    = false;
+static volatile bool s_ctrl_dirty   = true;   /* re-aplicar exposicion/ganancia en la tarea */
 
 void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
+    s_no_temporal = on;   /* vigilancia: sin promediado temporal (mas nitido con movimiento) */
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
+    s_ctrl_dirty = true;  /* aplicar exposicion/ganancia de vigilancia (mas brillo) o normal */
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
@@ -364,9 +524,6 @@ static void camera_stream_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
-    cam_set_ctrl(fd, V4L2_CID_EXPOSURE, CAM_EXPOSURE, "exposure");
-    cam_set_ctrl(fd, V4L2_CID_GAIN, CAM_GAIN_IDX, "gain(idx)");
-
     uint32_t ema = 0;
     bool first = true;
 
@@ -378,6 +535,14 @@ static void camera_stream_task(void *arg)
 
     while (1) {
         bool surv = s_surveillance;
+
+        /* Re-aplicar exposicion/ganancia al arranque y en cada cambio de modo:
+         * vigilancia usa valores mas altos (escena oscura con pantalla apagada). */
+        if (s_ctrl_dirty) {
+            s_ctrl_dirty = false;
+            cam_set_ctrl(fd, V4L2_CID_EXPOSURE, surv ? CAM_EXPOSURE_SURV : CAM_EXPOSURE, "exposure");
+            cam_set_ctrl(fd, V4L2_CID_GAIN, surv ? CAM_GAIN_IDX_SURV : CAM_GAIN_IDX, "gain(idx)");
+        }
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
@@ -431,29 +596,16 @@ static void camera_stream_task(void *arg)
                         (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
                         photo_count < MOT_MAX_PHOTOS) {
                         last_photo_us = now;
-                        uint8_t *bmp = NULL;
-                        size_t blen = 0;
-                        if (camera_snapshot_bmp(&bmp, &blen)) {
-                            mkdir("/sdcard/vigilancia", 0777);
-                            time_t t = time(NULL);
-                            struct tm tmv;
-                            localtime_r(&t, &tmv);
-                            char path[80];
-                            snprintf(path, sizeof(path),
-                                     "/sdcard/vigilancia/%04d%02d%02d-%02d%02d%02d.bmp",
-                                     tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
-                                     tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
-                            FILE *f = fopen(path, "wb");
-                            if (f) {
-                                fwrite(bmp, 1, blen, f);
-                                fclose(f);
-                                photo_count++;
-                                ESP_LOGI(TAG, "vigilancia: movimiento (%d celdas) -> foto %d %s",
-                                         changed, photo_count, path);
-                            } else {
-                                ESP_LOGW(TAG, "vigilancia: no pude guardar %s", path);
-                            }
-                            free(bmp);
+                        /* Codificar el JPEG por HW (PSRAM) y guardarlo en el anillo en
+                         * RAM. NO se escribe a la SD: el DMA camara+C6 la satura durante
+                         * la vigilancia (probado). Se ven por HTTP en /vigilancia. */
+                        uint8_t *jpg = NULL;
+                        size_t jlen = 0;
+                        if (camera_snapshot_jpeg(&jpg, &jlen)) {
+                            camera_vig_store(jpg, jlen, time(NULL));
+                            photo_count++;
+                            ESP_LOGI(TAG, "vigilancia: movimiento (%d celdas) -> captura %d en RAM (%u B)",
+                                     changed, photo_count, (unsigned)jlen);
                         }
                         /* TODO(video): grabacion H.264 de N seg aqui (esp_h264). */
                     }
