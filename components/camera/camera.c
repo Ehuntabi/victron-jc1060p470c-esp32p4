@@ -1,6 +1,8 @@
 #include "camera.h"
 #include "esp_video_init.h"
+#include "esp_video_ioctl.h"   /* VIDIOC_S_DQBUF_TIMEOUT (que DQBUF no bloquee infinito) */
 #include "esp_cam_sensor_detect.h"
+#include <sys/time.h>          /* struct timeval para el timeout de DQBUF */
 #include "esp_log.h"
 #include <fcntl.h>
 #include <unistd.h>
@@ -558,12 +560,16 @@ static void camera_stream_task(void *arg)
         return;
     }
 
-    /* Suscribir esta tarea al Task WDT: el fd es O_RDONLY (DQBUF bloqueante). Si el
-     * CSI/sensor se cuelga, DQBUF no retorna y la camara moriria en silencio; con el
-     * WDT, el cuelgue se detecta -> reinicio controlado (recuperable). Reset por
-     * iteracion. IMPORTANTE: el TWDT es PANIC=y con timeout 5s, asi que cada vuelta
-     * debe durar <5s -> mantener CAM_IDLE_MS/CAM_SURV_IDLE_MS holgadamente por debajo
-     * (hoy 2000/1500 ms; subirlos hacia >=4s reintroduciria reinicios espurios). */
+    /* Que DQBUF NO bloquee infinito: timeout de 3s. Asi un cuelgue del CSI/sensor
+     * hace que DQBUF retorne error (el bucle lo trata: vTaskDelay+continue -> resetea
+     * el WDT) en vez de bloquear la tarea para siempre. El Task WDT (5s, PANIC) queda
+     * como RESPALDO real para otros cuelgues, no como gatillo de un DQBUF normal. */
+    struct timeval dqbuf_to = { .tv_sec = 3, .tv_usec = 0 };
+    ioctl(fd, VIDIOC_S_DQBUF_TIMEOUT, &dqbuf_to);
+
+    /* Suscribir esta tarea al Task WDT (respaldo): si TODA la iteracion se cuelga
+     * (no solo DQBUF), el cuelgue se detecta -> reinicio recuperable. Reset por
+     * iteracion. Mantener CAM_IDLE_MS/CAM_SURV_IDLE_MS < 5s (TWDT timeout). */
     esp_err_t wdt_err = esp_task_wdt_add(NULL);
     if (wdt_err != ESP_OK)   /* si fallara, el reset() seria no-op -> sin proteccion */
         ESP_LOGW(TAG, "stream: esp_task_wdt_add fallo (%s) - sin watchdog en la tarea",
