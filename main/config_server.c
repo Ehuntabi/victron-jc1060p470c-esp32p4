@@ -249,7 +249,14 @@ esp_err_t wifi_ap_init(void)
 
         // Wi-Fi driver
         wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
-        ESP_ERROR_CHECK(esp_wifi_init(&wcfg));
+        /* NO abortar el boot si el C6/SDIO falla: el WiFi va por el C6 (esp_hosted) y
+         * un fallo suyo con ESP_ERROR_CHECK provocaba boot-loop dejando la UI rehen
+         * del WiFi. Degradar: seguir sin WiFi (R1). */
+        esp_err_t we = esp_wifi_init(&wcfg);
+        if (we != ESP_OK) {
+            ESP_LOGE(TAG, "esp_wifi_init fallo: %s -> sigo SIN WiFi", esp_err_to_name(we));
+            return we;
+        }
 
         subsystems_inited = true;
     }
@@ -340,7 +347,11 @@ esp_err_t wifi_ap_init(void)
     }
     esp_netif_t *ap_netif = s_ap_netif;
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    esp_err_t wm = esp_wifi_set_mode(WIFI_MODE_AP);
+    if (wm != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_set_mode fallo: %s -> sigo SIN WiFi", esp_err_to_name(wm));
+        return wm;
+    }
 
     /* Forzar password minima 8 chars (requisito WPA2) y por defecto. */
     if (strlen(pass) < 8) {
@@ -375,7 +386,11 @@ esp_err_t wifi_ap_init(void)
     /* Crear EventGroup ANTES de esp_wifi_start para no perder el evento
      * AP_START (que llega async). xEventGroupCreate solo la primera vez. */
     if (!s_ap_evt) s_ap_evt = xEventGroupCreate();
-    ESP_ERROR_CHECK(esp_wifi_start());
+    esp_err_t ws = esp_wifi_start();
+    if (ws != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_start fallo: %s -> sigo SIN WiFi", esp_err_to_name(ws));
+        return ws;
+    }
 
     /* Esperar hasta 2 s a que el handler async termine el action_start
      * (netif añadido + DHCP server up). Sin esto, dhcp_set_captiveportal_url

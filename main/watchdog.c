@@ -12,6 +12,9 @@
 static const char *TAG = "WD";
 static const char *NVS_NS = "wd";
 static const char *KEY_COUNT = "count";
+/* Motivo del reset FORZADO por el monitor SW (esp_restart -> aparece como ESP_RST_SW,
+ * indistinguible de un reboot planificado). 0=ninguno 1=LVGL congelada 2=tarea muda. */
+static const char *KEY_FORCED = "forced";
 
 static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
@@ -77,6 +80,29 @@ static uint32_t wd_load_counter_nvs(void)
     return v;
 }
 
+/* Marca el motivo del reset forzado ANTES de esp_restart (1=LVGL, 2=tarea muda). */
+static void wd_set_forced_reason_nvs(uint8_t code)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u8(h, KEY_FORCED, code);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+/* Lee y BORRA el motivo forzado. Devuelve 0 si no habia. */
+static uint8_t wd_take_forced_reason_nvs(void)
+{
+    nvs_handle_t h;
+    uint8_t code = 0;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_get_u8(h, KEY_FORCED, &code);
+        if (code != 0) { nvs_set_u8(h, KEY_FORCED, 0); nvs_commit(h); }
+        nvs_close(h);
+    }
+    return code;
+}
+
 static const char *reason_to_str(esp_reset_reason_t r)
 {
     switch (r) {
@@ -118,6 +144,7 @@ static void wd_monitor_task(void *arg)
                      consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
             if (consecutive_fail >= WD_LVGL_FAIL_THRESHOLD) {
                 ESP_LOGE(TAG, "UI congelada — reset controlado (sin flush SD)");
+                wd_set_forced_reason_nvs(1);   /* R4: registrar el motivo */
                 /* No hacemos flush a SD aqui: si el cuelgue lo causa el
                  * propio subsistema de SD/FAT (mutex retenido por una task
                  * muerta), datalogger_flush() / battery_history_flush()
@@ -136,6 +163,7 @@ static void wd_monitor_task(void *arg)
             if (stalled >= 0) {
                 ESP_LOGE(TAG, "Tarea %d sin latido >10s — reset controlado",
                          stalled);
+                wd_set_forced_reason_nvs(2);   /* R4: registrar el motivo */
                 bsp_display_brightness_set(0);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 esp_restart();
@@ -157,10 +185,17 @@ esp_err_t watchdog_init(void)
                          r == ESP_RST_PANIC);
 
     s_reset_count = wd_load_counter_nvs();
-    if (is_wdt_reset) {
+    /* R4: un reset FORZADO por este monitor llega como ESP_RST_SW (no como WDT), asi
+     * que no lo contaba is_wdt_reset. Leer/borrar el motivo guardado y contarlo. */
+    uint8_t forced = wd_take_forced_reason_nvs();
+    if (is_wdt_reset || forced) {
         wd_increment_counter_nvs();
     }
-    ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic resets: %lu",
+    if (forced) {
+        ESP_LOGW(TAG, "Reset FORZADO por watchdog SW: %s",
+                 forced == 1 ? "UI/LVGL congelada" : "tarea sin latido");
+    }
+    ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic/forzados: %lu",
              s_reason_str, (unsigned long)s_reset_count);
 
     /* Task monitor de salud de LVGL */

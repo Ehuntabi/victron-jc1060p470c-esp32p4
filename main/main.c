@@ -106,10 +106,17 @@ static int luma_to_brightness(uint8_t luma)
     return (b / 5) * 5;     /* pasos de 5% -> sin parpadeo */
 }
 
+static SemaphoreHandle_t s_bright_mutex = NULL;   /* serializa night_mode_timer_cb */
+
 static void night_mode_timer_cb(void *arg)
 {
     ui_state_t *ui = (ui_state_t *)arg;
     if (!ui) return;
+
+    /* Serializar: este cb corre desde la tarea esp_timer (4s) Y desde LVGL via
+     * brightness_apply_now (ausente). Sin esto, s_last_target sufre lost-update y los
+     * ledc_set/update se cruzan -> la pantalla podia reencenderse en vigilancia. */
+    if (s_bright_mutex) xSemaphoreTake(s_bright_mutex, portMAX_DELAY);
 
     /* Solo aplicamos si el objetivo cambia (evita reescribir el duty del LEDC). */
     static int s_last_target = -1;
@@ -120,6 +127,7 @@ static void night_mode_timer_cb(void *arg)
         target = 0;
     } else if (ui->screensaver.active) {
         /* El screensaver gestiona su propio brillo. */
+        if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
         return;
     } else {
         /* Precedencia: franja nocturna (atenuacion por horario) > auto-brillo por
@@ -146,9 +154,13 @@ static void night_mode_timer_cb(void *arg)
         }
     }
 
-    if (target == s_last_target) return;
+    if (target == s_last_target) {
+        if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
+        return;
+    }
     s_last_target = target;
     bsp_display_brightness_set(target);
+    if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
 }
 
 /* ── Estado UI global ────────────────────────────────────────── */
@@ -484,6 +496,7 @@ void app_main(void)
     esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
 
     /* Modo nocturno: re-evalúa cada 60 s y aplica brillo segun la hora. */
+    s_bright_mutex = xSemaphoreCreateMutex();   /* serializa el cb de brillo (R3) */
     static esp_timer_handle_t night_timer;
     const esp_timer_create_args_t night_args = {
         .callback        = &night_mode_timer_cb,

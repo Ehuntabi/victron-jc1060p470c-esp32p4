@@ -356,7 +356,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
  * (timeouts 0x107; probado a fondo). Solucion: guardar las ultimas N fotos JPEG en
  * PSRAM y servirlas por HTTP (/vigilancia). No se toca la SD -> cero conflicto. Se
  * pierden al reiniciar (encaja con "modo ausente ahora"). */
-#define VIG_RING 16
+#define VIG_RING 8    /* 8 capturas basta para "quien entro"; ahorra ~0.5MB PSRAM */
 typedef struct { uint8_t *buf; size_t len; time_t ts; uint32_t id; } vig_slot_t;
 static vig_slot_t       s_vig[VIG_RING];
 static int              s_vig_head = 0;        /* proxima posicion de escritura */
