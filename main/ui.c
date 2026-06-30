@@ -1904,6 +1904,9 @@ void ui_close_battery_history_screen(void)
         s_bh_chart = NULL;
         s_bh_prev_screen = NULL;
     }
+    /* Liberar el buffer de carga del historico (~140KB PSRAM): se reservaba lazy
+     * al abrir y nunca se liberaba. Se re-reserva al volver a abrir. */
+    if (s_bh_buf) { free(s_bh_buf); s_bh_buf = NULL; }
 }
 
 static void bh_screen_close_cb(lv_event_t *e)

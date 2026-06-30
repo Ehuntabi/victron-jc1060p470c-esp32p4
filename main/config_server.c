@@ -659,8 +659,13 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
         char line[400];
         for (int i = 0; i < n; i++) {
             struct tm tmv; localtime_r(&ts[i], &tmv);
-            char when[32];
-            strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tmv);
+            char when[40];
+            /* R6: si no hay hora fiable (sin RTC/NTP, año <2020) la fecha es basura;
+             * mostrarlo claro en vez de un "1970-..." enganoso. */
+            if (tmv.tm_year < 120)
+                snprintf(when, sizeof(when), "captura #%u (hora no fijada)", (unsigned)ids[i]);
+            else
+                strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tmv);
             snprintf(line, sizeof(line),
                      "<div class=cap><div class=t>%s &middot; %u KB</div>"
                      "<a href='/vigilancia/%u'><img src='/vigilancia/%u' loading=lazy></a></div>",
