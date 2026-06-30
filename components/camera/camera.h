@@ -35,10 +35,9 @@ bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
 bool camera_sd_bus_lock(uint32_t timeout_ms);
 void camera_sd_bus_unlock(void);
 
-/* Codifica el ultimo frame a JPEG por HW (recorte 960x544). Devuelve un puntero
- * a un buffer PERSISTENTE interno (NO hacer free) y su tamano. false si no hay
- * frame o falla el encoder. Salida ~80KB -> escritura corta que no choca con la
- * camara en el bus de la SD (a diferencia del BMP de 1.5MB). */
+/* Codifica el ultimo frame a JPEG por HW (recorte 960x544). THREAD-SAFE (mutex del
+ * encoder). Devuelve una COPIA nueva en PSRAM: el que llama hace free(*out). false
+ * si no hay frame o falla el encoder. Salida ~80-150KB. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);
 
 /* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta

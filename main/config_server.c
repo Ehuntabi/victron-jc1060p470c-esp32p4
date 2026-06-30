@@ -590,31 +590,21 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
     if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
 } while (0)
 
-// GET /snapshot -> foto BMP (grises) del ultimo frame de la camara. Sin auth
-// (endpoint de verificacion de la captura). Tambien guarda copia en /sdcard.
+// GET /snapshot -> foto JPEG del ultimo frame de la camara. Sin auth (endpoint de
+// verificacion). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
+// sobre el AP y sin el malloc de 1.58MB por peticion (que rozaba el suelo de PSRAM).
 static esp_err_t handle_snapshot(httpd_req_t *req) {
-    uint8_t *bmp = NULL;
+    uint8_t *jpg = NULL;
     size_t   len = 0;
-    if (!camera_snapshot_bmp(&bmp, &len)) {
+    if (!camera_snapshot_jpeg(&jpg, &len)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
         httpd_resp_sendstr(req, "camara sin frame todavia");
         return ESP_OK;
     }
-    /* NO escribir a SD aqui: 1.58 MB sincronos por peticion competian con el
-     * datalogger por la SD -> cuelgue/WDT (era la causa del crash al abrir la
-     * foto). El BMP enviado es copia privada; se libera al final. */
-    httpd_resp_set_type(req, "image/bmp");
+    httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    /* Enviar troceado: evita un unico send gigante (1.58 MB) que bloquea/encola
-     * mal sobre el AP. */
-    esp_err_t r = ESP_OK;
-    const size_t CHUNK = 8192;
-    for (size_t off = 0; off < len && r == ESP_OK; off += CHUNK) {
-        size_t n = (len - off < CHUNK) ? (len - off) : CHUNK;
-        r = httpd_resp_send_chunk(req, (const char *)bmp + off, n);
-    }
-    if (r == ESP_OK) httpd_resp_send_chunk(req, NULL, 0);
-    free(bmp);
+    esp_err_t r = httpd_resp_send(req, (const char *)jpg, len);
+    free(jpg);
     return r;
 }
 

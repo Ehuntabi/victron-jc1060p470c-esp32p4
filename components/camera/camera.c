@@ -311,43 +311,56 @@ static bool camera_jpeg_init(void)
     return true;
 }
 
+/* Mutex del encoder JPEG (s_jpeg_enc/in/out). Protege contra uso concurrente desde
+ * la tarea de camara (vigilancia) y el servidor HTTP (/snapshot). */
+static SemaphoreHandle_t s_jpeg_mutex = NULL;
+
 /* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
- * Devuelve puntero al buffer PERSISTENTE s_jpeg_out (NO hacer free) y su tamano. */
+ * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
+ * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
 {
-    if (!camera_jpeg_init()) return false;
-    int act = s_thumb_act;
-    if (act < 0 || s_thumb[act] == NULL) return false;
-    const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
+    if (s_jpeg_mutex) xSemaphoreTake(s_jpeg_mutex, portMAX_DELAY);
+    bool ok = false;
 
-    /* Copiar el recorte 960x544 a la entrada RGB888 (swap B<->R). */
-    for (int y = 0; y < JPEG_H; y++) {
-        const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
-        uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
-        for (int x = 0; x < JPEG_W; x++) {
-            d[x*3 + 0] = s[x*3 + 2];   /* R <- src.R (BGR[2]) */
-            d[x*3 + 1] = s[x*3 + 1];   /* G */
-            d[x*3 + 2] = s[x*3 + 0];   /* B <- src.B (BGR[0]) */
+    if (camera_jpeg_init()) {
+        int act = s_thumb_act;
+        if (act >= 0 && s_thumb[act] != NULL) {
+            const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
+            /* Copiar el recorte 960x544 a la entrada RGB888 (swap B<->R). */
+            for (int y = 0; y < JPEG_H; y++) {
+                const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
+                uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
+                for (int x = 0; x < JPEG_W; x++) {
+                    d[x*3 + 0] = s[x*3 + 2];   /* R <- src.R (BGR[2]) */
+                    d[x*3 + 1] = s[x*3 + 1];   /* G */
+                    d[x*3 + 2] = s[x*3 + 0];   /* B <- src.B (BGR[0]) */
+                }
+            }
+            jpeg_encode_cfg_t cfg = {
+                .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
+                .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,
+                .image_quality = JPEG_QUALITY,
+                .width         = JPEG_W,
+                .height        = JPEG_H,
+            };
+            uint32_t jlen = 0;
+            esp_err_t e = jpeg_encoder_process(s_jpeg_enc, &cfg, s_jpeg_in, s_jpeg_in_sz,
+                                               s_jpeg_out, s_jpeg_out_sz, &jlen);
+            if (e == ESP_OK) {
+                uint8_t *copy = heap_caps_malloc(jlen, MALLOC_CAP_SPIRAM);
+                if (copy) {
+                    memcpy(copy, s_jpeg_out, jlen);
+                    *out = copy; *out_len = jlen; ok = true;
+                }
+            } else {
+                ESP_LOGW(TAG, "jpeg: encode fallo: %s", esp_err_to_name(e));
+            }
         }
     }
 
-    jpeg_encode_cfg_t cfg = {
-        .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
-        .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,   /* equilibrio calidad/tamano (croma 4:2:2) */
-        .image_quality = JPEG_QUALITY,
-        .width         = JPEG_W,
-        .height        = JPEG_H,
-    };
-    uint32_t jlen = 0;
-    esp_err_t e = jpeg_encoder_process(s_jpeg_enc, &cfg, s_jpeg_in, s_jpeg_in_sz,
-                                       s_jpeg_out, s_jpeg_out_sz, &jlen);
-    if (e != ESP_OK) {
-        ESP_LOGW(TAG, "jpeg: encode fallo: %s", esp_err_to_name(e));
-        return false;
-    }
-    *out = s_jpeg_out;
-    *out_len = jlen;
-    return true;
+    if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
+    return ok;
 }
 
 /* ── Anillo de capturas de vigilancia en RAM (PSRAM) ─────────────────────────
@@ -686,6 +699,7 @@ static void camera_stream_task(void *arg)
                         size_t jlen = 0;
                         if (camera_snapshot_jpeg(&jpg, &jlen)) {
                             camera_vig_store(jpg, jlen, time(NULL));
+                            free(jpg);   /* ahora devuelve una copia -> liberarla */
                             s_photo_count++;
                             ESP_LOGI(TAG, "vigilancia: movimiento (%d celdas) -> captura %d en RAM (%u B)",
                                      changed, s_photo_count, (unsigned)jlen);
@@ -752,8 +766,9 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
 
     ESP_LOGI(TAG, "esp_video_init OK - camara OV02C10 lista (/dev/video0)");
 
-    /* Cerrojo de bus camara<->SD (creado ANTES de arrancar la tarea). */
+    /* Cerrojo de bus camara<->SD + mutex del encoder JPEG (ANTES de arrancar la tarea). */
     s_sd_bus = xSemaphoreCreateMutex();
+    s_jpeg_mutex = xSemaphoreCreateMutex();
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
