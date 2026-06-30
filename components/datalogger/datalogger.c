@@ -1,4 +1,5 @@
 #include "datalogger.h"
+#include "camera.h"          /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
 #include "rtc_rx8025t.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -168,9 +169,18 @@ static void flush_pending_to_sd_impl(void)
      * entradas para el proximo intento. */
     struct stat st;
     bool need_header = (stat(path, &st) != 0);
+
+    /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
+     * activo (contencion SDMMC -> INT WDT -> reinicio). Si no se consigue el bus,
+     * omitir este flush; los datos quedan en el ring para el siguiente. */
+    if (!camera_sd_bus_lock(2500)) {
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return;
+    }
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed", path);
+        camera_sd_bus_unlock();
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
@@ -183,6 +193,7 @@ static void flush_pending_to_sd_impl(void)
      * cientos de ms en el flush es ~0.1% del tiempo. */
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
         fclose(f);
+        camera_sd_bus_unlock();
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
@@ -215,6 +226,7 @@ static void flush_pending_to_sd_impl(void)
     }
     xSemaphoreGive(s_mutex);
     fclose(f);
+    camera_sd_bus_unlock();
 
     if (io_error) {
         ESP_LOGW(TAG, "I/O error en %s tras %d/%d entradas; reintento proximo flush",

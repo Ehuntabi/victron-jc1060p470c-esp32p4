@@ -12,4 +12,5 @@ idf_component_register(
         frigo
         rtc_rx8025t
         esp_hw_support
+        camera
 )

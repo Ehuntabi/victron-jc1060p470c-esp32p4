@@ -1,4 +1,5 @@
 #include "log_capture.h"
+#include "camera.h"   /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
 
 #include <string.h>
 #include <stdio.h>
@@ -267,9 +268,18 @@ static void log_save_task(void *arg)
         ESP_LOGI(SAVE_TAG, "iniciando save -> %s (%u lineas)",
                  req.path, (unsigned)req.snap_count);
 
+        /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Si no
+         * se consigue, omitir este save (best-effort; reintenta en el proximo). */
+        if (!camera_sd_bus_lock(2500)) {
+            ESP_LOGW(SAVE_TAG, "bus SD ocupado, omito save -> %s", req.path);
+            free(req.snap);
+            s_save_busy = false;
+            continue;
+        }
         FILE *f = fopen(req.path, "w");
         if (!f) {
             ESP_LOGE(SAVE_TAG, "fopen %s fallo", req.path);
+            camera_sd_bus_unlock();
             free(req.snap);
             s_save_busy = false;
             continue;
@@ -289,6 +299,7 @@ static void log_save_task(void *arg)
         }
 
         fclose(f);
+        camera_sd_bus_unlock();
         free(req.snap);
         s_save_busy = false;
         ESP_LOGI(SAVE_TAG, "save completo -> %s", req.path);

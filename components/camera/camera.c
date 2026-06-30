@@ -450,6 +450,28 @@ static volatile bool s_mot_reset    = false;
 static volatile bool s_ctrl_dirty   = true;   /* re-aplicar exposicion/ganancia en la tarea */
 static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
 
+/* Cerrojo de bus camara<->SD. El DMA de la camara (GDMA) contiende con el
+ * controlador SDMMC (SD + SDIO del C6); una escritura a SD que pille la ventana de
+ * DMA activo se atasca con interrupciones bloqueadas >300ms -> INT WDT -> reinicio.
+ * La tarea de camara RETIENE este mutex en su ventana de DMA activo y lo SUELTA en
+ * su ventana ociosa; los escritores de SD (datalogger/battery_history/log) lo toman
+ * antes de su I/O -> escriben solo cuando el GDMA esta parado. */
+static SemaphoreHandle_t s_sd_bus = NULL;
+
+/* Para escritores de SD externos: tomar/soltar el bus alrededor de su I/O a SD.
+ * lock devuelve false si no lo consigue en timeout_ms (el que llama debe omitir la
+ * escritura y reintentar luego). Si la camara no ha arrancado (mutex NULL) no hay
+ * contencion -> permitir siempre. */
+bool camera_sd_bus_lock(uint32_t timeout_ms)
+{
+    if (!s_sd_bus) return true;
+    return xSemaphoreTake(s_sd_bus, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+void camera_sd_bus_unlock(void)
+{
+    if (s_sd_bus) xSemaphoreGive(s_sd_bus);
+}
+
 void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
@@ -589,6 +611,13 @@ static void camera_stream_task(void *arg)
         esp_task_wdt_reset();   /* la tarea sigue viva (si DQBUF se cuelga, salta el WDT) */
         bool surv = s_surveillance;
 
+        /* Tomar el bus para la ventana de DMA activo. Si un escritor de SD lo tiene,
+         * esperar (con tope) -> si no se consigue, saltar el frame (GDMA sigue parado,
+         * sin problema). Asi la captura y las escrituras a SD nunca solapan. */
+        if (!camera_sd_bus_lock(1000)) {
+            continue;   /* esp_task_wdt_reset al inicio mantiene viva la tarea */
+        }
+
         /* Re-aplicar exposicion/ganancia al arranque y en cada cambio de modo:
          * vigilancia usa valores mas altos (escena oscura con pantalla apagada). */
         if (s_ctrl_dirty) {
@@ -599,6 +628,7 @@ static void camera_stream_task(void *arg)
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
+            camera_sd_bus_unlock();
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
@@ -669,9 +699,15 @@ static void camera_stream_task(void *arg)
         }
         ioctl(fd, VIDIOC_QBUF, &b);
 
-        /* THROTTLE: con los buffers llenos el GDMA de la camara se para por
-         * contrapresion -> la SD queda libre. Normal ~2s; vigilancia ~250ms. */
-        vTaskDelay(pdMS_TO_TICKS(surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS));
+        /* Dejar que el GDMA acabe de rellenar el buffer recien encolado y se PARE por
+         * contrapresion (ambos buffers llenos) ANTES de soltar el bus -> al soltarlo el
+         * DMA de la camara ya no toca el SDMMC. */
+        vTaskDelay(pdMS_TO_TICKS(80));
+        camera_sd_bus_unlock();   /* ventana ociosa: los escritores de SD pueden ir */
+
+        /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s. */
+        int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 80;
+        if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
     }
 }
 
@@ -715,6 +751,9 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     }
 
     ESP_LOGI(TAG, "esp_video_init OK - camara OV02C10 lista (/dev/video0)");
+
+    /* Cerrojo de bus camara<->SD (creado ANTES de arrancar la tarea). */
+    s_sd_bus = xSemaphoreCreateMutex();
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */

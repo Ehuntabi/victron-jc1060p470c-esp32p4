@@ -1,4 +1,5 @@
 #include "battery_history.h"
+#include "camera.h"   /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
 #include <string.h>
 #include <stdlib.h>
 #include "esp_log.h"
@@ -310,9 +311,15 @@ static void bh_flush_to_sd_dated(time_t file_date)
     if (total_pending == 0) return;
 
     /* === FASE 2: Escritura sin lock. === */
+    /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Si no se
+     * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego. */
+    if (!camera_sd_bus_lock(2500)) {
+        return;
+    }
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));
+        camera_sd_bus_unlock();
         return;
     }
     bool io_error = false;
@@ -352,6 +359,7 @@ static void bh_flush_to_sd_dated(time_t file_date)
         }
     }
     fclose(f);
+    camera_sd_bus_unlock();
 
     if (io_error) {
         ESP_LOGW(TAG, "I/O error escribiendo %s; reintentaremos en proximo flush", path);

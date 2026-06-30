@@ -27,6 +27,14 @@ bool camera_get_luma(uint8_t *out_luma);
  * (PSRAM). El que llama debe hacer free(*out). false si aun no hay frame. */
 bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
 
+/* Cerrojo de bus camara<->SD: los escritores de SD (datalogger/battery_history/log)
+ * DEBEN envolver su I/O con estas para no solapar con el DMA de la camara (la
+ * contencion en el controlador SDMMC provoca INT WDT -> reinicio). lock devuelve
+ * false si no consigue el bus en timeout_ms (entonces omitir la escritura y reintentar
+ * luego). Si la camara no esta arrancada (mutex no creado) permite siempre. */
+bool camera_sd_bus_lock(uint32_t timeout_ms);
+void camera_sd_bus_unlock(void);
+
 /* Codifica el ultimo frame a JPEG por HW (recorte 960x544). Devuelve un puntero
  * a un buffer PERSISTENTE interno (NO hacer free) y su tamano. false si no hay
  * frame o falla el encoder. Salida ~80KB -> escritura corta que no choca con la
