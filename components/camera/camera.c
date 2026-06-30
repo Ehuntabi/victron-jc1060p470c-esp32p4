@@ -261,8 +261,11 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
  * celdas cambian -> movimiento -> foto a SD (rate-limited por cooldown). */
 #define MOT_GW            32
 #define MOT_GH            18
-#define MOT_CELL_DIFF     35     /* diff por celda (0-255) que cuenta como cambio */
-#define MOT_CELL_COUNT    12     /* nº de celdas cambiadas para declarar movimiento */
+/* Calibrado con datos reales (escena con pantalla apagada, brillo~17): el ruido en
+ * reposo da maxdiff~5 y una persona moviendose da maxdiff 13-26. Umbral 10 separa
+ * limpiamente (sobre el ruido, bajo el movimiento). 35 era inalcanzable -> mov=0. */
+#define MOT_CELL_DIFF     10     /* diff por celda (0-255) que cuenta como cambio */
+#define MOT_CELL_COUNT    4      /* nº de celdas cambiadas para declarar movimiento */
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
 #define MOT_MAX_PHOTOS    300    /* tope por sesion (no llenar la SD) */
 
