@@ -624,12 +624,12 @@ static void camera_stream_task(void *arg)
         esp_task_wdt_reset();   /* la tarea sigue viva (si DQBUF se cuelga, salta el WDT) */
         bool surv = s_surveillance;
 
-        /* Tomar el bus para la ventana de DMA activo. Si un escritor de SD lo tiene,
-         * esperar (con tope) -> si no se consigue, saltar el frame (GDMA sigue parado,
-         * sin problema). Asi la captura y las escrituras a SD nunca solapan. */
-        if (!camera_sd_bus_lock(1000)) {
-            continue;   /* esp_task_wdt_reset al inicio mantiene viva la tarea */
-        }
+        /* NOTA: el GDMA de la camara solo se reactiva al QBUF (que libera un buffer);
+         * mientras tenemos un buffer fuera (DQBUF->proceso) el GDMA esta PARADO por
+         * contrapresion. Por eso NO tomamos el bus aqui: DQBUF, proceso, debayer y el
+         * encode JPEG (todo PSRAM/SCCB, sin tocar el SDMMC) corren sin el cerrojo. El
+         * bus solo se toma alrededor del QBUF+settle (abajo) -> ventana minima, no
+         * bloquea la tarea esp_timer durante el encode. */
 
         /* Re-aplicar exposicion/ganancia al arranque y en cada cambio de modo:
          * vigilancia usa valores mas altos (escena oscura con pantalla apagada). */
@@ -641,7 +641,6 @@ static void camera_stream_task(void *arg)
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
-            camera_sd_bus_unlock();
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
@@ -711,16 +710,19 @@ static void camera_stream_task(void *arg)
                 have_prev = true;
             }
         }
+        /* El QBUF reactiva el GDMA (libera un buffer). SOLO aqui se toca el bus que
+         * comparte con la SD -> tomar el cerrojo justo alrededor del QBUF + el settle
+         * (que el GDMA acabe de rellenar y pare por contrapresion). Ventana ~50ms ->
+         * los escritores de SD (tarea esp_timer) esperan como mucho eso, no el encode.
+         * El buffer b sigue retenido mientras esperamos -> GDMA parado, espera segura
+         * (reseteando el WDT por si un escritor tarda). */
+        while (!camera_sd_bus_lock(1000)) { esp_task_wdt_reset(); }
         ioctl(fd, VIDIOC_QBUF, &b);
-
-        /* Dejar que el GDMA acabe de rellenar el buffer recien encolado y se PARE por
-         * contrapresion (ambos buffers llenos) ANTES de soltar el bus -> al soltarlo el
-         * DMA de la camara ya no toca el SDMMC. */
-        vTaskDelay(pdMS_TO_TICKS(80));
-        camera_sd_bus_unlock();   /* ventana ociosa: los escritores de SD pueden ir */
+        vTaskDelay(pdMS_TO_TICKS(50));   /* GDMA rellena el buffer y para */
+        camera_sd_bus_unlock();
 
         /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s. */
-        int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 80;
+        int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
         if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
     }
 }

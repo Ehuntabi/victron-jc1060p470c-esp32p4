@@ -229,6 +229,7 @@ static void dhcp_set_captiveportal_url(void)
 esp_err_t wifi_ap_init(void)
 {
     static bool subsystems_inited = false;
+    static bool wifi_drv_inited  = false;   /* esp_wifi_init separado: reintentable si falla el C6 */
     esp_err_t err;
 
     // 1) One-time subsystems init
@@ -243,22 +244,26 @@ esp_err_t wifi_ap_init(void)
         }
         ESP_ERROR_CHECK(err);
 
-        // TCP/IP stack + default event loop
+        // TCP/IP stack + default event loop (one-time, NO dependen del C6)
         ESP_ERROR_CHECK(esp_netif_init());
         ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-        // Wi-Fi driver
+        /* Marcar HECHOS los inits one-time AQUI: si esp_wifi_init (abajo) falla por el
+         * C6 y se reintenta wifi_ap_init (toggle en Settings), NO se debe re-ejecutar
+         * esp_event_loop_create_default (daria INVALID_STATE -> ESP_ERROR_CHECK aborta,
+         * rompiendo el objetivo de R1). El esp_wifi_init va aparte con su propio flag. */
+        subsystems_inited = true;
+    }
+
+    // Wi-Fi driver (depende del C6/esp_hosted; reintentable, NO abortar el boot)
+    if (!wifi_drv_inited) {
         wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
-        /* NO abortar el boot si el C6/SDIO falla: el WiFi va por el C6 (esp_hosted) y
-         * un fallo suyo con ESP_ERROR_CHECK provocaba boot-loop dejando la UI rehen
-         * del WiFi. Degradar: seguir sin WiFi (R1). */
         esp_err_t we = esp_wifi_init(&wcfg);
         if (we != ESP_OK) {
             ESP_LOGE(TAG, "esp_wifi_init fallo: %s -> sigo SIN WiFi", esp_err_to_name(we));
             return we;
         }
-
-        subsystems_inited = true;
+        wifi_drv_inited = true;
     }
 
     // 2) Load SSID/password/enabled from NVS
