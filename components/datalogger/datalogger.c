@@ -239,20 +239,6 @@ static void start_flush_timer(void)
     }
 }
 
-/* UN solo intento diferido de montaje: el montaje a los 3s contiende con el
- * arranque del SDIO del C6 (~6-9s); a los 15s el bus ya esta tranquilo y un
- * unico intento suele enganchar SIN hammerear (lo que desestabilizaba). */
-static void sd_deferred_mount_task(void *arg)
-{
-    vTaskDelay(pdMS_TO_TICKS(15000));
-    if (!s_sd_mounted && mount_sd() == ESP_OK) {
-        s_sd_mounted = true;
-        start_flush_timer();
-        ESP_LOGI(TAG, "SD montada (intento diferido a 15s)");
-    }
-    vTaskDelete(NULL);
-}
-
 esp_err_t datalogger_init(void)
 {
     s_mutex = xSemaphoreCreateMutex();

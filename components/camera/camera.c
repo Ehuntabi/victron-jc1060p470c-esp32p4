@@ -13,6 +13,7 @@
 #include "esp_heap_caps.h"
 #include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
 #include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
+#include "esp_task_wdt.h"         /* vigilar la tarea de camara (DQBUF puede colgarse) */
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -62,24 +63,6 @@ bool camera_get_luma(uint8_t *out_luma)
     return true;
 }
 
-/* Calcula la luma media (0-255) de una muestra del centro del frame RAW10.
- * RAW10 va empaquetado en 16 bits/pixel little-endian (valor 0-1023). */
-static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
-{
-    const uint32_t sample_px = 4096;
-    uint32_t start = 0;
-    if (bytes / 2 > sample_px) {
-        start = ((bytes / 2 - sample_px) / 2) * 2;  /* centrado, alineado a 2 */
-    }
-    uint64_t sum = 0;
-    uint32_t cnt = 0;
-    for (uint32_t k = start; k + 1 < bytes && cnt < sample_px; k += 2, cnt++) {
-        uint16_t px = (uint16_t)p[k] | ((uint16_t)p[k + 1] << 8);  /* 0-1023 */
-        sum += px;
-    }
-    return cnt ? (uint8_t)((sum / cnt) >> 2) : 0;  /* 0-1023 -> 0-255 */
-}
-
 /* ── Thumbnail en COLOR (debayer BGGR -> RGB, para snapshot HTTP) ─────────────
  * El frame es RAW10 MIPI-packed: 4 pixeles en 5 bytes; los 4 primeros bytes de
  * cada grupo son los 8 MSB de 4 pixeles -> los usamos (8 bits limpios).
@@ -106,6 +89,23 @@ static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, 
 {
     uint32_t off = (uint32_t)y * stride + (uint32_t)(x >> 2) * 5 + (uint32_t)(x & 3);
     return (off < bytes) ? p[off] : 0;
+}
+
+/* Luma media (0-255) del centro del frame para el auto-brillo. Muestrea los bytes
+ * MSB via raw_px (0-255 limpios). OJO: NO leer el RAW10 como 16-bit/px (va packed
+ * 4px/5B) -> daria una señal en diente de sierra (mod 256) inservible. */
+static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
+{
+    uint32_t stride = bytes / SRC_H;
+    if (stride == 0) return 0;
+    uint64_t sum = 0;
+    uint32_t cnt = 0;
+    for (int y = SRC_H / 4; y < SRC_H * 3 / 4; y += 8)
+        for (int x = SRC_W / 4; x < SRC_W * 3 / 4; x += 8) {
+            sum += raw_px(p, bytes, stride, x, y);
+            cnt++;
+        }
+    return cnt ? (uint8_t)(sum / cnt) : 0;
 }
 
 /* LUT de gamma para subir las sombras de la foto sin reventar las altas luces.
@@ -225,6 +225,14 @@ bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
     const uint32_t img_size   = row_padded * THUMB_H;
     const uint32_t file_size  = off_bits + img_size;
 
+    /* Este BMP (~1.58MB) se reserva bajo demanda HTTP. Dejar un SUELO de PSRAM libre
+     * para los buffers DMA del SDIO del C6: si se agota, su alloc hace assert -> reboot.
+     * Si no hay margen, no servir el snapshot (mejor 503 que tumbar el WiFi). */
+    #define VIG_PSRAM_FLOOR  (1024 * 1024)   /* 1MB de reserva para el SDIO/sistema */
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < file_size + VIG_PSRAM_FLOOR) {
+        ESP_LOGW(TAG, "snapshot: PSRAM baja, no genero el BMP (protejo el SDIO)");
+        return false;
+    }
     uint8_t *bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
     if (!bmp) return false;
     memset(bmp, 0, file_size);
@@ -283,9 +291,18 @@ static bool camera_jpeg_init(void)
     jpeg_encode_memory_alloc_cfg_t in_cfg  = { .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER };
     jpeg_encode_memory_alloc_cfg_t out_cfg = { .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER };
     s_jpeg_in  = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3, &in_cfg,  &s_jpeg_in_sz);
-    s_jpeg_out = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3 / 3, &out_cfg, &s_jpeg_out_sz); /* ~1/3 sobra */
+    /* Salida = 1/2 del RGB. A q85 con frames nocturnos ruidosos (ganancia alta) el
+     * JPEG comprime poco; 1/3 (~522KB) se quedaba corto y la captura se perdia en
+     * silencio. 1/2 (~783KB) da margen amplio. */
+    s_jpeg_out = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3 / 2, &out_cfg, &s_jpeg_out_sz);
     if (!s_jpeg_in || !s_jpeg_out) {
         ESP_LOGE(TAG, "jpeg: sin memoria para buffers");
+        /* Dejar estado CONSISTENTE: si no, la guarda 's_jpeg_enc!=NULL' daria por
+         * listo el motor y jpeg_encoder_process desreferenciaria un buffer NULL. */
+        if (s_jpeg_in)  { free(s_jpeg_in);  s_jpeg_in  = NULL; }
+        if (s_jpeg_out) { free(s_jpeg_out); s_jpeg_out = NULL; }
+        jpeg_del_encoder_engine(s_jpeg_enc);
+        s_jpeg_enc = NULL;
         return false;
     }
     ESP_LOGI(TAG, "jpeg: motor HW listo (in=%u out=%u)", (unsigned)s_jpeg_in_sz, (unsigned)s_jpeg_out_sz);
@@ -424,11 +441,12 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 #define MOT_CELL_DIFF     10     /* diff por celda (0-255) que cuenta como cambio */
 #define MOT_CELL_COUNT    4      /* nº de celdas cambiadas para declarar movimiento */
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
-#define MOT_MAX_PHOTOS    300    /* tope por sesion (no llenar la SD) */
+#define MOT_MAX_PHOTOS    300    /* tope por SESION de vigilancia (anti-runaway) */
 
 static volatile bool s_surveillance = false;
 static volatile bool s_mot_reset    = false;
 static volatile bool s_ctrl_dirty   = true;   /* re-aplicar exposicion/ganancia en la tarea */
+static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
 
 void camera_set_surveillance(bool on)
 {
@@ -436,6 +454,8 @@ void camera_set_surveillance(bool on)
     s_no_temporal = on;   /* vigilancia: sin promediado temporal (mas nitido con movimiento) */
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
     s_ctrl_dirty = true;  /* aplicar exposicion/ganancia de vigilancia (mas brillo) o normal */
+    if (on) s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
+                                 * no acumulado de por vida (si no, dejaba de capturar) */
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
@@ -450,6 +470,19 @@ static bool cam_stream_start(int fd, int type)
         ioctl(fd, VIDIOC_QBUF, &qb);
     }
     return ioctl(fd, VIDIOC_STREAMON, &type) == 0;
+}
+
+/* Limpieza en caminos de error de la tarea de camara: libera los mmap V4L2 y los
+ * thumbnails/accum en PSRAM (~6MB). Sin esto, un fallo de init fugaba esa memoria y
+ * realimentaba la presion de PSRAM que dispara el assert del SDIO. */
+static void cam_task_cleanup(int fd, uint8_t **buf, uint32_t *len, int nbuf)
+{
+    for (int i = 0; i < nbuf; i++)
+        if (buf[i] && buf[i] != MAP_FAILED) munmap(buf[i], len[i]);
+    if (s_thumb[0]) { free(s_thumb[0]); s_thumb[0] = NULL; }
+    if (s_thumb[1]) { free(s_thumb[1]); s_thumb[1] = NULL; }
+    if (s_accum)    { free(s_accum);    s_accum = NULL; }
+    if (fd >= 0) close(fd);
 }
 
 /* Tarea de captura A DEMANDA: en modo normal coge una rafaga corta de frames cada
@@ -498,10 +531,10 @@ static void camera_stream_task(void *arg)
     uint32_t len[CAM_STREAM_BUFS] = {0};
     for (int i = 0; i < CAM_STREAM_BUFS; i++) {
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP, .index = i };
-        if (ioctl(fd, VIDIOC_QUERYBUF, &b) != 0) { close(fd); vTaskDelete(NULL); return; }
+        if (ioctl(fd, VIDIOC_QUERYBUF, &b) != 0) { cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return; }
         buf[i] = mmap(NULL, b.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, b.m.offset);
         len[i] = b.length;
-        if (buf[i] == MAP_FAILED) { close(fd); vTaskDelete(NULL); return; }
+        if (buf[i] == MAP_FAILED) { cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return; }
         ioctl(fd, VIDIOC_QBUF, &b);
     }
     ESP_LOGI(TAG, "stream: modo A DEMANDA (no continuo) para no bloquear la SD");
@@ -520,10 +553,22 @@ static void camera_stream_task(void *arg)
      * por contrapresion -> la SD queda libre entre frames. Mismo efecto, sin crash. */
     if (!cam_stream_start(fd, type)) {
         ESP_LOGE(TAG, "stream: STREAMON falla");
-        close(fd);
+        cam_task_cleanup(fd, buf, len, CAM_STREAM_BUFS);
         vTaskDelete(NULL);
         return;
     }
+
+    /* Suscribir esta tarea al Task WDT: el fd es O_RDONLY (DQBUF bloqueante). Si el
+     * CSI/sensor se cuelga, DQBUF no retorna y la camara moriria en silencio; con el
+     * WDT, el cuelgue se detecta -> reinicio controlado (recuperable). Reset por
+     * iteracion. IMPORTANTE: el TWDT es PANIC=y con timeout 5s, asi que cada vuelta
+     * debe durar <5s -> mantener CAM_IDLE_MS/CAM_SURV_IDLE_MS holgadamente por debajo
+     * (hoy 2000/1500 ms; subirlos hacia >=4s reintroduciria reinicios espurios). */
+    esp_err_t wdt_err = esp_task_wdt_add(NULL);
+    if (wdt_err != ESP_OK)   /* si fallara, el reset() seria no-op -> sin proteccion */
+        ESP_LOGW(TAG, "stream: esp_task_wdt_add fallo (%s) - sin watchdog en la tarea",
+                 esp_err_to_name(wdt_err));
+
     uint32_t ema = 0;
     bool first = true;
 
@@ -531,9 +576,11 @@ static void camera_stream_task(void *arg)
     static uint8_t  prev_grid[MOT_GW * MOT_GH];
     static bool     have_prev = false;
     static int64_t  last_photo_us = 0;
-    static int      photo_count = 0;
+    /* photo_count -> ahora s_photo_count (file-static), para que camera_set_surveillance
+     * lo resetee al iniciar cada sesion (el tope es por sesion, no de por vida). */
 
     while (1) {
+        esp_task_wdt_reset();   /* la tarea sigue viva (si DQBUF se cuelga, salta el WDT) */
         bool surv = s_surveillance;
 
         /* Re-aplicar exposicion/ganancia al arranque y en cada cambio de modo:
@@ -594,7 +641,7 @@ static void camera_stream_task(void *arg)
                     int64_t now = esp_timer_get_time();
                     if (changed >= MOT_CELL_COUNT &&
                         (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
-                        photo_count < MOT_MAX_PHOTOS) {
+                        s_photo_count < MOT_MAX_PHOTOS) {
                         last_photo_us = now;
                         /* Codificar el JPEG por HW (PSRAM) y guardarlo en el anillo en
                          * RAM. NO se escribe a la SD: el DMA camara+C6 la satura durante
@@ -603,9 +650,9 @@ static void camera_stream_task(void *arg)
                         size_t jlen = 0;
                         if (camera_snapshot_jpeg(&jpg, &jlen)) {
                             camera_vig_store(jpg, jlen, time(NULL));
-                            photo_count++;
+                            s_photo_count++;
                             ESP_LOGI(TAG, "vigilancia: movimiento (%d celdas) -> captura %d en RAM (%u B)",
-                                     changed, photo_count, (unsigned)jlen);
+                                     changed, s_photo_count, (unsigned)jlen);
                         }
                         /* TODO(video): grabacion H.264 de N seg aqui (esp_h264). */
                     }

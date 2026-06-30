@@ -34,6 +34,8 @@
 #include "lvgl.h"
 #include "rtc_rx8025t.h"
 #include "ui.h"
+#include "ui/ausente_mode.h"   /* salida de emergencia del modo ausente por HTTP */
+#include "esp_bsp.h"           /* bsp_display_lock/unlock para tocar LVGL desde httpd */
 #include <sys/time.h>
 #include <time.h>
 #include "datalogger.h"
@@ -657,6 +659,29 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
     }
     httpd_resp_sendstr_chunk(req, "</body></html>");
     httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
+/* Salida de EMERGENCIA del modo ausente por HTTP (GET /ausente?off): por si el
+ * tactil no responde y no se puede hacer el gesto de los 4 toques -> evita quedar
+ * con la pantalla negra hasta un corte fisico. Toma lvgl_port_lock porque
+ * ausente_request toca LVGL y aqui estamos en la tarea httpd, no en la de LVGL. */
+static esp_err_t handle_ausente(httpd_req_t *req) {
+    char q[24] = {0};
+    httpd_req_get_url_query_str(req, q, sizeof(q));
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    if (strstr(q, "off")) {
+        bool done = false;
+        if (bsp_display_lock(300)) {
+            ausente_request(false);   /* cancela cuenta atras o sale del modo activo */
+            bsp_display_unlock();
+            done = true;
+        }
+        httpd_resp_sendstr(req, done ? "Modo ausente desactivado"
+                                     : "No pude tomar el lock de pantalla, reintenta");
+    } else {
+        httpd_resp_sendstr(req, "Modo ausente. Usa /ausente?off para salir (emergencia).");
+    }
     return ESP_OK;
 }
 
@@ -1983,6 +2008,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_vig);
     httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
     httpd_register_uri_handler(server, &uri_vigf);
+    httpd_uri_t uri_ausente = { .uri = "/ausente", .method = HTTP_GET, .handler = handle_ausente };
+    httpd_register_uri_handler(server, &uri_ausente);
 
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);

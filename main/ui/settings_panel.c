@@ -3361,9 +3361,24 @@ static void sound_mute_changed_cb(lv_event_t *e)
 }
 
 
+/* Puntero al switch de ausente para poder sincronizarlo cuando se sale del modo
+ * por el gesto de 4 toques (si no, el switch queda CHECKED y hay que pulsarlo dos
+ * veces para re-armar). La pagina de Settings se cachea, asi que persiste. */
+static lv_obj_t *s_ausente_sw = NULL;
+
+/* Sincroniza el switch con el estado real del modo ausente. La llama ausente_mode
+ * al entrar/salir. Debe ejecutarse en la tarea LVGL (lo garantizan sus llamadores:
+ * el gesto corre en LVGL; la salida por HTTP toma lvgl_port_lock). */
+void settings_ausente_sync_switch(bool on)
+{
+    if (!s_ausente_sw) return;
+    if (on) lv_obj_add_state(s_ausente_sw, LV_STATE_CHECKED);
+    else    lv_obj_clear_state(s_ausente_sw, LV_STATE_CHECKED);
+}
+
 /* Switch del modo ausente/vigilancia: al activar, ausente_request inicia la
  * cuenta atras de 10 s; al desactivar, cancela (la salida real del modo activo
- * es con 4 toques en la esquina superior izquierda, no por este switch). */
+ * es con 4 toques en la esquina, no por este switch). */
 static void ausente_switch_cb(lv_event_t *e)
 {
     lv_obj_t *sw = lv_event_get_target(e);
@@ -3484,6 +3499,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *aus_sw = lv_switch_create(aus_row);
     lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
 
     lv_obj_t *aus_hint = lv_label_create(card_aus);
     lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);

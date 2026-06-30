@@ -6,6 +6,9 @@
 /* Definido en main.c: re-aplica el brillo segun la arbitracion actual
  * (night_mode_timer_cb). Lo llamamos al entrar/salir para efecto inmediato. */
 extern void brightness_apply_now(void);
+/* Definido en settings_panel.c: sincroniza el switch de "Modo ausente" con el
+ * estado real (para que al salir por gesto/HTTP no quede descuadrado). */
+extern void settings_ausente_sync_switch(bool on);
 
 static const char *TAG = "ausente";
 
@@ -42,8 +45,15 @@ static void guard_clicked_cb(lv_event_t *e)
     if (!indev) return;
     lv_point_t p;
     lv_indev_get_point(indev, &p);
-    if (p.x >= CORNER_PX || p.y >= CORNER_PX) {
-        return;  /* fuera de la esquina: toque comido, no hace nada */
+    /* Aceptar CUALQUIERA de las 4 esquinas (no solo la sup-izq): si el tactil tiene
+     * una zona muerta en una esquina, sigue habiendo salida -> evita quedar atrapado
+     * con la pantalla negra. El guard es pantalla completa, de el sacamos W y H. */
+    lv_coord_t W = lv_obj_get_width(s_guard_overlay);
+    lv_coord_t H = lv_obj_get_height(s_guard_overlay);
+    bool in_corner = (p.x < CORNER_PX || p.x > W - CORNER_PX) &&
+                     (p.y < CORNER_PX || p.y > H - CORNER_PX);
+    if (!in_corner) {
+        return;  /* fuera de las esquinas: toque comido, no hace nada */
     }
     uint32_t now = lv_tick_get();
     if (s_taps == 0 || (now - s_first_tap_ms) > TAP_WINDOW_MS) {
@@ -139,7 +149,8 @@ void ausente_request(bool on)
             destroy_guard();
             brightness_apply_now();  /* restaura el brillo normal */
             camera_set_surveillance(false);   /* parar vigilancia */
-            ESP_LOGI(TAG, "modo ausente DESACTIVADO (4 toques esquina)");
+            settings_ausente_sync_switch(false);  /* el switch quedaba CHECKED (U1) */
+            ESP_LOGI(TAG, "modo ausente DESACTIVADO (gesto/HTTP)");
         }
     }
 }
