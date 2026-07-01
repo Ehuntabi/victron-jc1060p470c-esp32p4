@@ -23,6 +23,8 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 25 kHz |
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Medidor AC 220 V** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 del JP1, Modbus 9600 8N1) |
+| **Cámara** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, JPEG por HW). Comparte el I²C (SDA=7 / SCL=8); sin pines reset/pwdn dedicados |
+| **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J5 (DE/RE automático) |
 
 > Pinout detallado con diagrama del JP1 (pines color-coded) y del CN2 en [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 
@@ -76,6 +78,22 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Driver Modbus-RTU sobre UART2 (TX=GPIO 32, RX=GPIO 33 del JP1).
 - Polling cada 2 s. Si el módulo no está conectado, el firmware sigue funcionando y muestra "no conectado" en el dashboard.
 - Datos en `/api/state` JSON y card propia en el dashboard web.
+
+#### Cámara y modo vigilancia (autocaravana)
+- Sensor **OmniVision OV02C10** por MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), driver propio portado del kernel Linux; ISP en bypass y **JPEG por hardware** (ESP32-P4). Comparte el bus I²C (SDA=7/SCL=8) con touch/RTC; sin pines dedicados.
+- Captura **a demanda** (1 frame cada ~2 s), no streaming continuo — así el DMA de la cámara no bloquea la SD. En uso normal sirve para **auto-brillo** (mide la luz ambiente).
+- `GET /snapshot`: última imagen en JPEG (recortada 960x544, calidad 85, ~80-150 KB).
+- **Modo ausente / vigilancia**: se activa desde *Settings → Sonido y avisos* o con `GET /ausente?on` (cuenta atrás de 10 s y apaga la pantalla). Detección de movimiento por rejilla de luminancia 32x18; al detectar guarda una foto JPEG en un **anillo de 8 en PSRAM** (no en SD, se pierde al reiniciar). Galería en `GET /vigilancia` (y `/vigilancia/<id>` para cada foto). Se sale con **4 toques en una esquina** o `GET /ausente?off`. *(Vídeo H.264: pendiente.)*
+- **Cerrojo cámara↔SD** (`camera_sd_bus_lock`): cámara y SDMMC comparten GDMA; los escritores de SD (datalogger) serializan su E/S con este mutex para no provocar reinicios por INT_WDT.
+
+#### NE185 — control de la autocaravana (RS-485)
+- El P4 hace de **maestro RS-485** del cuadro de distribución **Nordelettronica NE185** (sustituye al panel NE187 retirado). MAX485 (U8) en **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), DE/RE automático por puerta NAND; conector J5 (A/B/GND/+5V).
+- Polling cada 100 ms **alternando dos comandos "idle"** que imitan al NE187 (el NE185 solo devuelve datos si los ve alternados). Un botón = 8 tramas de pulsación (necesita ≥2) + 5 de reposo. Checksum + comprobación estructural; lectura robusta por barrido de fase (trama de 20 bytes y variante de 15 sin eco).
+- Datos: **nivel de agua limpia** (0-4/4) y **grises** (lleno/vacío), luz interior/exterior, bomba, presencia de **230 V (shore)**, tensión de batería de **servicio** y de **motor**, y "fresco" (trama válida < 30 s).
+- Controlable desde la UI (Overview) y por `POST /control`. Encendido automático de cargas al despertar (configurable, NVS).
+
+#### Display satélite "mini" (UDP)
+- Broadcast **UDP** (1 Hz) desde el AP del 7" a un segundo display **ESP32-C6 de 1,47"** (`192.168.4.255:4242`). Payload compacto (28 bytes, CRC32) con SoC/V/A de batería, DC/DC, frigo (temperatura + ventilador) y aguas del NE185. Protocolo compartido en `main/net/mini_proto.h` (debe ir **byte a byte idéntico** en ambos firmwares). Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
 
 #### Datalogger y persistencia
 - **Frigo**: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`.
@@ -166,6 +184,8 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Fridge fan** | LEDC PWM on **GPIO 5** (JP1 pin 15), 25 kHz |
 | **Audio** | ES8311 codec + NS4150 amp (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **AC 220 V meter** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 of JP1, Modbus 9600 8N1) |
+| **Camera** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, HW JPEG). Shares I²C (SDA=7 / SCL=8); no dedicated reset/pwdn pins |
+| **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J5 connector (automatic DE/RE) |
 
 > Detailed pinout with colour-coded JP1 and CN2 diagrams in [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 
@@ -219,6 +239,22 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Modbus-RTU driver over UART2 (TX=GPIO 32, RX=GPIO 33 of JP1).
 - 2 s polling. If the module is not connected, the firmware keeps running and shows "not connected" in the dashboard.
 - Data exposed in `/api/state` JSON and a dedicated card in the web dashboard.
+
+#### Camera & surveillance mode (camper)
+- **OmniVision OV02C10** sensor over MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), custom driver ported from the Linux kernel; ISP bypassed and **hardware JPEG** (ESP32-P4). Shares the I²C bus (SDA=7/SCL=8) with touch/RTC; no dedicated pins.
+- **On-demand** capture (1 frame every ~2 s), not continuous streaming — so the camera DMA doesn't block the SD. In normal use it drives **auto-brightness** (measures ambient light).
+- `GET /snapshot`: latest image as JPEG (cropped 960x544, quality 85, ~80-150 KB).
+- **Away / surveillance mode**: enabled from *Settings → Sound & alerts* or via `GET /ausente?on` (10 s countdown, then the screen turns off). Motion detection via a 32x18 luminance grid; on a hit it stores a JPEG in an **8-slot ring in PSRAM** (not on SD, lost on reboot). Gallery at `GET /vigilancia` (and `/vigilancia/<id>` per photo). Exit with **4 taps in one corner** or `GET /ausente?off`. *(H.264 video: pending.)*
+- **Camera↔SD lock** (`camera_sd_bus_lock`): camera and SDMMC share GDMA; SD writers (datalogger) serialize their I/O with this mutex to avoid INT_WDT resets.
+
+#### NE185 — camper control (RS-485)
+- The P4 acts as **RS-485 master** of the **Nordelettronica NE185** distribution panel (replacing the removed NE187 panel). MAX485 (U8) on **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), automatic DE/RE via NAND gate; J5 connector (A/B/GND/+5V).
+- Polling every 100 ms **alternating two "idle" commands** that mimic the NE187 (the NE185 only returns data when it sees them alternated). One button = 8 press frames (needs ≥2) + 5 idle frames. Checksum + structural check; robust reading via phase sweep (20-byte frame and a 15-byte echo-less variant).
+- Data: **fresh water level** (0-4/4) and **grey water** (full/empty), interior/exterior light, pump, presence of **230 V (shore)**, **service** and **engine** battery voltage, and "fresh" (valid frame < 30 s).
+- Controllable from the UI (Overview) and via `POST /control`. Automatic load switch-on on wake (configurable, NVS).
+
+#### "Mini" satellite display (UDP)
+- **UDP** broadcast (1 Hz) from the 7" AP to a second **1.47" ESP32-C6** display (`192.168.4.255:4242`). Compact payload (28 bytes, CRC32) with battery SoC/V/A, DC/DC, fridge (temperature + fan) and NE185 water levels. Shared protocol in `main/net/mini_proto.h` (must be **byte-for-byte identical** in both firmwares). It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
 
 #### Datalogger and persistence
 - **Frigo**: 200-entry RAM ring + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`.
