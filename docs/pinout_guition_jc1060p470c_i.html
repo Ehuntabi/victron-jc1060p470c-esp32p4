@@ -363,13 +363,6 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 compilado y flasheado; UART1 GPIO 26/27, conector J5; conectado y funcionando — control de luces y bomba operativo)</li>
 </ul>
 </div>
-<div class="nota">
-<strong>[!]</strong> Pendiente conexión física:
-<ul>
-<li>DS18B20 1-Wire en GPIO 4 → JP1 pin 13 (pullup 4.7 kΩ a 3.3 V; con cable largo ~2 m usar 1 kΩ)</li>
-<li>Ventilador PWM en GPIO 5 → JP1 pin 15</li>
-<li>PZEM-004T → JP1 pin 7 (GPIO 1 TX) y pin 9 (GPIO 2 RX), que son las filas 4ª y 5ª del header. El cable plano IDC de 2×10 (20 pines) es más corto que el header 2×13, así que enchúfalo pegado al borde superior para que esos pines (7 y 9) queden cubiertos.</li></ul>
-</div>
 <p class="small">
 <strong>Bug del fabricante:</strong> el esquemático Guition indica RX8130CE como RTC pero la
 placa real lleva RX8025T (mapa de registros distinto). El firmware ya maneja correctamente el
