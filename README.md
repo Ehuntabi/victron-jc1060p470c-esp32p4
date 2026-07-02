@@ -24,7 +24,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Medidor AC 220 V** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 del JP1, Modbus 9600 8N1) |
 | **Cámara** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, JPEG por HW). Comparte el I²C (SDA=7 / SCL=8); sin pines reset/pwdn dedicados |
-| **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J5 (DE/RE automático) |
+| **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J4 (DE/RE automático) |
 
 > Pinout detallado con diagrama del JP1 (pines color-coded) y del CN2 en [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 
@@ -87,7 +87,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - **Cerrojo cámara↔SD** (`camera_sd_bus_lock`): cámara y SDMMC comparten GDMA; los escritores de SD (datalogger) serializan su E/S con este mutex para no provocar reinicios por INT_WDT.
 
 #### NE185 — control de la autocaravana (RS-485)
-- El P4 hace de **maestro RS-485** del cuadro de distribución **Nordelettronica NE185** (sustituye al panel NE187 retirado). MAX485 (U8) en **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), DE/RE automático por puerta NAND; conector J5 (A/B/GND/+5V).
+- El P4 hace de **maestro RS-485** del cuadro de distribución **Nordelettronica NE185** (sustituye al panel NE187 retirado). MAX485 (U8) en **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), DE/RE automático por puerta NAND; conector J4 (A/B/GND/+5V).
 - Polling cada 100 ms **alternando dos comandos "idle"** que imitan al NE187 (el NE185 solo devuelve datos si los ve alternados). Un botón = 8 tramas de pulsación (necesita ≥2) + 5 de reposo. Checksum + comprobación estructural; lectura robusta por barrido de fase (trama de 20 bytes y variante de 15 sin eco).
 - Datos: **nivel de agua limpia** (0-4/4) y **grises** (lleno/vacío), luz interior/exterior, bomba, presencia de **230 V (shore)**, tensión de batería de **servicio** y de **motor**, y "fresco" (trama válida < 30 s).
 - Controlable desde la UI (Overview) y por `POST /control`. Encendido automático de cargas al despertar (configurable, NVS).
@@ -185,7 +185,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Audio** | ES8311 codec + NS4150 amp (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **AC 220 V meter** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 of JP1, Modbus 9600 8N1) |
 | **Camera** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, HW JPEG). Shares I²C (SDA=7 / SCL=8); no dedicated reset/pwdn pins |
-| **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J5 connector (automatic DE/RE) |
+| **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J4 connector (automatic DE/RE) |
 
 > Detailed pinout with colour-coded JP1 and CN2 diagrams in [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 
@@ -248,7 +248,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - **Camera↔SD lock** (`camera_sd_bus_lock`): camera and SDMMC share GDMA; SD writers (datalogger) serialize their I/O with this mutex to avoid INT_WDT resets.
 
 #### NE185 — camper control (RS-485)
-- The P4 acts as **RS-485 master** of the **Nordelettronica NE185** distribution panel (replacing the removed NE187 panel). MAX485 (U8) on **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), automatic DE/RE via NAND gate; J5 connector (A/B/GND/+5V).
+- The P4 acts as **RS-485 master** of the **Nordelettronica NE185** distribution panel (replacing the removed NE187 panel). MAX485 (U8) on **UART1** (TX=GPIO 26 / RX=GPIO 27, 38400 8N1), automatic DE/RE via NAND gate; J4 connector (A/B/GND/+5V).
 - Polling every 100 ms **alternating two "idle" commands** that mimic the NE187 (the NE185 only returns data when it sees them alternated). One button = 8 press frames (needs ≥2) + 5 idle frames. Checksum + structural check; robust reading via phase sweep (20-byte frame and a 15-byte echo-less variant).
 - Data: **fresh water level** (0-4/4) and **grey water** (full/empty), interior/exterior light, pump, presence of **230 V (shore)**, **service** and **engine** battery voltage, and "fresh" (valid frame < 30 s).
 - Controllable from the UI (Overview) and via `POST /control`. Automatic load switch-on on wake (configurable, NVS).

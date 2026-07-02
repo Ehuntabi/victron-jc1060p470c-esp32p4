@@ -5,7 +5,7 @@
  *   - GPIO 27  -> RX1 -> pin R del MAX485
  *   - DE/RE controlados automaticamente por una NAND gate (U7) a partir
  *     del propio TX1, sin GPIO extra.
- *   - Conector J5 (MX 1.25 4P) expone A, B, GND, +5V para enchufar el
+ *   - Conector J4 (MX 1.25 4P) expone A, B, GND, +5V para enchufar el
  *     cable del NE187 directamente.
  *
  * Asi que NO hace falta caja externa con ESP32+MAX485+buck. El P4 habla

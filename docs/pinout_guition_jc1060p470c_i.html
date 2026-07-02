@@ -106,7 +106,7 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <li>microSD slot 0 con SDMMC IOMUX dedicado.</li>
 <li>Codec audio ES8311 + amplificador NS4150.</li>
 <li>UART2 cableable al PZEM-004T (medidor de red 230 V).</li>
-<li><strong>RS-485 onboard via MAX485 (U8) en UART1, conector J5 — para hablar con el derivador NE185</strong>.</li>
+<li><strong>RS-485 onboard via MAX485 (U8) en UART1, conector J4 — para hablar con el derivador NE185</strong>.</li>
 <li>Cabeceras GPIO libres para sensores DS18B20 (frigo) y PWM (ventilador).</li>
 </ul>
 
@@ -188,14 +188,14 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <strong>Componente <code>main/ne185/</code>.</strong> El P4 habla RS-485 directamente con el
 derivador Nordelettronica NE185 a través del transceptor <strong>MAX485 (U8) integrado en
 la placa Guition</strong>. Sustituye al panel NE187 retirado. <strong>No hace falta caja
-ni hardware externo</strong>: solo un cable de 4 hilos del NE185 al conector J5.
+ni hardware externo</strong>: solo un cable de 4 hilos del NE185 al conector J4.
 </div>
 <table>
 <tr><th>Función</th><th>Pin P4</th><th>Conexión</th><th>Notas</th></tr>
 <tr><td>UART1 TX</td><td>GPIO 26</td><td>pin D del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
 <tr><td>UART1 RX</td><td>GPIO 27</td><td>pin R del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
 <tr><td>DE/RE</td><td>—</td><td>controlados por NAND (U7) auto-direccion</td><td>NO hace falta GPIO extra</td></tr>
-<tr><td>Bus RS-485</td><td>—</td><td>Conector J5 (MX 1.25 4P, conector #11)</td><td>Pines A, B, GND, +5V</td></tr>
+<tr><td>Bus RS-485</td><td>—</td><td>Conector J4 (MX 1.25 4P, conector #11)</td><td>Pines A, B, GND, +5V</td></tr>
 </table>
 <p class="small">
 Protocolo (38400 8N1, master): comando init <code>FF 40 00 80 BF</code>, idle
@@ -223,8 +223,8 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr>
 <tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
-<tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J5</td></tr>
-<tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J5</td></tr>
+<tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
+<tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
 <tr><td>1</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 7)</td></tr>
 <tr><td>2</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 9)</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
@@ -245,7 +245,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <ul>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J5). UART2 PZEM-004T (GPIO 1/2 → JP1 pines 7/9).</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 PZEM-004T (GPIO 1/2 → JP1 pines 7/9).</li>
 <li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
 </ul>
 
@@ -259,10 +259,10 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>5</td><td>MX 1.25 2P</td><td>Entrada batería Li-ion 3.7 V</td></tr>
 <tr><td>6</td><td>Battery button</td><td>On/off batería</td></tr>
 <tr><td>7</td><td>USB-C FS</td><td>Programación + 5 V</td></tr>
-<tr><td>8</td><td>MX 1.25 4P (CN2)</td><td>UART consola + 5 V</td></tr>
+<tr><td>8</td><td>MX 1.25 4P (J5)</td><td>Alimentación 5 V (UART1, no usar)</td></tr>
 <tr><td>9</td><td>USB-C HS</td><td>USB 2.0 HS + 5 V</td></tr>
 <tr><td>10</td><td>MX 1.25 4P</td><td>UART externo</td></tr>
-<tr><td>11</td><td>MX 1.25 4P</td><td>RS-485 con MAX485 onboard</td></tr>
+<tr><td>11</td><td>MX 1.25 4P (J4)</td><td>RS-485 con MAX485 onboard</td></tr>
 <tr><td>12</td><td>SH 1.0 4P (CN5)</td><td>I2C externo</td></tr>
 <tr><td>13</td><td>RJ45</td><td>Ethernet 100 Mbps</td></tr>
 <tr><td>14</td><td>Battery holder</td><td>CR1220 del RTC</td></tr>
@@ -315,20 +315,7 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
 </ul>
 </div>
 
-<div class="keep">
-<h2>16. CN2 — UART consola / entrada 5 V (MX 1.25 4P)</h2>
-<p>
-Conector secundario para alimentación 5 V y/o consola UART0. Frontend protegido con MOSFET AO3401
-(polaridad inversa) + TVS SMBJ6.0CA.
-</p>
-<ul>
-<li><strong>Identificar pin 1:</strong> CN2 está pegado al USB-C #7. El pin 1 (VIN) es el extremo más cercano al USB-C. Pin 4 = GND.</li>
-<li>Alimentar la placa con 5 V externos: +5 V al pin 1, GND al pin 4. 5 V ±5 %, hasta ~1 A pico con backlight.</li>
-<li>Solo UNA fuente 5 V activa a la vez (no mezclar USB-C con CN2 VIN).</li>
-</ul>
-</div>
-
-<h2>17. CN5 — I²C externo (SH 1.0 4P)</h2>
+<h2>16. CN5 — I²C externo (SH 1.0 4P)</h2>
 <table>
 <tr><th>Pin</th><th>Señal</th></tr>
 <tr><td>1</td><td>GND</td></tr>
@@ -337,14 +324,14 @@ Conector secundario para alimentación 5 V y/o consola UART0. Frontend protegido
 <tr><td>4</td><td>ES_I2C_SDA</td></tr>
 </table>
 
-<h2>18. Alimentación</h2>
+<h2>17. Alimentación</h2>
 <p>
 Tensión nominal: 5 V DC. Consumo ~600 mA (pico ~1 A con backlight máximo).<br>
-Cadena: USB-C / CN2 VIN → IP5306 (cargador Li + booster) → VOUT-BAT (5 V regulado) →
+Cadena: USB-C / 5 V del conector 8 (J5) → IP5306 (cargador Li + booster) → VOUT-BAT (5 V regulado) →
 TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5 V.
 </p>
 
-<h2>19. Cámara (MIPI-CSI — SC2336)</h2>
+<h2>18. Cámara (MIPI-CSI — SC2336)</h2>
 <table>
 <tr><th>Característica</th><th>Detalle</th></tr>
 <tr><td>Sensor</td><td><strong>SmartSens SC2336</strong> — 2 MP (1920×1080), CMOS 1/3"</td></tr>
@@ -355,7 +342,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <tr><td>Software</td><td>ESP-IDF: <code>esp_video</code> + <code>esp_cam_sensor</code> (driver <code>sc2336</code>). El firmware victron actual aún NO la usa.</td></tr>
 </table>
 
-<h2>20. Notas de hardware y estado</h2>
+<h2>19. Notas de hardware y estado</h2>
 <div class="ok">
 <strong>[OK]</strong> Funcionando en producción:
 <ul>
@@ -367,7 +354,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>LDO interno PHY MIPI-DSI</li>
 <li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
-compilado y flasheado; UART1 GPIO 26/27, conector J5; conectado y funcionando — control de luces y bomba operativo)</li>
+compilado y flasheado; UART1 GPIO 26/27, conector J4; conectado y funcionando — control de luces y bomba operativo)</li>
 </ul>
 </div>
 <p class="small">
@@ -376,7 +363,7 @@ placa real lleva RX8025T (mapa de registros distinto). El firmware ya maneja cor
 RX8025T.
 </p>
 
-<h2 style="page-break-before: always; break-before: page;">21. Vista trasera y conexiones físicas</h2>
+<h2 style="page-break-before: always; break-before: page;">20. Vista trasera y conexiones físicas</h2>
 <p>
 Ubicación física de los conectores en la cara trasera de la placa (numeración del fabricante).
 Los tres que usa el proyecto para cablear en la autocaravana están <strong>resaltados</strong> en la foto:
@@ -390,25 +377,31 @@ el <strong style="color:#1E9BE0">11</strong> (RS-485 al NE185, azul).
 programación / consola</strong> — por aquí se flashea y se lee el log (<code>/dev/ttyACM0</code>).
 </p>
 
-<div style="display:flex; gap:24px; align-items:flex-start; break-inside:avoid;">
+<div style="display:flex; gap:24px; align-items:stretch; break-inside:avoid;">
 
-<div style="flex:1;">
+<div style="flex:1; display:flex; flex-direction:column;">
 <h3 style="margin-top:0; color:#E01F26;">Conector 8 — alimentación +5 V</h3>
 <p class="small">Orden real leído en la serigrafía, de abajo (pin 1) a arriba (pin 4). De este conector
 solo se usan <strong>+5&nbsp;V (pin 1)</strong> y <strong>GND (pin 4)</strong> para alimentar. Los pines 2 y 3
 (IO26/IO27) <strong>no se deben conectar</strong>: están dedicados al MAX485 del NE185 (RS-485).</p>
-<img src="conector8_alim.png" style="width:100%; max-width:340px; display:block; margin:2px auto;" alt="Pinout del conector 8: 5V, IO26, IO27, GND">
+<img src="conector8_alim.png" style="width:100%; max-width:340px; align-self:center; margin-top:auto;" alt="Pinout del conector 8: 5V, IO26, IO27, GND">
 </div>
 
-<div style="flex:1;">
+<div style="flex:1; display:flex; flex-direction:column;">
 <h3 style="margin-top:0; color:#1E9BE0;">Conector 11 — RS-485 al NE185</h3>
 <p class="small">Orden real leído en la serigrafía, de abajo (pin 1) a arriba (pin 4). Cablear los
 4 hilos del NE185: <strong>+5&nbsp;V (pin 1)</strong>, <strong>A (pin 2)</strong>,
 <strong>B (pin 3)</strong>, <strong>GND (pin 4)</strong>.</p>
-<img src="conector11_j5_ne185.png" style="width:100%; max-width:340px; display:block; margin:2px auto;" alt="Pinout del conector 11: 5V, A, B, GND">
+<img src="conector11_j5_ne185.png" style="width:100%; max-width:340px; align-self:center; margin-top:auto;" alt="Pinout del conector 11: 5V, A, B, GND">
 </div>
 
 </div>
+
+<p class="small" style="background:#FFF6E5; border-left:4px solid #E8A500; padding:6px 10px; margin-top:14px;">
+<strong>⚠ Una sola fuente de 5 V a la vez.</strong> No alimentes por el <strong>conector 8</strong> y el
+<strong>USB-C</strong> al mismo tiempo (los dos entran al mismo IP5306). La entrada de 5 V lleva protección
+de polaridad inversa (MOSFET AO3401 + TVS SMBJ6.0CA).
+</p>
 
 </body>
 </html>
