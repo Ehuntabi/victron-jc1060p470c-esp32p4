@@ -275,6 +275,13 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <div class="keep">
 <h2>15. JP1 — pines disponibles para periféricos externos</h2>
 
+<p style="background:#FFF6E5; border-left:4px solid #E8A500; padding:8px 12px; margin:8px 0 12px; font-size:9.5pt;">
+<strong>Solo se usan los 20 pines superiores (1–20).</strong> El conector IDC <strong>2×10</strong> disponible
+es más corto que el header <strong>2×13</strong>: se enchufa pegado al borde superior y solo alcanza hasta el
+<strong>pin 20</strong>. En el diagrama de abajo, los <strong>pines 21–26</strong> (las 3 filas inferiores:
+GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son accesibles.
+</p>
+
 <div class="jp1-grid">
   <img class="jp1" src="jp1_pinout.png" alt="JP1 pinout">
   <table>
@@ -386,10 +393,10 @@ programación / consola</strong> — por aquí se flashea y se lee el log (<code
 <div style="display:flex; gap:24px; align-items:flex-start; break-inside:avoid;">
 
 <div style="flex:1;">
-<h3 style="margin-top:0; color:#E01F26;">Conector 8 — alimentación +5 V (y UART1)</h3>
-<p class="small">Orden real leído en la serigrafía de la placa, de abajo (pin 1) a arriba (pin 4).
-Para alimentar: <strong>+5&nbsp;V al pin 1</strong> y <strong>GND al pin 4</strong>. Los pines
-IO26/IO27 son la UART1 (los mismos que atacan el MAX485 del NE185; normalmente sin conectar).</p>
+<h3 style="margin-top:0; color:#E01F26;">Conector 8 — alimentación +5 V</h3>
+<p class="small">Orden real leído en la serigrafía, de abajo (pin 1) a arriba (pin 4). De este conector
+solo se usan <strong>+5&nbsp;V (pin 1)</strong> y <strong>GND (pin 4)</strong> para alimentar. Los pines 2 y 3
+(IO26/IO27) <strong>no se deben conectar</strong>: están dedicados al MAX485 del NE185 (RS-485).</p>
 <img src="conector8_alim.png" style="width:100%; max-width:340px; display:block; margin:2px auto;" alt="Pinout del conector 8: 5V, IO26, IO27, GND">
 </div>
 

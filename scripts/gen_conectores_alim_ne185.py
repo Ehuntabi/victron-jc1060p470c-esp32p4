@@ -17,7 +17,7 @@ import matplotlib.image as mpimg
 from matplotlib.patches import Circle
 
 DOCS = Path(__file__).resolve().parent.parent / "docs"
-C_5V, C_BUS, C_GND = "#E01F26", "#1E9BE0", "#1A1A1A"
+C_5V, C_BUS, C_GND, C_NA = "#E01F26", "#1E9BE0", "#1A1A1A", "#8E8E8E"
 
 
 def annotate(foto, title, right_x, pins, out):
@@ -49,12 +49,12 @@ def annotate(foto, title, right_x, pins, out):
 
 # Conector 8: arriba->abajo = GND(pin4), IO27(pin3), IO26(pin2), 5V(pin1)
 annotate("conector8_foto.png",
-         "Conector 8 · MX 1.25 4P — alimentacion +5 V (y UART1)",
+         "Conector 8 · MX 1.25 4P — alimentacion +5 V",
          252,
-         [(122, 4, "GND",  "tierra",        C_GND),
-          (188, 3, "IO27", "UART1 RX",      C_BUS),
-          (250, 2, "IO26", "UART1 TX",      C_BUS),
-          (312, 1, "+5 V", "alimentacion",  C_5V)],
+         [(122, 4, "GND",         "tierra",        C_GND),
+          (188, 3, "No conectar", "",              C_NA),
+          (250, 2, "No conectar", "",              C_NA),
+          (312, 1, "+5 V",        "alimentacion",  C_5V)],
          "conector8_alim.png")
 
 # Conector 11: arriba->abajo = GND(pin4), B(pin3), A(pin2), 5V(pin1)
