@@ -102,5 +102,5 @@ draw([
     (2, "A",    "RS-485 A  →  NE185 A",  C_BUS),
     (3, "B",    "RS-485 B  →  NE185 B",  C_BUS),
     (4, "GND",  "masa comun del bus",    C_GND),
-], "Conector 11 / J5 · MX 1.25 4P — RS-485 al NE185",
+], "Conector 11 · MX 1.25 4P — RS-485 al NE185",
    DOCS / "conector11_j5_ne185.png")
