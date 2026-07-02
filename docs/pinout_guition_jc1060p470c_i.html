@@ -369,5 +369,31 @@ placa real lleva RX8025T (mapa de registros distinto). El firmware ya maneja cor
 RX8025T.
 </p>
 
+<h2 style="page-break-before: always; break-before: page;">21. Vista trasera y conexiones físicas</h2>
+<p>
+Ubicación física de los conectores en la cara trasera de la placa (numeración del fabricante).
+Los tres que usa el proyecto para cablear en la autocaravana son el <strong>7</strong>
+(USB de programación), el <strong>8</strong> (alimentación +5&nbsp;V) y el <strong>11 / J5</strong>
+(RS-485 al NE185).
+</p>
+<img src="vista_trasera_placa.png" style="width:82%; max-width:820px; display:block; margin:8px auto; border:1px solid #ccc;" alt="Vista trasera de la placa con los conectores numerados 1-18">
+
+<p class="small">
+<strong>Conector 7</strong> (USB-C Full-speed, USB nativo del ESP32-P4): es el <strong>puerto de
+programación / consola</strong> — por aquí se flashea y se lee el log (<code>/dev/ttyACM0</code>).
+</p>
+
+<h3>Conector 8 — alimentación +5 V (y UART1)</h3>
+<p class="small">Orden real leído en la serigrafía de la placa, de abajo (pin 1) a arriba (pin 4).
+Para alimentar: <strong>+5&nbsp;V al pin 1</strong> y <strong>GND al pin 4</strong>. Los pines
+IO26/IO27 son la UART1 (los mismos que atacan el MAX485 del NE185; normalmente se dejan sin conectar).</p>
+<img src="conector8_alim.png" style="width:47%; max-width:440px; display:block; margin:6px auto;" alt="Pinout del conector 8: 5V, IO26, IO27, GND">
+
+<h3>Conector 11 / J5 — RS-485 al NE185</h3>
+<p class="small">Orden real leído en la serigrafía, de abajo (pin 1) a arriba (pin 4). Cablear los
+4 hilos del NE185: <strong>+5&nbsp;V (pin 1)</strong>, <strong>A (pin 2)</strong>,
+<strong>B (pin 3)</strong>, <strong>GND (pin 4)</strong>.</p>
+<img src="conector11_j5_ne185.png" style="width:47%; max-width:440px; display:block; margin:6px auto;" alt="Pinout del conector 11 J5: 5V, A, B, GND">
+
 </body>
 </html>
