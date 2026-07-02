@@ -43,5 +43,7 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 
 ## Pendientes activos
 1. Victron Keys 2 columnas (intento alternativo, el anterior no renderizaba textos)
-2. DS18B20 físicos (cuando se conecten)
+2. DS18B20: RESUELTO 2026-07-02 (2 sensores OK en GPIO4). Gotcha: el bus 1-Wire
+   necesita resets de warm-up ANTES de enumerar; sin ellos frigo_init daba 0
+   sensores al arrancar aunque el HW fuera correcto (commit a60d93e).
 3. Ventilador GPIO21 (cuando esté cableado)
