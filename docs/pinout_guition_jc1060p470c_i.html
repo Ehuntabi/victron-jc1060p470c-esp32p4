@@ -331,15 +331,15 @@ Cadena: USB-C / 5 V del conector 8 (J5) → IP5306 (cargador Li + booster) → V
 TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5 V.
 </p>
 
-<h2>18. Cámara (MIPI-CSI — SC2336)</h2>
+<h2>18. Cámara (MIPI-CSI — OV02C10)</h2>
 <table>
 <tr><th>Característica</th><th>Detalle</th></tr>
-<tr><td>Sensor</td><td><strong>SmartSens SC2336</strong> — 2 MP (1920×1080), CMOS 1/3"</td></tr>
+<tr><td>Sensor</td><td><strong>OmniVision OV02C10</strong> — 2 MP (1920×1080). El esquemático Guition cita SC2336, pero la placa real lleva <strong>OV02C10</strong> (detect en 0x36).</td></tr>
 <tr><td>Interfaz</td><td>MIPI-CSI 2 carriles (CSI_A: CLK + DATA0 + DATA1) → controlador CSI nativo del ESP32-P4</td></tr>
 <tr><td>Conector</td><td>FPC 0.5 mm, 15 pines (CSI_Camera)</td></tr>
 <tr><td>Control</td><td>I²C / SCCB en dirección <strong>0x36</strong></td></tr>
 <tr><td>Variante</td><td>Incluida en JC1060P470C_<strong>I_W</strong>(_Y): viene con cámara (y Ethernet)</td></tr>
-<tr><td>Software</td><td>ESP-IDF: <code>esp_video</code> + <code>esp_cam_sensor</code> (driver <code>sc2336</code>). El firmware victron actual aún NO la usa.</td></tr>
+<tr><td>Software</td><td>ESP-IDF <code>esp_video</code> + <strong>driver local <code>ov02c10</code></strong>. <strong>Implementada y en uso</strong>: streaming, auto-brillo del display por luminancia y captura de foto/snapshot JPEG (con bloqueo SD↔cámara).</td></tr>
 </table>
 
 <h2>19. Notas de hardware y estado</h2>
@@ -355,6 +355,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
 compilado y flasheado; UART1 GPIO 26/27, conector J4; conectado y funcionando — control de luces y bomba operativo)</li>
+<li><strong>Cámara OV02C10</strong> (MIPI-CSI): auto-brillo del display + captura de foto/snapshot JPEG (ver sección 18)</li>
 </ul>
 </div>
 <p class="small">
@@ -371,7 +372,7 @@ el <strong style="color:#18A83A">7</strong> (USB de programación, verde),
 el <strong style="color:#E01F26">8</strong> (alimentación +5&nbsp;V, rojo) y
 el <strong style="color:#1E9BE0">11</strong> (RS-485 al NE185, azul).
 </p>
-<img src="vista_trasera_placa.png" style="width:66%; max-width:660px; display:block; margin:8px auto 4px; border:1px solid #ccc;" alt="Vista trasera de la placa con los conectores numerados 1-18">
+<img src="vista_trasera_placa.png" style="width:60%; max-width:600px; display:block; margin:6px auto 4px; border:1px solid #ccc;" alt="Vista trasera de la placa con los conectores numerados 1-18">
 <p class="small" style="max-width:660px; margin:6px auto 16px;">
 <strong style="color:#18A83A">Conector 7</strong> (USB-C Full-speed, USB nativo del ESP32-P4): es el <strong>puerto de
 programación / consola</strong> — por aquí se flashea y se lee el log (<code>/dev/ttyACM0</code>).
@@ -398,9 +399,11 @@ solo se usan <strong>+5&nbsp;V (pin 1)</strong> y <strong>GND (pin 4)</strong> p
 </div>
 
 <p class="small" style="background:#FFF6E5; border-left:4px solid #E8A500; padding:6px 10px; margin-top:14px;">
-<strong>⚠ Una sola fuente de 5 V a la vez.</strong> No alimentes por el <strong>conector 8</strong> y el
-<strong>USB-C</strong> al mismo tiempo (los dos entran al mismo IP5306). La entrada de 5 V lleva protección
-de polaridad inversa (MOSFET AO3401 + TVS SMBJ6.0CA).
+<strong>⚠ Preferiblemente una sola fuente de 5 V a la vez</strong> (conector 8 <em>o</em> USB-C): las dos entran
+al mismo IP5306, así que juntas quedan en paralelo (posible retroalimentación leve). Durante el desarrollo del
+protocolo NE185 han estado las dos conectadas a la vez (USB-C para flashear/consola + conector 8) sin daños; para
+la instalación final, alimenta solo por el conector 8. La entrada de 5 V lleva protección de polaridad inversa
+(MOSFET AO3401 + TVS SMBJ6.0CA).
 </p>
 
 </body>
