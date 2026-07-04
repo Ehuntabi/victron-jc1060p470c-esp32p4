@@ -239,18 +239,27 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
         onewire_new_bus_rmt(&bus_cfg, &rmt_cfg, &s_bus),
         TAG, "onewire_new_bus_rmt falló");
 
-    /* Warm-up del bus: varios DS18B20 NO dan pulso de presencia en el primer
-     * reset tras el power-on. Sin estos resets previos la enumeracion encontraba
-     * 0 sensores aunque cableado, pull-up y pines fueran correctos (funcionaba en
-     * Arduino porque DallasTemperature reintenta). Con el warm-up responden bien. */
-    for (int i = 0; i < 3; i++) {
-        onewire_bus_reset(s_bus);
-        vTaskDelay(pdMS_TO_TICKS(150));
-    }
-
-    /* Enumerar con reintentos por si algun sensor aun tarda en responder. */
+    /* Enumeracion con reintento REAL. Un DS18B20 puede no dar pulso de presencia
+     * en el primer reset frio tras el power-on. El bucle antiguo solo repetia
+     * onewire_bus_reset() sobre el mismo handle, pero tras un timeout el canal RX
+     * del RMT queda en INVALID_STATE y los reintentos ya no tocan el cable (no-op).
+     * Por eso aqui cada intento DESTRUYE y RECREA el bus: solo asi el reset vuelve
+     * a ser real. */
     s_state.n_sensors = 0;
-    for (int intento = 0; intento < 4 && s_state.n_sensors == 0; intento++) {
+    for (int intento = 0; intento < 5 && s_state.n_sensors == 0; intento++) {
+        if (intento > 0) {
+            onewire_bus_del(s_bus);
+            vTaskDelay(pdMS_TO_TICKS(200));
+            if (onewire_new_bus_rmt(&bus_cfg, &rmt_cfg, &s_bus) != ESP_OK) {
+                ESP_LOGE(TAG, "intento %d: recrear bus fallo", intento);
+                continue;
+            }
+        }
+
+        esp_err_t rr = onewire_bus_reset(s_bus);
+        ESP_LOGI(TAG, "intento %d: reset=%s", intento, esp_err_to_name(rr));
+        if (rr != ESP_OK) { vTaskDelay(pdMS_TO_TICKS(150)); continue; }
+
         onewire_device_iter_handle_t iter;
         onewire_new_device_iter(s_bus, &iter);
         onewire_device_t dev;
@@ -266,10 +275,6 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
             }
         }
         onewire_del_device_iter(iter);
-        if (s_state.n_sensors == 0) {
-            onewire_bus_reset(s_bus);
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
     }
     ESP_LOGI(TAG, "%d sensor(es) DS18B20 en bus GPIO%d",
              s_state.n_sensors, FRIGO_ONEWIRE_GPIO);

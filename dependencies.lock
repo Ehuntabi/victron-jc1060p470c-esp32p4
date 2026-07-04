@@ -67,7 +67,7 @@ dependencies:
     - esp32s31
     version: 2.3.0
   espressif/esp_codec_dev:
-    component_hash: 896c67360ae1f8dedaf8a53dfe48c015317fa455f061a5165307892296990028
+    component_hash: df70f10af8d7b922add7b9d07372c9c97ab356e58d72b7a892050227c2d44348
     dependencies:
     - name: idf
       require: private
@@ -75,7 +75,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.5.10
+    version: 1.5.11
   espressif/esp_h264:
     component_hash: 40cb64e697a8cfd787453165f6ce54e1fb8601844448eb073d677b9f9fde071e
     dependencies:
@@ -96,7 +96,7 @@ dependencies:
       type: local
     version: 0.0.27
   espressif/esp_ipa:
-    component_hash: cbfe525ee3d520f0d3c3e3c6eae906aff9dd50209ba65bdf3a42d46c7bb2d121
+    component_hash: da24ae8139754b48af75a8c737b81e8eb7fc5a7af4ced5d70af1feb3a056838c
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -110,7 +110,7 @@ dependencies:
       type: service
     targets:
     - esp32p4
-    version: 2.2.0
+    version: 2.2.0~1
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
