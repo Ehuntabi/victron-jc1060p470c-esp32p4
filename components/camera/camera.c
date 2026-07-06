@@ -531,7 +531,7 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t
      * reintentando (nunca rendirse) para no solapar la ventana GDMA de la camara -> INT
      * WDT. La tarea drain no esta suscrita al TWDT, asi que basta ceder con vTaskDelay. */
     while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
-    close(fd);
+    if (close(fd) != 0) ok = false;   /* el flush/f_sync real a la SD ocurre en close() */
     camera_sd_bus_unlock();
     if (!ok) {
         while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
@@ -874,6 +874,10 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     s_sd_bus = xSemaphoreCreateMutex();
     s_jpeg_mutex = xSemaphoreCreateMutex();
     s_vig_mtx = xSemaphoreCreateMutex();   /* anillo de vigilancia: crear ANTES de arrancar las tareas */
+    if (!s_sd_bus || !s_jpeg_mutex || !s_vig_mtx) {
+        ESP_LOGE(TAG, "no se pudieron crear los mutex de camara (sin heap) -> sin camara");
+        return ESP_ERR_NO_MEM;
+    }
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */

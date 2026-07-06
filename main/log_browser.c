@@ -86,16 +86,16 @@ int log_browser_load_frigo(const char *path,
                            frigo_log_entry_t *out, int max)
 {
     if (!path || !out || max <= 0) return 0;
-    camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     FILE *f = fopen(path, "r");
     if (!f) {
-        camera_sd_bus_unlock();
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
         return 0;
     }
     char line[160];
     /* Saltar cabecera */
-    if (!fgets(line, sizeof(line), f)) { fclose(f); camera_sd_bus_unlock(); return 0; }
+    if (!fgets(line, sizeof(line), f)) { fclose(f); if (sdl) camera_sd_bus_unlock(); return 0; }
     int n = 0;
     while (fgets(line, sizeof(line), f) && n < max) {
         char *fields[8] = {0};
@@ -110,7 +110,7 @@ int log_browser_load_frigo(const char *path,
         n++;
     }
     fclose(f);
-    camera_sd_bus_unlock();
+    if (sdl) camera_sd_bus_unlock();
     return n;
 }
 
@@ -118,15 +118,15 @@ int log_browser_load_battery(const char *path,
                              battery_log_entry_t *out, int max)
 {
     if (!path || !out || max <= 0) return 0;
-    camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     FILE *f = fopen(path, "r");
     if (!f) {
-        camera_sd_bus_unlock();
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
         return 0;
     }
     char line[160];
-    if (!fgets(line, sizeof(line), f)) { fclose(f); camera_sd_bus_unlock(); return 0; }
+    if (!fgets(line, sizeof(line), f)) { fclose(f); if (sdl) camera_sd_bus_unlock(); return 0; }
     int n = 0;
     while (fgets(line, sizeof(line), f) && n < max) {
         char *fields[8] = {0};
@@ -144,6 +144,6 @@ int log_browser_load_battery(const char *path,
         n++;
     }
     fclose(f);
-    camera_sd_bus_unlock();
+    if (sdl) camera_sd_bus_unlock();
     return n;
 }
