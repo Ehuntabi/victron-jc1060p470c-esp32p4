@@ -364,11 +364,14 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
 }
 
 /* ── Anillo de capturas de vigilancia en RAM (PSRAM) ─────────────────────────
- * Escribir las fotos a la SD durante la vigilancia NO es viable en esta placa: el
- * DMA de la camara + el sondeo SDIO del C6 saturan el controlador SDMMC compartido
- * (timeouts 0x107; probado a fondo). Solucion: guardar las ultimas N fotos JPEG en
- * PSRAM y servirlas por HTTP (/vigilancia). No se toca la SD -> cero conflicto. Se
- * pierden al reiniciar (encaja con "modo ausente ahora"). */
+ * Buffer entre la captura (rapida) y la SD (lenta). Cada foto JPEG entra aqui,
+ * se sirve por HTTP (/vigilancia) y el drenador (vig_sd_drain_task) la vuelca a
+ * la SD "sin prisas" tomando camera_sd_bus_lock (escribe solo cuando el GDMA de
+ * la camara esta parado; la SD ya esta en SPI3, fuera del bus SDMMC del C6). Al
+ * guardar OK se libera el slot (sale de HTTP). Historicamente el volcado directo
+ * a SD durante el streaming NO era viable (DMA camara+C6 sobre SDMMC compartido,
+ * timeouts 0x107); ahora se sortea con SD-en-SPI3 + cerrojo de bus + volcado
+ * diferido a baja prioridad. */
 #define VIG_RING 8    /* 8 capturas basta para "quien entro"; ahorra ~0.5MB PSRAM */
 typedef struct { uint8_t *buf; size_t len; time_t ts; uint32_t id; } vig_slot_t;
 static vig_slot_t       s_vig[VIG_RING];
@@ -483,6 +486,81 @@ bool camera_sd_bus_lock(uint32_t timeout_ms)
 void camera_sd_bus_unlock(void)
 {
     if (s_sd_bus) xSemaphoreGive(s_sd_bus);
+}
+
+/* ── Drenador anillo PSRAM -> SD ("sin prisas") ──────────────────────────────
+ * Escribe cada JPEG del anillo a /sdcard/vigilancia SIN parar el stream (parar
+ * STREAMON crashea el CSI): toma camera_sd_bus_lock alrededor de la escritura,
+ * como datalogger -> escribe en la ventana en que el GDMA de la camara esta
+ * parado. El JPEG es pequeno (~50-100KB) -> escritura corta, no ahoga a LVGL.
+ * Al guardar OK libera el slot del anillo. Tarea de baja prioridad. */
+#define VIG_SD_DIR "/sdcard/vigilancia"
+
+static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t len)
+{
+    struct stat stx;
+    if (stat(VIG_SD_DIR, &stx) != 0) mkdir(VIG_SD_DIR, 0777);
+
+    char path[96];
+    struct tm tmv;
+    localtime_r(&ts, &tmv);
+    size_t p = strftime(path, sizeof(path), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
+    snprintf(path + p, sizeof(path) - p, "_%03lu.jpg", (unsigned long)(id % 1000));
+
+    if (!camera_sd_bus_lock(2000)) return false;   /* ventana con GDMA parado */
+    FILE *f = fopen(path, "wb");
+    bool ok = false;
+    if (f) {
+        ok = (fwrite(jpg, 1, len, f) == len);
+        fclose(f);
+        if (!ok) unlink(path);   /* escritura parcial -> borrar */
+    }
+    camera_sd_bus_unlock();
+    if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B)", path, (unsigned)len);
+    else    ESP_LOGW(TAG, "vig: fallo guardando en SD (%s)", path);
+    return ok;
+}
+
+static void vig_sd_drain_task(void *arg)
+{
+    for (;;) {
+        uint8_t *copy = NULL; size_t clen = 0; uint32_t cid = 0; time_t cts = 0;
+
+        /* Coger el pendiente mas ANTIGUO (menor id) y copiarlo fuera del anillo,
+         * para no retener el mutex durante la escritura lenta a SD. */
+        if (s_vig_mtx) {
+            xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+            int best = -1; uint32_t bestid = 0xFFFFFFFFu;
+            for (int i = 0; i < VIG_RING; i++) {
+                if (s_vig[i].buf && s_vig[i].id < bestid) { bestid = s_vig[i].id; best = i; }
+            }
+            if (best >= 0) {
+                copy = heap_caps_malloc(s_vig[best].len, MALLOC_CAP_SPIRAM);
+                if (copy) {
+                    memcpy(copy, s_vig[best].buf, s_vig[best].len);
+                    clen = s_vig[best].len; cid = s_vig[best].id; cts = s_vig[best].ts;
+                }
+            }
+            xSemaphoreGive(s_vig_mtx);
+        }
+
+        if (!copy) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }  /* nada pendiente */
+
+        bool ok = vig_write_jpeg_sd(cid, cts, copy, clen);
+        free(copy);
+
+        if (ok && s_vig_mtx) {
+            /* Borrar del anillo (si una captura nueva no reciclo ya ese slot). */
+            xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+            for (int i = 0; i < VIG_RING; i++) {
+                if (s_vig[i].buf && s_vig[i].id == cid) {
+                    free(s_vig[i].buf); s_vig[i].buf = NULL; break;
+                }
+            }
+            xSemaphoreGive(s_vig_mtx);
+        }
+        vTaskDelay(pdMS_TO_TICKS(ok ? 300 : 3000));  /* sin prisas; si falla, mas espera */
+    }
 }
 
 void camera_set_surveillance(bool on)
@@ -692,8 +770,9 @@ static void camera_stream_task(void *arg)
                         s_photo_count < MOT_MAX_PHOTOS) {
                         last_photo_us = now;
                         /* Codificar el JPEG por HW (PSRAM) y guardarlo en el anillo en
-                         * RAM. NO se escribe a la SD: el DMA camara+C6 la satura durante
-                         * la vigilancia (probado). Se ven por HTTP en /vigilancia. */
+                         * RAM. Se sirve por HTTP (/vigilancia) y el drenador
+                         * (vig_sd_drain_task) lo vuelca a la SD sin prisas, tomando el
+                         * bus en la ventana en que el GDMA esta parado. */
                         uint8_t *jpg = NULL;
                         size_t jlen = 0;
                         if (camera_snapshot_jpeg(&jpg, &jlen)) {
@@ -775,6 +854,10 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
     xTaskCreate(camera_stream_task, "cam_stream", 6144, NULL, 4, NULL);
+
+    /* Drenador del anillo de vigilancia -> SD (baja prioridad, "sin prisas").
+     * Idle si no hay capturas pendientes; con SD no montada reintenta. */
+    xTaskCreate(vig_sd_drain_task, "vig_drain", 6144, NULL, 2, NULL);
 
     return ESP_OK;
 }
