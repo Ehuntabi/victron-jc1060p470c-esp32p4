@@ -4,6 +4,18 @@
 
 ---
 
+## Capturas / Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/img/01_overview.png" width="320"><br><sub>Vista general / Overview</sub></td>
+    <td align="center"><img src="docs/img/09_ajustes.png" width="320"><br><sub>Ajustes / Settings</sub></td>
+    <td align="center"><img src="docs/img/10_ajustes_frigo.png" width="320"><br><sub>Frigo / Fridge</sub></td>
+  </tr>
+</table>
+
+---
+
 ## Español
 
 Port del proyecto [victronsolardisplayesp (multi-device)](https://github.com/CamdenSutherland/victronsolardisplayesp/tree/multi-device) de CamdenSutherland, que a su vez es un fork de [VictronSolarDisplayEsp](https://github.com/wytr/VictronSolarDisplayEsp) de wytr.
