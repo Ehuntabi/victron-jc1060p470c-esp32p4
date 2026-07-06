@@ -41,7 +41,7 @@ dependencies:
       type: service
     version: 1.1.5
   espressif/esp_cam_sensor:
-    component_hash: 4ed9e34055a7ac5d6c60552c21dfa470deaadb7eda8040d157c5f3314de8d2fd
+    component_hash: 0a2775d95fae99449bb4c044feab6d887e9db309602fad8df6c3fc58bc6e1b6d
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -65,7 +65,7 @@ dependencies:
     - esp32c6
     - esp32c61
     - esp32s31
-    version: 2.3.0
+    version: 2.2.0
   espressif/esp_codec_dev:
     component_hash: df70f10af8d7b922add7b9d07372c9c97ab356e58d72b7a892050227c2d44348
     dependencies:
@@ -96,7 +96,7 @@ dependencies:
       type: local
     version: 0.0.27
   espressif/esp_ipa:
-    component_hash: da24ae8139754b48af75a8c737b81e8eb7fc5a7af4ced5d70af1feb3a056838c
+    component_hash: 668dfaa406c089104294c908546e5c641879585e088ad6b2186f6322c6227dac
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -110,7 +110,7 @@ dependencies:
       type: service
     targets:
     - esp32p4
-    version: 2.2.0~1
+    version: 2.1.0
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
@@ -170,7 +170,7 @@ dependencies:
       type: service
     version: 1.1.2
   espressif/esp_video:
-    component_hash: 2391b4f34230cb1eeea23a0cb1920ae762bb9f0252d4947fe981154530519198
+    component_hash: d3c27c05433c0ff4d57e544fcdce891fa2497debf2f006d5ff452c4eb4e7fced
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -179,7 +179,7 @@ dependencies:
     - name: espressif/esp_cam_sensor
       registry_url: https://components.espressif.com
       require: private
-      version: 2.3.*
+      version: 2.2.*
     - name: espressif/esp_h264
       registry_url: https://components.espressif.com
       require: private
@@ -191,7 +191,7 @@ dependencies:
       require: private
       rules:
       - if: target in [esp32p4]
-      version: 2.2.*
+      version: 2.1.*
     - name: idf
       require: private
       version: '>=5.4'
@@ -212,7 +212,7 @@ dependencies:
     - esp32c6
     - esp32c61
     - esp32s31
-    version: 2.3.0
+    version: 2.2.0
   espressif/esp_wifi_remote:
     component_hash: 263261f498f7378b23351dfecbfc11e9b44895b66ce57991c4fd61bc0d6a2f34
     dependencies:
@@ -284,6 +284,6 @@ direct_dependencies:
 - espressif/onewire_bus
 - idf
 - lvgl/lvgl
-manifest_hash: 0ad1ef381ca3d2fbff6ba0306bc31cae0b73a73d1b445efa7d420d20cca5a6bc
+manifest_hash: 33cebb13eeebbc773602bbf8759c6fbb8767410bcf6cce545c07ef8ce42526f3
 target: esp32p4
 version: 2.0.0
