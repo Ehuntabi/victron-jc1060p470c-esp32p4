@@ -5,6 +5,9 @@
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdmmc_host.h"
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
+#include "driver/gpio.h"
 #include "sdmmc_cmd.h"
 #include "esp_ldo_regulator.h"
 #include "freertos/FreeRTOS.h"
@@ -22,6 +25,17 @@ static const char *TAG = "DATALOGGER";
 #define MOUNT_POINT "/sdcard"
 #define LOG_DIR     MOUNT_POINT "/frigo"
 #define FLUSH_INTERVAL_MS 60000  /* volcado cada 60s */
+
+/* --- SD en modo SPI (bus SPI3), NO SDMMC ---
+ * Saca la SD del periferico SDMMC que comparte con el C6 (WiFi por SDIO en
+ * slot 1) -> evita el timeout 0x107 por conflicto de bus con el WiFi.
+ * Reutiliza los MISMOS pines fisicos del slot 0 (la tarjeta habla SPI sobre
+ * ellos): CLK->SCK(43) CMD->MOSI(44) D0->MISO(39) D3->CS(42). */
+#define SD_SPI_HOST   SPI3_HOST
+#define SD_PIN_SCK    43   /* CLK */
+#define SD_PIN_MOSI   44   /* CMD */
+#define SD_PIN_MISO   39   /* D0  */
+#define SD_PIN_CS     42   /* D3  */
 
 static datalogger_entry_t s_buf[DATALOGGER_MAX_ENTRIES];
 static int                s_head  = 0;
@@ -102,26 +116,39 @@ static esp_err_t mount_sd(void)
         .max_files = 8,
         .allocation_unit_size = 16 * 1024,
     };
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.slot = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    /* SD en SPI necesita pull-up en MISO y CS (el board no lleva fuertes; el
+     * modo SDMMC usaba INTERNAL_PULLUP). */
+    gpio_set_pull_mode(SD_PIN_MISO, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(SD_PIN_CS,   GPIO_PULLUP_ONLY);
 
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.width = 4;  /* 4-bit bus */
-    /* Pines via IOMUX en slot 0 del P4: 43,44,39,40,41,42 */
-    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num     = SD_PIN_MOSI,
+        .miso_io_num     = SD_PIN_MISO,
+        .sclk_io_num     = SD_PIN_SCK,
+        .quadwp_io_num   = -1,
+        .quadhd_io_num   = -1,
+        .max_transfer_sz = 4000,
+    };
+    esp_err_t err = spi_bus_initialize(SD_SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {  /* INVALID_STATE = ya init */
+        ESP_LOGW(TAG, "spi_bus_initialize: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    /* El montaje es INTERMITENTE: el C6 (WiFi) comparte el periferico SDMMC y, si
-     * esta ocupado cuando la SD intenta leer, da timeout (0x107). Reintentar pilla
-     * una ventana en que el C6 esta libre. (La SD y el guardado funcionan; era solo
-     * la fiabilidad del montaje.) */
-    /* 3 intentos cortos (sin bloquear el boot >WDT). El montaje fiable depende de
-     * resolver el conflicto con la camara (la SD fallaba desde que se anadio). */
-    esp_err_t err = ESP_FAIL;
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = SD_SPI_HOST;
+
+    sdspi_device_config_t dev_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
+    dev_cfg.gpio_cs = SD_PIN_CS;
+    dev_cfg.host_id = SD_SPI_HOST;
+
+    /* 3 intentos cortos (sin bloquear el boot > WDT). Ya no comparte bus con el
+     * C6 (WiFi); la contencion con la camara se mitiga con camera_sd_bus_lock. */
+    err = ESP_FAIL;
     for (int i = 0; i < 3 && err != ESP_OK; i++) {
-        err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
+        err = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &dev_cfg, &mount_config, &s_card);
         if (err != ESP_OK) {
-            ESP_LOGW(TAG, "SD mount intento %d/3: %s", i + 1, esp_err_to_name(err));
+            ESP_LOGW(TAG, "SD(SPI) mount intento %d/3: %s", i + 1, esp_err_to_name(err));
             vTaskDelay(pdMS_TO_TICKS(150));
         }
     }
