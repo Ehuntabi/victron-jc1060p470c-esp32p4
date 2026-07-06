@@ -59,13 +59,12 @@ esp_err_t config_backup_export(const char *path)
 
     /* Night mode */
     bool nm_en = false;
-    uint8_t nm_s = 22, nm_e = 7, nm_b = 15;
-    load_night_mode(&nm_en, &nm_s, &nm_e, &nm_b);
+    uint8_t nm_s = 22, nm_e = 7;
+    load_night_mode(&nm_en, &nm_s, &nm_e);
     cJSON *nm = cJSON_AddObjectToObject(disp, "night_mode");
     cJSON_AddBoolToObject(nm, "enabled", nm_en);
     cJSON_AddNumberToObject(nm, "start_h", nm_s);
     cJSON_AddNumberToObject(nm, "end_h", nm_e);
-    cJSON_AddNumberToObject(nm, "brightness", nm_b);
 
     /* Screensaver */
     bool ss_en = false;
@@ -166,8 +165,7 @@ esp_err_t config_backup_import(const char *path)
             bool en = cJSON_IsTrue(cJSON_GetObjectItem(nm, "enabled"));
             int s = cJSON_GetObjectItem(nm, "start_h")  ? cJSON_GetObjectItem(nm, "start_h")->valueint : 22;
             int e = cJSON_GetObjectItem(nm, "end_h")    ? cJSON_GetObjectItem(nm, "end_h")->valueint   : 7;
-            int b = cJSON_GetObjectItem(nm, "brightness")? cJSON_GetObjectItem(nm, "brightness")->valueint : 15;
-            save_night_mode(en, (uint8_t)s, (uint8_t)e, (uint8_t)b);
+            save_night_mode(en, (uint8_t)s, (uint8_t)e);
         }
         cJSON *ss = cJSON_GetObjectItem(disp, "screensaver");
         if (ss) {

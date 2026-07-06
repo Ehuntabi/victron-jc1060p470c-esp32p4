@@ -102,7 +102,6 @@ static void night_start_dec_cb(lv_event_t *e);
 static void night_start_inc_cb(lv_event_t *e);
 static void night_end_dec_cb(lv_event_t *e);
 static void night_end_inc_cb(lv_event_t *e);
-static void night_brightness_slider_cb(lv_event_t *e);
 
 /* Aplica inmediatamente el brillo correcto según hora actual + config. */
 static bool night_in_window(int h, uint8_t s, uint8_t e)
@@ -125,7 +124,7 @@ static void apply_brightness_for_now(ui_state_t *ui)
             if (night_in_window(tm_local.tm_hour,
                                 ui->night_mode.start_h,
                                 ui->night_mode.end_h)) {
-                target = ui->night_mode.brightness;
+                target = 0;   /* franja nocturna: pantalla apagada */
             }
         }
     }
@@ -151,6 +150,7 @@ typedef struct settings_page_ctx_s settings_page_ctx_t;
 struct settings_page_ctx_s {
     uint32_t accent;
     ui_state_t *ui;
+    lv_obj_t *page;   /* pagina de menu asociada (para navegacion programatica) */
     void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page);
     bool populated;
     /* Extras (solo Wi-Fi los usa) */
@@ -750,7 +750,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_COLUMN);
 
-    /* Row 1: titulo + switch + "Brillo nocturno" + valor + slider */
+    /* Row 1: titulo + switch */
     lv_obj_t *nm_top = lv_obj_create(card_nm);
     lv_obj_remove_style_all(nm_top);
     lv_obj_set_size(nm_top, lv_pct(100), LV_SIZE_CONTENT);
@@ -781,41 +781,6 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
-
-    /* Bloque derecho: Brillo nocturno (label + valor + slider) en la MISMA fila */
-    lv_obj_t *nm_bri_grp = lv_obj_create(nm_top);
-    lv_obj_remove_style_all(nm_bri_grp);
-    lv_obj_set_size(nm_bri_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_bri_grp, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_bri_grp, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_bri_grp, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(nm_bri_grp, 10, 0);
-
-    lv_obj_t *nm_bri_lbl = lv_label_create(nm_bri_grp);
-    lv_obj_set_style_text_font(nm_bri_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(nm_bri_lbl, lv_color_hex(0xBBBBBB), 0);
-    lv_label_set_text(nm_bri_lbl, "Brillo nocturno");
-
-    lv_obj_t *nm_bri_val = lv_label_create(nm_bri_grp);
-    lv_obj_set_style_text_font(nm_bri_val, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(nm_bri_val, lv_color_white(), 0);
-    lv_obj_set_width(nm_bri_val, 60);
-    lv_obj_set_style_text_align(nm_bri_val, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_text_fmt(nm_bri_val, "%d%%", ui->night_mode.brightness);
-
-    lv_obj_t *nm_bri_slider = lv_slider_create(nm_bri_grp);
-    lv_obj_set_width(nm_bri_slider, 200);
-    lv_obj_set_height(nm_bri_slider, 22);
-    lv_slider_set_range(nm_bri_slider, 5, 100);
-    lv_slider_set_value(nm_bri_slider, ui->night_mode.brightness, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0),
-                              LV_PART_INDICATOR);
-    lv_obj_set_style_radius(nm_bri_slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(nm_bri_slider, lv_color_hex(0x9C27B0), LV_PART_KNOB);
-    lv_obj_set_user_data(nm_bri_slider, nm_bri_val);
-    lv_obj_add_event_cb(nm_bri_slider, night_brightness_slider_cb,
-                        LV_EVENT_VALUE_CHANGED, ui);
 
     /* Row 2: selectores Inicio + Fin (inline) */
     lv_obj_t *nm_hours = lv_obj_create(card_nm);
@@ -2026,8 +1991,7 @@ static void night_save_and_apply(ui_state_t *ui)
 {
     save_night_mode(ui->night_mode.enabled,
                     ui->night_mode.start_h,
-                    ui->night_mode.end_h,
-                    ui->night_mode.brightness);
+                    ui->night_mode.end_h);
     apply_brightness_for_now(ui);
 }
 
@@ -2077,25 +2041,6 @@ static void night_end_inc_cb(lv_event_t *e)
     ui->night_mode.end_h = (ui->night_mode.end_h + 1) % 24;
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(lv_event_get_target(e));
     if (lbl) lv_label_set_text_fmt(lbl, "%02u:00", ui->night_mode.end_h);
-    night_save_and_apply(ui);
-}
-
-static void night_brightness_slider_cb(lv_event_t *e)
-{
-    ui_state_t *ui = lv_event_get_user_data(e);
-    if (!ui) return;
-    lv_obj_t *slider = lv_event_get_target(e);
-    int val = lv_slider_get_value(slider);
-    int snapped = ((val + 2) / 5) * 5;
-    if (snapped < 5) snapped = 5;
-    if (snapped > 100) snapped = 100;
-    if (snapped != val) {
-        lv_slider_set_value(slider, snapped, LV_ANIM_OFF);
-        val = snapped;
-    }
-    ui->night_mode.brightness = (uint8_t)val;
-    lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(slider);
-    if (lbl) lv_label_set_text_fmt(lbl, "%d%%", val);
     night_save_and_apply(ui);
 }
 
@@ -3141,12 +3086,33 @@ static settings_page_ctx_t *settings_menu_add_entry(
         memset(ctx, 0, sizeof(*ctx));
         ctx->accent = accent;
         ctx->ui = ui;
+        ctx->page = target_page;
         ctx->populate = populate;
         lv_obj_set_user_data(target_page, ctx);
     }
 
     lv_menu_set_load_page_event(menu, cont, target_page);
     return ctx;
+}
+
+/* ── Navegacion programatica de sub-paginas (tour de capturas) ─────────── */
+int ui_settings_panel_page_count(void)
+{
+    return (int)s_page_ctx_count;
+}
+
+void ui_settings_panel_show_page(int idx)
+{
+    if (idx < 0 || (size_t)idx >= s_page_ctx_count) return;
+    settings_page_ctx_t *ctx = &s_page_ctxs[idx];
+    if (!s_settings_menu || !ctx->page) return;
+    lv_menu_set_page(s_settings_menu, ctx->page);
+    /* Asegurar el populate perezoso por si lv_menu_set_page no disparo el
+     * evento de cambio de pagina (el flag 'populated' evita duplicar). */
+    if (!ctx->populated && ctx->populate) {
+        ctx->populate(ctx, ctx->page);
+        ctx->populated = true;
+    }
 }
 
 /* Card clickable con la misma estetica que settings_menu_add_entry pero con

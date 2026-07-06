@@ -130,8 +130,8 @@ static void night_mode_timer_cb(void *arg)
         if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
         return;
     } else {
-        /* Precedencia: franja nocturna (atenuacion por horario) > auto-brillo por
-         * luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
+        /* Precedencia: franja nocturna (pantalla APAGADA por horario) > auto-brillo
+         * por luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
          * el auto-brillo (requisito del usuario). */
         bool night_win = false;
         if (ui->night_mode.enabled) {
@@ -146,7 +146,7 @@ static void night_mode_timer_cb(void *arg)
         }
         uint8_t luma;
         if (night_win) {
-            target = ui->night_mode.brightness;
+            target = 0;                 /* franja nocturna: pantalla apagada */
         } else if (s_auto_brightness && camera_get_luma(&luma)) {
             target = luma_to_brightness(luma);
         } else {
@@ -367,6 +367,12 @@ void app_main(void)
     /* Auto-save de logs a SD 30 s tras boot (con rotacion FIFO 20 archivos).
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
+
+    /* Auto-tour de capturas a /sdcard/screenshots: DESACTIVADO en produccion.
+     * En SDSC por SPI la escritura de 16 BMP grandes ahoga la CPU y dispara el
+     * watchdog SW (falso positivo de "LVGL congelada"). Para capturar pantallas
+     * usar los endpoints HTTP /capturas y /captura?n=<i> sobre el AP del P4. */
+    /* ui_start_screenshot_tour(); */
 
     /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
     {

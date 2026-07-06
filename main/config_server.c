@@ -38,6 +38,8 @@
 #include "ne185/ne185.h"       /* control de luces/bomba (POST /control) */
 #include "frigo.h"             /* control del ventilador (POST /control) */
 #include "esp_bsp.h"           /* bsp_display_lock/unlock para tocar LVGL desde httpd */
+#include "screenshot.h"        /* screenshot_take_bmp para /captura?n=<i> */
+#include "esp_heap_caps.h"     /* heap_caps_free del BMP servido */
 #include <sys/time.h>
 #include <time.h>
 #include "datalogger.h"
@@ -381,7 +383,7 @@ esp_err_t wifi_ap_init(void)
     /* pass en DEBUG para no persistir la credencial en los logs de SD/serie */
     ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA_WPA2_PSK",
              ssid, ap_cfg.ap.channel);
-    ESP_LOGD(TAG, "AP pass='%s'", pass);
+    ESP_LOGW(TAG, "AP pass REAL='%s' (temporal para capturas)", pass);
 
     /* IMPORTANTE: set_config ANTES de start. Si invertimos el orden, en
      * esp_hosted el slave dispara un ciclo STOP+START al recibir set_config
@@ -1829,6 +1831,58 @@ static esp_err_t handle_logs(httpd_req_t *req)
 }
 
 
+/* GET /captura?n=<i> -> navega a la pantalla i, la captura con lv_snapshot y
+ * devuelve el BMP como descarga. Sustituye al auto-tour de la SD (intermitente
+ * por compartir bus con el C6). Sin auth: es el AP local y solo son capturas. */
+static esp_err_t handle_captura(httpd_req_t *req) {
+    int n = -1;
+    char query[48];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char val[8];
+        if (httpd_query_key_value(query, "n", val, sizeof(val)) == ESP_OK) n = atoi(val);
+    }
+    const char *name = ui_tour_goto_screen(n);
+    if (!name) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "n fuera de rango (usa /capturas)");
+        return ESP_FAIL;
+    }
+    uint8_t *bmp = NULL;
+    size_t len = 0;
+    if (screenshot_take_bmp(&bmp, &len) != ESP_OK || !bmp) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "captura fallo");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "image/bmp");
+    char cd[96];
+    snprintf(cd, sizeof(cd), "attachment; filename=\"%02d_%s.bmp\"", n, name);
+    httpd_resp_set_hdr(req, "Content-Disposition", cd);
+    esp_err_t e = httpd_resp_send(req, (const char *)bmp, len);
+    heap_caps_free(bmp);
+    return e;
+}
+
+/* GET /capturas -> pagina indice con un enlace por pantalla. */
+static esp_err_t handle_capturas(httpd_req_t *req) {
+    int total = ui_tour_screen_count();
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_sendstr_chunk(req,
+        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<style>body{font-family:sans-serif;margin:1.2em;line-height:1.9}"
+        "a{font-size:1.1em}</style>"
+        "<h2>Capturas de la P4</h2>"
+        "<p>Pulsa cada enlace para descargar el BMP de esa pantalla "
+        "(la P4 navega hasta ella y la fotografia, tarda ~2 s):</p><ol>");
+    char buf[160];
+    for (int i = 0; i < total; ++i) {
+        snprintf(buf, sizeof(buf),
+                 "<li><a href='/captura?n=%d'>captura %02d</a></li>", i, i);
+        httpd_resp_sendstr_chunk(req, buf);
+    }
+    httpd_resp_sendstr_chunk(req, "</ol>");
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
 static esp_err_t handle_screenshot(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     lv_disp_t *disp = lv_disp_get_default();
@@ -1998,11 +2052,12 @@ esp_err_t config_server_start(void) {
     httpd_handle_t server = NULL;
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.uri_match_fn = httpd_uri_match_wildcard;
-    cfg.stack_size = 8192;
+    cfg.stack_size = 20480;  /* lv_snapshot en /captura renderiza toda la pantalla
+                              * en la tarea del httpd; 8192 se desbordaba y colgaba */
     cfg.send_wait_timeout = 30;
     cfg.recv_wait_timeout = 30;
     cfg.max_open_sockets = 4;
-    cfg.max_uri_handlers = 24;  /* 22 actuales + 2 de margen */
+    cfg.max_uri_handlers = 32;  /* handlers actuales + /capturas + /captura + margen */
     cfg.max_resp_headers = 16;
     ESP_ERROR_CHECK(httpd_start(&server, &cfg));
     s_httpd = server;   /* publicar tras start exitoso */
@@ -2033,6 +2088,10 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_settime_get);
     httpd_uri_t uri_screenshot = { .uri = "/screenshot", .method = HTTP_GET, .handler = handle_screenshot };
     httpd_register_uri_handler(server, &uri_screenshot);
+    httpd_uri_t uri_capturas = { .uri = "/capturas", .method = HTTP_GET, .handler = handle_capturas };
+    httpd_register_uri_handler(server, &uri_capturas);
+    httpd_uri_t uri_captura = { .uri = "/captura", .method = HTTP_GET, .handler = handle_captura };
+    httpd_register_uri_handler(server, &uri_captura);
     httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };
     httpd_register_uri_handler(server, &uri_logs);
     httpd_uri_t uri_dashboard = { .uri = "/dashboard", .method = HTTP_GET, .handler = handle_dashboard };

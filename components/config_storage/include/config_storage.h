@@ -95,9 +95,7 @@ esp_err_t save_timezone(const char *tz_str);
 // Si start>end, la ventana cruza la medianoche (ej. 22 → 7).
 esp_err_t load_night_mode(bool *enabled_out,
                           uint8_t *start_h_out,
-                          uint8_t *end_h_out,
-                          uint8_t *brightness_out);
+                          uint8_t *end_h_out);
 esp_err_t save_night_mode(bool enabled,
                           uint8_t start_h,
-                          uint8_t end_h,
-                          uint8_t brightness);
+                          uint8_t end_h);

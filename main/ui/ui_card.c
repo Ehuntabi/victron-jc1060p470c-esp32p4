@@ -86,7 +86,9 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
 
     if (icon_utf8 && icon_utf8[0]) {
         lv_obj_t *icon = lv_label_create(left);
-        lv_obj_set_style_text_font(icon, &lv_font_montserrat_28_es, 0);
+        /* Icono = LV_SYMBOL_*: la fuente _es (Inter) NO trae esos glifos -> salia
+         * un rectangulo (tofu) en Inverter/DC-DC. Montserrat built-in si los tiene. */
+        lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
         lv_obj_set_style_text_color(icon, accent, 0);
         lv_label_set_text(icon, icon_utf8);
     }
