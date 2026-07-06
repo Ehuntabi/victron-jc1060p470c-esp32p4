@@ -80,8 +80,15 @@ static void build_msg(mini_msg_t *out)
         out->water_gray  = MINI_NO_DATA_U8;
     }
 
-    /* Exterior - sin sensor todavía */
-    out->exterior_temp_centi = MINI_NO_DATA_I16;
+    /* Exterior (slot Exterior del frigo; 1-Wire si esta asignado) */
+    if (fr && fr->T_Exterior > -100.0f) {
+        float ve = fr->T_Exterior * 100.0f;
+        if (ve >  32767.0f) ve =  32767.0f;
+        if (ve < -32767.0f) ve = -32767.0f;
+        out->exterior_temp_centi = (int16_t)ve;
+    } else {
+        out->exterior_temp_centi = MINI_NO_DATA_I16;
+    }
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
     out->crc32 = esp_crc32_le(0, (const uint8_t *)out,
