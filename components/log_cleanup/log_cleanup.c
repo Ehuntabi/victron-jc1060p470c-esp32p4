@@ -1,6 +1,7 @@
 #include "log_cleanup.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "camera.h"          /* camera_sd_bus_lock: serializar el barrido con la camara */
 #include <dirent.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -45,8 +46,10 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
     time_t cutoff_delete = now - (time_t)effective_max * 86400;
     time_t cutoff_warn   = now - (time_t)(effective_max - 1) * 86400;
 
+    camera_sd_bus_lock(3000);   /* serializar el barrido de SD con el GDMA de la camara */
     DIR *dp = opendir(dir);
     if (!dp) {
+        camera_sd_bus_unlock();
         ESP_LOGD(TAG, "%s no abre (probablemente no montado)", dir);
         return 0;
     }
@@ -80,6 +83,7 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
         }
     }
     closedir(dp);
+    camera_sd_bus_unlock();
     return hits;
 }
 

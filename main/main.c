@@ -475,9 +475,10 @@ void app_main(void)
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
 
-    /* Modo simulacion: inyecta datos ficticios cambiantes para previsualizar
-     * la vista Overview. Toggle desde sim_overview.h. */
-    sim_overview_start();
+    /* Modo simulacion: inyecta datos ficticios para previsualizar Overview.
+     * DESACTIVADO en produccion (doble seguro, como el tour): descomentar la
+     * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
+    /* sim_overview_start(); */
 
     /* --- Timer reboot 24h --- */
     static esp_timer_handle_t reboot_timer;

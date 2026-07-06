@@ -136,10 +136,10 @@ esp_err_t screenshot_save_bmp(const char *path)
         if (w != n) break;
         vTaskDelay(1);  /* cede CPU: alimenta el idle/WDT durante la escritura lenta */
     }
-    fclose(f);
+    int cerr = fclose(f);   /* el flush final a la SD ocurre aqui: si falla, el fichero quedo truncado */
     heap_caps_free(bmp);
-    if (wr != len) {
-        ESP_LOGE(TAG, "Escritura incompleta en %s (%u/%u)", path, (unsigned)wr, (unsigned)len);
+    if (wr != len || cerr != 0) {
+        ESP_LOGE(TAG, "Escritura incompleta en %s (%u/%u, close=%d)", path, (unsigned)wr, (unsigned)len, cerr);
         return ESP_FAIL;
     }
     ESP_LOGI(TAG, "Captura guardada: %s", path);

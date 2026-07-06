@@ -127,7 +127,7 @@ static esp_err_t mount_sd(void)
         .sclk_io_num     = SD_PIN_SCK,
         .quadwp_io_num   = -1,
         .quadhd_io_num   = -1,
-        .max_transfer_sz = 4000,
+        .max_transfer_sz = 8192,   /* >= trozo de camara (8KB) y menos transacciones SPI */
     };
     esp_err_t err = spi_bus_initialize(SD_SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {  /* INVALID_STATE = ya init */

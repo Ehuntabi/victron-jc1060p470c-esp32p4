@@ -1155,12 +1155,15 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
     struct stat st;
     if (stat(path, &st) != 0) return NULL;
     if (st.st_size <= 0 || st.st_size > 512 * 1024) return NULL; /* limite 512KB */
+    /* Serializar el I/O de SD con el GDMA de la camara (no-op si no hay camara). */
+    camera_sd_bus_lock(3000);
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) { camera_sd_bus_unlock(); return NULL; }
     char *buf = malloc(st.st_size + 1);
-    if (!buf) { fclose(f); return NULL; }
+    if (!buf) { fclose(f); camera_sd_bus_unlock(); return NULL; }
     size_t n = fread(buf, 1, st.st_size, f);
     fclose(f);
+    camera_sd_bus_unlock();
     buf[n] = 0;
     if (out_len) *out_len = n;
     return buf;
@@ -1998,17 +2001,25 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) break;
 
         /* Contenido en chunks de 2KB */
+        /* Cada op de SD bajo el cerrojo; se SUELTA en el envio de red para que la
+         * camara interleave (un tar grande no la ciega segundos). */
+        camera_sd_bus_lock(3000);
         FILE *f = fopen(full_path, "rb");
+        camera_sd_bus_unlock();
         if (!f) continue;
         size_t remaining = st.st_size;
         while (remaining > 0) {
             size_t to_read = remaining > 2048 ? 2048 : remaining;
+            camera_sd_bus_lock(3000);
             size_t n = fread(buf, 1, to_read, f);
+            camera_sd_bus_unlock();
             if (n == 0) break;
             if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { remaining = 0; break; }
             remaining -= n;
         }
+        camera_sd_bus_lock(3000);
         fclose(f);
+        camera_sd_bus_unlock();
 
         /* Padding hasta multiplo de 512 */
         size_t pad = (TAR_BLOCK - (st.st_size % TAR_BLOCK)) % TAR_BLOCK;

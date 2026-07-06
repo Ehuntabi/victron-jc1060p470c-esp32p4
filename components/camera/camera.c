@@ -383,7 +383,7 @@ static SemaphoreHandle_t s_vig_mtx = NULL;
  * la tarea de camara. Copia los bytes -> s_jpeg_out se puede reusar luego. */
 static void camera_vig_store(const uint8_t *jpg, size_t len, time_t ts)
 {
-    if (!s_vig_mtx) { s_vig_mtx = xSemaphoreCreateMutex(); if (!s_vig_mtx) return; }
+    if (!s_vig_mtx) return;   /* creado en camera_init (antes de las tareas); si no, sin vigilancia */
     uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
     if (!copy) { ESP_LOGW(TAG, "vig: sin PSRAM para la captura"); return; }
     memcpy(copy, jpg, len);
@@ -527,9 +527,17 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t
         vTaskDelay(pdMS_TO_TICKS(20));   /* ceder a la camara entre trozos */
     }
 
-    if (camera_sd_bus_lock(2000)) { close(fd); camera_sd_bus_unlock(); }
-    else                          { close(fd); }
-    if (!ok && camera_sd_bus_lock(2000)) { unlink(path); camera_sd_bus_unlock(); }
+    /* close() hace transaccion SD real (flush + entrada de dir): SIEMPRE bajo el bus,
+     * reintentando (nunca rendirse) para no solapar la ventana GDMA de la camara -> INT
+     * WDT. La tarea drain no esta suscrita al TWDT, asi que basta ceder con vTaskDelay. */
+    while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+    close(fd);
+    camera_sd_bus_unlock();
+    if (!ok) {
+        while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+        unlink(path);
+        camera_sd_bus_unlock();
+    }
 
     if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B, troceada)", path, (unsigned)len);
     else    ESP_LOGW(TAG, "vig: fallo guardando en SD (%s)", path);
@@ -865,6 +873,7 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     /* Cerrojo de bus camara<->SD + mutex del encoder JPEG (ANTES de arrancar la tarea). */
     s_sd_bus = xSemaphoreCreateMutex();
     s_jpeg_mutex = xSemaphoreCreateMutex();
+    s_vig_mtx = xSemaphoreCreateMutex();   /* anillo de vigilancia: crear ANTES de arrancar las tareas */
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
