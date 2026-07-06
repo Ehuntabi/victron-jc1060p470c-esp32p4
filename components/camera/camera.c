@@ -494,29 +494,44 @@ void camera_sd_bus_unlock(void)
  * como datalogger -> escribe en la ventana en que el GDMA de la camara esta
  * parado. El JPEG es pequeno (~50-100KB) -> escritura corta, no ahoga a LVGL.
  * Al guardar OK libera el slot del anillo. Tarea de baja prioridad. */
-#define VIG_SD_DIR "/sdcard/vigilancia"
+#define VIG_SD_DIR   "/sdcard/vigilancia"
+#define VIG_SD_CHUNK (8 * 1024)   /* trozo pequeno: se SUELTA el bus entre trozos */
 
 static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t len)
 {
-    struct stat stx;
-    if (stat(VIG_SD_DIR, &stx) != 0) mkdir(VIG_SD_DIR, 0777);
-
     char path[96];
     struct tm tmv;
     localtime_r(&ts, &tmv);
     size_t p = strftime(path, sizeof(path), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
     snprintf(path + p, sizeof(path) - p, "_%03lu.jpg", (unsigned long)(id % 1000));
 
-    if (!camera_sd_bus_lock(2000)) return false;   /* ventana con GDMA parado */
-    FILE *f = fopen(path, "wb");
-    bool ok = false;
-    if (f) {
-        ok = (fwrite(jpg, 1, len, f) == len);
-        fclose(f);
-        if (!ok) unlink(path);   /* escritura parcial -> borrar */
-    }
+    /* Crear dir + abrir bajo el bus (I/O de metadatos). */
+    if (!camera_sd_bus_lock(2000)) return false;
+    struct stat stx;
+    if (stat(VIG_SD_DIR, &stx) != 0) mkdir(VIG_SD_DIR, 0777);
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     camera_sd_bus_unlock();
-    if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B)", path, (unsigned)len);
+    if (fd < 0) { ESP_LOGW(TAG, "vig: no abre SD (%s)", path); return false; }
+
+    /* Escribir en trozos pequenos SOLTANDO el bus entre cada uno: la camara (GDMA)
+     * recupera su ventana y no se bloquean interrupciones >300ms -> sin INT WDT. Con
+     * write() de bajo nivel (sin buffer de stdio) cada trozo cae de verdad en su
+     * ventana con el bus tomado. Mismo patron seguro que el datalogger (writes cortos). */
+    bool ok = true;
+    for (size_t off = 0; off < len; off += VIG_SD_CHUNK) {
+        size_t n = (len - off < VIG_SD_CHUNK) ? (len - off) : VIG_SD_CHUNK;
+        if (!camera_sd_bus_lock(2000)) { ok = false; break; }
+        ssize_t w = write(fd, jpg + off, n);
+        camera_sd_bus_unlock();
+        if (w != (ssize_t)n) { ok = false; break; }
+        vTaskDelay(pdMS_TO_TICKS(20));   /* ceder a la camara entre trozos */
+    }
+
+    if (camera_sd_bus_lock(2000)) { close(fd); camera_sd_bus_unlock(); }
+    else                          { close(fd); }
+    if (!ok && camera_sd_bus_lock(2000)) { unlink(path); camera_sd_bus_unlock(); }
+
+    if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B, troceada)", path, (unsigned)len);
     else    ESP_LOGW(TAG, "vig: fallo guardando en SD (%s)", path);
     return ok;
 }
