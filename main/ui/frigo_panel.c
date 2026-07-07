@@ -145,61 +145,63 @@ static void dd_exterior_cb(lv_event_t *e)
     uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
     apply_assignment_with_swap(FRIGO_SLOT_EXTERIOR, (uint8_t)idx);
 }
+/* Repinta AMBAS etiquetas min/max desde el estado REAL (validado). Clave del
+ * fix: frigo_set_thresholds rechaza min>=max sin tocar el estado, asi que
+ * pintar desde el estado guardado (no desde el valor local tentativo)
+ * garantiza que las etiquetas nunca muestran un par invertido. */
+static void refresh_threshold_labels(void)
+{
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    char buf[12];
+    if (s_lbl_tmin_val) {
+        snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st.T_min);
+        lv_label_set_text(s_lbl_tmin_val, buf);
+    }
+    if (s_lbl_tmax_val) {
+        snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st.T_max);
+        lv_label_set_text(s_lbl_tmax_val, buf);
+    }
+}
 static void btn_tmin_minus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    frigo_state_t st_copy;
-    frigo_get_state_copy(&st_copy);
-    const frigo_state_t *st = &st_copy;
-    uint8_t t = st->T_min;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_min;
     if (t > 30) t -= 5;
-    frigo_set_thresholds(t, st->T_max);
-    if (s_lbl_tmin_val) {
-        char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);
-        lv_label_set_text(s_lbl_tmin_val, buf);
-    }
+    frigo_set_thresholds(t, st.T_max);
+    refresh_threshold_labels();
 }
 static void btn_tmin_plus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    frigo_state_t st_copy;
-    frigo_get_state_copy(&st_copy);
-    const frigo_state_t *st = &st_copy;
-    uint8_t t = st->T_min;
-    if (t + 5 <= st->T_max) t += 5;
-    frigo_set_thresholds(t, st->T_max);
-    if (s_lbl_tmin_val) {
-        char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);
-        lv_label_set_text(s_lbl_tmin_val, buf);
-    }
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_min;
+    if (t + 5 <= st.T_max) t += 5;
+    frigo_set_thresholds(t, st.T_max);
+    refresh_threshold_labels();
 }
 static void btn_tmax_minus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    frigo_state_t st_copy;
-    frigo_get_state_copy(&st_copy);
-    const frigo_state_t *st = &st_copy;
-    uint8_t t = st->T_max;
-    if (t - 5 >= st->T_min) t -= 5;
-    frigo_set_thresholds(st->T_min, t);
-    if (s_lbl_tmax_val) {
-        char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);
-        lv_label_set_text(s_lbl_tmax_val, buf);
-    }
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_max;
+    if (t - 5 >= st.T_min) t -= 5;
+    frigo_set_thresholds(st.T_min, t);
+    refresh_threshold_labels();
 }
 static void btn_tmax_plus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    frigo_state_t st_copy;
-    frigo_get_state_copy(&st_copy);
-    const frigo_state_t *st = &st_copy;
-    uint8_t t = st->T_max;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_max;
     if (t < 50) t += 5;
-    frigo_set_thresholds(st->T_min, t);
-    if (s_lbl_tmax_val) {
-        char buf[8]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", t);
-        lv_label_set_text(s_lbl_tmax_val, buf);
-    }
+    frigo_set_thresholds(st.T_min, t);
+    refresh_threshold_labels();
 }
 
 /* ── Construir opciones dropdown ─────────────────────────────── */

@@ -2358,7 +2358,7 @@ lv_font_t lv_font_montserrat_14_es = {
 #endif
     .dsc = &font_dsc,          /*The custom font data. Will be accessed by `get_glyph_bitmap/dsc` */
 #if LV_VERSION_CHECK(8, 2, 0) || LVGL_VERSION_MAJOR >= 9
-    .fallback = NULL,
+    .fallback = &lv_font_montserrat_14,  /* glifos LV_SYMBOL faltan en _es -> built-in */
 #endif
     .user_data = NULL,
 };

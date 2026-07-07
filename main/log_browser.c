@@ -8,6 +8,7 @@
 #include <math.h>
 #include <errno.h>
 #include "esp_log.h"
+#include "camera.h"   /* camera_sd_bus_lock: serializar SD con el GDMA de la camara */
 
 static const char *TAG = "LOG_BROWSER";
 
@@ -21,8 +22,10 @@ int log_browser_list_dates(const char *dir,
                            int max)
 {
     if (!dir || !dates_out || max <= 0) return 0;
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido de dir con el GDMA de la camara */
     DIR *d = opendir(dir);
     if (!d) {
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "opendir %s: %s", dir, strerror(errno));
         return 0;
     }
@@ -43,6 +46,7 @@ int log_browser_list_dates(const char *dir,
         skip: ;
     }
     closedir(d);
+    if (sdl) camera_sd_bus_unlock();
     qsort(dates_out, n, LOG_BROWSER_DATE_LEN, cmp_str);
     return n;
 }
@@ -85,14 +89,16 @@ int log_browser_load_frigo(const char *path,
                            frigo_log_entry_t *out, int max)
 {
     if (!path || !out || max <= 0) return 0;
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     FILE *f = fopen(path, "r");
     if (!f) {
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
         return 0;
     }
     char line[160];
     /* Saltar cabecera */
-    if (!fgets(line, sizeof(line), f)) { fclose(f); return 0; }
+    if (!fgets(line, sizeof(line), f)) { fclose(f); if (sdl) camera_sd_bus_unlock(); return 0; }
     int n = 0;
     while (fgets(line, sizeof(line), f) && n < max) {
         char *fields[8] = {0};
@@ -107,6 +113,7 @@ int log_browser_load_frigo(const char *path,
         n++;
     }
     fclose(f);
+    if (sdl) camera_sd_bus_unlock();
     return n;
 }
 
@@ -114,13 +121,15 @@ int log_browser_load_battery(const char *path,
                              battery_log_entry_t *out, int max)
 {
     if (!path || !out || max <= 0) return 0;
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     FILE *f = fopen(path, "r");
     if (!f) {
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
         return 0;
     }
     char line[160];
-    if (!fgets(line, sizeof(line), f)) { fclose(f); return 0; }
+    if (!fgets(line, sizeof(line), f)) { fclose(f); if (sdl) camera_sd_bus_unlock(); return 0; }
     int n = 0;
     while (fgets(line, sizeof(line), f) && n < max) {
         char *fields[8] = {0};
@@ -138,5 +147,6 @@ int log_browser_load_battery(const char *path,
         n++;
     }
     fclose(f);
+    if (sdl) camera_sd_bus_unlock();
     return n;
 }

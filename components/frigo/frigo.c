@@ -42,6 +42,9 @@ static frigo_update_cb_t  s_cb    = NULL;
 static frigo_heartbeat_cb_t s_hb_cb = NULL;
 static onewire_bus_handle_t s_bus  = NULL;
 static ds18b20_device_handle_t s_devs[FRIGO_MAX_SENSORS] = {0};
+/* Cuando el sim inyecta datos (banco sin sondas), frigo_task deja de escribir
+ * s_state para no pisar los valores simulados (evita el parpadeo de las temps). */
+static volatile bool s_sim_mode = false;
 
 /* ── NVS ─────────────────────────────────────────────────────── */
 static void nvs_load(void)
@@ -138,6 +141,10 @@ static void frigo_task(void *arg)
 {
     while (1) {
         if (s_hb_cb) s_hb_cb();  /* latido watchdog */
+
+        /* Modo simulacion (banco sin sondas): manda el sim, aqui NO tocamos
+         * s_state para no pisar sus valores. El watchdog ya se alimento arriba. */
+        if (s_sim_mode) { vTaskDelay(pdMS_TO_TICKS(1000)); continue; }
 
         /* Si no hay sensores DS18B20, igualmente atendemos los cambios de
          * modo OFF/50/100 (que no requieren temperatura) para que la UI
@@ -308,6 +315,7 @@ void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb) { s_hb_cb = cb; }
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent)
 {
+    s_sim_mode = true;   /* a partir de ahora manda el sim: frigo_task no pisa */
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         s_state.T_Aletas     = t_aletas;
         s_state.T_Congelador = t_congelador;

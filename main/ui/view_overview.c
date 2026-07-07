@@ -345,9 +345,12 @@ static void overview_camper_tick_cb(lv_timer_t *t)
     ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
     if (!ov || !ov->base.root) return;
     if (lv_obj_has_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN)) return;
-    /* No renderizar mientras el screensaver esta activo (overlays encima
-     * o brillo bajo); evita consumir heap LVGL haciendo redraws invisibles. */
-    if (ov->base.ui && ov->base.ui->screensaver.active) return;
+    /* En modo Rotar el overview queda tapado por overlays / se rota a otra
+     * vista: no renderizar (evita redraws invisibles y consumo de heap LVGL).
+     * En modo Atenuar la pantalla solo baja de brillo pero SIGUE visible, asi
+     * que hay que seguir renderizando para que los datos no se congelen. */
+    if (ov->base.ui && ov->base.ui->screensaver.active &&
+        ov->base.ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) return;
     overview_render(ov);
 }
 
@@ -360,9 +363,11 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
     if (!ov || !ov->img_fan) return;
     if (lv_obj_has_flag(ov->base.root, LV_OBJ_FLAG_HIDDEN)) return;
-    /* Igual que en camper_tick_cb: si el screensaver esta activo no rotamos
-     * la imagen para no agotar el heap LVGL con buffers de rotacion. */
-    if (ov->base.ui && ov->base.ui->screensaver.active) return;
+    /* Solo detenemos la animacion del ventilador en modo Rotar (vista tapada,
+     * y evita agotar el heap LVGL con buffers de rotacion). En modo Atenuar la
+     * vista sigue visible, asi que el ventilador debe seguir girando. */
+    if (ov->base.ui && ov->base.ui->screensaver.active &&
+        ov->base.ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) return;
     frigo_state_t fs_copy;
     frigo_get_state_copy(&fs_copy);
     const frigo_state_t *fs = &fs_copy;

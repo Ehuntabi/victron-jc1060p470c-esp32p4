@@ -130,8 +130,8 @@ static void night_mode_timer_cb(void *arg)
         if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
         return;
     } else {
-        /* Precedencia: franja nocturna (atenuacion por horario) > auto-brillo por
-         * luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
+        /* Precedencia: franja nocturna (pantalla APAGADA por horario) > auto-brillo
+         * por luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
          * el auto-brillo (requisito del usuario). */
         bool night_win = false;
         if (ui->night_mode.enabled) {
@@ -146,7 +146,7 @@ static void night_mode_timer_cb(void *arg)
         }
         uint8_t luma;
         if (night_win) {
-            target = ui->night_mode.brightness;
+            target = 0;                 /* franja nocturna: pantalla apagada */
         } else if (s_auto_brightness && camera_get_luma(&luma)) {
             target = luma_to_brightness(luma);
         } else {
@@ -368,6 +368,12 @@ void app_main(void)
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
 
+    /* Auto-tour de capturas a /sdcard/screenshots: DESACTIVADO en produccion.
+     * En SDSC por SPI la escritura de 16 BMP grandes ahoga la CPU y dispara el
+     * watchdog SW (falso positivo de "LVGL congelada"). Para capturar pantallas
+     * usar los endpoints HTTP /capturas y /captura?n=<i> sobre el AP del P4. */
+    /* ui_start_screenshot_tour(); */
+
     /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
     {
         char tz_buf[48];
@@ -469,9 +475,10 @@ void app_main(void)
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
 
-    /* Modo simulacion: inyecta datos ficticios cambiantes para previsualizar
-     * la vista Overview. Toggle desde sim_overview.h. */
-    sim_overview_start();
+    /* Modo simulacion: inyecta datos ficticios para previsualizar Overview.
+     * DESACTIVADO en produccion (doble seguro, como el tour): descomentar la
+     * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
+    /* sim_overview_start(); */
 
     /* --- Timer reboot 24h --- */
     static esp_timer_handle_t reboot_timer;

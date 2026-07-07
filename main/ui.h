@@ -37,6 +37,11 @@ bool ui_screensaver_is_active(void);
 /* Forzar un refresco inmediato del label de la hora.
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);
+
+/* Arranca (en una tarea) el recorrido automatico de capturas: ~60 s tras el
+ * boot recorre las pantallas principales y guarda un BMP por pantalla en
+ * /sdcard/screenshots/. Se ejecuta una sola vez (marcador en la SD). */
+void ui_start_screenshot_tour(void);
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 /* Estado actual de la alarma del congelador (criterio robusto de main.c).
  * La vista Overview lo consulta en vez de re-evaluar el umbral. */
@@ -73,3 +78,8 @@ void ui_refresh_victron_device_list(void);
 ui_state_t *ui_get_state(void);
 void ui_close_chart_screen(void);
 void ui_close_battery_history_screen(void);
+
+/* Capturas por WiFi: navega a la pantalla idx (0..count-1) y devuelve su nombre
+ * corto, o NULL si idx esta fuera de rango. Ver ui.c / config_server.c. */
+const char *ui_tour_goto_screen(int idx);
+int ui_tour_screen_count(void);

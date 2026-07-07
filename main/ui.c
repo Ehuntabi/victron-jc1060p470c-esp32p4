@@ -36,7 +36,9 @@
 #include "pzem004t.h"
 #include "log_browser.h"
 #include "health_score.h"
+#include "screenshot.h"
 #include "esp_heap_caps.h"
+#include <sys/stat.h>
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
@@ -164,19 +166,30 @@ static void volume_icon_timer_cb(lv_timer_t *t)
             muted ? lv_color_hex(0xFF4444) : lv_color_white(), 0);
         last_muted = muted;
     }
-    /* Refresca wifi icon */
+    /* Refresca wifi icon. Leer NVS solo UNA vez y cachear en RAM: hacerlo en cada
+     * tick (cada 500ms) provocaba INT WDT -> nvs_get_u8 -> esp_partition_read ->
+     * spi_flash_disable_interrupts_caches_and_other_cpu apaga la cache de flash y
+     * para el otro core; a ~2/seg, tarde o temprano la ventana coincidia con CPU1
+     * ocupado (GDMA camara/esp_hosted) y pasaba de 300ms. Es SEGURO cachear:
+     * cualquier cambio del flag 'wifi/enabled' reinicia la placa (siempre pasa por
+     * dialogo de reinicio -> esp_restart), asi que el valor del arranque es valido
+     * toda la sesion. */
     if (ui->lbl_wifi) {
         static int last_en = -1;
-        nvs_handle_t h;
-        uint8_t en = 1;
-        if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
-            nvs_get_u8(h, "enabled", &en);
-            nvs_close(h);
+        static int cached_en = -1;
+        if (cached_en < 0) {
+            nvs_handle_t h;
+            uint8_t en = 1;
+            if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+                nvs_get_u8(h, "enabled", &en);
+                nvs_close(h);
+            }
+            cached_en = en;
         }
-        if ((int)en != last_en) {
+        if (cached_en != last_en) {
             lv_obj_set_style_text_color(ui->lbl_wifi,
-                en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
-            last_en = en;
+                cached_en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+            last_en = cached_en;
         }
     }
 }
@@ -216,8 +229,7 @@ void ui_init(void) {
     load_brightness(&ui->brightness);
     load_night_mode(&ui->night_mode.enabled,
                     &ui->night_mode.start_h,
-                    &ui->night_mode.end_h,
-                    &ui->night_mode.brightness);
+                    &ui->night_mode.end_h);
 
     ui->active_view = NULL;
     ui->default_view = NULL;
@@ -2580,4 +2592,219 @@ void ui_update_wifi_ssid(ui_state_t *ui)
             lvgl_port_unlock();
         }
     }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Tour de capturas: recorre las pantallas principales con los datos reales
+ * del momento y guarda cada una como BMP en /sdcard/screenshots/.
+ *
+ * LVGL no es thread-safe: la navegacion se hace tomando lvgl_port_lock; el
+ * lock se suelta durante las esperas para que lleguen datos BLE reales y se
+ * dibuje la vista. screenshot_save_bmp toma su propio lock para copiar el
+ * framebuffer. Se dispara solo una vez (marcador en la SD) ~60 s tras el boot.
+ * ────────────────────────────────────────────────────────────────────── */
+#define TOUR_DIR        "/sdcard/screenshots"
+#define TOUR_MARKER     TOUR_DIR "/.done_sim20260706h"  /* subir version fuerza re-ejecutar */
+#define TOUR_BOOT_DELAY_MS   60000   /* esperar ~60s a que BLE tenga datos reales */
+#define TOUR_SETTLE_MS        1500   /* dejar que la vista se actualice/dibuje */
+
+static void tour_set_view(ui_state_t *ui, ui_view_mode_t mode)
+{
+    if (lvgl_port_lock(1000)) {
+        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);  /* Live */
+        ui->view_selection.mode = mode;
+        ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
+        lvgl_port_unlock();
+    }
+}
+
+/* Espera a que la vista se dibuje MANTENIENDO la pantalla despierta. La
+ * navegacion programatica del tour NO cuenta como actividad del usuario, asi
+ * que sin esto, pasados 60 s, saltarian el auto-return de Ajustes (l.868), el
+ * idle-to-live o el salvapantallas (que cambiaria de vista) y arruinarian las
+ * capturas. Reseteamos los tres relojes de inactividad en cada paso; si el
+ * salvapantallas ya estuviera activo, ui_notify_user_activity lo despierta. */
+static void tour_settle(void)
+{
+    if (lvgl_port_lock(500)) {
+        lv_disp_trig_activity(NULL);   /* auto-return de Ajustes (inactive_time) */
+        ui_notify_user_activity();     /* idle-to-live + screensaver_wake */
+        lvgl_port_unlock();
+    }
+    vTaskDelay(pdMS_TO_TICKS(TOUR_SETTLE_MS));
+}
+
+static void screenshot_tour_task(void *arg)
+{
+    ui_state_t *ui = &g_ui;
+
+    /* Disparo unico: si ya existe el marcador, no repetir en cada arranque. */
+    vTaskDelay(pdMS_TO_TICKS(TOUR_BOOT_DELAY_MS));
+    FILE *mk = fopen(TOUR_MARKER, "r");
+    if (mk) { fclose(mk); ESP_LOGI("TOUR", "Marcador presente, no repito"); vTaskDelete(NULL); return; }
+    if (mkdir(TOUR_DIR, 0777) != 0) {
+        /* Puede existir ya; si no hay SD, los fopen posteriores fallaran. */
+    }
+    /* Escribir el marcador ANTES de capturar: si algo falla a mitad del tour,
+     * en el siguiente arranque se ve el marcador y NO se repite (evita un
+     * bucle de reinicios). Si no hay SD, este fopen falla y se reintentara. */
+    { FILE *m = fopen(TOUR_MARKER, "w"); if (m) { fputs("done\n", m); fclose(m); } }
+
+    ESP_LOGI("TOUR", "Iniciando recorrido de capturas...");
+    const ui_view_mode_t saved_mode = ui->view_selection.mode;
+
+    static const struct { ui_view_mode_t mode; const char *name; } LIVE_SCREENS[] = {
+        { UI_VIEW_MODE_OVERVIEW,        "01_overview"        },
+        { UI_VIEW_MODE_DEFAULT_BATTERY, "02_bateria"         },
+        { UI_VIEW_MODE_SOLAR_CHARGER,   "03_solar"           },
+        { UI_VIEW_MODE_BATTERY_MONITOR, "04_monitor_bateria" },
+        { UI_VIEW_MODE_INVERTER,        "05_inversor"        },
+        { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
+    };
+
+    int ok = 0;
+    char path[96];
+    for (size_t i = 0; i < sizeof(LIVE_SCREENS) / sizeof(LIVE_SCREENS[0]); ++i) {
+        tour_set_view(ui, LIVE_SCREENS[i].mode);
+        tour_settle();
+        snprintf(path, sizeof(path), TOUR_DIR "/%s.bmp", LIVE_SCREENS[i].name);
+        if (screenshot_save_bmp(path) == ESP_OK) ok++;
+    }
+
+    /* Log historico de bateria (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    if (screenshot_save_bmp(TOUR_DIR "/07_log_bateria.bmp") == ESP_OK) ok++;
+    if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
+
+    /* Log de temperaturas del frigo (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    if (screenshot_save_bmp(TOUR_DIR "/08_log_frigo.bmp") == ESP_OK) ok++;
+    if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
+
+    /* Menu de Ajustes (pagina principal) */
+    if (lvgl_port_lock(1000)) {
+        lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
+        lvgl_port_unlock();
+    }
+    tour_settle();
+    if (screenshot_save_bmp(TOUR_DIR "/09_ajustes.bmp") == ESP_OK) ok++;
+
+    /* Sub-paginas de Ajustes (Frigo, Logs, Wi-Fi, Display, Sonido, Victron
+     * Keys, About). Orden fijado por settings_panel. */
+    static const char *SET_NAMES[] = {
+        "frigo", "logs", "wifi", "display", "sonido", "victron_keys", "about"
+    };
+    int n_set = ui_settings_panel_page_count();
+    for (int s = 0; s < n_set; ++s) {
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
+            ui_settings_panel_show_page(s);
+            lvgl_port_unlock();
+        }
+        tour_settle();
+        const char *nm = (s < (int)(sizeof(SET_NAMES) / sizeof(SET_NAMES[0])))
+                             ? SET_NAMES[s] : "pagina";
+        snprintf(path, sizeof(path), TOUR_DIR "/1%d_ajustes_%s.bmp", s, nm);
+        if (screenshot_save_bmp(path) == ESP_OK) ok++;
+    }
+    if (lvgl_port_lock(1000)) { ui_settings_panel_go_to_main(); lvgl_port_unlock(); }
+
+    /* Restaurar: volver a Live + Overview con el modo previo. */
+    if (lvgl_port_lock(1000)) {
+        ui->view_selection.mode = saved_mode;
+        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+        ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
+        lvgl_port_unlock();
+    }
+
+    ESP_LOGI("TOUR", "Recorrido terminado: %d capturas en %s", ok, TOUR_DIR);
+    vTaskDelete(NULL);
+}
+
+void ui_start_screenshot_tour(void)
+{
+    xTaskCreate(screenshot_tour_task, "shot_tour", 12288, NULL, 3, NULL);
+}
+
+/* --- Navegacion por indice para las capturas por WiFi ---
+ * Mapea un indice 0..(N-1) a una pantalla concreta, navega hasta ella (cerrando
+ * antes cualquier overlay para partir de un estado limpio) y espera a que se
+ * dibuje con tour_settle(). Reutiliza la misma logica que el auto-tour. Se
+ * llama desde el handler HTTP /captura?n=<i> (config_server.c), que luego hace
+ * screenshot_take_bmp() y devuelve el BMP. Devuelve el nombre corto de la
+ * pantalla (para el nombre de fichero) o NULL si el indice esta fuera de rango. */
+static const struct { ui_view_mode_t mode; const char *name; } TOUR_LIVE[] = {
+    { UI_VIEW_MODE_OVERVIEW,        "overview"        },
+    { UI_VIEW_MODE_DEFAULT_BATTERY, "bateria"         },
+    { UI_VIEW_MODE_SOLAR_CHARGER,   "solar"           },
+    { UI_VIEW_MODE_BATTERY_MONITOR, "monitor_bateria" },
+    { UI_VIEW_MODE_INVERTER,        "inversor"        },
+    { UI_VIEW_MODE_DCDC_CONVERTER,  "dcdc"            },
+};
+static const char *TOUR_SET_NAMES[] = {
+    "frigo", "logs", "wifi", "display", "sonido", "victron_keys", "about"
+};
+#define TOUR_N_LIVE   ((int)(sizeof(TOUR_LIVE) / sizeof(TOUR_LIVE[0])))
+#define TOUR_I_BATLOG  (TOUR_N_LIVE)       /* 6  */
+#define TOUR_I_FRIGLOG (TOUR_N_LIVE + 1)   /* 7  */
+#define TOUR_I_SETMAIN (TOUR_N_LIVE + 2)   /* 8  */
+#define TOUR_I_SETSUB0 (TOUR_N_LIVE + 3)   /* 9  */
+
+int ui_tour_screen_count(void)
+{
+    return TOUR_I_SETSUB0 + ui_settings_panel_page_count();
+}
+
+const char *ui_tour_goto_screen(int idx)
+{
+    ui_state_t *ui = &g_ui;
+    if (idx < 0 || idx >= ui_tour_screen_count()) return NULL;
+
+    /* Partir siempre de estado limpio: cerrar overlays abiertos. */
+    if (lvgl_port_lock(1000)) {
+        ui_close_chart_screen();
+        ui_close_battery_history_screen();
+        lvgl_port_unlock();
+    }
+
+    const char *name = "pantalla";
+    if (idx < TOUR_N_LIVE) {
+        tour_set_view(ui, TOUR_LIVE[idx].mode);
+        name = TOUR_LIVE[idx].name;
+    } else if (idx == TOUR_I_BATLOG) {
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            ui_show_battery_history_screen(ui);
+            lvgl_port_unlock();
+        }
+        name = "log_bateria";
+    } else if (idx == TOUR_I_FRIGLOG) {
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            ui_show_chart_screen(ui);
+            lvgl_port_unlock();
+        }
+        name = "log_frigo";
+    } else if (idx == TOUR_I_SETMAIN) {
+        if (lvgl_port_lock(1000)) {
+            ui_settings_panel_go_to_main();
+            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
+            lvgl_port_unlock();
+        }
+        name = "ajustes";
+    } else {
+        int s = idx - TOUR_I_SETSUB0;
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
+            ui_settings_panel_show_page(s);
+            lvgl_port_unlock();
+        }
+        name = (s < (int)(sizeof(TOUR_SET_NAMES) / sizeof(TOUR_SET_NAMES[0])))
+                   ? TOUR_SET_NAMES[s] : "ajustes";
+    }
+
+    tour_settle();
+    return name;
 }

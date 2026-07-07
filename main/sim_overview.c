@@ -49,10 +49,13 @@ static uint8_t tank_level_from_pct(float pct) {
 
 static void sim_task(void *arg) {
     (void)arg;
-    ESP_LOGI(TAG, "Simulacion overview ACTIVA — datos ficticios cambiantes");
-    uint32_t t0 = now_ms();
+    ESP_LOGI(TAG, "Simulacion overview ACTIVA — datos ficticios FIJOS");
+    (void)now_ms;   /* datos estaticos: ya no usamos el reloj */
     while (1) {
-        uint32_t t = now_ms() - t0;
+        /* Frame FIJO (el usuario quiere rellenar una vez, sin animar): da
+         * SoC ~62% descargando, TTG ~250min, 13.4V, DC-DC activo, solar ~210W,
+         * frigo -10C, tanques parciales. Los valores NO cambian entre capturas. */
+        const uint32_t t = 30000;
 
         /* === Bateria: SOC entre 30 % y 95 % con ciclo de 40 s.
          *   Corriente: +5 A cuando sube SOC, -3 A cuando baja.
@@ -93,6 +96,17 @@ static void sim_task(void *arg) {
         d.record.dcdc.device_state = dcdc_active ? 4 : 0;   /* 4=charging,0=off */
         d.record.dcdc.input_voltage_centi = dcdc_active ? 1380 : 1240;
         d.record.dcdc.output_voltage_centi = dcdc_active ? 1360 : 1270;
+        ui_on_panel_data(&d);
+
+        /* === Inversor: encendido (inverting), 230 V, ~230 VA, 1 A. === */
+        memset(&d, 0, sizeof(d));
+        d.type = VICTRON_BLE_RECORD_INVERTER;
+        d.record.inverter.device_state          = 9;      /* 9 = inverting */
+        d.record.inverter.alarm_reason          = 0;
+        d.record.inverter.battery_voltage_centi = 1340;   /* 13.4 V */
+        d.record.inverter.ac_apparent_power_va  = 230;    /* 230 VA */
+        d.record.inverter.ac_voltage_centi      = 23000;  /* 230.00 V */
+        d.record.inverter.ac_current_deci       = 10;     /* 1.0 A */
         ui_on_panel_data(&d);
 
         /* === Tanques: limpia se vacia en 50 s y se rellena de golpe.

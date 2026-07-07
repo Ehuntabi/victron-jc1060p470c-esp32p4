@@ -392,13 +392,14 @@ static const char *reset_reason_name(esp_reset_reason_t r)
  * Usa malloc temporal (~10 KB), libera al salir. */
 static void rotate_logs(int keep)
 {
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido/stat con el GDMA de la camara */
     DIR *d = opendir("/sdcard");
-    if (!d) return;
+    if (!d) { if (sdl) camera_sd_bus_unlock(); return; }
 
     typedef struct { char name[64]; time_t mtime; } entry_t;
     const int MAX_ENTRIES = 128;
     entry_t *entries = malloc(sizeof(entry_t) * MAX_ENTRIES);
-    if (!entries) { closedir(d); return; }
+    if (!entries) { closedir(d); if (sdl) camera_sd_bus_unlock(); return; }
 
     int n = 0;
     struct dirent *de;
@@ -417,6 +418,7 @@ static void rotate_logs(int keep)
         n++;
     }
     closedir(d);
+    if (sdl) camera_sd_bus_unlock();
 
     if (n > keep) {
         /* Bubble sort por mtime ascendente (mas viejo primero) */
@@ -429,11 +431,13 @@ static void rotate_logs(int keep)
                 }
             }
         }
+        bool ul = camera_sd_bus_lock(3000);
         for (int i = 0; i < n - keep; i++) {
             char path[320];
             snprintf(path, sizeof(path), "/sdcard/%s", entries[i].name);
             unlink(path);
         }
+        if (ul) camera_sd_bus_unlock();
     }
     free(entries);
 }

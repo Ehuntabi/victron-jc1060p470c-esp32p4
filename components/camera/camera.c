@@ -364,11 +364,14 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
 }
 
 /* ── Anillo de capturas de vigilancia en RAM (PSRAM) ─────────────────────────
- * Escribir las fotos a la SD durante la vigilancia NO es viable en esta placa: el
- * DMA de la camara + el sondeo SDIO del C6 saturan el controlador SDMMC compartido
- * (timeouts 0x107; probado a fondo). Solucion: guardar las ultimas N fotos JPEG en
- * PSRAM y servirlas por HTTP (/vigilancia). No se toca la SD -> cero conflicto. Se
- * pierden al reiniciar (encaja con "modo ausente ahora"). */
+ * Buffer entre la captura (rapida) y la SD (lenta). Cada foto JPEG entra aqui,
+ * se sirve por HTTP (/vigilancia) y el drenador (vig_sd_drain_task) la vuelca a
+ * la SD "sin prisas" tomando camera_sd_bus_lock (escribe solo cuando el GDMA de
+ * la camara esta parado; la SD ya esta en SPI3, fuera del bus SDMMC del C6). Al
+ * guardar OK se libera el slot (sale de HTTP). Historicamente el volcado directo
+ * a SD durante el streaming NO era viable (DMA camara+C6 sobre SDMMC compartido,
+ * timeouts 0x107); ahora se sortea con SD-en-SPI3 + cerrojo de bus + volcado
+ * diferido a baja prioridad. */
 #define VIG_RING 8    /* 8 capturas basta para "quien entro"; ahorra ~0.5MB PSRAM */
 typedef struct { uint8_t *buf; size_t len; time_t ts; uint32_t id; } vig_slot_t;
 static vig_slot_t       s_vig[VIG_RING];
@@ -380,7 +383,14 @@ static SemaphoreHandle_t s_vig_mtx = NULL;
  * la tarea de camara. Copia los bytes -> s_jpeg_out se puede reusar luego. */
 static void camera_vig_store(const uint8_t *jpg, size_t len, time_t ts)
 {
-    if (!s_vig_mtx) { s_vig_mtx = xSemaphoreCreateMutex(); if (!s_vig_mtx) return; }
+    if (!s_vig_mtx) return;   /* creado en camera_init (antes de las tareas); si no, sin vigilancia */
+    /* M2: mismo SUELO de PSRAM que el snapshot (VIG_PSRAM_FLOOR). Si el anillo se llena
+     * (SD caida -> no drena) una rafaga de movimiento podria agotar la PSRAM y tumbar el
+     * SDIO/C6 (assert -> reboot). Mejor descartar la captura que tirar el WiFi. */
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < len + VIG_PSRAM_FLOOR) {
+        ESP_LOGW(TAG, "vig: PSRAM baja, descarto captura (protejo el SDIO)");
+        return;
+    }
     uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
     if (!copy) { ESP_LOGW(TAG, "vig: sin PSRAM para la captura"); return; }
     memcpy(copy, jpg, len);
@@ -483,6 +493,104 @@ bool camera_sd_bus_lock(uint32_t timeout_ms)
 void camera_sd_bus_unlock(void)
 {
     if (s_sd_bus) xSemaphoreGive(s_sd_bus);
+}
+
+/* ── Drenador anillo PSRAM -> SD ("sin prisas") ──────────────────────────────
+ * Escribe cada JPEG del anillo a /sdcard/vigilancia SIN parar el stream (parar
+ * STREAMON crashea el CSI): toma camera_sd_bus_lock alrededor de la escritura,
+ * como datalogger -> escribe en la ventana en que el GDMA de la camara esta
+ * parado. El JPEG es pequeno (~50-100KB) -> escritura corta, no ahoga a LVGL.
+ * Al guardar OK libera el slot del anillo. Tarea de baja prioridad. */
+#define VIG_SD_DIR   "/sdcard/vigilancia"
+#define VIG_SD_CHUNK (8 * 1024)   /* trozo pequeno: se SUELTA el bus entre trozos */
+
+static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t len)
+{
+    char path[96];
+    struct tm tmv;
+    localtime_r(&ts, &tmv);
+    size_t p = strftime(path, sizeof(path), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
+    snprintf(path + p, sizeof(path) - p, "_%03lu.jpg", (unsigned long)(id % 1000));
+
+    /* Crear dir + abrir bajo el bus (I/O de metadatos). */
+    if (!camera_sd_bus_lock(2000)) return false;
+    struct stat stx;
+    if (stat(VIG_SD_DIR, &stx) != 0) mkdir(VIG_SD_DIR, 0777);
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    camera_sd_bus_unlock();
+    if (fd < 0) { ESP_LOGW(TAG, "vig: no abre SD (%s)", path); return false; }
+
+    /* Escribir en trozos pequenos SOLTANDO el bus entre cada uno: la camara (GDMA)
+     * recupera su ventana y no se bloquean interrupciones >300ms -> sin INT WDT. Con
+     * write() de bajo nivel (sin buffer de stdio) cada trozo cae de verdad en su
+     * ventana con el bus tomado. Mismo patron seguro que el datalogger (writes cortos). */
+    bool ok = true;
+    for (size_t off = 0; off < len; off += VIG_SD_CHUNK) {
+        size_t n = (len - off < VIG_SD_CHUNK) ? (len - off) : VIG_SD_CHUNK;
+        if (!camera_sd_bus_lock(2000)) { ok = false; break; }
+        ssize_t w = write(fd, jpg + off, n);
+        camera_sd_bus_unlock();
+        if (w != (ssize_t)n) { ok = false; break; }
+        vTaskDelay(pdMS_TO_TICKS(20));   /* ceder a la camara entre trozos */
+    }
+
+    /* close() hace transaccion SD real (flush + entrada de dir): SIEMPRE bajo el bus,
+     * reintentando (nunca rendirse) para no solapar la ventana GDMA de la camara -> INT
+     * WDT. La tarea drain no esta suscrita al TWDT, asi que basta ceder con vTaskDelay. */
+    while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+    if (close(fd) != 0) ok = false;   /* el flush/f_sync real a la SD ocurre en close() */
+    camera_sd_bus_unlock();
+    if (!ok) {
+        while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+        unlink(path);
+        camera_sd_bus_unlock();
+    }
+
+    if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B, troceada)", path, (unsigned)len);
+    else    ESP_LOGW(TAG, "vig: fallo guardando en SD (%s)", path);
+    return ok;
+}
+
+static void vig_sd_drain_task(void *arg)
+{
+    for (;;) {
+        uint8_t *copy = NULL; size_t clen = 0; uint32_t cid = 0; time_t cts = 0;
+
+        /* Coger el pendiente mas ANTIGUO (menor id) y copiarlo fuera del anillo,
+         * para no retener el mutex durante la escritura lenta a SD. */
+        if (s_vig_mtx) {
+            xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+            int best = -1; uint32_t bestid = 0xFFFFFFFFu;
+            for (int i = 0; i < VIG_RING; i++) {
+                if (s_vig[i].buf && s_vig[i].id < bestid) { bestid = s_vig[i].id; best = i; }
+            }
+            if (best >= 0) {
+                copy = heap_caps_malloc(s_vig[best].len, MALLOC_CAP_SPIRAM);
+                if (copy) {
+                    memcpy(copy, s_vig[best].buf, s_vig[best].len);
+                    clen = s_vig[best].len; cid = s_vig[best].id; cts = s_vig[best].ts;
+                }
+            }
+            xSemaphoreGive(s_vig_mtx);
+        }
+
+        if (!copy) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }  /* nada pendiente */
+
+        bool ok = vig_write_jpeg_sd(cid, cts, copy, clen);
+        free(copy);
+
+        if (ok && s_vig_mtx) {
+            /* Borrar del anillo (si una captura nueva no reciclo ya ese slot). */
+            xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+            for (int i = 0; i < VIG_RING; i++) {
+                if (s_vig[i].buf && s_vig[i].id == cid) {
+                    free(s_vig[i].buf); s_vig[i].buf = NULL; break;
+                }
+            }
+            xSemaphoreGive(s_vig_mtx);
+        }
+        vTaskDelay(pdMS_TO_TICKS(ok ? 300 : 3000));  /* sin prisas; si falla, mas espera */
+    }
 }
 
 void camera_set_surveillance(bool on)
@@ -619,9 +727,15 @@ static void camera_stream_task(void *arg)
     static int64_t  last_photo_us = 0;
     /* photo_count -> ahora s_photo_count (file-static), para que camera_set_surveillance
      * lo resetee al iniciar cada sesion (el tope es por sesion, no de por vida). */
+    int dqbuf_fails = 0;                 /* M3: DQBUF fallidos consecutivos */
+    const int CAM_DQBUF_FAIL_LIMIT = 10; /* tras N seguidos, la camara esta muerta */
 
     while (1) {
-        esp_task_wdt_reset();   /* la tarea sigue viva (si DQBUF se cuelga, salta el WDT) */
+        /* M3: alimentar el WDT SOLO si la camara responde. Si DQBUF falla N veces
+         * seguidas (0 buffers en el driver) dejamos de resetearlo -> salta el TWDT y
+         * reinicia. Sin esto el bucle giraria para siempre con la camara muerta EN
+         * SILENCIO (auto-brillo congelado, vigilancia ciega, el WDT nunca salta). */
+        if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) esp_task_wdt_reset();
         bool surv = s_surveillance;
 
         /* NOTA: el GDMA de la camara solo se reactiva al QBUF (que libera un buffer);
@@ -641,9 +755,14 @@ static void camera_stream_task(void *arg)
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
+            if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) {
+                if (++dqbuf_fails >= CAM_DQBUF_FAIL_LIMIT)
+                    ESP_LOGE(TAG, "stream: DQBUF fallo %d veces -> camara muerta, dejo saltar el WDT", dqbuf_fails);
+            }
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+        dqbuf_fails = 0;
         if (b.flags & V4L2_BUF_FLAG_DONE) {
             uint8_t luma = frame_luma(buf[b.index], b.bytesused);
             /* EMA suave: el brillo ambiente cambia lento. Una muestra cada ~2s ->
@@ -692,8 +811,9 @@ static void camera_stream_task(void *arg)
                         s_photo_count < MOT_MAX_PHOTOS) {
                         last_photo_us = now;
                         /* Codificar el JPEG por HW (PSRAM) y guardarlo en el anillo en
-                         * RAM. NO se escribe a la SD: el DMA camara+C6 la satura durante
-                         * la vigilancia (probado). Se ven por HTTP en /vigilancia. */
+                         * RAM. Se sirve por HTTP (/vigilancia) y el drenador
+                         * (vig_sd_drain_task) lo vuelca a la SD sin prisas, tomando el
+                         * bus en la ventana en que el GDMA esta parado. */
                         uint8_t *jpg = NULL;
                         size_t jlen = 0;
                         if (camera_snapshot_jpeg(&jpg, &jlen)) {
@@ -717,7 +837,8 @@ static void camera_stream_task(void *arg)
          * El buffer b sigue retenido mientras esperamos -> GDMA parado, espera segura
          * (reseteando el WDT por si un escritor tarda). */
         while (!camera_sd_bus_lock(1000)) { esp_task_wdt_reset(); }
-        ioctl(fd, VIDIOC_QBUF, &b);
+        if (ioctl(fd, VIDIOC_QBUF, &b) != 0)   /* M3: QBUF fallido = buffer perdido */
+            ESP_LOGW(TAG, "stream: QBUF fallo (buffer perdido, idx=%lu)", (unsigned long)b.index);
         vTaskDelay(pdMS_TO_TICKS(50));   /* GDMA rellena el buffer y para */
         camera_sd_bus_unlock();
 
@@ -771,10 +892,19 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     /* Cerrojo de bus camara<->SD + mutex del encoder JPEG (ANTES de arrancar la tarea). */
     s_sd_bus = xSemaphoreCreateMutex();
     s_jpeg_mutex = xSemaphoreCreateMutex();
+    s_vig_mtx = xSemaphoreCreateMutex();   /* anillo de vigilancia: crear ANTES de arrancar las tareas */
+    if (!s_sd_bus || !s_jpeg_mutex || !s_vig_mtx) {
+        ESP_LOGE(TAG, "no se pudieron crear los mutex de camara (sin heap) -> sin camara");
+        return ESP_ERR_NO_MEM;
+    }
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
     xTaskCreate(camera_stream_task, "cam_stream", 6144, NULL, 4, NULL);
+
+    /* Drenador del anillo de vigilancia -> SD (baja prioridad, "sin prisas").
+     * Idle si no hay capturas pendientes; con SD no montada reintenta. */
+    xTaskCreate(vig_sd_drain_task, "vig_drain", 6144, NULL, 2, NULL);
 
     return ESP_OK;
 }

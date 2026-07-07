@@ -67,7 +67,6 @@ typedef struct {
     bool enabled;
     uint8_t start_h;      // hora inicio (0..23)
     uint8_t end_h;        // hora fin (0..23). Si start>end, cruza medianoche.
-    uint8_t brightness;   // brillo nocturno aplicado en franja (5..100)
 } ui_night_mode_t;
 
 

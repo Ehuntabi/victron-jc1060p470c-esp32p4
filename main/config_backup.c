@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "esp_log.h"
+#include "camera.h"   /* camera_sd_bus_lock: serializar SD con la camara */
 
 static const char *TAG = "CFG_BAK";
 
@@ -59,13 +60,12 @@ esp_err_t config_backup_export(const char *path)
 
     /* Night mode */
     bool nm_en = false;
-    uint8_t nm_s = 22, nm_e = 7, nm_b = 15;
-    load_night_mode(&nm_en, &nm_s, &nm_e, &nm_b);
+    uint8_t nm_s = 22, nm_e = 7;
+    load_night_mode(&nm_en, &nm_s, &nm_e);
     cJSON *nm = cJSON_AddObjectToObject(disp, "night_mode");
     cJSON_AddBoolToObject(nm, "enabled", nm_en);
     cJSON_AddNumberToObject(nm, "start_h", nm_s);
     cJSON_AddNumberToObject(nm, "end_h", nm_e);
-    cJSON_AddNumberToObject(nm, "brightness", nm_b);
 
     /* Screensaver */
     bool ss_en = false;
@@ -122,11 +122,13 @@ esp_err_t config_backup_export(const char *path)
     cJSON_Delete(root);
     if (!json) return ESP_FAIL;
 
+    bool sdl = camera_sd_bus_lock(3000);
     FILE *fp = fopen(path, "w");
-    if (!fp) { free(json); ESP_LOGE(TAG, "fopen %s", path); return ESP_FAIL; }
+    if (!fp) { if (sdl) camera_sd_bus_unlock(); free(json); ESP_LOGE(TAG, "fopen %s", path); return ESP_FAIL; }
     size_t len = strlen(json);
     size_t wrote = fwrite(json, 1, len, fp);
     fclose(fp);
+    if (sdl) camera_sd_bus_unlock();
     free(json);
     ESP_LOGI(TAG, "Exportado: %s (%u bytes)", path, (unsigned)wrote);
     return wrote == len ? ESP_OK : ESP_FAIL;
@@ -134,17 +136,19 @@ esp_err_t config_backup_export(const char *path)
 
 esp_err_t config_backup_import(const char *path)
 {
+    bool sdl = camera_sd_bus_lock(3000);
     FILE *fp = fopen(path, "r");
-    if (!fp) { ESP_LOGE(TAG, "No se puede abrir %s", path); return ESP_FAIL; }
+    if (!fp) { if (sdl) camera_sd_bus_unlock(); ESP_LOGE(TAG, "No se puede abrir %s", path); return ESP_FAIL; }
     fseek(fp, 0, SEEK_END);
     long sz = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    if (sz <= 0 || sz > 32 * 1024) { fclose(fp); return ESP_FAIL; }
+    if (sz <= 0 || sz > 32 * 1024) { fclose(fp); if (sdl) camera_sd_bus_unlock(); return ESP_FAIL; }
     char *buf = malloc((size_t)sz + 1);
-    if (!buf) { fclose(fp); return ESP_ERR_NO_MEM; }
+    if (!buf) { fclose(fp); if (sdl) camera_sd_bus_unlock(); return ESP_ERR_NO_MEM; }
     fread(buf, 1, (size_t)sz, fp);
     buf[sz] = 0;
     fclose(fp);
+    if (sdl) camera_sd_bus_unlock();
 
     cJSON *root = cJSON_Parse(buf);
     free(buf);
@@ -166,8 +170,7 @@ esp_err_t config_backup_import(const char *path)
             bool en = cJSON_IsTrue(cJSON_GetObjectItem(nm, "enabled"));
             int s = cJSON_GetObjectItem(nm, "start_h")  ? cJSON_GetObjectItem(nm, "start_h")->valueint : 22;
             int e = cJSON_GetObjectItem(nm, "end_h")    ? cJSON_GetObjectItem(nm, "end_h")->valueint   : 7;
-            int b = cJSON_GetObjectItem(nm, "brightness")? cJSON_GetObjectItem(nm, "brightness")->valueint : 15;
-            save_night_mode(en, (uint8_t)s, (uint8_t)e, (uint8_t)b);
+            save_night_mode(en, (uint8_t)s, (uint8_t)e);
         }
         cJSON *ss = cJSON_GetObjectItem(disp, "screensaver");
         if (ss) {
