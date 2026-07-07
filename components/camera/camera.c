@@ -384,6 +384,13 @@ static SemaphoreHandle_t s_vig_mtx = NULL;
 static void camera_vig_store(const uint8_t *jpg, size_t len, time_t ts)
 {
     if (!s_vig_mtx) return;   /* creado en camera_init (antes de las tareas); si no, sin vigilancia */
+    /* M2: mismo SUELO de PSRAM que el snapshot (VIG_PSRAM_FLOOR). Si el anillo se llena
+     * (SD caida -> no drena) una rafaga de movimiento podria agotar la PSRAM y tumbar el
+     * SDIO/C6 (assert -> reboot). Mejor descartar la captura que tirar el WiFi. */
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < len + VIG_PSRAM_FLOOR) {
+        ESP_LOGW(TAG, "vig: PSRAM baja, descarto captura (protejo el SDIO)");
+        return;
+    }
     uint8_t *copy = heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
     if (!copy) { ESP_LOGW(TAG, "vig: sin PSRAM para la captura"); return; }
     memcpy(copy, jpg, len);
@@ -720,9 +727,15 @@ static void camera_stream_task(void *arg)
     static int64_t  last_photo_us = 0;
     /* photo_count -> ahora s_photo_count (file-static), para que camera_set_surveillance
      * lo resetee al iniciar cada sesion (el tope es por sesion, no de por vida). */
+    int dqbuf_fails = 0;                 /* M3: DQBUF fallidos consecutivos */
+    const int CAM_DQBUF_FAIL_LIMIT = 10; /* tras N seguidos, la camara esta muerta */
 
     while (1) {
-        esp_task_wdt_reset();   /* la tarea sigue viva (si DQBUF se cuelga, salta el WDT) */
+        /* M3: alimentar el WDT SOLO si la camara responde. Si DQBUF falla N veces
+         * seguidas (0 buffers en el driver) dejamos de resetearlo -> salta el TWDT y
+         * reinicia. Sin esto el bucle giraria para siempre con la camara muerta EN
+         * SILENCIO (auto-brillo congelado, vigilancia ciega, el WDT nunca salta). */
+        if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) esp_task_wdt_reset();
         bool surv = s_surveillance;
 
         /* NOTA: el GDMA de la camara solo se reactiva al QBUF (que libera un buffer);
@@ -742,9 +755,14 @@ static void camera_stream_task(void *arg)
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
+            if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) {
+                if (++dqbuf_fails >= CAM_DQBUF_FAIL_LIMIT)
+                    ESP_LOGE(TAG, "stream: DQBUF fallo %d veces -> camara muerta, dejo saltar el WDT", dqbuf_fails);
+            }
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+        dqbuf_fails = 0;
         if (b.flags & V4L2_BUF_FLAG_DONE) {
             uint8_t luma = frame_luma(buf[b.index], b.bytesused);
             /* EMA suave: el brillo ambiente cambia lento. Una muestra cada ~2s ->
@@ -819,7 +837,8 @@ static void camera_stream_task(void *arg)
          * El buffer b sigue retenido mientras esperamos -> GDMA parado, espera segura
          * (reseteando el WDT por si un escritor tarda). */
         while (!camera_sd_bus_lock(1000)) { esp_task_wdt_reset(); }
-        ioctl(fd, VIDIOC_QBUF, &b);
+        if (ioctl(fd, VIDIOC_QBUF, &b) != 0)   /* M3: QBUF fallido = buffer perdido */
+            ESP_LOGW(TAG, "stream: QBUF fallo (buffer perdido, idx=%lu)", (unsigned long)b.index);
         vTaskDelay(pdMS_TO_TICKS(50));   /* GDMA rellena el buffer y para */
         camera_sd_bus_unlock();
 
