@@ -166,19 +166,30 @@ static void volume_icon_timer_cb(lv_timer_t *t)
             muted ? lv_color_hex(0xFF4444) : lv_color_white(), 0);
         last_muted = muted;
     }
-    /* Refresca wifi icon */
+    /* Refresca wifi icon. Leer NVS solo UNA vez y cachear en RAM: hacerlo en cada
+     * tick (cada 500ms) provocaba INT WDT -> nvs_get_u8 -> esp_partition_read ->
+     * spi_flash_disable_interrupts_caches_and_other_cpu apaga la cache de flash y
+     * para el otro core; a ~2/seg, tarde o temprano la ventana coincidia con CPU1
+     * ocupado (GDMA camara/esp_hosted) y pasaba de 300ms. Es SEGURO cachear:
+     * cualquier cambio del flag 'wifi/enabled' reinicia la placa (siempre pasa por
+     * dialogo de reinicio -> esp_restart), asi que el valor del arranque es valido
+     * toda la sesion. */
     if (ui->lbl_wifi) {
         static int last_en = -1;
-        nvs_handle_t h;
-        uint8_t en = 1;
-        if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
-            nvs_get_u8(h, "enabled", &en);
-            nvs_close(h);
+        static int cached_en = -1;
+        if (cached_en < 0) {
+            nvs_handle_t h;
+            uint8_t en = 1;
+            if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+                nvs_get_u8(h, "enabled", &en);
+                nvs_close(h);
+            }
+            cached_en = en;
         }
-        if ((int)en != last_en) {
+        if (cached_en != last_en) {
             lv_obj_set_style_text_color(ui->lbl_wifi,
-                en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
-            last_en = en;
+                cached_en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+            last_en = cached_en;
         }
     }
 }
