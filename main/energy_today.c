@@ -1,5 +1,4 @@
 #include "energy_today.h"
-#include "nvs_trace.h"
 
 #include <time.h>
 #include <math.h>
@@ -34,7 +33,6 @@ static void save_nvs(void)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_trace_begin(NVS_SITE_ENERGY);
     nvs_set_i32(h, NVS_KEY_DAY,  s.day_of_year);
     nvs_set_i32(h, NVS_KEY_YEAR, s.year);
     nvs_set_i32(h, NVS_KEY_PV,  (int32_t)s.pv_wh);
@@ -42,7 +40,6 @@ static void save_nvs(void)
     nvs_set_i32(h, NVS_KEY_YPV, (int32_t)s.yesterday_pv_wh);
     nvs_set_i32(h, NVS_KEY_YLD, (int32_t)s.yesterday_loads_wh);
     nvs_commit(h);
-    nvs_trace_end();
     nvs_close(h);
 }
 

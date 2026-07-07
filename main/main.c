@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <lvgl.h>
 #include "display.h"
-#include "nvs_trace.h"   /* instrumentacion INT WDT: breadcrumb NVS en RTC-noinit */
 #include "esp_bsp.h"
 #include "esp_lvgl_port.h"
 #include "victron_ble.h"
@@ -281,7 +280,6 @@ void app_main(void)
      * camara). La ROM no saca el motivo por USB-Serial-JTAG; lo imprime la app.
      * 1=POWERON 2=EXT 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT 7=WDT 9=BROWNOUT 10=SDIO */
     ESP_LOGW(TAG, "### MOTIVO ULTIMO REINICIO: %d ###", (int)esp_reset_reason());
-    nvs_trace_boot_report();   /* si el reset fue INT WDT: que op NVS estaba en vuelo */
 
     /* --- Chip info --- */
     logSection("LVGL init start");
@@ -310,15 +308,12 @@ void app_main(void)
     );
 
     /* --- NVS --- */
-    nvs_trace_begin(NVS_SITE_FLASH_INIT);   /* la GC de recovery al boot es sospechosa */
     esp_err_t nvs_err = nvs_flash_init();
     if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         nvs_err = nvs_flash_init();
     }
-    nvs_trace_end();
     ESP_ERROR_CHECK(nvs_err);
-    nvs_trace_stats();   /* ¿NVS lleno de claves legacy -> GC casi en cada commit? */
 
     /* --- Watchdog: registra causa del ultimo reset y arranca task monitor LVGL --- */
     watchdog_init();

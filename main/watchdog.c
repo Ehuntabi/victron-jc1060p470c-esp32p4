@@ -1,5 +1,4 @@
 #include "watchdog.h"
-#include "nvs_trace.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -64,10 +63,8 @@ static void wd_increment_counter_nvs(void)
     uint32_t v = 0;
     nvs_get_u32(h, KEY_COUNT, &v);
     v++;
-    nvs_trace_begin(NVS_SITE_WD_COUNTER);
     nvs_set_u32(h, KEY_COUNT, v);
     nvs_commit(h);
-    nvs_trace_end();
     nvs_close(h);
     s_reset_count = v;
 }
