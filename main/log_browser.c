@@ -22,8 +22,10 @@ int log_browser_list_dates(const char *dir,
                            int max)
 {
     if (!dir || !dates_out || max <= 0) return 0;
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido de dir con el GDMA de la camara */
     DIR *d = opendir(dir);
     if (!d) {
+        if (sdl) camera_sd_bus_unlock();
         ESP_LOGW(TAG, "opendir %s: %s", dir, strerror(errno));
         return 0;
     }
@@ -44,6 +46,7 @@ int log_browser_list_dates(const char *dir,
         skip: ;
     }
     closedir(d);
+    if (sdl) camera_sd_bus_unlock();
     qsort(dates_out, n, LOG_BROWSER_DATE_LEN, cmp_str);
     return n;
 }

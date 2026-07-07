@@ -383,7 +383,7 @@ esp_err_t wifi_ap_init(void)
     /* pass en DEBUG para no persistir la credencial en los logs de SD/serie */
     ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA_WPA2_PSK",
              ssid, ap_cfg.ap.channel);
-    ESP_LOGW(TAG, "AP pass REAL='%s' (temporal para capturas)", pass);
+    ESP_LOGD(TAG, "AP pass configurada (%u chars)", (unsigned)strlen(pass));
 
     /* IMPORTANTE: set_config ANTES de start. Si invertimos el orden, en
      * esp_hosted el slave dispara un ciclo STOP+START al recibir set_config
@@ -1132,8 +1132,9 @@ static void get_latest_csv_path(const char *subdir, char *out, size_t out_len)
 {
     char dirpath[64];
     snprintf(dirpath, sizeof(dirpath), "/sdcard/%s", subdir);
+    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido de dir con el GDMA de la camara */
     DIR *d = opendir(dirpath);
-    if (!d) { out[0] = 0; return; }
+    if (!d) { if (sdl) camera_sd_bus_unlock(); out[0] = 0; return; }
     char latest[24] = {0};
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
@@ -1145,6 +1146,7 @@ static void get_latest_csv_path(const char *subdir, char *out, size_t out_len)
         }
     }
     closedir(d);
+    if (sdl) camera_sd_bus_unlock();
     if (latest[0]) snprintf(out, out_len, "%s/%s", dirpath, latest);
     else out[0] = 0;
 }
@@ -1839,6 +1841,7 @@ static esp_err_t handle_logs(httpd_req_t *req)
  * devuelve el BMP como descarga. Sustituye al auto-tour de la SD (intermitente
  * por compartir bus con el C6). Sin auth: es el AP local y solo son capturas. */
 static esp_err_t handle_captura(httpd_req_t *req) {
+    REQUIRE_AUTH(req);   /* navega la pantalla fisica (ui_tour_goto_screen): exige auth */
     int n = -1;
     char query[48];
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
@@ -1867,6 +1870,7 @@ static esp_err_t handle_captura(httpd_req_t *req) {
 
 /* GET /capturas -> pagina indice con un enlace por pantalla. */
 static esp_err_t handle_capturas(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     int total = ui_tour_screen_count();
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr_chunk(req,
@@ -1971,7 +1975,9 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
     strncat(disp, attach_name, sizeof(disp) - strlen(disp) - 1);
     httpd_resp_set_hdr(req, "Content-Disposition", disp);
 
+    bool dol = camera_sd_bus_lock(3000);   /* opendir lee sectores de dir: serializar con la camara */
     DIR *dp = opendir(src_dir);
+    if (dol) camera_sd_bus_unlock();
     if (!dp) {
         /* Aun asi devolvemos un TAR vacio (dos bloques cero) */
         uint8_t zeros[TAR_BLOCK * 2] = {0};
@@ -1994,7 +2000,10 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         char full_path[400];
         snprintf(full_path, sizeof full_path, "%s/%s", src_dir, de->d_name);
         struct stat st;
-        if (stat(full_path, &st) != 0) continue;
+        bool stl = camera_sd_bus_lock(3000);
+        int sr = stat(full_path, &st);
+        if (stl) camera_sd_bus_unlock();
+        if (sr != 0) continue;
         if (st.st_size <= 0) continue;
 
         /* Header */
