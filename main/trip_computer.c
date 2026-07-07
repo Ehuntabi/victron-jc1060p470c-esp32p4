@@ -1,4 +1,5 @@
 #include "trip_computer.h"
+#include "nvs_trace.h"
 
 #include <string.h>
 #include <stdint.h>
@@ -19,6 +20,7 @@ static void persist_locked(void)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_trace_begin(NVS_SITE_TRIP);
     nvs_set_i64(h, "reset", s.reset_epoch);
     nvs_set_i64(h, "secs",  s.seconds_running);
     int32_t whc = (int32_t)s.wh_charged;
@@ -30,6 +32,7 @@ static void persist_locked(void)
     nvs_set_i32(h, "ah_c", ahc_m);  /* en mAh para preservar decimales */
     nvs_set_i32(h, "ah_d", ahd_m);
     nvs_commit(h);
+    nvs_trace_end();
     nvs_close(h);
 }
 
