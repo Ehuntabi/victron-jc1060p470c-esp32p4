@@ -733,10 +733,34 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(ui->capture_status_lbl,
                       "Guarda las 8 pantallas de datos en la SD");
 
-    /* Boton: abrir el visor de galeria en pantalla */
-    lv_obj_t *btn_gal = lv_btn_create(card_cap);
-    lv_obj_set_width(btn_gal, lv_pct(100));
+    /* === Card Visor de imagenes (separado del carrusel) === */
+    lv_obj_t *card_view = lv_obj_create(cont);
+    lv_obj_set_width(card_view, lv_pct(100));
+    lv_obj_set_height(card_view, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_view, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_view, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_view, lv_color_hex(0x26C6DA), 0);  /* cyan */
+    lv_obj_set_style_border_width(card_view, 1, 0);
+    lv_obj_set_style_radius(card_view, 12, 0);
+    lv_obj_set_style_pad_all(card_view, 16, 0);
+    lv_obj_set_style_pad_gap(card_view, 8, 0);
+    lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_view, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *view_title = lv_label_create(card_view);
+    lv_obj_set_style_text_font(view_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
+    lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
+
+    lv_obj_t *view_desc = lv_label_create(card_view);
+    lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
+    lv_label_set_text(view_desc, "Ver las capturas del carrusel y la vigilancia");
+
+    lv_obj_t *btn_gal = lv_btn_create(card_view);
+    lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
     lv_obj_set_height(btn_gal, 46);
+    lv_obj_set_style_pad_hor(btn_gal, 24, 0);
     lv_obj_set_style_bg_color(btn_gal, lv_color_hex(0x0288D1), 0);
     lv_obj_set_style_radius(btn_gal, 8, 0);
     lv_obj_t *lbl_gal = lv_label_create(btn_gal);
@@ -3411,6 +3435,13 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
 }
 
 /* === Pagina Sonido === */
+/* Refs para que el switch 'Silenciar avisos' maneje el slider de volumen:
+ * ON -> guarda el volumen actual y lo pone a 0; OFF -> retoma el guardado. */
+static lv_obj_t *s_vol_slider  = NULL;
+static lv_obj_t *s_vol_label   = NULL;
+static lv_obj_t *s_mute_switch = NULL;
+static int       s_vol_saved   = 50;
+
 static void sound_volume_changed_cb(lv_event_t *e)
 {
     lv_obj_t *slider = lv_event_get_target(e);
@@ -3421,6 +3452,12 @@ static void sound_volume_changed_cb(lv_event_t *e)
     audio_set_volume(v);
     lv_obj_t *lbl = (lv_obj_t *)lv_event_get_user_data(e);
     if (lbl) lv_label_set_text_fmt(lbl, "Volumen: %d%%", v);
+    /* Si suben el volumen con el silencio activo, se desactiva el silencio. */
+    if (v > 0 && s_mute_switch && lv_obj_is_valid(s_mute_switch) &&
+        lv_obj_has_state(s_mute_switch, LV_STATE_CHECKED)) {
+        lv_obj_clear_state(s_mute_switch, LV_STATE_CHECKED);
+        audio_set_mute(false);
+    }
 }
 
 static void sound_mute_changed_cb(lv_event_t *e)
@@ -3428,6 +3465,17 @@ static void sound_mute_changed_cb(lv_event_t *e)
     lv_obj_t *sw = lv_event_get_target(e);
     bool muted = lv_obj_has_state(sw, LV_STATE_CHECKED);
     audio_set_mute(muted);
+    if (muted) {
+        s_vol_saved = audio_get_volume();   /* recordar antes de poner a 0 */
+        audio_set_volume(0);
+    } else {
+        audio_set_volume(s_vol_saved);      /* retomar el ultimo valor guardado */
+    }
+    int v = audio_get_volume();
+    if (s_vol_slider && lv_obj_is_valid(s_vol_slider))
+        lv_slider_set_value(s_vol_slider, v, LV_ANIM_OFF);
+    if (s_vol_label && lv_obj_is_valid(s_vol_label))
+        lv_label_set_text_fmt(s_vol_label, "Volumen: %d%%", v);
 }
 
 
@@ -3483,7 +3531,7 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
-    /* Fila titulo: 'VOLUME_MAX Sonido' a la izda, 'Silenciar avisos' + switch a la dcha */
+    /* Fila titulo: 'Sonido' (izda) + 'Volumen: X%' (dcha, sobre el slider) */
     lv_obj_t *title_row = lv_obj_create(card1);
     lv_obj_remove_style_all(title_row);
     lv_obj_set_size(title_row, lv_pct(100), LV_SIZE_CONTENT);
@@ -3498,46 +3546,53 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 
-    /* Sub-grupo derecho: label + switch para silenciar */
-    lv_obj_t *mute_grp = lv_obj_create(title_row);
-    lv_obj_remove_style_all(mute_grp);
-    lv_obj_set_size(mute_grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(mute_grp, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(mute_grp, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(mute_grp, LV_FLEX_ALIGN_END,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(mute_grp, 12, 0);
+    lv_obj_t *lbl_vol = lv_label_create(title_row);
+    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
 
-    lv_obj_t *lbl_mute = lv_label_create(mute_grp);
+    /* Fila: silenciar avisos (izda, texto+switch) + slider de volumen (dcha) */
+    lv_obj_t *ctl_row = lv_obj_create(card1);
+    lv_obj_remove_style_all(ctl_row);
+    lv_obj_set_size(ctl_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(ctl_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(ctl_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(ctl_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_left(ctl_row, 10, 0);     /* separa un poco 'Silenciar avisos' */
+    lv_obj_set_style_pad_column(ctl_row, 14, 0);   /* hueco entre el texto y el switch */
+
+    /* Silenciar avisos a la IZQUIERDA (texto + switch) */
+    lv_obj_t *lbl_mute = lv_label_create(ctl_row);
     lv_obj_set_style_text_font(lbl_mute, &lv_font_montserrat_20_es, 0);
-    /* Ancho explicito generoso para que el texto entero quepa en Inter
-     * 20pt (los anchos de glyph reales son mas grandes de lo estimado).
-     * LONG_CLIP + align RIGHT: si por lo que sea no cupiera, se corta
-     * de forma controlada por la derecha, no por la izquierda. */
-    lv_obj_set_width(lbl_mute, 240);
-    lv_label_set_long_mode(lbl_mute, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_align(lbl_mute, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
-    lv_obj_t *sw = lv_switch_create(mute_grp);
+    lv_obj_t *sw = lv_switch_create(ctl_row);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0xFF7043), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     ui->sound_mute_switch = sw;
 
-    /* Volumen */
-    lv_obj_t *lbl_vol = lv_label_create(card1);
-    lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
+    /* Espaciador flexible: empuja el slider al borde derecho */
+    lv_obj_t *spacer = lv_obj_create(ctl_row);
+    lv_obj_remove_style_all(spacer);
+    lv_obj_set_height(spacer, 1);
+    lv_obj_set_flex_grow(spacer, 1);
 
-    lv_obj_t *slider = lv_slider_create(card1);
-    lv_obj_set_width(slider, lv_pct(95));
+    /* Slider de volumen a la DERECHA */
+    lv_obj_t *slider = lv_slider_create(ctl_row);
+    lv_obj_set_width(slider, 440);
     lv_obj_set_height(slider, 26);
     lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_KNOB);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
+
+    /* Refs para que 'Silenciar avisos' maneje el slider (guardar/0/restaurar). */
+    s_vol_slider  = slider;
+    s_vol_label   = lbl_vol;
+    s_mute_switch = sw;
+    if (!audio_is_muted()) s_vol_saved = audio_get_volume();
 
     /* === Card: Modo ausente / vigilancia === */
     lv_obj_t *card_aus = lv_obj_create(cont);
@@ -3607,16 +3662,17 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *col_crit = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_crit);
     lv_obj_set_layout(col_crit, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_crit, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_crit, LV_FLEX_FLOW_ROW);   /* icono+texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_crit, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_crit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_crit, 6, 0);
+    lv_obj_set_style_pad_gap(col_crit, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_crit = lv_label_create(col_crit);
     lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_crit, lv_color_hex(0xFF4444), 0);
     lv_label_set_text(lbl_crit, LV_SYMBOL_WARNING " Critico");
     lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
     lv_obj_set_width(dd_crit, 130);
+    lv_obj_set_style_text_font(dd_crit, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_crit, "10 %\n20 %\n30 %\n40 %");
     {
         int cur = alerts_get_soc_critical();
@@ -3632,16 +3688,17 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *col_warn = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_warn);
     lv_obj_set_layout(col_warn, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_warn, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_warn, LV_FLEX_FLOW_ROW);   /* icono+texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_warn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_warn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_warn, 6, 0);
+    lv_obj_set_style_pad_gap(col_warn, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_warn = lv_label_create(col_warn);
     lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_warn, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(lbl_warn, LV_SYMBOL_BELL " Aviso");
     lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
     lv_obj_set_width(dd_warn, 130);
+    lv_obj_set_style_text_font(dd_warn, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_warn, "40 %\n50 %\n60 %\n70 %");
     {
         int cur = alerts_get_soc_warning();
@@ -3679,15 +3736,16 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *col_min_a = lv_obj_create(row_frigo);
     lv_obj_remove_style_all(col_min_a);
     lv_obj_set_layout(col_min_a, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_min_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_min_a, LV_FLEX_FLOW_ROW);   /* texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_min_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_min_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_min_a, 6, 0);
+    lv_obj_set_style_pad_gap(col_min_a, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_min_a = lv_label_create(col_min_a);
     lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_min_a, "Tras subir (min)");
     lv_obj_t *dd_min_a = lv_dropdown_create(col_min_a);
     lv_obj_set_width(dd_min_a, 130);
+    lv_obj_set_style_text_font(dd_min_a, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_min_a, "15\n30\n45\n60\n90");
     {
         static const int opts[] = { 15, 30, 45, 60, 90 };
@@ -3704,15 +3762,16 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *col_t_a = lv_obj_create(row_frigo);
     lv_obj_remove_style_all(col_t_a);
     lv_obj_set_layout(col_t_a, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_t_a, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_flow(col_t_a, LV_FLEX_FLOW_ROW);   /* texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_t_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_t_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_t_a, 6, 0);
+    lv_obj_set_style_pad_gap(col_t_a, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_t_a = lv_label_create(col_t_a);
     lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_t_a, "Si supera");
     lv_obj_t *dd_t_a = lv_dropdown_create(col_t_a);
     lv_obj_set_width(dd_t_a, 140);
+    lv_obj_set_style_text_font(dd_t_a, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_t_a, "-5 \xc2\xb0""C\n-2 \xc2\xb0""C\n0 \xc2\xb0""C\n+2 \xc2\xb0""C");
     {
         static const float opts[] = { -5.0f, -2.0f, 0.0f, 2.0f };
