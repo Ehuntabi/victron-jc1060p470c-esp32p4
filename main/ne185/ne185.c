@@ -103,17 +103,6 @@ static ne185_data_t       s_data;
 static SemaphoreHandle_t  s_mutex;
 static QueueHandle_t      s_press_queue;
 static bool               s_inited;
-static volatile uint32_t  s_sniff_bursts = 0;
-static volatile uint32_t  s_frames_fail = 0;
-static volatile bool      s_verbose_log = false;  /* OFF por defecto: el volcado raw a
-                                                   * ~10 Hz era de la fase de reverse
-                                                   * engineering (2026-05-27); ya no hace
-                                                   * falta y saturaba el log. */
-static volatile bool      s_polling_paused = false; /* sniff mode: no envia, solo lee */
-static volatile uint8_t   s_custom_cmd_b1 = 0;       /* 0 = nada pendiente */
-static volatile bool      s_custom_cmd_set = false;
-static uint8_t            s_last_raw[FRAME_LEN];
-static SemaphoreHandle_t  s_raw_mutex;            /* protege s_last_raw */
 
 /* Auto-encendido de cargas al arranque (luz int + bomba). Ver ne185.h. */
 static volatile bool      s_autostart_enabled = false; /* leido de NVS en init */
@@ -251,10 +240,6 @@ static void parse_frame(const uint8_t *b)
                       "bat1=%.1fV bat2=%.1fV",
                  tmp.light_in, tmp.light_out, tmp.pump, tmp.shore,
                  tmp.s1, tmp.r1, tmp.battery1_v, tmp.battery2_v);
-    }
-    if (s_verbose_log) {
-        ESP_LOGI(TAG, "raw b5=%02X b6=%02X b9=%02X b14=%02X b15=%02X chk=%02X",
-                 b[5], b[6], b[9], b[14], b[15], b[19]);
     }
 }
 
@@ -403,108 +388,6 @@ static void rs485_task(void *arg)
 watcher_skip:;
         }
 
-        /* === CUSTOM CMD pendiente? ===
-         * Si se inyecto un cmd custom desde la UI (ne185_inject_custom_cmd),
-         * lo enviamos UNA vez en lugar del cmd normal. Para diagnosticar
-         * que responde el NE185 a otros cmds (FF 50, FF 60, etc.). */
-        uint8_t custom_cmd_buf[5];
-        if (s_custom_cmd_set) {
-            uint8_t b1 = s_custom_cmd_b1;
-            custom_cmd_buf[0] = 0xFF;
-            custom_cmd_buf[1] = b1;
-            custom_cmd_buf[2] = 0x00;
-            custom_cmd_buf[3] = 0x00;
-            custom_cmd_buf[4] = (0xFF + b1) & 0xFF;
-            tx_cmd = custom_cmd_buf;
-            tx_len = 5;
-            ESP_LOGW(TAG, ">>> CUSTOM tx: FF %02X 00 00 %02X <<<",
-                     b1, custom_cmd_buf[4]);
-            s_custom_cmd_set = false;
-            /* Cancelar press en curso si estabamos en hold */
-            press_frames_left = 0;
-            release_frames_left = 0;
-        }
-
-        /* === SNIFF MODE (pause polling) ===
-         * Si s_polling_paused == true: no enviamos. Solo intentamos leer.
-         * Util para detectar si el NE185 emite frames espontaneamente. */
-        if (s_polling_paused) {
-            /* === CAPTURA DE POLL (modo sniff, NE187 = master) ==============
-             * Read-only: el ESP NO transmite (colisionaria con el NE187). En
-             * RS-485 de 2 hilos vemos AMBAS direcciones, asi que el buffer trae
-             * intercalados el POLL del NE187 (5 B) y la RESP del NE185 (20 B).
-             * Segmentamos todo el buffer y logueamos cada uno etiquetado con
-             * timestamp (ms desde boot), deduplicando: solo se loguea cuando
-             * cambian sus bytes (al pulsar/soltar o variar tanque) -> sin spam a
-             * ~16 Hz. Objetivo: descubrir los bytes EXACTOS del poll del NE187
-             * para replicarlos en CMD_IDLE y que el NE185 emita la trama de 20 B
-             * (con tanques) tambien en modo master. */
-            int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
-                                    pdMS_TO_TICKS(READ_TIMEOUT_MS));
-
-            /* Volcado RAW del buffer completo (dedup vs lectura anterior) para
-             * VER la respuesta del NE185 al poll, sea cual sea su formato o
-             * checksum. Imprescindible para localizar los tanques: el poll de
-             * 5 B y el RESP canonico se segmentan abajo, pero si la respuesta
-             * usa otro formato/checksum quedaria invisible sin este raw. */
-            static uint8_t lastbuf[RX_READ_LEN];
-            static int     lastn = -1;
-            if (n > 0 && (n != lastn || memcmp(buf, lastbuf, n) != 0)) {
-                char hex[RX_READ_LEN * 3 + 1];
-                int o = 0;
-                for (int i = 0; i < n && o < (int)sizeof(hex) - 3; i++)
-                    o += snprintf(hex + o, sizeof(hex) - o, "%02X ", buf[i]);
-                ESP_LOGI(TAG, "RAW n=%d: %s", n, hex);
-                memcpy(lastbuf, buf, n);
-                lastn = n;
-            }
-
-            /* Sentinelas para forzar el primer log de cada tipo. */
-            static uint8_t lp[5]  = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
-            static uint8_t lr_b1 = 0xAA, lr_b5 = 0xAA, lr_b7 = 0xAA, lr_b15 = 0xAA;
-
-            int k = 0;
-            while (k < n) {
-                uint32_t t = now_ms();
-                /* RESP primero: su checksum de 20 B es muy discriminante. Ojo:
-                 * sus 5 primeros bytes (eco del cmd) TAMBIEN pasarian el test de
-                 * poll, asi que consumir la trama entera evita el falso positivo. */
-                if (buf[k] == 0xFF && k + FRAME_LEN <= n && checksum_ok(buf + k)) {
-                    const uint8_t *r = buf + k;
-                    s_sniff_bursts++;
-                    if (r[1] != lr_b1 || r[5] != lr_b5 ||
-                        r[7] != lr_b7 || r[15] != lr_b15) {
-                        ESP_LOGI(TAG, "RESP t=%lu: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X  clean(b5)=%X grey(b7)=%X shore(b16)=%02X",
-                                 (unsigned long)t,
-                                 r[0],r[1],r[2],r[3],r[4], r[5],r[6],r[7],r[8],r[9],
-                                 r[10],r[11],r[12],r[13],r[14], r[15],r[16],r[17],r[18],r[19],
-                                 r[5] & 0x0F, r[7] & 0x01, r[16]);
-                        lr_b1 = r[1]; lr_b5 = r[5]; lr_b7 = r[7]; lr_b15 = r[15];
-                    }
-                    k += FRAME_LEN;
-                    continue;
-                }
-                /* POLL: 5 B, FF + checksum simple (b0+b1+b2+b3)&0xFF == b4.
-                 * Es el patron de CMD_IDLE/CMD_BTN_* y, por hipotesis, del poll
-                 * real del NE187. Lo logueamos con nivel W para destacarlo. */
-                if (buf[k] == 0xFF && k + 5 <= n &&
-                    (uint8_t)(buf[k] + buf[k+1] + buf[k+2] + buf[k+3]) == buf[k+4]) {
-                    const uint8_t *p = buf + k;
-                    if (p[0]!=lp[0] || p[1]!=lp[1] || p[2]!=lp[2] ||
-                        p[3]!=lp[3] || p[4]!=lp[4]) {
-                        ESP_LOGW(TAG, "POLL t=%lu: %02X %02X %02X %02X %02X",
-                                 (unsigned long)t, p[0],p[1],p[2],p[3],p[4]);
-                        lp[0]=p[0]; lp[1]=p[1]; lp[2]=p[2]; lp[3]=p[3]; lp[4]=p[4];
-                    }
-                    k += 5;
-                    continue;
-                }
-                k++;
-            }
-            vTaskDelayUntil(&last_tick, pdMS_TO_TICKS(POLL_PERIOD_MS));
-            continue;
-        }
-
         /* === TX + RX sync ============================================ */
         /* NO flush antes: respuesta del NE185 puede llegar muy rapido
          * y un flush descartaria bytes legitimos. */
@@ -565,12 +448,6 @@ watcher_skip:;
 
         if (ok) {
             parse_frame(frame20);
-            if (s_raw_mutex) {
-                xSemaphoreTake(s_raw_mutex, portMAX_DELAY);
-                memcpy(s_last_raw, frame20, FRAME_LEN);
-                xSemaphoreGive(s_raw_mutex);
-            }
-            s_sniff_bursts++;
             consec_timeouts = 0;
 
             /* Auto-encendido de cargas: cuando la centralita lleva ya unas
@@ -594,7 +471,6 @@ watcher_skip:;
             }
         } else {
             consec_timeouts++;
-            s_frames_fail++;
             if (consec_timeouts == BUS_DEAD_THRESH) {
                 /* Bus muerto = centralita apagada. Rearmamos el autostart para
                  * que vuelva a encender cargas cuando despierte de nuevo (util
@@ -729,9 +605,7 @@ void ne185_init(void)
         s_mutex = NULL;
         return;
     }
-    s_raw_mutex = xSemaphoreCreateMutex();
     memset(&s_data, 0, sizeof(s_data));
-    memset(s_last_raw, 0, sizeof(s_last_raw));
 
     /* Auto-encendido de cargas al arranque: leer flag persistido. */
     bool autostart = false;
@@ -787,11 +661,6 @@ void ne185_send_cmd(char cmd)
     }
 }
 
-uint32_t ne185_get_sniff_count(void)
-{
-    return s_sniff_bursts;
-}
-
 void ne185_log_marker(const char *what)
 {
     if (!what) return;
@@ -807,20 +676,6 @@ bool ne185_sim_inject_raw(const uint8_t *frame20)
     return true;
 }
 
-/* Verbose log toggle: si ON, loguea hex de cada frame RX (util para
- * diagnosticar cambios en bytes desconocidos b9/b14). Default OFF para
- * evitar spam a 16Hz. */
-void ne185_set_verbose(bool enable)
-{
-    s_verbose_log = enable;
-    ESP_LOGW(TAG, ">>> VERBOSE log %s <<<", enable ? "ON (log raw RX)" : "OFF");
-}
-
-bool ne185_get_verbose(void)
-{
-    return s_verbose_log;
-}
-
 void ne185_set_autostart(bool enabled)
 {
     s_autostart_enabled = enabled;
@@ -833,37 +688,6 @@ void ne185_set_autostart(bool enabled)
 bool ne185_get_autostart(void)
 {
     return s_autostart_enabled;
-}
-
-void ne185_set_polling_paused(bool paused)
-{
-    s_polling_paused = paused;
-    ESP_LOGW(TAG, ">>> POLLING %s <<<", paused ? "PAUSED (sniff mode)" : "ACTIVE");
-}
-
-bool ne185_get_polling_paused(void)
-{
-    return s_polling_paused;
-}
-
-void ne185_inject_custom_cmd(uint8_t b1)
-{
-    s_custom_cmd_b1 = b1;
-    s_custom_cmd_set = true;
-    ESP_LOGW(TAG, ">>> custom cmd encolado: FF %02X 00 00 %02X <<<",
-             b1, (0xFF + b1) & 0xFF);
-}
-
-void ne185_get_last_raw(uint8_t out[FRAME_LEN], uint32_t *n_frames_ok,
-                        uint32_t *n_frames_fail)
-{
-    if (out && s_raw_mutex) {
-        xSemaphoreTake(s_raw_mutex, portMAX_DELAY);
-        memcpy(out, s_last_raw, FRAME_LEN);
-        xSemaphoreGive(s_raw_mutex);
-    }
-    if (n_frames_ok)   *n_frames_ok   = s_sniff_bursts;
-    if (n_frames_fail) *n_frames_fail = s_frames_fail;
 }
 
 void ne185_sim_inject(uint8_t s1, uint8_t r1,
