@@ -36,7 +36,6 @@ typedef struct {
     uint32_t   acc_count_cv;
     int32_t    last_centi_volts;
     bool       has_latest;
-    int32_t    last_sample_ts;
 } bh_buffer_t;
 
 /* Alojado en PSRAM en init() — 552 KB no caben en internal RAM */
@@ -49,9 +48,6 @@ static SemaphoreHandle_t s_bufs_mutex = NULL;
 static esp_timer_handle_t s_sample_timer = NULL;
 static esp_timer_handle_t s_bh_flush_timer = NULL;
 static bool s_bh_dir_ok = false;
-/* indices para flush */
-static size_t s_bh_last_flushed_idx[BH_SRC_COUNT] = {0};
-static bool   s_bh_last_flushed_wrapped[BH_SRC_COUNT] = {false};
 
 /* Filtro anti-duplicados: solo se escriben puntos con ts > este umbral.
  * En fichero scope (no static dentro de la funcion) para que sea reutilizable
@@ -181,7 +177,6 @@ static void sample_timer_cb(void *arg)
         if (b->acc_count > 0) {
             int32_t avg = (int32_t)(b->acc_sum_ma / (int64_t)b->acc_count);
             buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, cv, true);
-            b->last_sample_ts = ts;
         } else if (b->has_latest) {
             /* Sin nuevas muestras este intervalo: repite el último valor */
             buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, cv, true);
@@ -294,8 +289,6 @@ static void bh_flush_to_sd_dated(time_t file_date)
                 }
             }
         }
-        s_bh_last_flushed_idx[s] = b->write_idx;
-        s_bh_last_flushed_wrapped[s] = b->wrapped;
     }
     BH_UNLOCK();
     for (int s = 0; s < BH_SRC_COUNT; ++s) {
@@ -487,23 +480,4 @@ void battery_history_get_totals(bh_source_t src,
     BH_UNLOCK();
     if (out_charge_ah) *out_charge_ah = charge_mah / 1000.0f;
     if (out_discharge_ah) *out_discharge_ah = discharge_mah / 1000.0f;
-}
-
-void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int32_t *out_newest_ts)
-{
-    if (out_oldest_ts) *out_oldest_ts = 0;
-    if (out_newest_ts) *out_newest_ts = 0;
-    if (src >= BH_SRC_COUNT || !s_bufs) return;
-    BH_LOCK();
-    bh_buffer_t *b = &s_bufs[src];
-    int32_t oldest = INT32_MAX, newest = INT32_MIN;
-    size_t total = b->wrapped ? BH_POINTS : b->write_idx;
-    for (size_t i = 0; i < total; ++i) {
-        if (!b->points[i].valid) continue;
-        if (b->points[i].ts < oldest) oldest = b->points[i].ts;
-        if (b->points[i].ts > newest) newest = b->points[i].ts;
-    }
-    BH_UNLOCK();
-    if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
-    if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
 }

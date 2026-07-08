@@ -189,17 +189,6 @@ static esp_err_t write_buf_to_sd(const char *path, const uint8_t *buf, size_t le
     return ESP_OK;
 }
 
-esp_err_t screenshot_save_bmp(const char *path)
-{
-    uint8_t *bmp = NULL;
-    size_t len = 0;
-    esp_err_t e = screenshot_take_bmp(&bmp, &len);
-    if (e != ESP_OK) return e;
-    e = write_buf_to_sd(path, bmp, len);
-    heap_caps_free(bmp);
-    return e;
-}
-
 esp_err_t screenshot_save_jpeg(const char *path)
 {
     /* Snapshot coherente de la pantalla activa a RGB565 (igual que

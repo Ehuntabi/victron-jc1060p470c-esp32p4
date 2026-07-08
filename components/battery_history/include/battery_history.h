@@ -10,7 +10,6 @@ extern "C" {
 
 #define BH_POINTS         8640    /* 24h @ 10 s sample */
 #define BH_SAMPLE_MS      10000
-#define BH_PERSIST_MS     (15 * 60 * 1000)
 
 typedef enum {
     BH_SRC_BATTERY_MONITOR = 0,
@@ -50,9 +49,6 @@ void battery_history_get_totals(bh_source_t src,
                                 float *out_discharge_ah);
 
 const char *battery_history_source_name(bh_source_t src);
-
-/* Get only the timestamp range without copying points */
-void battery_history_get_time_range(bh_source_t src, int32_t *out_oldest_ts, int32_t *out_newest_ts);
 
 #ifdef __cplusplus
 }
