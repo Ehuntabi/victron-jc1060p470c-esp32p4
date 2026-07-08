@@ -42,6 +42,7 @@
 extern void ui_force_view_update(void);
 extern void ui_start_capture_carousel(void);
 extern bool ui_capture_carousel_running(void);
+extern void ui_gallery_open(void);   /* visor de galeria en pantalla (gallery.c) */
 
 #define WIFI_NAMESPACE "wifi"
 
@@ -102,6 +103,13 @@ static void cb_capture_carousel_cb(lv_event_t *e)
         ui_start_capture_carousel();
     }
     /* Apagado manual: no hacemos nada; la tarea lo dejara en OFF al terminar. */
+}
+
+/* Boton "Ver galeria en pantalla": abre el visor de las capturas de la SD. */
+static void cb_open_gallery(lv_event_t *e)
+{
+    (void)e;
+    ui_gallery_open();
 }
 
 static void cb_screensaver_event_cb(lv_event_t *e);
@@ -1177,6 +1185,18 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->capture_status_lbl,
                       "Guarda las 8 pantallas de datos en la SD");
+
+    /* Boton: abrir el visor de galeria en pantalla */
+    lv_obj_t *btn_gal = lv_btn_create(card_cap);
+    lv_obj_set_width(btn_gal, lv_pct(100));
+    lv_obj_set_height(btn_gal, 46);
+    lv_obj_set_style_bg_color(btn_gal, lv_color_hex(0x0288D1), 0);
+    lv_obj_set_style_radius(btn_gal, 8, 0);
+    lv_obj_t *lbl_gal = lv_label_create(btn_gal);
+    lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas en pantalla");
+    lv_obj_center(lbl_gal);
+    lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
 
     /* === Card Zona horaria (al final) === */
     lv_obj_t *card_tz = lv_obj_create(cont);
