@@ -2746,17 +2746,34 @@ static const struct { ui_view_mode_t mode; const char *name; } CAPTURE_SCREENS[]
     { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
 };
 
+/* Guarda una pantalla contando aciertos y recordando el PRIMER error (para
+ * diagnostico sin serie: distingue "sin PSRAM" de "SD ocupada/error"). */
+static void cap_save(const char *path, int *ok, esp_err_t *first_err)
+{
+    esp_err_t e = screenshot_save_bmp(path);
+    if (e == ESP_OK) (*ok)++;
+    else if (*first_err == ESP_OK) *first_err = e;
+}
+
 /* Apaga el switch y refleja el resultado (bajo lock LVGL; valida los objetos
  * por si la pagina Display se hubiera reconstruido durante la captura). */
-static void capture_carousel_finish(ui_state_t *ui, int ok)
+static void capture_carousel_finish(ui_state_t *ui, int ok, esp_err_t first_err)
 {
     if (lvgl_port_lock(1000)) {
         if (ui->capture_switch && lv_obj_is_valid(ui->capture_switch)) {
             lv_obj_clear_state(ui->capture_switch, LV_STATE_CHECKED);
         }
         if (ui->capture_status_lbl && lv_obj_is_valid(ui->capture_status_lbl)) {
-            lv_label_set_text_fmt(ui->capture_status_lbl,
-                                  "%d/8 capturas guardadas en la SD", ok);
+            if (ok >= 8) {
+                lv_label_set_text(ui->capture_status_lbl,
+                                  "8/8 capturas guardadas en la SD");
+            } else {
+                const char *why = (first_err == ESP_ERR_NO_MEM) ? "sin PSRAM"
+                                : (first_err == ESP_FAIL)        ? screenshot_last_error()
+                                :                                  "error";
+                lv_label_set_text_fmt(ui->capture_status_lbl,
+                                      "%d/8 - fallo: %s", ok, why);
+            }
         }
         lvgl_port_unlock();
     }
@@ -2767,31 +2784,30 @@ static void capture_carousel_task(void *arg)
     ui_state_t *ui = &g_ui;
     const ui_view_mode_t saved_mode = ui->view_selection.mode;
     int ok = 0;
+    esp_err_t first_err = ESP_OK;
     char path[96];
 
-    if (mkdir(TOUR_DIR, 0777) != 0) {
-        /* Puede existir ya; si no hay SD, los screenshot_save_bmp fallaran. */
-    }
     ESP_LOGI("CAPCAR", "Carrusel de captura: 8 pantallas -> %s", TOUR_DIR);
 
-    /* 6 device-views con datos reales */
+    /* 6 device-views con datos reales. screenshot_save_bmp ya crea el directorio
+     * padre bajo camera_sd_bus_lock, no hace falta mkdir aqui. */
     for (size_t i = 0; i < sizeof(CAPTURE_SCREENS) / sizeof(CAPTURE_SCREENS[0]); ++i) {
         tour_set_view(ui, CAPTURE_SCREENS[i].mode);
         tour_settle();
         snprintf(path, sizeof(path), TOUR_DIR "/%s.bmp", CAPTURE_SCREENS[i].name);
-        if (screenshot_save_bmp(path) == ESP_OK) ok++;
+        cap_save(path, &ok, &first_err);
     }
 
     /* Grafico historico de bateria (overlay) */
     if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
     tour_settle();
-    if (screenshot_save_bmp(TOUR_DIR "/07_log_bateria.bmp") == ESP_OK) ok++;
+    cap_save(TOUR_DIR "/07_log_bateria.bmp", &ok, &first_err);
     if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
 
     /* Grafico de temperaturas del frigo (overlay) */
     if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
     tour_settle();
-    if (screenshot_save_bmp(TOUR_DIR "/08_log_frigo.bmp") == ESP_OK) ok++;
+    cap_save(TOUR_DIR "/08_log_frigo.bmp", &ok, &first_err);
     if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
 
     /* Restaurar: volver a Live + la vista previa. */
@@ -2802,8 +2818,8 @@ static void capture_carousel_task(void *arg)
         lvgl_port_unlock();
     }
 
-    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/8 capturas", ok);
-    capture_carousel_finish(ui, ok);
+    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/8 capturas (first_err=0x%x)", ok, (int)first_err);
+    capture_carousel_finish(ui, ok, first_err);
     s_capture_running = false;
     vTaskDelete(NULL);
 }
