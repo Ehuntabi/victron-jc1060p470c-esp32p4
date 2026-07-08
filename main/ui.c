@@ -1391,9 +1391,11 @@ static bool    s_frigo_dragging     = false;
 static int64_t s_frigo_last_apply_us = 0;
 static int64_t s_frigo_last_click_us = 0;
 
-/* Buffer estatico para parsear CSV de un dia. 1440 muestras = 1 min cada una. */
+/* Buffer para parsear el CSV de un dia guardado (1440 muestras = 1 min c/u).
+ * En PSRAM (lazy): 1500 x 24 B ~= 36 KB, demasiado para RAM interna estatica.
+ * Se reserva al ver un dia historico y se libera al cerrar la grafica. */
 #define FRIGO_LOG_MAX_ENTRIES   1500
-static frigo_log_entry_t s_frigo_buf[FRIGO_LOG_MAX_ENTRIES];
+static frigo_log_entry_t *s_frigo_buf = NULL;
 /* Cache: dia (idx) ya parseado en s_frigo_buf y su n. Evita re-leer/re-parsear
  * el CSV de la SD en cada tick de pan/zoom (apply_window). -2 = cache vacia. */
 static int s_frigo_loaded_idx = -2;
@@ -1691,14 +1693,19 @@ static void frigo_chart_load_day(void)
         (void)valid;
     } else {
         const char *date = s_frigo_dates[s_frigo_day_idx];
+        if (s_frigo_buf == NULL) {
+            s_frigo_buf = heap_caps_malloc(sizeof(frigo_log_entry_t) * FRIGO_LOG_MAX_ENTRIES,
+                                           MALLOC_CAP_SPIRAM);
+            s_frigo_loaded_idx = -2;   /* buffer nuevo: cache invalida */
+        }
         int n;
-        if (s_frigo_day_idx == s_frigo_loaded_idx) {
+        if (s_frigo_buf && s_frigo_day_idx == s_frigo_loaded_idx) {
             n = s_frigo_loaded_n;   /* mismo dia ya en s_frigo_buf: no re-leer la SD */
         } else {
             char path[64];
             snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
-            n = log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES);
-            s_frigo_loaded_idx = s_frigo_day_idx;
+            n = s_frigo_buf ? log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES) : 0;
+            s_frigo_loaded_idx = s_frigo_buf ? s_frigo_day_idx : -2;
             s_frigo_loaded_n   = n;
         }
         int wa = (int)(s_frigo_win_a * n);
@@ -1904,6 +1911,9 @@ void ui_close_chart_screen(void)
     /* Borrar el overlay raíz, que arrastra al chart y todos sus hijos */
     if (s_chart_screen) { lv_obj_del(s_chart_screen); s_chart_screen = NULL; }
     s_chart = NULL;
+    /* Liberar el buffer de carga de dias guardados (~36KB PSRAM): se reserva
+     * lazy al ver un dia y se re-reserva al volver a abrir. */
+    if (s_frigo_buf) { free(s_frigo_buf); s_frigo_buf = NULL; s_frigo_loaded_idx = -2; }
 }
 
 static lv_obj_t *s_bh_chart  = NULL;

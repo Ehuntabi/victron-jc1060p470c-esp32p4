@@ -425,33 +425,32 @@ size_t battery_history_get_series(bh_source_t src,
                                   int32_t *out_newest_ts)
 {
     if (src >= BH_SRC_COUNT || !out_points || !s_bufs) return 0;
+    /* Copia en bloque bajo lock (dos memcpy que ademas dejan el orden
+     * cronologico: [write_idx..fin] + [0..write_idx]) para minimizar el tiempo
+     * con BH_LOCK tomado: antes el copiado punto-a-punto con ramas retenia el
+     * lock hasta 8640 iteraciones y bloqueaba el RX BLE (update_latest) y el
+     * timer de muestreo. oldest/newest se calculan ya FUERA del lock. */
     BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
-    size_t count = 0;
-    int32_t oldest = INT32_MAX, newest = INT32_MIN;
-
-    /* Reorder so the oldest comes first */
+    size_t count;
     if (b->wrapped) {
-        for (size_t i = 0; i < BH_POINTS; ++i) {
-            size_t idx = (b->write_idx + i) % BH_POINTS;
-            out_points[count] = b->points[idx];
-            if (b->points[idx].valid) {
-                if (b->points[idx].ts < oldest) oldest = b->points[idx].ts;
-                if (b->points[idx].ts > newest) newest = b->points[idx].ts;
-            }
-            count++;
-        }
+        size_t tail = BH_POINTS - b->write_idx;
+        memcpy(out_points, &b->points[b->write_idx], tail * sizeof(bh_point_t));
+        memcpy(out_points + tail, &b->points[0], b->write_idx * sizeof(bh_point_t));
+        count = BH_POINTS;
     } else {
-        for (size_t i = 0; i < b->write_idx; ++i) {
-            out_points[count] = b->points[i];
-            if (b->points[i].valid) {
-                if (b->points[i].ts < oldest) oldest = b->points[i].ts;
-                if (b->points[i].ts > newest) newest = b->points[i].ts;
-            }
-            count++;
-        }
+        memcpy(out_points, b->points, b->write_idx * sizeof(bh_point_t));
+        count = b->write_idx;
     }
     BH_UNLOCK();
+
+    int32_t oldest = INT32_MAX, newest = INT32_MIN;
+    for (size_t i = 0; i < count; ++i) {
+        if (out_points[i].valid) {
+            if (out_points[i].ts < oldest) oldest = out_points[i].ts;
+            if (out_points[i].ts > newest) newest = out_points[i].ts;
+        }
+    }
     if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
     if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
     return count;
