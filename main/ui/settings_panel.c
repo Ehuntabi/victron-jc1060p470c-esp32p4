@@ -54,6 +54,13 @@ static void wifi_event_cb(lv_event_t *e);
 static void password_toggle_btn_event_cb(lv_event_t *e);
 static void about_refresh_dynamic(ui_state_t *ui);
 static void about_timer_cb(lv_timer_t *t);
+/* Trip computer + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
+static lv_obj_t *s_trip_label = NULL;
+static void trip_label_refresh(void);
+static void trip_reset_btn_cb(lv_event_t *e);
+static void backup_export_cb(lv_event_t *e);
+static void backup_import_cb(lv_event_t *e);
+static void sd_trip_timer_cb(lv_timer_t *t);
 static void reboot_msgbox_cb(lv_event_t *e);
 static void reboot_btn_cb(lv_event_t *e);
 static void brightness_slider_event_cb(lv_event_t *e);
@@ -641,6 +648,14 @@ static void autostart_switch_cb(lv_event_t *e)
 }
 
 /* Pagina "Tarjeta SD": carrusel de capturas + visor de imagenes de la SD. */
+/* Refresco del Trip computer (card reubicada en Tarjeta SD): solo si esta
+ * visible, para no gastar cada segundo cuando no se mira. */
+static void sd_trip_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (s_trip_label && lv_obj_is_visible(s_trip_label)) trip_label_refresh();
+}
+
 static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 {
     style_settings_scrollbar(page_sd);
@@ -729,6 +744,123 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas en pantalla");
     lv_obj_center(lbl_gal);
     lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
+
+    /* === Card Trip computer (contadores reseteables del viaje) === */
+    lv_obj_t *card_trip = lv_obj_create(cont);
+    lv_obj_set_width(card_trip, lv_pct(100));
+    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
+    lv_obj_set_style_border_width(card_trip, 1, 0);
+    lv_obj_set_style_radius(card_trip, 12, 0);
+    lv_obj_set_style_pad_all(card_trip, 16, 0);
+    lv_obj_set_style_pad_gap(card_trip, 10, 0);
+    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *trip_head = lv_obj_create(card_trip);
+    lv_obj_remove_style_all(trip_head);
+    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *trip_title = lv_label_create(trip_head);
+    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
+    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
+
+    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
+    lv_obj_set_size(btn_trip_rst, 140, 44);
+    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
+    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
+    lv_label_set_text(lbl_trip_rst, "Reset");
+    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_trip_rst);
+    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    s_trip_label = lv_label_create(card_trip);
+    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
+    lv_obj_set_width(s_trip_label, lv_pct(100));
+    /* LONG_DOT en vez de WRAP por riesgo WDT al construir
+     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
+    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
+    trip_label_refresh();
+
+    /* === Card 4: Backup/Restore configuracion === */
+    lv_obj_t *card_bak = lv_obj_create(cont);
+    lv_obj_set_width(card_bak, lv_pct(100));
+    lv_obj_set_height(card_bak, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_bak, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_border_width(card_bak, 1, 0);
+    lv_obj_set_style_radius(card_bak, 12, 0);
+    lv_obj_set_style_pad_all(card_bak, 16, 0);
+    lv_obj_set_style_pad_gap(card_bak, 12, 0);
+    lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *bak_title = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
+    lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Backup configuracion");
+
+    lv_obj_t *bak_desc = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
+    lv_obj_set_width(bak_desc, lv_pct(100));
+    /* \n manual + LONG_CLIP en vez de WRAP por riesgo WDT al construir
+     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
+    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(bak_desc,
+        "Exporta toda la configuracion (claves Victron, alertas, brillo,\n"
+        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json.\n"
+        "El password Wi-Fi no se exporta por seguridad.");
+
+    lv_obj_t *bak_row = lv_obj_create(card_bak);
+    lv_obj_remove_style_all(bak_row);
+    lv_obj_set_size(bak_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(bak_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(bak_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bak_row, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_exp = lv_btn_create(bak_row);
+    lv_obj_set_size(btn_exp, 200, 50);
+    lv_obj_set_style_bg_color(btn_exp, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_radius(btn_exp, 10, 0);
+    lv_obj_t *lbl_exp = lv_label_create(btn_exp);
+    lv_label_set_text(lbl_exp, LV_SYMBOL_UPLOAD "  Exportar");
+    lv_obj_set_style_text_font(lbl_exp, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_exp);
+
+    lv_obj_t *btn_imp = lv_btn_create(bak_row);
+    lv_obj_set_size(btn_imp, 200, 50);
+    lv_obj_set_style_bg_color(btn_imp, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_radius(btn_imp, 10, 0);
+    lv_obj_t *lbl_imp = lv_label_create(btn_imp);
+    lv_label_set_text(lbl_imp, LV_SYMBOL_DOWNLOAD "  Importar");
+    lv_obj_set_style_text_font(lbl_imp, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_imp);
+
+    /* Status label */
+    lv_obj_t *bak_status = lv_label_create(card_bak);
+    lv_obj_set_style_text_font(bak_status, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(bak_status, lv_color_hex(0xFFD54F), 0);
+    lv_label_set_text(bak_status, "");
+
+    lv_obj_set_user_data(btn_exp, bak_status);
+    lv_obj_set_user_data(btn_imp, bak_status);
+    lv_obj_add_event_cb(btn_exp, backup_export_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_add_event_cb(btn_imp, backup_import_cb, LV_EVENT_CLICKED, ui);
+
+    /* Trip computer: refresco en vivo mientras la card este visible. */
+    lv_timer_create(sd_trip_timer_cb, 1000, NULL);
 }
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
@@ -1777,7 +1909,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_text_color(back_btn, lv_color_white(), 0);
 
     lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, LV_SYMBOL_LEFT "  Back");
+    lv_label_set_text(back_label, LV_SYMBOL_LEFT "  Volver");
     lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
     /* Spacer invisible para centrar el titulo via SPACE_BETWEEN */
@@ -1789,16 +1921,16 @@ void ui_settings_panel_init(ui_state_t *ui,
     s_settings_main_page = main_page;
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
-    lv_obj_t *page_logs = lv_menu_page_create(menu, "LOGS");
-    lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y AVISOS");
+    lv_obj_t *page_logs = lv_menu_page_create(menu, "HISTORIAL EN GRAFICOS");
+    lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y ALERTAS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
-    lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
+    lv_obj_t *page_display = lv_menu_page_create(menu, "PANTALLA");
     lv_obj_t *page_sd = lv_menu_page_create(menu, "TARJETA SD");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
     /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
      * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
-    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT Joint SPL 145 Control");
+    lv_obj_t *page_about = lv_menu_page_create(menu, "ACERCA DE Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
@@ -1815,12 +1947,12 @@ void ui_settings_panel_init(ui_state_t *ui,
         "Frigo",         "Sensores, ventilador y umbrales",
         LV_SYMBOL_REFRESH,    0x00C851, NULL);
     settings_menu_add_entry(ui, main_page, menu, page_logs,
-        "Logs",          "Histórico SD: batería y nevera",
-        LV_SYMBOL_SAVE,       0xFFAA00, populate_logs);
+        "Historial en graficos", "Histórico SD: batería y nevera",
+        LV_SYMBOL_SAVE,       0x9C27B0, populate_logs);
     settings_page_ctx_t *ctx_wifi = settings_menu_add_entry(
         ui, main_page, menu, page_wifi,
         "Wi-Fi",         "Modo AP y credenciales",
-        LV_SYMBOL_WIFI,       0x4FC3F7, populate_wifi);
+        LV_SYMBOL_WIFI,       0xFF9100, populate_wifi);
     if (ctx_wifi) {
         if (default_ssid) {
             strncpy(ctx_wifi->wifi_ssid, default_ssid, sizeof(ctx_wifi->wifi_ssid) - 1);
@@ -1831,17 +1963,17 @@ void ui_settings_panel_init(ui_state_t *ui,
         ctx_wifi->wifi_ap_enabled = ap_enabled;
     }
     settings_menu_add_entry(ui, main_page, menu, page_display,
-        "Display",       "Brillo, salvapantallas, modo noche",
-        LV_SYMBOL_EYE_OPEN,   0xBA68C8, populate_display);
+        "Pantalla",      "Brillo, salvapantallas, modo noche",
+        LV_SYMBOL_EYE_OPEN,   0x00BFA5, populate_display);
     settings_menu_add_entry(ui, main_page, menu, page_sd,
         "Tarjeta SD",    "Carrusel de capturas y visor de imagenes",
-        LV_SYMBOL_SD_CARD,    0x29B6F6, populate_sd);
+        LV_SYMBOL_SD_CARD,    0x2979FF, populate_sd);
     settings_menu_add_entry(ui, main_page, menu, page_sound,
-        "Sonido y avisos","Volumen, jingles y alertas",
-        LV_SYMBOL_VOLUME_MAX, 0xFF7043, populate_sound);
+        "Sonido y alertas","Volumen, jingles y alertas",
+        LV_SYMBOL_VOLUME_MAX, 0xFF1744, populate_sound);
     settings_menu_add_entry(ui, main_page, menu, page_victron,
         "Victron Keys",  "Dispositivos BLE y claves",
-        LV_SYMBOL_GPS,        0xE91E63, populate_keys);
+        LV_SYMBOL_GPS,        0xEC407A, populate_keys);
     /* Mostrar warning al entrar en Victron Keys */
     {
         lv_obj_t *cont_vk = lv_obj_get_child(main_page, lv_obj_get_child_cnt(main_page) - 1);
@@ -1850,7 +1982,7 @@ void ui_settings_panel_init(ui_state_t *ui,
         }
     }
     settings_menu_add_entry(ui, main_page, menu, page_about,
-        "About",         "Sistema, uptime, IP y reinicio",
+        "Acerca de",     "Sistema, uptime, IP y reinicio",
         LV_SYMBOL_LIST,       0x90A4AE, populate_about);
 
 
@@ -2644,8 +2776,6 @@ void ui_settings_panel_refresh_victron_devices(ui_state_t *ui)
 }
 
 /* ── Trip computer: refresco periodico y reset ─────────────────── */
-static lv_obj_t *s_trip_label = NULL;
-
 static void trip_label_refresh(void)
 {
     if (!s_trip_label) return;
@@ -2859,120 +2989,6 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
     lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
-
-    /* === Card Trip computer (contadores reseteables del viaje) === */
-    lv_obj_t *card_trip = lv_obj_create(cont);
-    lv_obj_set_width(card_trip, lv_pct(100));
-    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
-    lv_obj_set_style_border_width(card_trip, 1, 0);
-    lv_obj_set_style_radius(card_trip, 12, 0);
-    lv_obj_set_style_pad_all(card_trip, 16, 0);
-    lv_obj_set_style_pad_gap(card_trip, 10, 0);
-    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *trip_head = lv_obj_create(card_trip);
-    lv_obj_remove_style_all(trip_head);
-    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *trip_title = lv_label_create(trip_head);
-    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
-    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
-
-    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
-    lv_obj_set_size(btn_trip_rst, 140, 44);
-    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
-    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
-    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
-    lv_label_set_text(lbl_trip_rst, "Reset");
-    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_trip_rst);
-    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
-
-    s_trip_label = lv_label_create(card_trip);
-    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
-    lv_obj_set_width(s_trip_label, lv_pct(100));
-    /* LONG_DOT en vez de WRAP por riesgo WDT al construir
-     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
-    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
-    trip_label_refresh();
-
-    /* === Card 4: Backup/Restore configuracion === */
-    lv_obj_t *card_bak = lv_obj_create(cont);
-    lv_obj_set_width(card_bak, lv_pct(100));
-    lv_obj_set_height(card_bak, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_bak, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
-    lv_obj_set_style_border_width(card_bak, 1, 0);
-    lv_obj_set_style_radius(card_bak, 12, 0);
-    lv_obj_set_style_pad_all(card_bak, 16, 0);
-    lv_obj_set_style_pad_gap(card_bak, 12, 0);
-    lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *bak_title = lv_label_create(card_bak);
-    lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
-    lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Backup configuracion");
-
-    lv_obj_t *bak_desc = lv_label_create(card_bak);
-    lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
-    lv_obj_set_width(bak_desc, lv_pct(100));
-    /* \n manual + LONG_CLIP en vez de WRAP por riesgo WDT al construir
-     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
-    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(bak_desc,
-        "Exporta toda la configuracion (claves Victron, alertas, brillo,\n"
-        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json.\n"
-        "El password Wi-Fi no se exporta por seguridad.");
-
-    lv_obj_t *bak_row = lv_obj_create(card_bak);
-    lv_obj_remove_style_all(bak_row);
-    lv_obj_set_size(bak_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(bak_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(bak_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(bak_row, LV_FLEX_ALIGN_SPACE_EVENLY,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *btn_exp = lv_btn_create(bak_row);
-    lv_obj_set_size(btn_exp, 200, 50);
-    lv_obj_set_style_bg_color(btn_exp, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_radius(btn_exp, 10, 0);
-    lv_obj_t *lbl_exp = lv_label_create(btn_exp);
-    lv_label_set_text(lbl_exp, LV_SYMBOL_UPLOAD "  Exportar");
-    lv_obj_set_style_text_font(lbl_exp, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_exp);
-
-    lv_obj_t *btn_imp = lv_btn_create(bak_row);
-    lv_obj_set_size(btn_imp, 200, 50);
-    lv_obj_set_style_bg_color(btn_imp, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_radius(btn_imp, 10, 0);
-    lv_obj_t *lbl_imp = lv_label_create(btn_imp);
-    lv_label_set_text(lbl_imp, LV_SYMBOL_DOWNLOAD "  Importar");
-    lv_obj_set_style_text_font(lbl_imp, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_imp);
-
-    /* Status label */
-    lv_obj_t *bak_status = lv_label_create(card_bak);
-    lv_obj_set_style_text_font(bak_status, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(bak_status, lv_color_hex(0xFFD54F), 0);
-    lv_label_set_text(bak_status, "");
-
-    lv_obj_set_user_data(btn_exp, bak_status);
-    lv_obj_set_user_data(btn_imp, bak_status);
-    lv_obj_add_event_cb(btn_exp, backup_export_cb, LV_EVENT_CLICKED, ui);
-    lv_obj_add_event_cb(btn_imp, backup_import_cb, LV_EVENT_CLICKED, ui);
 
     /* Refrescar y crear timer */
     about_refresh_dynamic(ui);
@@ -3269,7 +3285,6 @@ static void about_timer_cb(lv_timer_t *t)
         return;
     }
     about_refresh_dynamic(ui);
-    trip_label_refresh();
 }
 
 static void reboot_msgbox_cb(lv_event_t *e)
