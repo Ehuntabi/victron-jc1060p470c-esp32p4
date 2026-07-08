@@ -912,14 +912,10 @@ static void nav_btn_event_cb(lv_event_t *e)
  * del label lo hace volume_icon_timer_cb (cada 500 ms). */
 static void volume_btn_event_cb(lv_event_t *e)
 {
-    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
-    bool new_muted = !audio_is_muted();
-    audio_set_mute(new_muted);
-    /* Sincronizar el switch del panel Settings si ya está creado */
-    if (ui && ui->sound_mute_switch) {
-        if (new_muted) lv_obj_add_state(ui->sound_mute_switch, LV_STATE_CHECKED);
-        else           lv_obj_clear_state(ui->sound_mute_switch, LV_STATE_CHECKED);
-    }
+    (void)lv_event_get_user_data(e);
+    /* Misma logica que el switch "Silenciar avisos": guarda/restaura el volumen
+     * y sincroniza slider, etiqueta y switch de Settings (si estan creados). */
+    ui_settings_apply_mute(!audio_is_muted());
 }
 
 /* Toggle Wi-Fi AP on/off al pulsar el icono — comportamiento idéntico al

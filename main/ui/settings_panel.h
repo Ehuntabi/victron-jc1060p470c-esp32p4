@@ -12,6 +12,12 @@ void ui_settings_panel_init(ui_state_t *ui,
 void ui_settings_panel_on_user_activity(ui_state_t *ui);
 void ui_settings_panel_set_mac(ui_state_t *ui, const char *mac_str);
 
+/* Silenciar/activar avisos con guardado y restauracion del volumen. Sincroniza
+ * el slider, la etiqueta y el switch de Settings si ya existen. La usan tanto el
+ * switch "Silenciar avisos" como el icono del altavoz de la barra inferior, para
+ * comportamiento identico desde ambos. */
+void ui_settings_apply_mute(bool muted);
+
 // Update device status for a specific MAC address in Victron Keys page
 void ui_settings_panel_update_victron_device_status(ui_state_t *ui, const char *mac_address, 
                                                      const char *device_type, const char *product_name, 

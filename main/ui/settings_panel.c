@@ -3460,10 +3460,12 @@ static void sound_volume_changed_cb(lv_event_t *e)
     }
 }
 
-static void sound_mute_changed_cb(lv_event_t *e)
+/* Aplica mute/unmute con guardado y restauracion del volumen, y sincroniza los
+ * widgets de Settings (slider, etiqueta y switch) si ya existen. La llaman el
+ * switch "Silenciar avisos" y el icono del altavoz de la barra inferior, para
+ * que el comportamiento sea identico desde ambos sitios. */
+void ui_settings_apply_mute(bool muted)
 {
-    lv_obj_t *sw = lv_event_get_target(e);
-    bool muted = lv_obj_has_state(sw, LV_STATE_CHECKED);
     audio_set_mute(muted);
     if (muted) {
         s_vol_saved = audio_get_volume();   /* recordar antes de poner a 0 */
@@ -3476,6 +3478,16 @@ static void sound_mute_changed_cb(lv_event_t *e)
         lv_slider_set_value(s_vol_slider, v, LV_ANIM_OFF);
     if (s_vol_label && lv_obj_is_valid(s_vol_label))
         lv_label_set_text_fmt(s_vol_label, "Volumen: %d%%", v);
+    if (s_mute_switch && lv_obj_is_valid(s_mute_switch)) {
+        if (muted) lv_obj_add_state(s_mute_switch, LV_STATE_CHECKED);
+        else       lv_obj_clear_state(s_mute_switch, LV_STATE_CHECKED);
+    }
+}
+
+static void sound_mute_changed_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    ui_settings_apply_mute(lv_obj_has_state(sw, LV_STATE_CHECKED));
 }
 
 
