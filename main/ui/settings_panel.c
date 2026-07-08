@@ -622,45 +622,6 @@ static void reactivate_portal_cb(lv_event_t *e)
              esp_err_to_name(err));
 }
 
-/* ── Zona horaria: presets + callback dropdown ────────────────────────── */
-static const char *TZ_LABELS =
-    "Madrid (CET/CEST)\n"
-    "Lisboa / Canarias (WET/WEST)\n"
-    "Londres (GMT/BST)\n"
-    "Berlin (CET/CEST)\n"
-    "Atenas (EET/EEST)\n"
-    "UTC";
-
-static const char *TZ_POSIX[] = {
-    "CET-1CEST,M3.5.0,M10.5.0/3",
-    "WET0WEST,M3.5.0/1,M10.5.0",
-    "GMT0BST,M3.5.0/1,M10.5.0",
-    "CET-1CEST,M3.5.0,M10.5.0/3",
-    "EET-2EEST,M3.5.0/3,M10.5.0/4",
-    "UTC0",
-};
-#define TZ_COUNT (sizeof(TZ_POSIX)/sizeof(TZ_POSIX[0]))
-
-static int tz_index_from_posix(const char *cur)
-{
-    for (int i = 0; i < (int)TZ_COUNT; i++) {
-        if (strcmp(cur, TZ_POSIX[i]) == 0) return i;
-    }
-    return 0; /* default Madrid */
-}
-
-static void tz_dropdown_cb(lv_event_t *e)
-{
-    lv_obj_t *dd = lv_event_get_target(e);
-    uint16_t idx = lv_dropdown_get_selected(dd);
-    if (idx >= TZ_COUNT) return;
-    const char *posix = TZ_POSIX[idx];
-    save_timezone(posix);
-    setenv("TZ", posix, 1);
-    tzset();
-    ESP_LOGI(TAG_SETTINGS, "TZ -> %s", posix);
-}
-
 /* ── Splash dropdown ──────────────────────────────────────────── */
 static void splash_dropdown_cb(lv_event_t *e)
 {
@@ -864,54 +825,34 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_width(card_nm, 1, 0);
     lv_obj_set_style_radius(card_nm, 12, 0);
     lv_obj_set_style_pad_all(card_nm, 12, 0);
-    lv_obj_set_style_pad_gap(card_nm, 8, 0);
+    lv_obj_set_style_pad_gap(card_nm, 14, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_COLUMN);
-
-    /* Row 1: titulo + switch */
-    lv_obj_t *nm_top = lv_obj_create(card_nm);
-    lv_obj_remove_style_all(nm_top);
-    lv_obj_set_size(nm_top, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_top, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_top, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_top, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card_nm, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(nm_top, 10, 0);
 
-    /* Bloque izquierdo: titulo + switch */
-    lv_obj_t *nm_lhs = lv_obj_create(nm_top);
-    lv_obj_remove_style_all(nm_lhs);
-    lv_obj_set_size(nm_lhs, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_lhs, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_lhs, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_lhs, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    /* Separacion entre 'Modo nocturno' y el switch */
-    lv_obj_set_style_pad_gap(nm_lhs, 28, 0);
-
-    lv_obj_t *nm_title = lv_label_create(nm_lhs);
+    /* Todo en una linea con hijos DIRECTOS + spacer flexible: evita el bug de
+     * LVGL de un contenedor SIZE_CONTENT anidado en un padre SPACE_BETWEEN
+     * (colapsaba y recortaba el bloque -> se veia solo "Fin"). */
+    lv_obj_t *nm_title = lv_label_create(card_nm);
     lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
     lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
 
-    lv_obj_t *nm_sw = lv_switch_create(nm_lhs);
+    lv_obj_t *nm_sw = lv_switch_create(card_nm);
     lv_obj_set_style_bg_color(nm_sw, lv_color_hex(0x9C27B0),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* Row 2: selectores Inicio + Fin (inline) */
-    lv_obj_t *nm_hours = lv_obj_create(card_nm);
-    lv_obj_remove_style_all(nm_hours);
-    lv_obj_set_size(nm_hours, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(nm_hours, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(nm_hours, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_hours, LV_FLEX_ALIGN_SPACE_AROUND,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(nm_hours, 12, 0);
+    /* Spacer flexible: empuja los selectores Inicio/Fin al borde derecho */
+    lv_obj_t *nm_spacer = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_spacer);
+    lv_obj_set_height(nm_spacer, 1);
+    lv_obj_set_flex_grow(nm_spacer, 1);
 
     for (int slot = 0; slot < 2; slot++) {
-        lv_obj_t *grp = lv_obj_create(nm_hours);
+        lv_obj_t *grp = lv_obj_create(card_nm);
         lv_obj_remove_style_all(grp);
         lv_obj_set_size(grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_set_layout(grp, LV_LAYOUT_FLEX);
@@ -1240,37 +1181,6 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     /* (El card "Carrusel captura pantalla" + visor se movio a su propia pagina
      *  de Settings "Tarjeta SD": create_sd_settings_page.) */
-
-    /* === Card Zona horaria (al final) === */
-    lv_obj_t *card_tz = lv_obj_create(cont);
-    lv_obj_set_width(card_tz, lv_pct(100));
-    lv_obj_set_height(card_tz, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_tz, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_tz, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_tz, lv_color_hex(0x00C851), 0);  /* verde */
-    lv_obj_set_style_border_width(card_tz, 1, 0);
-    lv_obj_set_style_radius(card_tz, 12, 0);
-    lv_obj_set_style_pad_all(card_tz, 16, 0);
-    lv_obj_set_style_pad_gap(card_tz, 10, 0);
-    lv_obj_set_layout(card_tz, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_tz, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card_tz, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *tz_title = lv_label_create(card_tz);
-    lv_obj_set_style_text_font(tz_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(tz_title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(tz_title, LV_SYMBOL_GPS "  Zona horaria");
-
-    lv_obj_t *tz_dd = lv_dropdown_create(card_tz);
-    lv_obj_set_width(tz_dd, 320);
-    lv_dropdown_set_options(tz_dd, TZ_LABELS);
-    {
-        char tz_now[48];
-        load_timezone(tz_now, sizeof(tz_now));
-        lv_dropdown_set_selected(tz_dd, tz_index_from_posix(tz_now));
-    }
-    lv_obj_add_event_cb(tz_dd, tz_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     /* === Card Auto-encendido de cargas al arranque ===
      * Reubicado desde la antigua pagina "Consola". Al arrancar el P4 enciende
