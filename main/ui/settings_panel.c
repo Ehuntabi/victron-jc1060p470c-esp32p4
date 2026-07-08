@@ -47,7 +47,7 @@ extern void ui_gallery_open(void);   /* visor de galeria en pantalla (gallery.c)
 #define WIFI_NAMESPACE "wifi"
 
 static const char *TAG_SETTINGS = "UI_SETTINGS";
-static const char *APP_VERSION = "1.3.0";
+static const char *APP_VERSION = "1.0.0";
 
 static void ta_event_cb(lv_event_t *e);
 static void wifi_event_cb(lv_event_t *e);
@@ -1798,7 +1798,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
     /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
      * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
-    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT VictronSolarDisplay");
+    lv_obj_t *page_about = lv_menu_page_create(menu, "ABOUT Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
@@ -2826,20 +2826,13 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_center(lbl_reboot_hdr);
     lv_obj_add_event_cb(btn_reboot_hdr, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 
-    /* Version + build info: app version (hardcoded) + git describe (de
-     * esp_app_get_description; coincide con el tag/commit del flash) +
-     * fecha/hora de compilacion. */
+    /* Version + fecha/hora de compilacion, todo en una linea. */
+    const esp_app_desc_t *app_desc = esp_app_get_description();
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
-    lv_label_set_text_fmt(lbl_ver_top, "Version: %s", APP_VERSION);
-
-    const esp_app_desc_t *app_desc = esp_app_get_description();
-    lv_obj_t *lbl_build = lv_label_create(card3);
-    lv_obj_set_style_text_font(lbl_build, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_build, lv_color_hex(0xAAAAAA), 0);
-    lv_label_set_text_fmt(lbl_build, "Build: %s  (%s %s)",
-                          app_desc ? app_desc->version : "?",
+    lv_label_set_text_fmt(lbl_ver_top, "Version: %s    Compilado: %s  %s",
+                          APP_VERSION,
                           app_desc ? app_desc->date : __DATE__,
                           app_desc ? app_desc->time : __TIME__);
 
