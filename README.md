@@ -1,6 +1,6 @@
-# VictronSolarDisplay — Port for Guition JC1060P470C_I (ESP32-P4)
+# Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**[Español](#español) | [English](#english)**
+**v1.0.0** · **[Español](#español) | [English](#english)**
 
 ---
 
@@ -68,7 +68,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - **Frigo** (verde): control PWM del ventilador según T_Aletas.
 - **Logs** (naranja): chart 24 h de batería y de temperaturas frigo. Swipe izquierda/derecha **navega por fecha** en los logs guardados en SD (header muestra la fecha seleccionada).
 - **Wi-Fi** (azul): SSID, contraseña, switch on/off, modal “requiere reiniciar”.
-- **Display** (cyan/púrpura/verde/naranja): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Zona horaria** (6 presets POSIX); **Pantalla de bienvenida** (logo furgo o sin splash).
+- **Display** (cyan/púrpura/verde/naranja): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
 - **Sonido y avisos** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
 - **Victron Keys** (rosa): MAC + clave AES por dispositivo (hasta 8), confirmación al modificar. Selector “Página inicial portal”: **Dashboard** (default), Logs o Keys.
 - **About** (gris): uptime, RAM libre, IP del AP, chip, versión IDF, **Trip computer** con kWh/Ah cargados/consumidos y horas desde el último reset, **Backup configuración** (exportar/importar a `/sdcard/config_backup.json`), **Último reset** + contador de resets por watchdog/panic, botón Reboot con confirmación.
@@ -116,7 +116,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Backup horario del epoch del sistema en NVS (`rtc_backup/epoch`).
 
 #### RTC y hora
-- Zona horaria configurable (Europe/Madrid por defecto). 6 presets POSIX TZ disponibles desde Settings → Display.
+- Zona horaria Europe/Madrid por defecto (CET/CEST), aplicada desde NVS al arrancar y preservada en el backup de configuración.
 - El RTC almacena hora local; `mktime` la interpreta con la TZ activa.
 
 #### Salvapantallas
@@ -229,7 +229,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - **Frigo** (green): PWM fan based on T_Fins.
 - **Logs** (orange): 24 h battery + frigo temperature charts. Swipe left/right **navigates by date** across SD logs (header shows the active day).
 - **Wi-Fi** (blue): SSID, password, on/off switch, restart modal.
-- **Display** (cyan/purple/green/orange): combined **Brightness + Screensaver** card; **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Timezone** (6 POSIX presets); **Splash screen** (camper logo or none).
+- **Display** (cyan/purple/green/orange): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
 - **Sound & alerts** (red): volume, mute switch, SoC and freezer temperature thresholds.
 - **Victron Keys** (pink): MAC + AES key per device (up to 8), confirmation modal on edit. “Web portal start page” selector: **Dashboard** (default), Logs or Keys.
 - **About** (gray): uptime, free RAM, AP IP, chip, IDF version, **Trip computer** with kWh/Ah charged/discharged and active hours since last reset, **Configuration backup** (export/import to `/sdcard/config_backup.json`), **Last reset** + WDT/panic reset counter, Reboot button.
@@ -277,7 +277,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Hourly NVS backup of the system epoch (`rtc_backup/epoch`).
 
 #### RTC and time
-- Configurable timezone (Europe/Madrid by default). 6 POSIX TZ presets available in Settings → Display.
+- Europe/Madrid timezone by default (CET/CEST), applied from NVS at boot and preserved in the configuration backup.
 - RTC stores local time; `mktime` interprets it with the active TZ.
 
 #### Screensaver
