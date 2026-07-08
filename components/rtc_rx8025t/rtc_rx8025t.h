@@ -27,8 +27,3 @@ esp_err_t rtc_get_time(struct tm *tm_out);
  * @brief Escribir hora en el RTC
  */
 esp_err_t rtc_set_time(const struct tm *tm_in);
-
-/**
- * @brief Obtener timestamp Unix desde el RTC
- */
-time_t rtc_get_timestamp(void);

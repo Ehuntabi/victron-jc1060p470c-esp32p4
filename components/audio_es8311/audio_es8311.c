@@ -7,7 +7,6 @@
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
 #include "nvs.h"
-#include "nvs_flash.h"
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
@@ -31,10 +30,10 @@ static esp_codec_dev_handle_t     s_codec   = NULL;
 
 static int  s_volume = 50;     /* 0..100 */
 static bool s_muted  = false;
-/* Generation counter para cancelacion: cada llamada a audio_beep /
- * audio_play_tones captura su propia generacion al entrar y aborta su
- * loop cuando audio_cancel_playback la incrementa. Asi una llamada nueva
- * no resetea la cancelacion de otra anterior aun en curso. */
+/* Generation counter para cancelacion: cada llamada a audio_play_tones
+ * captura su propia generacion al entrar y aborta su loop cuando
+ * audio_cancel_playback la incrementa. Asi una llamada nueva no resetea
+ * la cancelacion de otra anterior aun en curso. */
 static volatile uint32_t s_audio_gen = 0;
 
 static void load_audio_prefs(void)
@@ -113,7 +112,7 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     ret = i2s_channel_enable(s_tx_chan);
     if (ret != ESP_OK) { ESP_LOGE(TAG, "i2s_enable: %s", esp_err_to_name(ret)); return ret; }
 
-    /* 2. Configurar PA por GPIO53 (NS4150) */
+    /* 2. Configurar PA por GPIO11 / PA_CTRL (NS4150) */
     gpio_config_t pa_cfg = {
         .pin_bit_mask = (1ULL << PA_CTRL),
         .mode = GPIO_MODE_OUTPUT,
@@ -174,6 +173,11 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     };
     if (esp_codec_dev_open(s_codec, &fs) != ESP_OK) {
         ESP_LOGE(TAG, "esp_codec_dev_open fallo");
+        /* Dejar estado consistente: si no, las guardas 's_codec' de
+         * audio_set_volume/play_tones operarian sobre un codec sin abrir. */
+        esp_codec_dev_delete(s_codec);
+        s_codec = NULL;
+        gpio_set_level(PA_CTRL, 0);
         return ESP_FAIL;
     }
     load_audio_prefs();
@@ -181,67 +185,6 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     if (s_muted) esp_codec_dev_set_out_mute(s_codec, true);
 
     ESP_LOGI(TAG, "Audio inicializado (sr=%d Hz)", SAMPLE_RATE);
-    return ESP_OK;
-}
-
-esp_err_t audio_beep(int freq_hz, int duration_ms)
-{
-    if (!s_codec) return ESP_ERR_INVALID_STATE;
-    if (s_muted) return ESP_OK;
-    uint32_t my_gen = s_audio_gen;
-    /* Asegurar PA encendido */
-    gpio_set_level(PA_CTRL, 1);
-    if (freq_hz < 50) freq_hz = 50;
-    if (freq_hz > 8000) freq_hz = 8000;
-    if (duration_ms < 10) duration_ms = 10;
-    if (duration_ms > 5000) duration_ms = 5000;
-
-    const int chunk_ms = 100;
-    const size_t samples_per_chunk = (SAMPLE_RATE * chunk_ms) / 1000;
-    size_t buf_bytes = samples_per_chunk * 2 * sizeof(int16_t);
-    int16_t *buf = malloc(buf_bytes);
-    if (!buf) return ESP_ERR_NO_MEM;
-
-    float phase = 0.0f;
-    float step  = 2.0f * (float)M_PI * (float)freq_hz / (float)SAMPLE_RATE;
-    int chunks_total = (duration_ms + chunk_ms - 1) / chunk_ms;
-    int amp = 2000;
-
-    for (int c = 0; c < chunks_total; ++c) {
-        if (s_audio_gen != my_gen) break;   /* cancelacion instantanea */
-        for (size_t i = 0; i < samples_per_chunk; ++i) {
-            int16_t s = (int16_t)(amp * sinf(phase));
-            phase += step;
-            if (phase > 2.0f * (float)M_PI) phase -= 2.0f * (float)M_PI;
-            buf[i*2 + 0] = s;
-            buf[i*2 + 1] = s;
-        }
-        if (c == 0) {
-            for (size_t i = 0; i < samples_per_chunk; ++i) {
-                float k = (float)i / (float)samples_per_chunk;
-                buf[i*2 + 0] = (int16_t)(buf[i*2 + 0] * k);
-                buf[i*2 + 1] = (int16_t)(buf[i*2 + 1] * k);
-            }
-        }
-        if (c == chunks_total - 1) {
-            for (size_t i = 0; i < samples_per_chunk; ++i) {
-                float k = 1.0f - (float)i / (float)samples_per_chunk;
-                buf[i*2 + 0] = (int16_t)(buf[i*2 + 0] * k);
-                buf[i*2 + 1] = (int16_t)(buf[i*2 + 1] * k);
-            }
-        }
-        esp_codec_dev_write(s_codec, buf, buf_bytes);
-    }
-    /* Enviar un buffer de silencio para vaciar el DMA. Si fue cancelado
-     * solo metemos 1 buffer en lugar de 4 para minimizar la latencia. */
-    memset(buf, 0, buf_bytes);
-    int silence_chunks = (s_audio_gen != my_gen) ? 1 : 4;
-    for (int i = 0; i < silence_chunks; ++i) {
-        esp_codec_dev_write(s_codec, buf, buf_bytes);
-    }
-    /* Apagar el PA para no consumir corriente */
-    gpio_set_level(PA_CTRL, 0);
-    free(buf);
     return ESP_OK;
 }
 

@@ -216,56 +216,10 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     }
 }
 
-bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
-{
-    int act = s_thumb_act;
-    if (act < 0 || s_thumb[act] == NULL) return false;
-    const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 bytes por fila */
-
-    const uint32_t row_bytes  = (uint32_t)THUMB_W * 3;
-    const uint32_t row_padded = (row_bytes + 3) & ~3u;    /* filas a multiplo de 4 */
-    const uint32_t off_bits   = 14 + 40;                  /* 24-bit: sin paleta */
-    const uint32_t img_size   = row_padded * THUMB_H;
-    const uint32_t file_size  = off_bits + img_size;
-
-    /* Este BMP (~1.58MB) se reserva bajo demanda HTTP. Dejar un SUELO de PSRAM libre
-     * para los buffers DMA del SDIO del C6: si se agota, su alloc hace assert -> reboot.
-     * Si no hay margen, no servir el snapshot (mejor 503 que tumbar el WiFi). */
-    #define VIG_PSRAM_FLOOR  (1024 * 1024)   /* 1MB de reserva para el SDIO/sistema */
-    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < file_size + VIG_PSRAM_FLOOR) {
-        ESP_LOGW(TAG, "snapshot: PSRAM baja, no genero el BMP (protejo el SDIO)");
-        return false;
-    }
-    uint8_t *bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
-    if (!bmp) return false;
-    memset(bmp, 0, file_size);
-
-    /* BITMAPFILEHEADER */
-    bmp[0] = 'B'; bmp[1] = 'M';
-    bmp[2] = file_size & 0xff; bmp[3] = (file_size >> 8) & 0xff;
-    bmp[4] = (file_size >> 16) & 0xff; bmp[5] = (file_size >> 24) & 0xff;
-    bmp[10] = off_bits & 0xff; bmp[11] = (off_bits >> 8) & 0xff;
-    bmp[12] = (off_bits >> 16) & 0xff; bmp[13] = (off_bits >> 24) & 0xff;
-    /* BITMAPINFOHEADER */
-    bmp[14] = 40;
-    bmp[18] = THUMB_W & 0xff; bmp[19] = (THUMB_W >> 8) & 0xff;
-    bmp[22] = THUMB_H & 0xff; bmp[23] = (THUMB_H >> 8) & 0xff;
-    bmp[26] = 1;                 /* planes */
-    bmp[28] = 24;                /* bpp (color BGR) */
-    bmp[34] = img_size & 0xff; bmp[35] = (img_size >> 8) & 0xff;
-    bmp[36] = (img_size >> 16) & 0xff; bmp[37] = (img_size >> 24) & 0xff;
-    /* clrUsed = 0 (24-bit no usa paleta) */
-
-    /* Pixeles, bottom-up, BGR */
-    for (int y = 0; y < THUMB_H; y++) {
-        uint8_t *row = &bmp[off_bits + (uint32_t)(THUMB_H - 1 - y) * row_padded];
-        memcpy(row, &src[(uint32_t)y * row_bytes], row_bytes);
-    }
-
-    *out = bmp;
-    *out_len = file_size;
-    return true;
-}
+/* Suelo de PSRAM libre a preservar para los buffers DMA del SDIO del C6: si se
+ * agota, su alloc hace assert -> reboot. Los que reservan en PSRAM (vigilancia)
+ * comprueban este margen antes de pedir memoria (mejor no servir que tumbar WiFi). */
+#define VIG_PSRAM_FLOOR  (1024 * 1024)   /* 1MB de reserva para el SDIO/sistema */
 
 /* ── JPEG por hardware (ESP32-P4) para las fotos de vigilancia ───────────────
  * El BMP de 1.5MB chocaba con la camara en el bus de la SD (escritura larga).
@@ -319,8 +273,8 @@ static SemaphoreHandle_t s_jpeg_mutex = NULL;
 /* Decodifica un JPEG (p.ej. una foto de vigilancia leida de la SD) a un buffer
  * RGB565 en PSRAM, listo para un lv_img (mismo formato que el framebuffer). El que
  * llama libera *out con free(). Serializa el codec HW con s_jpeg_mutex (mismo
- * bloque que el encoder) y crea/destruye un motor de decode por llamada (uso
- * puntual). Devuelve el ancho (alineado a 16, el paso de fila) y el alto reales.
+ * bloque que el encoder) y reutiliza un motor de decode persistente (creado en la
+ * primera llamada). Devuelve el ancho (alineado a 16, el paso de fila) y el alto reales.
  * false si el header no parsea, falta memoria o el decode falla. */
 bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
                                uint8_t **out, int *out_w, int *out_h)
@@ -349,18 +303,23 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
 
     bool ok = false;
     if (!s_jpeg_mutex || xSemaphoreTake(s_jpeg_mutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
-        jpeg_decoder_handle_t dec = NULL;
-        jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
-        if (jpeg_new_decoder_engine(&eng, &dec) == ESP_OK) {
+        /* Motor de decode persistente (como el encoder s_jpeg_enc): crear/destruir
+         * uno por imagen cargaba descriptores DMA en cada paso de la galeria. Se
+         * crea en la primera llamada y se reutiliza, protegido por s_jpeg_mutex. */
+        static jpeg_decoder_handle_t s_jpeg_dec = NULL;
+        if (!s_jpeg_dec) {
+            jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
+            if (jpeg_new_decoder_engine(&eng, &s_jpeg_dec) != ESP_OK) s_jpeg_dec = NULL;
+        }
+        if (s_jpeg_dec) {
             jpeg_decode_cfg_t dc = {
                 .output_format = JPEG_DECODE_OUT_FORMAT_RGB888,
                 .rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_RGB,
                 .conv_std      = JPEG_YUV_RGB_CONV_STD_BT601,
             };
             uint32_t osize = 0;
-            if (jpeg_decoder_process(dec, &dc, in, len, ob, out_sz, &osize) == ESP_OK)
+            if (jpeg_decoder_process(s_jpeg_dec, &dc, in, len, ob, out_sz, &osize) == ESP_OK)
                 ok = true;
-            jpeg_del_decoder_engine(dec);
         }
         if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
     }

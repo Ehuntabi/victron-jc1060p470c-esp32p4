@@ -1,6 +1,5 @@
 #include "datalogger.h"
 #include "camera.h"          /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
-#include "rtc_rx8025t.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
@@ -178,7 +177,6 @@ void datalogger_flush(void)
     flush_pending_to_sd_impl();
 }
 
-static void flush_pending_to_sd_impl(void);
 static void flush_pending_to_sd_impl(void)
 {
     if (!s_sd_mounted || !s_mutex) return;
@@ -309,8 +307,6 @@ esp_err_t datalogger_init(void)
              DATALOGGER_MAX_ENTRIES, s_sd_mounted ? "OK" : "no disponible");
     return ESP_OK;
 }
-
-bool datalogger_is_ready(void) { return true; }
 
 esp_err_t datalogger_log(const frigo_state_t *frigo)
 {

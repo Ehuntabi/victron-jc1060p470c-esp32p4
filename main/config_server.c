@@ -27,7 +27,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
-#include "esp_netif.h"
 #include "esp_netif_types.h"
 #include "dns_server.h" 
 #include <lwip/inet.h>
@@ -557,9 +556,10 @@ static void http_auth_init(void)
         nvs_commit(h);
         nvs_close(h);
         if (need_default_user || need_default_pass) {
-            ESP_LOGW(TAG, "HTTP auth DEFAULT generado: user='%s' pass='%s'  "
-                          "(cambiar desde Settings, queda en NVS)",
-                     user, pass);
+            /* No imprimir la pass en claro: log_capture la persistiria en la SD.
+             * Queda en NVS; se ve/cambia desde Settings. */
+            ESP_LOGW(TAG, "HTTP auth DEFAULT generado para user='%s' "
+                          "(pass en NVS; verla/cambiarla en Settings)", user);
         }
     }
     /* Construir cabecera "Basic <base64(user:pass)>" una vez. */
@@ -599,10 +599,11 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
     if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
 } while (0)
 
-// GET /snapshot -> foto JPEG del ultimo frame de la camara. Sin auth (endpoint de
-// verificacion). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
+// GET /snapshot -> foto JPEG del ultimo frame de la camara. Requiere auth (expone la
+// camara). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
 // sobre el AP y sin el malloc de 1.58MB por peticion (que rozaba el suelo de PSRAM).
 static esp_err_t handle_snapshot(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     uint8_t *jpg = NULL;
     size_t   len = 0;
     if (!camera_snapshot_jpeg(&jpg, &len)) {
@@ -618,12 +619,12 @@ static esp_err_t handle_snapshot(httpd_req_t *req) {
 }
 
 // GET /vigilancia -> lista las capturas de movimiento; /vigilancia/<archivo> -> sirve el BMP.
-#define VIG_DIR "/sdcard/vigilancia"
 /* Galeria de vigilancia servida desde el anillo en RAM (PSRAM) de camera.c.
  * No se usa la SD: el bus SDMMC se satura con la camara + el C6 durante la
  * vigilancia. Las capturas se pierden al reiniciar (encaja con "modo ausente"). */
 #define VIG_MAX 16
 static esp_err_t handle_vigilancia(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     const char *uri = req->uri;
     const char *idstr = NULL;
     if (strncmp(uri, "/vigilancia/", 12) == 0 && uri[12] != '\0') idstr = uri + 12;
@@ -686,6 +687,7 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
  * con la pantalla negra hasta un corte fisico. Toma lvgl_port_lock porque
  * ausente_request toca LVGL y aqui estamos en la tarea httpd, no en la de LVGL. */
 static esp_err_t handle_ausente(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     char q[24] = {0};
     httpd_req_get_url_query_str(req, q, sizeof(q));
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
@@ -711,6 +713,7 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
  *   dev=fan&mode=auto|off|50|100 -> modo del ventilador del frigo (frigo_set_mode)
  * Solo red, no toca DSI. */
 static esp_err_t handle_control(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     char body[80] = {0};
     int total = req->content_len < (int)sizeof(body) - 1 ? req->content_len : (int)sizeof(body) - 1;
     int got = 0;
@@ -1820,23 +1823,6 @@ static esp_err_t handle_data_index(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t handle_logs(httpd_req_t *req)
-{
-    REQUIRE_AUTH(req);
-    char *csv = datalogger_get_csv();
-    if (!csv) {
-        httpd_resp_set_type(req, "text/csv");
-        httpd_resp_sendstr(req, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
-        return ESP_OK;
-    }
-    httpd_resp_set_type(req, "text/csv");
-    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=frigo_log.csv");
-    httpd_resp_sendstr(req, csv);
-    free(csv);
-    return ESP_OK;
-}
-
-
 /* GET /captura?n=<i> -> navega a la pantalla i, la captura con lv_snapshot y
  * devuelve el BMP como descarga. Sustituye al auto-tour de la SD (intermitente
  * por compartir bus con el C6). Sin auth: es el AP local y solo son capturas. */
@@ -1888,22 +1874,6 @@ static esp_err_t handle_capturas(httpd_req_t *req) {
     }
     httpd_resp_sendstr_chunk(req, "</ol>");
     httpd_resp_sendstr_chunk(req, NULL);
-    return ESP_OK;
-}
-
-static esp_err_t handle_screenshot(httpd_req_t *req) {
-    REQUIRE_AUTH(req);
-    lv_disp_t *disp = lv_disp_get_default();
-    if (!disp || !disp->driver || !disp->driver->draw_buf || !disp->driver->draw_buf->buf1) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No framebuffer");
-        return ESP_FAIL;
-    }
-    size_t width = disp->driver->hor_res;
-    size_t height = disp->driver->ver_res;
-    size_t bpp = sizeof(lv_color_t); // usually 2 (RGB565)
-    size_t buf_size = width * height * bpp;
-    httpd_resp_set_type(req, "application/octet-stream");
-    httpd_resp_send(req, (const char*)disp->driver->draw_buf->buf1, buf_size);
     return ESP_OK;
 }
 
@@ -2107,14 +2077,10 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_settime);
     httpd_uri_t uri_settime_get = { .uri = "/settime", .method = HTTP_GET, .handler = handle_settime };
     httpd_register_uri_handler(server, &uri_settime_get);
-    httpd_uri_t uri_screenshot = { .uri = "/screenshot", .method = HTTP_GET, .handler = handle_screenshot };
-    httpd_register_uri_handler(server, &uri_screenshot);
     httpd_uri_t uri_capturas = { .uri = "/capturas", .method = HTTP_GET, .handler = handle_capturas };
     httpd_register_uri_handler(server, &uri_capturas);
     httpd_uri_t uri_captura = { .uri = "/captura", .method = HTTP_GET, .handler = handle_captura };
     httpd_register_uri_handler(server, &uri_captura);
-    httpd_uri_t uri_logs = { .uri = "/logs", .method = HTTP_GET, .handler = handle_logs };
-    httpd_register_uri_handler(server, &uri_logs);
     httpd_uri_t uri_dashboard = { .uri = "/dashboard", .method = HTTP_GET, .handler = handle_dashboard };
     httpd_register_uri_handler(server, &uri_dashboard);
     httpd_uri_t uri_keys = { .uri = "/keys", .method = HTTP_GET, .handler = handle_keys };
@@ -2160,11 +2126,3 @@ esp_err_t config_server_start(void) {
 
     return ESP_OK;
 }
-// force wifi debug
-// force wifi pass
-// force new mac
-// force wifi event
-// force no static mac
-// force wifi cfg log
-// force config after start
-// force ssid restart

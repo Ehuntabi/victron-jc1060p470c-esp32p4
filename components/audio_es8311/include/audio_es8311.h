@@ -21,7 +21,6 @@ typedef enum {
 } audio_jingle_t;
 
 esp_err_t audio_init(i2c_master_bus_handle_t bus);
-esp_err_t audio_beep(int freq_hz, int duration_ms);
 esp_err_t audio_play_tones(const audio_note_t *notes, size_t count);
 esp_err_t audio_play_jingle(audio_jingle_t jingle);
 
@@ -33,11 +32,11 @@ int       audio_get_volume(void);
 esp_err_t audio_set_mute(bool mute);
 bool      audio_is_muted(void);
 
-/* Cancelar la reproduccion en curso (audio_beep / audio_play_tones).
+/* Cancelar la reproduccion en curso (audio_play_tones).
  * El playback en progreso saldra del bucle interno en < 50 ms y devolvera.
- * El flag se autorresetea al inicio de la siguiente llamada a audio_beep
- * o audio_play_tones. Util para alarmas que el usuario quiere silenciar
- * instantaneamente. */
+ * Incrementa un generation counter: la llamada en curso lo detecta y aborta,
+ * y la siguiente captura su propia generacion al entrar. Util para alarmas
+ * que el usuario quiere silenciar instantaneamente. */
 void      audio_cancel_playback(void);
 
 #ifdef __cplusplus

@@ -23,10 +23,6 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);
 
-/* Genera un BMP de 8/24 bits del ultimo frame en un buffer recien reservado
- * (PSRAM). El que llama debe hacer free(*out). false si aun no hay frame. */
-bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
-
 /* Cerrojo de bus camara<->SD: los escritores de SD (datalogger/battery_history/log)
  * DEBEN envolver su I/O con estas para no solapar con el DMA de la camara (la
  * contencion en el controlador SDMMC provoca INT WDT -> reinicio). lock devuelve
