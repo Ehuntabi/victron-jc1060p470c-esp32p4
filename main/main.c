@@ -368,11 +368,9 @@ void app_main(void)
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
 
-    /* Auto-tour de capturas a /sdcard/screenshots: DESACTIVADO en produccion.
-     * En SDSC por SPI la escritura de 16 BMP grandes ahoga la CPU y dispara el
-     * watchdog SW (falso positivo de "LVGL congelada"). Para capturar pantallas
-     * usar los endpoints HTTP /capturas y /captura?n=<i> sobre el AP del P4. */
-    /* ui_start_screenshot_tour(); */
+    /* Para capturar pantallas: carrusel a demanda (Settings) o los endpoints
+     * HTTP /capturas y /captura?n=<i> sobre el AP del P4. El antiguo auto-tour
+     * a BMP quedo retirado (la escritura de 16 BMP grandes ahogaba la CPU). */
 
     /* TZ desde NVS (default Madrid) antes de cualquier settimeofday/mktime/localtime */
     {

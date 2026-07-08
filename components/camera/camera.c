@@ -14,6 +14,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
+#include "driver/jpeg_decode.h"   /* decoder JPEG por HW (galeria: fotos de vigilancia) */
 #include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
 #include "esp_task_wdt.h"         /* vigilar la tarea de camara (DQBUF puede colgarse) */
 #include <stdlib.h>
@@ -215,56 +216,10 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     }
 }
 
-bool camera_snapshot_bmp(uint8_t **out, size_t *out_len)
-{
-    int act = s_thumb_act;
-    if (act < 0 || s_thumb[act] == NULL) return false;
-    const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 bytes por fila */
-
-    const uint32_t row_bytes  = (uint32_t)THUMB_W * 3;
-    const uint32_t row_padded = (row_bytes + 3) & ~3u;    /* filas a multiplo de 4 */
-    const uint32_t off_bits   = 14 + 40;                  /* 24-bit: sin paleta */
-    const uint32_t img_size   = row_padded * THUMB_H;
-    const uint32_t file_size  = off_bits + img_size;
-
-    /* Este BMP (~1.58MB) se reserva bajo demanda HTTP. Dejar un SUELO de PSRAM libre
-     * para los buffers DMA del SDIO del C6: si se agota, su alloc hace assert -> reboot.
-     * Si no hay margen, no servir el snapshot (mejor 503 que tumbar el WiFi). */
-    #define VIG_PSRAM_FLOOR  (1024 * 1024)   /* 1MB de reserva para el SDIO/sistema */
-    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < file_size + VIG_PSRAM_FLOOR) {
-        ESP_LOGW(TAG, "snapshot: PSRAM baja, no genero el BMP (protejo el SDIO)");
-        return false;
-    }
-    uint8_t *bmp = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);
-    if (!bmp) return false;
-    memset(bmp, 0, file_size);
-
-    /* BITMAPFILEHEADER */
-    bmp[0] = 'B'; bmp[1] = 'M';
-    bmp[2] = file_size & 0xff; bmp[3] = (file_size >> 8) & 0xff;
-    bmp[4] = (file_size >> 16) & 0xff; bmp[5] = (file_size >> 24) & 0xff;
-    bmp[10] = off_bits & 0xff; bmp[11] = (off_bits >> 8) & 0xff;
-    bmp[12] = (off_bits >> 16) & 0xff; bmp[13] = (off_bits >> 24) & 0xff;
-    /* BITMAPINFOHEADER */
-    bmp[14] = 40;
-    bmp[18] = THUMB_W & 0xff; bmp[19] = (THUMB_W >> 8) & 0xff;
-    bmp[22] = THUMB_H & 0xff; bmp[23] = (THUMB_H >> 8) & 0xff;
-    bmp[26] = 1;                 /* planes */
-    bmp[28] = 24;                /* bpp (color BGR) */
-    bmp[34] = img_size & 0xff; bmp[35] = (img_size >> 8) & 0xff;
-    bmp[36] = (img_size >> 16) & 0xff; bmp[37] = (img_size >> 24) & 0xff;
-    /* clrUsed = 0 (24-bit no usa paleta) */
-
-    /* Pixeles, bottom-up, BGR */
-    for (int y = 0; y < THUMB_H; y++) {
-        uint8_t *row = &bmp[off_bits + (uint32_t)(THUMB_H - 1 - y) * row_padded];
-        memcpy(row, &src[(uint32_t)y * row_bytes], row_bytes);
-    }
-
-    *out = bmp;
-    *out_len = file_size;
-    return true;
-}
+/* Suelo de PSRAM libre a preservar para los buffers DMA del SDIO del C6: si se
+ * agota, su alloc hace assert -> reboot. Los que reservan en PSRAM (vigilancia)
+ * comprueban este margen antes de pedir memoria (mejor no servir que tumbar WiFi). */
+#define VIG_PSRAM_FLOOR  (1024 * 1024)   /* 1MB de reserva para el SDIO/sistema */
 
 /* ── JPEG por hardware (ESP32-P4) para las fotos de vigilancia ───────────────
  * El BMP de 1.5MB chocaba con la camara en el bus de la SD (escritura larga).
@@ -315,6 +270,85 @@ static bool camera_jpeg_init(void)
  * la tarea de camara (vigilancia) y el servidor HTTP (/snapshot). */
 static SemaphoreHandle_t s_jpeg_mutex = NULL;
 
+/* Decodifica un JPEG (p.ej. una foto de vigilancia leida de la SD) a un buffer
+ * RGB565 en PSRAM, listo para un lv_img (mismo formato que el framebuffer). El que
+ * llama libera *out con free(). Serializa el codec HW con s_jpeg_mutex (mismo
+ * bloque que el encoder) y reutiliza un motor de decode persistente (creado en la
+ * primera llamada). Devuelve el ancho (alineado a 16, el paso de fila) y el alto reales.
+ * false si el header no parsea, falta memoria o el decode falla. */
+bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
+                               uint8_t **out, int *out_w, int *out_h)
+{
+    if (out) *out = NULL;
+    if (!jpg || !out || !out_w || !out_h || len < 4) return false;
+
+    jpeg_decode_picture_info_t info;
+    if (jpeg_decoder_get_info(jpg, len, &info) != ESP_OK) return false;
+    const int w  = (int)info.width;
+    const int h  = (int)info.height;
+    const int aw = (w + 15) & ~15;   /* el decoder trabaja en bloques de 16 */
+    const int ah = (h + 15) & ~15;
+    if (w <= 0 || h <= 0 || aw > 4096 || ah > 4096) return false;
+
+    jpeg_decode_memory_alloc_cfg_t in_mc  = { .buffer_direction = JPEG_DEC_ALLOC_INPUT_BUFFER };
+    jpeg_decode_memory_alloc_cfg_t out_mc = { .buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER };
+    size_t in_sz = 0, out_sz = 0;
+    uint8_t *in = jpeg_alloc_decoder_mem(len, &in_mc, &in_sz);
+    if (!in) return false;
+    memcpy(in, jpg, len);
+    /* Decodificamos a RGB888 y empaquetamos a RGB565 nosotros: el empaquetado
+     * RGB565 del propio HW daba un tinte violeta en los tonos oscuros. */
+    uint8_t *ob = jpeg_alloc_decoder_mem((size_t)aw * ah * 3, &out_mc, &out_sz);
+    if (!ob) { free(in); return false; }
+
+    bool ok = false;
+    if (!s_jpeg_mutex || xSemaphoreTake(s_jpeg_mutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+        /* Motor de decode persistente (como el encoder s_jpeg_enc): crear/destruir
+         * uno por imagen cargaba descriptores DMA en cada paso de la galeria. Se
+         * crea en la primera llamada y se reutiliza, protegido por s_jpeg_mutex. */
+        static jpeg_decoder_handle_t s_jpeg_dec = NULL;
+        if (!s_jpeg_dec) {
+            jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
+            if (jpeg_new_decoder_engine(&eng, &s_jpeg_dec) != ESP_OK) s_jpeg_dec = NULL;
+        }
+        if (s_jpeg_dec) {
+            jpeg_decode_cfg_t dc = {
+                .output_format = JPEG_DECODE_OUT_FORMAT_RGB888,
+                .rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_RGB,
+                .conv_std      = JPEG_YUV_RGB_CONV_STD_BT601,
+            };
+            uint32_t osize = 0;
+            if (jpeg_decoder_process(s_jpeg_dec, &dc, in, len, ob, out_sz, &osize) == ESP_OK)
+                ok = true;
+        }
+        if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
+    }
+    free(in);
+    if (!ok) { free(ob); return false; }
+
+    /* RGB888 -> RGB565 (formato del framebuffer). El orden de byte del decoder HW
+     * queda invertido respecto al del encoder (naranja<->azul en pantalla), asi
+     * que leemos B,G,R: s[0]=B, s[2]=R. Corrige el swap R<->B en carrusel y
+     * vigilancia (ambos pasan por aqui). Paso de fila = aw. */
+    uint16_t *rgb = heap_caps_malloc((size_t)aw * h * 2, MALLOC_CAP_SPIRAM);
+    if (!rgb) { free(ob); return false; }
+    for (int y = 0; y < h; ++y) {
+        const uint8_t *s = ob + (size_t)y * aw * 3;
+        uint16_t *d = rgb + (size_t)y * aw;
+        for (int x = 0; x < aw; ++x) {
+            uint8_t b = s[0], g = s[1], r = s[2];
+            s += 3;
+            d[x] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+        }
+    }
+    free(ob);
+
+    *out   = (uint8_t *)rgb;
+    *out_w = aw;   /* paso de fila = ancho alineado (== ancho real si ya es multiplo de 16) */
+    *out_h = h;
+    return true;
+}
+
 /* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
  * (el que llama hace free(*out)). false si no hay frame o falla. */
@@ -359,6 +393,57 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         }
     }
 
+    if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
+    return ok;
+}
+
+/* Codifica un framebuffer RGB565 (p.ej. una captura de pantalla 1024x600) a JPEG
+ * por HW. Reusa el motor del encoder (serializado con s_jpeg_mutex) con buffers
+ * propios del tamano pedido. YUV422 -> exige ancho multiplo de 16 y alto multiplo
+ * de 8 (1024x600 cumple). El que llama hace free(*out). false si no cumple el
+ * tamano, falta memoria o falla el encoder. */
+bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
+                               uint8_t **out, size_t *out_len)
+{
+    if (out) *out = NULL;
+    if (!rgb || !out || !out_len) return false;
+    if (w <= 0 || h <= 0 || (w & 15) || (h & 7)) return false;   /* YUV422: w%16, h%8 */
+
+    bool ok = false;
+    if (s_jpeg_mutex) xSemaphoreTake(s_jpeg_mutex, portMAX_DELAY);
+    if (camera_jpeg_init()) {   /* solo necesitamos el motor s_jpeg_enc */
+        jpeg_encode_memory_alloc_cfg_t in_cfg  = { .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER };
+        jpeg_encode_memory_alloc_cfg_t out_cfg = { .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER };
+        size_t in_sz = 0, out_sz = 0;
+        uint8_t *in = jpeg_alloc_encoder_mem((size_t)w * h * 3, &in_cfg, &in_sz);
+        uint8_t *ob = jpeg_alloc_encoder_mem((size_t)w * h * 3 / 2, &out_cfg, &out_sz);
+        if (in && ob) {
+            const int n = w * h;
+            for (int i = 0; i < n; ++i) {      /* RGB565 -> RGB888 (R,G,B) */
+                uint16_t p = rgb[i];
+                in[i*3+0] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* R */
+                in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
+                in[i*3+2] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* B */
+            }
+            jpeg_encode_cfg_t cfg = {
+                .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
+                .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,
+                .image_quality = quality,
+                .width         = w,
+                .height        = h,
+            };
+            uint32_t jlen = 0;
+            esp_err_t e = jpeg_encoder_process(s_jpeg_enc, &cfg, in, in_sz, ob, out_sz, &jlen);
+            if (e == ESP_OK && jlen) {
+                uint8_t *copy = heap_caps_malloc(jlen, MALLOC_CAP_SPIRAM);
+                if (copy) { memcpy(copy, ob, jlen); *out = copy; *out_len = jlen; ok = true; }
+            } else if (e != ESP_OK) {
+                ESP_LOGW(TAG, "jpeg: encode %dx%d fallo: %s", w, h, esp_err_to_name(e));
+            }
+        }
+        if (in) free(in);
+        if (ob) free(ob);
+    }
     if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
     return ok;
 }

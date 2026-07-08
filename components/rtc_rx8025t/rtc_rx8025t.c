@@ -185,10 +185,3 @@ esp_err_t rtc_set_time(const struct tm *tm_in)
              tm_in->tm_hour, tm_in->tm_min, tm_in->tm_sec);
     return ESP_OK;
 }
-
-time_t rtc_get_timestamp(void)
-{
-    struct tm t;
-    if (rtc_get_time(&t) != ESP_OK) return 0;
-    return mktime(&t);
-}

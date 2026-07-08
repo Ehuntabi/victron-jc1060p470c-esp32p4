@@ -7,10 +7,14 @@
 extern "C" {
 #endif
 
-/* Captura el framebuffer actual del display y lo guarda como BMP de 24 bits
- * (abrible en cualquier PC) en 'path'. Toma el lock de LVGL internamente para
- * leer el framebuffer de forma coherente. Devuelve ESP_OK si lo guardo. */
-esp_err_t screenshot_save_bmp(const char *path);
+/* Captura la pantalla activa y la guarda como JPEG (encode por HW) en 'path':
+ * ~10x mas pequeno que un BMP -> escritura y posterior lectura en el visor mucho
+ * mas rapidas. Toma el lock de LVGL internamente. Lo usa el carrusel. */
+esp_err_t screenshot_save_jpeg(const char *path);
+
+/* Detalle textual del ultimo fallo de guardado (errno + paso), para mostrarlo
+ * en la UI sin depender del monitor serie. Cadena vacia si no hubo. */
+const char *screenshot_last_error(void);
 
 /* Captura la pantalla activa como BMP de 24 bits EN MEMORIA (para servirla por
  * HTTP sin depender de la SD). Deja en *out_buf un buffer PSRAM con el BMP

@@ -116,6 +116,8 @@ typedef struct ui_state {
     lv_obj_t *bottom_bar;         // Indicador BLE
     lv_obj_t *btn_nav;            // Botón toggle Live↔Settings en bottom_bar
     lv_obj_t *sound_mute_switch;  // Switch "Silenciar avisos" del panel Settings/Sonido
+    lv_obj_t *capture_switch;      // Switch "Carrusel captura pantalla" (Settings/Display)
+    lv_obj_t *capture_status_lbl;  // Etiqueta de estado del carrusel de captura
     /* About page dynamic info */
     lv_obj_t *lbl_about_uptime;
     lv_obj_t *lbl_about_heap;

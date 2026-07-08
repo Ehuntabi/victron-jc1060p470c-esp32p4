@@ -23,10 +23,6 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);
 
-/* Genera un BMP de 8/24 bits del ultimo frame en un buffer recien reservado
- * (PSRAM). El que llama debe hacer free(*out). false si aun no hay frame. */
-bool camera_snapshot_bmp(uint8_t **out, size_t *out_len);
-
 /* Cerrojo de bus camara<->SD: los escritores de SD (datalogger/battery_history/log)
  * DEBEN envolver su I/O con estas para no solapar con el DMA de la camara (la
  * contencion en el controlador SDMMC provoca INT WDT -> reinicio). lock devuelve
@@ -39,6 +35,18 @@ void camera_sd_bus_unlock(void);
  * encoder). Devuelve una COPIA nueva en PSRAM: el que llama hace free(*out). false
  * si no hay frame o falla el encoder. Salida ~80-150KB. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);
+
+/* Decodifica un JPEG a un buffer RGB565 en PSRAM (para mostrarlo en un lv_img).
+ * THREAD-SAFE (mutex del codec). El que llama hace free(*out). Deja en *out_w el
+ * paso de fila (ancho alineado a 16) y en *out_h el alto real. false si falla. */
+bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
+                               uint8_t **out, int *out_w, int *out_h);
+
+/* Codifica un framebuffer RGB565 (w%16==0, h%8==0) a JPEG por HW. THREAD-SAFE.
+ * El que llama hace free(*out). Usado por la captura del carrusel (mucho mas
+ * pequeno y rapido que el BMP). false si el tamano no cumple o falla. */
+bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
+                               uint8_t **out, size_t *out_len);
 
 /* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta
  * movimiento y guarda las fotos JPEG en un anillo en RAM (no SD; el bus SDMMC se

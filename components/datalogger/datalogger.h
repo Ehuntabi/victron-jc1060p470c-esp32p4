@@ -15,7 +15,6 @@ typedef struct {
 
 esp_err_t datalogger_init(void);
 esp_err_t datalogger_log(const frigo_state_t *frigo);
-bool datalogger_is_ready(void);
 int datalogger_get_count(void);
 const datalogger_entry_t *datalogger_get_entry(int index);
 char *datalogger_get_csv(void);

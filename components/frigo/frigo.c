@@ -1,17 +1,14 @@
 #include "frigo.h"
-#include <inttypes.h>
 #include "onewire_bus.h"
 #include "ds18b20.h"
 #include "driver/ledc.h"
 #include "driver/gpio.h"
-#include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "esp_task_wdt.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -80,7 +77,8 @@ static void nvs_save_task(void *arg)
 
 static void nvs_save(void)
 {
-    xTaskCreate(nvs_save_task, "frigo_nvs", 3072, NULL, 3, NULL);
+    if (xTaskCreate(nvs_save_task, "frigo_nvs", 3072, NULL, 3, NULL) != pdPASS)
+        ESP_LOGW(TAG, "nvs_save: no pude crear la tarea, ajuste no persistido");
 }
 
 /* ── PWM ─────────────────────────────────────────────────────── */

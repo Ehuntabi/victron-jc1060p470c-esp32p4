@@ -9,7 +9,7 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 ## Hardware
 - ESP32-P4 (principal) + ESP32-C6 vía SDIO (Wi-Fi/BT con esp_hosted)
 - Display DSI 1024x600 (panel JD9165BA)
-- Touch GT911, RTC RX8130, microSD slot 0 IOMUX
+- Touch GT911, RTC RX8025T (I²C 0x32, pila CR1220), microSD slot 0 IOMUX
 - Codec audio ES8311 + amplificador NS4150 (GPIO11 PA_CTRL)
 - Pines I2S: MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9
 - Ventilador frigo PWM en GPIO5 (JP1 pin 15)

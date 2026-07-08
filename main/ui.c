@@ -912,14 +912,10 @@ static void nav_btn_event_cb(lv_event_t *e)
  * del label lo hace volume_icon_timer_cb (cada 500 ms). */
 static void volume_btn_event_cb(lv_event_t *e)
 {
-    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
-    bool new_muted = !audio_is_muted();
-    audio_set_mute(new_muted);
-    /* Sincronizar el switch del panel Settings si ya está creado */
-    if (ui && ui->sound_mute_switch) {
-        if (new_muted) lv_obj_add_state(ui->sound_mute_switch, LV_STATE_CHECKED);
-        else           lv_obj_clear_state(ui->sound_mute_switch, LV_STATE_CHECKED);
-    }
+    (void)lv_event_get_user_data(e);
+    /* Misma logica que el switch "Silenciar avisos": guarda/restaura el volumen
+     * y sincroniza slider, etiqueta y switch de Settings (si estan creados). */
+    ui_settings_apply_mute(!audio_is_muted());
 }
 
 /* Toggle Wi-Fi AP on/off al pulsar el icono — comportamiento idéntico al
@@ -1395,9 +1391,15 @@ static bool    s_frigo_dragging     = false;
 static int64_t s_frigo_last_apply_us = 0;
 static int64_t s_frigo_last_click_us = 0;
 
-/* Buffer estatico para parsear CSV de un dia. 1440 muestras = 1 min cada una. */
+/* Buffer para parsear el CSV de un dia guardado (1440 muestras = 1 min c/u).
+ * En PSRAM (lazy): 1500 x 24 B ~= 36 KB, demasiado para RAM interna estatica.
+ * Se reserva al ver un dia historico y se libera al cerrar la grafica. */
 #define FRIGO_LOG_MAX_ENTRIES   1500
-static frigo_log_entry_t s_frigo_buf[FRIGO_LOG_MAX_ENTRIES];
+static frigo_log_entry_t *s_frigo_buf = NULL;
+/* Cache: dia (idx) ya parseado en s_frigo_buf y su n. Evita re-leer/re-parsear
+ * el CSV de la SD en cada tick de pan/zoom (apply_window). -2 = cache vacia. */
+static int s_frigo_loaded_idx = -2;
+static int s_frigo_loaded_n   = 0;
 
 static void frigo_chart_load_day(void);
 static void frigo_chart_gesture_cb(lv_event_t *e);
@@ -1562,6 +1564,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     s_frigo_n_dates = log_browser_list_dates("/sdcard/frigo",
                                              s_frigo_dates, LOG_BROWSER_MAX_DATES);
     s_frigo_day_idx = -1;
+    s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
     frigo_chart_load_day();
 
     /* Gestures para navegar entre dias */
@@ -1690,9 +1693,21 @@ static void frigo_chart_load_day(void)
         (void)valid;
     } else {
         const char *date = s_frigo_dates[s_frigo_day_idx];
-        char path[64];
-        snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
-        int n = log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES);
+        if (s_frigo_buf == NULL) {
+            s_frigo_buf = heap_caps_malloc(sizeof(frigo_log_entry_t) * FRIGO_LOG_MAX_ENTRIES,
+                                           MALLOC_CAP_SPIRAM);
+            s_frigo_loaded_idx = -2;   /* buffer nuevo: cache invalida */
+        }
+        int n;
+        if (s_frigo_buf && s_frigo_day_idx == s_frigo_loaded_idx) {
+            n = s_frigo_loaded_n;   /* mismo dia ya en s_frigo_buf: no re-leer la SD */
+        } else {
+            char path[64];
+            snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
+            n = s_frigo_buf ? log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES) : 0;
+            s_frigo_loaded_idx = s_frigo_buf ? s_frigo_day_idx : -2;
+            s_frigo_loaded_n   = n;
+        }
         int wa = (int)(s_frigo_win_a * n);
         int wb = (int)(s_frigo_win_b * n);
         if (wb <= wa) wb = wa + 1;
@@ -1879,6 +1894,10 @@ static int64_t s_bh_last_click_us = 0;
 /* En PSRAM: 8800 x 16 B ~= 140 KB, demasiado para RAM interna estatica.
  * Se aloja una vez (lazy) al consultar un dia historico. */
 static battery_log_entry_t *s_bh_buf = NULL;
+/* Cache: dia (idx) ya parseado en s_bh_buf y su n (mismo motivo que el frigo:
+ * no re-leer el CSV de la SD en cada tick de pan/zoom). -2 = cache vacia. */
+static int s_bh_loaded_idx = -2;
+static int s_bh_loaded_n   = 0;
 
 static void bh_chart_load_day(void);
 static void bh_chart_gesture_cb(lv_event_t *e);
@@ -1892,6 +1911,9 @@ void ui_close_chart_screen(void)
     /* Borrar el overlay raíz, que arrastra al chart y todos sus hijos */
     if (s_chart_screen) { lv_obj_del(s_chart_screen); s_chart_screen = NULL; }
     s_chart = NULL;
+    /* Liberar el buffer de carga de dias guardados (~36KB PSRAM): se reserva
+     * lazy al ver un dia y se re-reserva al volver a abrir. */
+    if (s_frigo_buf) { free(s_frigo_buf); s_frigo_buf = NULL; s_frigo_loaded_idx = -2; }
 }
 
 static lv_obj_t *s_bh_chart  = NULL;
@@ -1918,7 +1940,7 @@ void ui_close_battery_history_screen(void)
     }
     /* Liberar el buffer de carga del historico (~140KB PSRAM): se reservaba lazy
      * al abrir y nunca se liberaba. Se re-reserva al volver a abrir. */
-    if (s_bh_buf) { free(s_bh_buf); s_bh_buf = NULL; }
+    if (s_bh_buf) { free(s_bh_buf); s_bh_buf = NULL; s_bh_loaded_idx = -2; }
 }
 
 static void bh_screen_close_cb(lv_event_t *e)
@@ -2365,13 +2387,21 @@ static void bh_chart_load_day(void)
     } else {
         /* Día histórico desde SD: solo se carga BM */
         const char *date = s_bh_dates[s_bh_day_idx];
-        char path[64];
-        snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
         if (s_bh_buf == NULL) {
             s_bh_buf = heap_caps_malloc(sizeof(battery_log_entry_t) * BH_LOG_MAX_ENTRIES,
                                         MALLOC_CAP_SPIRAM);
+            s_bh_loaded_idx = -2;   /* buffer nuevo: cache invalida */
         }
-        int n = s_bh_buf ? log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES) : 0;
+        int n;
+        if (s_bh_buf && s_bh_day_idx == s_bh_loaded_idx) {
+            n = s_bh_loaded_n;      /* mismo dia ya en s_bh_buf: no re-leer la SD */
+        } else {
+            char path[64];
+            snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
+            n = s_bh_buf ? log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES) : 0;
+            s_bh_loaded_idx = s_bh_buf ? s_bh_day_idx : -2;
+            s_bh_loaded_n   = n;
+        }
 
         /* Totales calculados sobre el dia completo (no afectados por la ventana). */
         int64_t total_ch_ma_s = 0, total_dis_ma_s = 0;
@@ -2595,17 +2625,12 @@ void ui_update_wifi_ssid(ui_state_t *ui)
 }
 
 /* ──────────────────────────────────────────────────────────────────────
- * Tour de capturas: recorre las pantallas principales con los datos reales
- * del momento y guarda cada una como BMP en /sdcard/screenshots/.
- *
- * LVGL no es thread-safe: la navegacion se hace tomando lvgl_port_lock; el
- * lock se suelta durante las esperas para que lleguen datos BLE reales y se
- * dibuje la vista. screenshot_save_bmp toma su propio lock para copiar el
- * framebuffer. Se dispara solo una vez (marcador en la SD) ~60 s tras el boot.
+ * Navegacion de pantallas para captura (carrusel a demanda de Settings y
+ * /captura por WiFi). LVGL no es thread-safe: se toma lvgl_port_lock y se
+ * suelta durante las esperas para que lleguen datos BLE reales y se dibuje
+ * la vista antes de fotografiarla.
  * ────────────────────────────────────────────────────────────────────── */
 #define TOUR_DIR        "/sdcard/screenshots"
-#define TOUR_MARKER     TOUR_DIR "/.done_sim20260706h"  /* subir version fuerza re-ejecutar */
-#define TOUR_BOOT_DELAY_MS   60000   /* esperar ~60s a que BLE tenga datos reales */
 #define TOUR_SETTLE_MS        1500   /* dejar que la vista se actualice/dibuje */
 
 static void tour_set_view(ui_state_t *ui, ui_view_mode_t mode)
@@ -2634,84 +2659,90 @@ static void tour_settle(void)
     vTaskDelay(pdMS_TO_TICKS(TOUR_SETTLE_MS));
 }
 
-static void screenshot_tour_task(void *arg)
+/* ─── Carrusel de captura a demanda (switch en Settings→Display) ──────────────
+ * Recorre SOLO las 8 pantallas de datos (6 device-views + grafico bateria +
+ * grafico frigo), captura cada una a BMP en la SD (sobrescribe mismos nombres),
+ * y al terminar apaga el switch y muestra el resultado. Reutiliza
+ * tour_set_view/tour_settle/screenshot_save_bmp. A diferencia de
+ * screenshot_tour_task: sin marcador, sin retardo de 60 s y sin las paginas de
+ * Ajustes. Un unico disparo a la vez (s_capture_running). */
+static volatile bool s_capture_running = false;
+
+static const struct { ui_view_mode_t mode; const char *name; } CAPTURE_SCREENS[] = {
+    { UI_VIEW_MODE_OVERVIEW,        "01_overview"        },
+    { UI_VIEW_MODE_DEFAULT_BATTERY, "02_bateria"         },
+    { UI_VIEW_MODE_SOLAR_CHARGER,   "03_solar"           },
+    { UI_VIEW_MODE_BATTERY_MONITOR, "04_monitor_bateria" },
+    { UI_VIEW_MODE_INVERTER,        "05_inversor"        },
+    { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
+};
+
+/* Guarda una pantalla contando aciertos y recordando el PRIMER error (para
+ * diagnostico sin serie: distingue "sin PSRAM" de "SD ocupada/error"). */
+static void cap_save(const char *path, int *ok, esp_err_t *first_err)
 {
-    ui_state_t *ui = &g_ui;
+    esp_err_t e = screenshot_save_jpeg(path);
+    if (e == ESP_OK) (*ok)++;
+    else if (*first_err == ESP_OK) *first_err = e;
+}
 
-    /* Disparo unico: si ya existe el marcador, no repetir en cada arranque. */
-    vTaskDelay(pdMS_TO_TICKS(TOUR_BOOT_DELAY_MS));
-    FILE *mk = fopen(TOUR_MARKER, "r");
-    if (mk) { fclose(mk); ESP_LOGI("TOUR", "Marcador presente, no repito"); vTaskDelete(NULL); return; }
-    if (mkdir(TOUR_DIR, 0777) != 0) {
-        /* Puede existir ya; si no hay SD, los fopen posteriores fallaran. */
-    }
-    /* Escribir el marcador ANTES de capturar: si algo falla a mitad del tour,
-     * en el siguiente arranque se ve el marcador y NO se repite (evita un
-     * bucle de reinicios). Si no hay SD, este fopen falla y se reintentara. */
-    { FILE *m = fopen(TOUR_MARKER, "w"); if (m) { fputs("done\n", m); fclose(m); } }
-
-    ESP_LOGI("TOUR", "Iniciando recorrido de capturas...");
-    const ui_view_mode_t saved_mode = ui->view_selection.mode;
-
-    static const struct { ui_view_mode_t mode; const char *name; } LIVE_SCREENS[] = {
-        { UI_VIEW_MODE_OVERVIEW,        "01_overview"        },
-        { UI_VIEW_MODE_DEFAULT_BATTERY, "02_bateria"         },
-        { UI_VIEW_MODE_SOLAR_CHARGER,   "03_solar"           },
-        { UI_VIEW_MODE_BATTERY_MONITOR, "04_monitor_bateria" },
-        { UI_VIEW_MODE_INVERTER,        "05_inversor"        },
-        { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
-    };
-
-    int ok = 0;
-    char path[96];
-    for (size_t i = 0; i < sizeof(LIVE_SCREENS) / sizeof(LIVE_SCREENS[0]); ++i) {
-        tour_set_view(ui, LIVE_SCREENS[i].mode);
-        tour_settle();
-        snprintf(path, sizeof(path), TOUR_DIR "/%s.bmp", LIVE_SCREENS[i].name);
-        if (screenshot_save_bmp(path) == ESP_OK) ok++;
-    }
-
-    /* Log historico de bateria (overlay) */
-    if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
-    tour_settle();
-    if (screenshot_save_bmp(TOUR_DIR "/07_log_bateria.bmp") == ESP_OK) ok++;
-    if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
-
-    /* Log de temperaturas del frigo (overlay) */
-    if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
-    tour_settle();
-    if (screenshot_save_bmp(TOUR_DIR "/08_log_frigo.bmp") == ESP_OK) ok++;
-    if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
-
-    /* Menu de Ajustes (pagina principal) */
+/* Apaga el switch y refleja el resultado (bajo lock LVGL; valida los objetos
+ * por si la pagina Display se hubiera reconstruido durante la captura). */
+static void capture_carousel_finish(ui_state_t *ui, int ok, esp_err_t first_err)
+{
     if (lvgl_port_lock(1000)) {
-        lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
+        if (ui->capture_switch && lv_obj_is_valid(ui->capture_switch)) {
+            lv_obj_clear_state(ui->capture_switch, LV_STATE_CHECKED);
+        }
+        if (ui->capture_status_lbl && lv_obj_is_valid(ui->capture_status_lbl)) {
+            if (ok >= 8) {
+                lv_label_set_text(ui->capture_status_lbl,
+                                  "8/8 capturas guardadas en la SD");
+            } else {
+                const char *why = (first_err == ESP_ERR_NO_MEM) ? "sin PSRAM"
+                                : (first_err == ESP_FAIL)        ? screenshot_last_error()
+                                :                                  "error";
+                lv_label_set_text_fmt(ui->capture_status_lbl,
+                                      "%d/8 - fallo: %s", ok, why);
+            }
+        }
         lvgl_port_unlock();
     }
-    tour_settle();
-    if (screenshot_save_bmp(TOUR_DIR "/09_ajustes.bmp") == ESP_OK) ok++;
+}
 
-    /* Sub-paginas de Ajustes (Frigo, Logs, Wi-Fi, Display, Sonido, Victron
-     * Keys, About). Orden fijado por settings_panel. */
-    static const char *SET_NAMES[] = {
-        "frigo", "logs", "wifi", "display", "sonido", "victron_keys", "about"
-    };
-    int n_set = ui_settings_panel_page_count();
-    for (int s = 0; s < n_set; ++s) {
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
-            ui_settings_panel_show_page(s);
-            lvgl_port_unlock();
-        }
+static void capture_carousel_task(void *arg)
+{
+    ui_state_t *ui = &g_ui;
+    const ui_view_mode_t saved_mode = ui->view_selection.mode;
+    int ok = 0;
+    esp_err_t first_err = ESP_OK;
+    char path[96];
+
+    ESP_LOGI("CAPCAR", "Carrusel de captura: 8 pantallas -> %s", TOUR_DIR);
+
+    /* 6 device-views con datos reales. screenshot_save_jpeg ya crea el directorio
+     * padre bajo camera_sd_bus_lock, no hace falta mkdir aqui. JPG ~10x mas
+     * pequeno que el BMP -> captura y posterior visor mucho mas rapidos. */
+    for (size_t i = 0; i < sizeof(CAPTURE_SCREENS) / sizeof(CAPTURE_SCREENS[0]); ++i) {
+        tour_set_view(ui, CAPTURE_SCREENS[i].mode);
         tour_settle();
-        const char *nm = (s < (int)(sizeof(SET_NAMES) / sizeof(SET_NAMES[0])))
-                             ? SET_NAMES[s] : "pagina";
-        snprintf(path, sizeof(path), TOUR_DIR "/1%d_ajustes_%s.bmp", s, nm);
-        if (screenshot_save_bmp(path) == ESP_OK) ok++;
+        snprintf(path, sizeof(path), TOUR_DIR "/%s.jpg", CAPTURE_SCREENS[i].name);
+        cap_save(path, &ok, &first_err);
     }
-    if (lvgl_port_lock(1000)) { ui_settings_panel_go_to_main(); lvgl_port_unlock(); }
 
-    /* Restaurar: volver a Live + Overview con el modo previo. */
+    /* Grafico historico de bateria (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    cap_save(TOUR_DIR "/07_log_bateria.jpg", &ok, &first_err);
+    if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
+
+    /* Grafico de temperaturas del frigo (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    cap_save(TOUR_DIR "/08_log_frigo.jpg", &ok, &first_err);
+    if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
+
+    /* Restaurar: volver a Live + la vista previa. */
     if (lvgl_port_lock(1000)) {
         ui->view_selection.mode = saved_mode;
         lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
@@ -2719,13 +2750,28 @@ static void screenshot_tour_task(void *arg)
         lvgl_port_unlock();
     }
 
-    ESP_LOGI("TOUR", "Recorrido terminado: %d capturas en %s", ok, TOUR_DIR);
+    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/8 capturas (first_err=0x%x)", ok, (int)first_err);
+    capture_carousel_finish(ui, ok, first_err);
+    s_capture_running = false;
     vTaskDelete(NULL);
 }
 
-void ui_start_screenshot_tour(void)
+bool ui_capture_carousel_running(void)
 {
-    xTaskCreate(screenshot_tour_task, "shot_tour", 12288, NULL, 3, NULL);
+    return s_capture_running;
+}
+
+void ui_start_capture_carousel(void)
+{
+    if (s_capture_running) {
+        ESP_LOGW("CAPCAR", "Carrusel ya en curso, ignoro");
+        return;
+    }
+    s_capture_running = true;
+    if (xTaskCreate(capture_carousel_task, "cap_carousel", 12288, NULL, 3, NULL) != pdPASS) {
+        s_capture_running = false;
+        ESP_LOGE("CAPCAR", "No pude crear la tarea del carrusel");
+    }
 }
 
 /* --- Navegacion por indice para las capturas por WiFi ---
