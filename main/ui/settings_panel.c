@@ -40,6 +40,8 @@
 
 // Forward declaration for view update function
 extern void ui_force_view_update(void);
+extern void ui_start_capture_carousel(void);
+extern bool ui_capture_carousel_running(void);
 
 #define WIFI_NAMESPACE "wifi"
 
@@ -84,6 +86,22 @@ static void ss_period_inc_cb(lv_event_t *e)
     lv_obj_t *btn = lv_event_get_target(e);
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(btn);
     if (lbl) lv_label_set_text_fmt(lbl, "%d", ui->screensaver.rotate_period_min);
+}
+
+/* Switch "Carrusel captura pantalla": al encenderlo lanza el carrusel de
+ * captura a la SD; la tarea lo devuelve a OFF al terminar. */
+static void cb_capture_carousel_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui) return;
+    lv_obj_t *sw = lv_event_get_target(e);
+    if (lv_obj_has_state(sw, LV_STATE_CHECKED)) {
+        if (ui_capture_carousel_running()) return;   /* ya en curso */
+        if (ui->capture_status_lbl)
+            lv_label_set_text(ui->capture_status_lbl, "Capturando pantallas...");
+        ui_start_capture_carousel();
+    }
+    /* Apagado manual: no hacemos nada; la tarea lo dejara en OFF al terminar. */
 }
 
 static void cb_screensaver_event_cb(lv_event_t *e);
@@ -1119,6 +1137,46 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_center(lbl_pinc);
     lv_obj_add_event_cb(btn_period_inc, ss_period_inc_cb, LV_EVENT_CLICKED, ui);
     lv_obj_set_user_data(btn_period_inc, lbl_period_val);
+
+    /* === Card Carrusel captura pantalla === */
+    lv_obj_t *card_cap = lv_obj_create(cont);
+    lv_obj_set_width(card_cap, lv_pct(100));
+    lv_obj_set_height(card_cap, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_cap, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
+    lv_obj_set_style_border_width(card_cap, 1, 0);
+    lv_obj_set_style_radius(card_cap, 12, 0);
+    lv_obj_set_style_pad_all(card_cap, 16, 0);
+    lv_obj_set_style_pad_gap(card_cap, 8, 0);
+    lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *cap_row = lv_obj_create(card_cap);
+    lv_obj_remove_style_all(cap_row);
+    lv_obj_set_size(cap_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(cap_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cap_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(cap_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *cap_title = lv_label_create(cap_row);
+    lv_obj_set_style_text_font(cap_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(cap_title, lv_color_hex(0x29B6F6), 0);
+    lv_label_set_text(cap_title, LV_SYMBOL_IMAGE "  Carrusel captura pantalla");
+
+    ui->capture_switch = lv_switch_create(cap_row);
+    lv_obj_set_size(ui->capture_switch, 50, 28);
+    lv_obj_set_style_bg_color(ui->capture_switch, lv_color_hex(0x29B6F6),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_add_event_cb(ui->capture_switch, cb_capture_carousel_cb,
+                        LV_EVENT_VALUE_CHANGED, ui);
+
+    ui->capture_status_lbl = lv_label_create(card_cap);
+    lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
+    lv_label_set_text(ui->capture_status_lbl,
+                      "Guarda las 8 pantallas de datos en la SD");
 
     /* === Card Zona horaria (al final) === */
     lv_obj_t *card_tz = lv_obj_create(cont);

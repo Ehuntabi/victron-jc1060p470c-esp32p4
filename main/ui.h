@@ -83,3 +83,9 @@ void ui_close_battery_history_screen(void);
  * corto, o NULL si idx esta fuera de rango. Ver ui.c / config_server.c. */
 const char *ui_tour_goto_screen(int idx);
 int ui_tour_screen_count(void);
+
+/* Carrusel de captura a demanda: recorre las 8 pantallas de datos (6 vistas +
+ * 2 graficos), guarda un BMP de cada una en la SD (sobrescribe) y termina. Lo
+ * dispara el switch de Settings->Display; el switch se apaga solo al acabar. */
+void ui_start_capture_carousel(void);
+bool ui_capture_carousel_running(void);

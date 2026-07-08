@@ -2728,6 +2728,104 @@ void ui_start_screenshot_tour(void)
     xTaskCreate(screenshot_tour_task, "shot_tour", 12288, NULL, 3, NULL);
 }
 
+/* ─── Carrusel de captura a demanda (switch en Settings→Display) ──────────────
+ * Recorre SOLO las 8 pantallas de datos (6 device-views + grafico bateria +
+ * grafico frigo), captura cada una a BMP en la SD (sobrescribe mismos nombres),
+ * y al terminar apaga el switch y muestra el resultado. Reutiliza
+ * tour_set_view/tour_settle/screenshot_save_bmp. A diferencia de
+ * screenshot_tour_task: sin marcador, sin retardo de 60 s y sin las paginas de
+ * Ajustes. Un unico disparo a la vez (s_capture_running). */
+static volatile bool s_capture_running = false;
+
+static const struct { ui_view_mode_t mode; const char *name; } CAPTURE_SCREENS[] = {
+    { UI_VIEW_MODE_OVERVIEW,        "01_overview"        },
+    { UI_VIEW_MODE_DEFAULT_BATTERY, "02_bateria"         },
+    { UI_VIEW_MODE_SOLAR_CHARGER,   "03_solar"           },
+    { UI_VIEW_MODE_BATTERY_MONITOR, "04_monitor_bateria" },
+    { UI_VIEW_MODE_INVERTER,        "05_inversor"        },
+    { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
+};
+
+/* Apaga el switch y refleja el resultado (bajo lock LVGL; valida los objetos
+ * por si la pagina Display se hubiera reconstruido durante la captura). */
+static void capture_carousel_finish(ui_state_t *ui, int ok)
+{
+    if (lvgl_port_lock(1000)) {
+        if (ui->capture_switch && lv_obj_is_valid(ui->capture_switch)) {
+            lv_obj_clear_state(ui->capture_switch, LV_STATE_CHECKED);
+        }
+        if (ui->capture_status_lbl && lv_obj_is_valid(ui->capture_status_lbl)) {
+            lv_label_set_text_fmt(ui->capture_status_lbl,
+                                  "%d/8 capturas guardadas en la SD", ok);
+        }
+        lvgl_port_unlock();
+    }
+}
+
+static void capture_carousel_task(void *arg)
+{
+    ui_state_t *ui = &g_ui;
+    const ui_view_mode_t saved_mode = ui->view_selection.mode;
+    int ok = 0;
+    char path[96];
+
+    if (mkdir(TOUR_DIR, 0777) != 0) {
+        /* Puede existir ya; si no hay SD, los screenshot_save_bmp fallaran. */
+    }
+    ESP_LOGI("CAPCAR", "Carrusel de captura: 8 pantallas -> %s", TOUR_DIR);
+
+    /* 6 device-views con datos reales */
+    for (size_t i = 0; i < sizeof(CAPTURE_SCREENS) / sizeof(CAPTURE_SCREENS[0]); ++i) {
+        tour_set_view(ui, CAPTURE_SCREENS[i].mode);
+        tour_settle();
+        snprintf(path, sizeof(path), TOUR_DIR "/%s.bmp", CAPTURE_SCREENS[i].name);
+        if (screenshot_save_bmp(path) == ESP_OK) ok++;
+    }
+
+    /* Grafico historico de bateria (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    if (screenshot_save_bmp(TOUR_DIR "/07_log_bateria.bmp") == ESP_OK) ok++;
+    if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
+
+    /* Grafico de temperaturas del frigo (overlay) */
+    if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
+    tour_settle();
+    if (screenshot_save_bmp(TOUR_DIR "/08_log_frigo.bmp") == ESP_OK) ok++;
+    if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
+
+    /* Restaurar: volver a Live + la vista previa. */
+    if (lvgl_port_lock(1000)) {
+        ui->view_selection.mode = saved_mode;
+        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+        ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
+        lvgl_port_unlock();
+    }
+
+    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/8 capturas", ok);
+    capture_carousel_finish(ui, ok);
+    s_capture_running = false;
+    vTaskDelete(NULL);
+}
+
+bool ui_capture_carousel_running(void)
+{
+    return s_capture_running;
+}
+
+void ui_start_capture_carousel(void)
+{
+    if (s_capture_running) {
+        ESP_LOGW("CAPCAR", "Carrusel ya en curso, ignoro");
+        return;
+    }
+    s_capture_running = true;
+    if (xTaskCreate(capture_carousel_task, "cap_carousel", 12288, NULL, 3, NULL) != pdPASS) {
+        s_capture_running = false;
+        ESP_LOGE("CAPCAR", "No pude crear la tarea del carrusel");
+    }
+}
+
 /* --- Navegacion por indice para las capturas por WiFi ---
  * Mapea un indice 0..(N-1) a una pantalla concreta, navega hasta ella (cerrando
  * antes cualquier overlay para partir de un estado limpio) y espera a que se
