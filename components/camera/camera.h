@@ -40,6 +40,12 @@ void camera_sd_bus_unlock(void);
  * si no hay frame o falla el encoder. Salida ~80-150KB. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);
 
+/* Decodifica un JPEG a un buffer RGB565 en PSRAM (para mostrarlo en un lv_img).
+ * THREAD-SAFE (mutex del codec). El que llama hace free(*out). Deja en *out_w el
+ * paso de fila (ancho alineado a 16) y en *out_h el alto real. false si falla. */
+bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
+                               uint8_t **out, int *out_w, int *out_h);
+
 /* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta
  * movimiento y guarda las fotos JPEG en un anillo en RAM (no SD; el bus SDMMC se
  * satura con la camara+C6). Se ven por HTTP en /vigilancia. Lo llama el modo ausente. */

@@ -15,7 +15,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "camera.h"   /* camera_sd_bus_lock: leer SD coordinado con la camara */
+#include "camera.h"   /* camera_sd_bus_lock + camera_decode_jpeg_rgb565 */
 
 static const char *TAG = "GALLERY";
 
@@ -23,25 +23,42 @@ static const char *TAG = "GALLERY";
 LV_FONT_DECLARE(lv_font_montserrat_20_es);
 LV_FONT_DECLARE(lv_font_montserrat_24_es);
 
-#define GAL_DIR       "/sdcard/screenshots"
-#define GAL_MAX_FILES 64
+#define GAL_MAX_FILES 128
 #define GAL_NAME_LEN  48
 
-/* Estado del overlay (protegido por el lock de LVGL: todo se toca en el hilo de
- * LVGL o bajo lvgl_port_lock desde la tarea de carga). */
-static lv_obj_t   *s_screen   = NULL;   /* overlay raiz (NULL = cerrado) */
-static lv_obj_t   *s_img      = NULL;   /* lv_img de la imagen actual */
-static lv_obj_t   *s_lbl      = NULL;   /* nombre + contador */
-static lv_obj_t   *s_lbl_hint = NULL;   /* "Cargando..." / errores */
-static lv_img_dsc_t s_dsc;
-static uint8_t    *s_img_buf  = NULL;   /* RGB565 decodificado (PSRAM) */
-static char        s_files[GAL_MAX_FILES][GAL_NAME_LEN];
-static int         s_count    = 0;
-static int         s_idx      = 0;
-static volatile bool s_loading = false;
-static volatile uint32_t s_gen = 0;     /* generacion: invalida cargas viejas */
+/* Las dos carpetas navegables. El indice s_folder selecciona una. */
+typedef struct {
+    const char *dir;
+    const char *ext;    /* extension que se lista */
+    const char *label;  /* texto del boton de carpeta */
+    const char *empty;  /* mensaje cuando no hay ficheros */
+} gal_folder_t;
 
-/* ── Listado del directorio (opendir bajo el bus de la camara) ─────────────── */
+static const gal_folder_t FOLDERS[] = {
+    { "/sdcard/screenshots", ".bmp", LV_SYMBOL_IMAGE " Carrusel",
+      "No hay capturas del carrusel\n(usa el carrusel primero)" },
+    { "/sdcard/vigilancia",  ".jpg", LV_SYMBOL_EYE_OPEN " Vigilancia",
+      "No hay fotos de vigilancia" },
+};
+#define GAL_FOLDER_COUNT ((int)(sizeof(FOLDERS) / sizeof(FOLDERS[0])))
+
+/* Estado del overlay. Todo se toca en el hilo de LVGL o bajo lvgl_port_lock. */
+static lv_obj_t   *s_screen     = NULL;   /* overlay raiz (NULL = cerrado) */
+static lv_obj_t   *s_img        = NULL;   /* lv_img de la imagen actual */
+static lv_obj_t   *s_lbl        = NULL;   /* nombre + contador */
+static lv_obj_t   *s_lbl_hint   = NULL;   /* "Cargando..." / errores / vacio */
+static lv_obj_t   *s_lbl_folder = NULL;   /* texto del boton de carpeta */
+static lv_img_dsc_t s_dsc;
+static uint8_t    *s_img_buf    = NULL;   /* RGB565 decodificado (PSRAM) */
+static char        s_files[GAL_MAX_FILES][GAL_NAME_LEN];
+static int         s_count      = 0;
+static int         s_idx        = 0;
+static int         s_folder     = 0;
+static volatile bool s_loading  = false;  /* hay una tarea de carga en marcha */
+static volatile bool s_pending  = false;  /* llego otra peticion durante la carga */
+static volatile uint32_t s_gen  = 0;      /* generacion: invalida cargas superadas */
+
+/* ── Listado del directorio de la carpeta activa (bajo el bus de la camara) ─── */
 static int cmp_names(const void *a, const void *b)
 {
     return strcmp((const char *)a, (const char *)b);
@@ -50,14 +67,15 @@ static int cmp_names(const void *a, const void *b)
 static void gallery_scan(void)
 {
     s_count = 0;
+    const gal_folder_t *f = &FOLDERS[s_folder];
     if (!camera_sd_bus_lock(3000)) return;
-    DIR *d = opendir(GAL_DIR);
+    DIR *d = opendir(f->dir);
     if (d) {
         struct dirent *e;
         while ((e = readdir(d)) != NULL && s_count < GAL_MAX_FILES) {
             const char *n = e->d_name;
             size_t l = strlen(n);
-            if (l > 4 && strcasecmp(n + l - 4, ".bmp") == 0) {
+            if (l > 4 && strcasecmp(n + l - 4, f->ext) == 0) {
                 strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
                 s_files[s_count][GAL_NAME_LEN - 1] = '\0';
                 s_count++;
@@ -69,8 +87,8 @@ static void gallery_scan(void)
     if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
 }
 
-/* ── Lectura de un fichero de SD a un buffer PSRAM (troceada, soltando el bus
- *    entre trozos igual que la escritura -> coordina con el GDMA de la camara). */
+/* ── Lectura de un fichero de SD a PSRAM (troceada, soltando el bus entre trozos
+ *    igual que la escritura -> coordina con el GDMA de la camara). ──────────── */
 static uint8_t *gallery_read_file(const char *path, size_t *out_len)
 {
     struct stat st;
@@ -109,8 +127,8 @@ static uint8_t *gallery_read_file(const char *path, size_t *out_len)
     return buf;
 }
 
-/* ── Decodifica NUESTRO BMP (24-bit BGR, filas de abajo a arriba) a un buffer
- *    RGB565 top-down (formato del framebuffer). Inverso de screenshot.c. ────── */
+/* ── Decodifica NUESTRO BMP (24-bit BGR, filas de abajo a arriba) a RGB565
+ *    top-down (inverso de screenshot.c). ─────────────────────────────────── */
 static uint8_t *gallery_decode_bmp(const uint8_t *bmp, size_t len, int *out_w, int *out_h)
 {
     if (len < 54 || bmp[0] != 'B' || bmp[1] != 'M') return NULL;
@@ -143,28 +161,33 @@ static uint8_t *gallery_decode_bmp(const uint8_t *bmp, size_t len, int *out_w, i
     return (uint8_t *)out;
 }
 
-/* ── Tarea de carga: lee+decodifica FUERA del hilo de LVGL (para no congelar la
- *    UI ni disparar el watchdog), luego actualiza el lv_img bajo el lock. ───── */
+/* ── Carga: lee+decodifica FUERA del hilo de LVGL, luego actualiza el lv_img bajo
+ *    el lock. Solo aplica si la generacion sigue vigente (no fue superada). ─── */
+static void gallery_start_load(void);   /* fwd */
+
 static void gallery_load_task(void *arg)
 {
-    uint32_t gen = s_gen;
-    int idx = s_idx;
-    char path[96];
-    snprintf(path, sizeof(path), GAL_DIR "/%s", s_files[idx]);
+    (void)arg;
+    uint32_t gen    = s_gen;
+    int      idx    = s_idx;
+    int      folder = s_folder;
+    char path[128];
+    snprintf(path, sizeof(path), "%s/%s", FOLDERS[folder].dir, s_files[idx]);
 
     size_t flen = 0;
     int w = 0, h = 0;
     uint8_t *img = NULL;
     uint8_t *raw = gallery_read_file(path, &flen);
     if (raw) {
-        img = gallery_decode_bmp(raw, flen, &w, &h);
+        if (folder == 0) img = gallery_decode_bmp(raw, flen, &w, &h);
+        else             camera_decode_jpeg_rgb565(raw, flen, &img, &w, &h);
         heap_caps_free(raw);
     }
 
     if (lvgl_port_lock(2000)) {
-        if (s_screen && gen == s_gen) {         /* sigue abierto y vigente */
+        if (s_screen && gen == s_gen) {          /* sigue abierto y vigente */
             if (img) {
-                lv_img_set_src(s_img, NULL);    /* soltar referencia anterior */
+                lv_img_set_src(s_img, NULL);     /* soltar referencia anterior */
                 if (s_img_buf) heap_caps_free(s_img_buf);
                 s_img_buf = img;
                 img = NULL;
@@ -184,17 +207,22 @@ static void gallery_load_task(void *arg)
                 lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
             }
         }
+        /* Encadenar la siguiente peticion pendiente (cambio de imagen/carpeta
+         * durante la carga) sin dejar tareas concurrentes pisandose. */
+        s_loading = false;
+        if (s_pending && s_screen) {
+            s_pending = false;
+            gallery_start_load();
+        }
         lvgl_port_unlock();
     }
-    if (img) heap_caps_free(img);   /* cerrado/invalidado mientras cargaba */
-    s_loading = false;
+    if (img) heap_caps_free(img);   /* cerrado/superado mientras cargaba */
     vTaskDelete(NULL);
 }
 
-/* Llamada desde el hilo de LVGL (callbacks). */
-static void gallery_load_current(void)
+/* Arranca una tarea de carga (bajo lock de LVGL: toca s_lbl_hint). */
+static void gallery_start_load(void)
 {
-    if (s_loading || s_count == 0) return;
     s_loading = true;
     lv_label_set_text(s_lbl_hint, "Cargando...");
     lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
@@ -204,20 +232,54 @@ static void gallery_load_current(void)
     }
 }
 
+/* Pide cargar s_files[s_idx]. Si ya hay una carga, la encola (una sola). */
+static void gallery_request_load(void)
+{
+    s_gen++;   /* invalida cualquier carga en vuelo que ya no sea la ultima */
+    if (s_count == 0) return;
+    if (s_loading) { s_pending = true; return; }
+    gallery_start_load();
+}
+
+/* Muestra el estado de la carpeta activa tras (re)escanear. */
+static void gallery_after_scan(void)
+{
+    s_idx = 0;
+    if (s_lbl_folder) lv_label_set_text(s_lbl_folder, FOLDERS[s_folder].label);
+    if (s_count == 0) {
+        s_gen++;   /* invalida cargas en vuelo */
+        lv_img_set_src(s_img, NULL);
+        if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
+        lv_label_set_text(s_lbl, "");
+        lv_label_set_text(s_lbl_hint, FOLDERS[s_folder].empty);
+        lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        gallery_request_load();
+    }
+}
+
 static void gallery_prev_cb(lv_event_t *e)
 {
     (void)e;
-    if (s_count == 0 || s_loading) return;
+    if (s_count == 0) return;
     s_idx = (s_idx - 1 + s_count) % s_count;
-    gallery_load_current();
+    gallery_request_load();
 }
 
 static void gallery_next_cb(lv_event_t *e)
 {
     (void)e;
-    if (s_count == 0 || s_loading) return;
+    if (s_count == 0) return;
     s_idx = (s_idx + 1) % s_count;
-    gallery_load_current();
+    gallery_request_load();
+}
+
+static void gallery_folder_cb(lv_event_t *e)
+{
+    (void)e;
+    s_folder = (s_folder + 1) % GAL_FOLDER_COUNT;
+    gallery_scan();
+    gallery_after_scan();
 }
 
 static void gallery_close_cb(lv_event_t *e)
@@ -227,17 +289,32 @@ static void gallery_close_cb(lv_event_t *e)
     if (s_screen) {
         lv_obj_del(s_screen);   /* arrastra s_img/s_lbl/... */
         s_screen = NULL;
-        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL;
+        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
+}
+
+/* Boton translucido cuadrado con un simbolo centrado. */
+static lv_obj_t *make_nav_btn(lv_obj_t *parent, const char *sym,
+                              lv_align_t align, int dx, lv_event_cb_t cb)
+{
+    lv_obj_t *b = lv_btn_create(parent);
+    lv_obj_set_size(b, 90, 90);
+    lv_obj_align(b, align, dx, 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_40, 0);
+    lv_obj_t *l = lv_label_create(b);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_24_es, 0);
+    lv_label_set_text(l, sym);
+    lv_obj_center(l);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
+    return b;
 }
 
 void ui_gallery_open(void)
 {
     if (s_screen) return;   /* ya abierto */
+    s_folder = 0;
     gallery_scan();
-    s_idx = 0;
-    s_gen++;
 
     lv_obj_t *scr = lv_obj_create(lv_scr_act());
     lv_obj_remove_style_all(scr);
@@ -264,28 +341,23 @@ void ui_gallery_open(void)
     s_lbl_hint = lv_label_create(scr);
     lv_obj_set_style_text_font(s_lbl_hint, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(s_lbl_hint, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_align(s_lbl_hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(s_lbl_hint, "");
     lv_obj_center(s_lbl_hint);
 
-    lv_obj_t *btn_prev = lv_btn_create(scr);
-    lv_obj_set_size(btn_prev, 90, 90);
-    lv_obj_align(btn_prev, LV_ALIGN_LEFT_MID, 8, 0);
-    lv_obj_set_style_bg_opa(btn_prev, LV_OPA_40, 0);
-    lv_obj_t *l1 = lv_label_create(btn_prev);
-    lv_obj_set_style_text_font(l1, &lv_font_montserrat_24_es, 0);
-    lv_label_set_text(l1, LV_SYMBOL_LEFT);
-    lv_obj_center(l1);
-    lv_obj_add_event_cb(btn_prev, gallery_prev_cb, LV_EVENT_CLICKED, NULL);
+    make_nav_btn(scr, LV_SYMBOL_LEFT,  LV_ALIGN_LEFT_MID,   8, gallery_prev_cb);
+    make_nav_btn(scr, LV_SYMBOL_RIGHT, LV_ALIGN_RIGHT_MID, -8, gallery_next_cb);
 
-    lv_obj_t *btn_next = lv_btn_create(scr);
-    lv_obj_set_size(btn_next, 90, 90);
-    lv_obj_align(btn_next, LV_ALIGN_RIGHT_MID, -8, 0);
-    lv_obj_set_style_bg_opa(btn_next, LV_OPA_40, 0);
-    lv_obj_t *l2 = lv_label_create(btn_next);
-    lv_obj_set_style_text_font(l2, &lv_font_montserrat_24_es, 0);
-    lv_label_set_text(l2, LV_SYMBOL_RIGHT);
-    lv_obj_center(l2);
-    lv_obj_add_event_cb(btn_next, gallery_next_cb, LV_EVENT_CLICKED, NULL);
+    /* Boton de carpeta (Carrusel <-> Vigilancia) abajo al centro. */
+    lv_obj_t *btn_folder = lv_btn_create(scr);
+    lv_obj_set_height(btn_folder, 50);
+    lv_obj_align(btn_folder, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_set_style_bg_color(btn_folder, lv_color_hex(0x0288D1), 0);
+    s_lbl_folder = lv_label_create(btn_folder);
+    lv_obj_set_style_text_font(s_lbl_folder, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(s_lbl_folder, FOLDERS[s_folder].label);
+    lv_obj_center(s_lbl_folder);
+    lv_obj_add_event_cb(btn_folder, gallery_folder_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *btn_close = lv_btn_create(scr);
     lv_obj_set_size(btn_close, 100, 50);
@@ -296,9 +368,5 @@ void ui_gallery_open(void)
     lv_obj_center(lc);
     lv_obj_add_event_cb(btn_close, gallery_close_cb, LV_EVENT_CLICKED, NULL);
 
-    if (s_count == 0) {
-        lv_label_set_text(s_lbl_hint, "No hay capturas en la SD\n(usa el carrusel primero)");
-    } else {
-        gallery_load_current();
-    }
+    gallery_after_scan();
 }

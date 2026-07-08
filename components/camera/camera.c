@@ -14,6 +14,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
+#include "driver/jpeg_decode.h"   /* decoder JPEG por HW (galeria: fotos de vigilancia) */
 #include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
 #include "esp_task_wdt.h"         /* vigilar la tarea de camara (DQBUF puede colgarse) */
 #include <stdlib.h>
@@ -314,6 +315,61 @@ static bool camera_jpeg_init(void)
 /* Mutex del encoder JPEG (s_jpeg_enc/in/out). Protege contra uso concurrente desde
  * la tarea de camara (vigilancia) y el servidor HTTP (/snapshot). */
 static SemaphoreHandle_t s_jpeg_mutex = NULL;
+
+/* Decodifica un JPEG (p.ej. una foto de vigilancia leida de la SD) a un buffer
+ * RGB565 en PSRAM, listo para un lv_img (mismo formato que el framebuffer). El que
+ * llama libera *out con free(). Serializa el codec HW con s_jpeg_mutex (mismo
+ * bloque que el encoder) y crea/destruye un motor de decode por llamada (uso
+ * puntual). Devuelve el ancho (alineado a 16, el paso de fila) y el alto reales.
+ * false si el header no parsea, falta memoria o el decode falla. */
+bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
+                               uint8_t **out, int *out_w, int *out_h)
+{
+    if (out) *out = NULL;
+    if (!jpg || !out || !out_w || !out_h || len < 4) return false;
+
+    jpeg_decode_picture_info_t info;
+    if (jpeg_decoder_get_info(jpg, len, &info) != ESP_OK) return false;
+    const int w  = (int)info.width;
+    const int h  = (int)info.height;
+    const int aw = (w + 15) & ~15;   /* el decoder trabaja en bloques de 16 */
+    const int ah = (h + 15) & ~15;
+    if (w <= 0 || h <= 0 || aw > 4096 || ah > 4096) return false;
+
+    jpeg_decode_memory_alloc_cfg_t in_mc  = { .buffer_direction = JPEG_DEC_ALLOC_INPUT_BUFFER };
+    jpeg_decode_memory_alloc_cfg_t out_mc = { .buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER };
+    size_t in_sz = 0, out_sz = 0;
+    uint8_t *in = jpeg_alloc_decoder_mem(len, &in_mc, &in_sz);
+    if (!in) return false;
+    memcpy(in, jpg, len);
+    uint8_t *ob = jpeg_alloc_decoder_mem((size_t)aw * ah * 2, &out_mc, &out_sz);
+    if (!ob) { free(in); return false; }
+
+    bool ok = false;
+    if (!s_jpeg_mutex || xSemaphoreTake(s_jpeg_mutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+        jpeg_decoder_handle_t dec = NULL;
+        jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
+        if (jpeg_new_decoder_engine(&eng, &dec) == ESP_OK) {
+            jpeg_decode_cfg_t dc = {
+                .output_format = JPEG_DECODE_OUT_FORMAT_RGB565,
+                .rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_RGB,
+                .conv_std      = JPEG_YUV_RGB_CONV_STD_BT601,
+            };
+            uint32_t osize = 0;
+            if (jpeg_decoder_process(dec, &dc, in, len, ob, out_sz, &osize) == ESP_OK)
+                ok = true;
+            jpeg_del_decoder_engine(dec);
+        }
+        if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
+    }
+    free(in);
+    if (!ok) { free(ob); return false; }
+
+    *out   = ob;
+    *out_w = aw;   /* paso de fila = ancho alineado (== ancho real si ya es multiplo de 16) */
+    *out_h = h;
+    return true;
+}
 
 /* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
