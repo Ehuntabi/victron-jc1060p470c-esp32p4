@@ -191,6 +191,7 @@ static size_t s_page_ctx_count = 0;
 /* Forward decls de los populate wrappers (defs cerca de settings_menu_add_entry). */
 static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_display(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_sd(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page);
@@ -678,6 +679,73 @@ static void autostart_switch_cb(lv_event_t *e)
     ne185_set_autostart(lv_obj_has_state(sw, LV_STATE_CHECKED));
 }
 
+/* Pagina "Tarjeta SD": carrusel de capturas + visor de imagenes de la SD. */
+static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
+{
+    style_settings_scrollbar(page_sd);
+    lv_obj_t *cont = lv_obj_create(page_sd);
+    lv_obj_set_width(cont, lv_pct(100));
+    lv_obj_set_height(cont, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 16, 0);
+
+    /* === Card Carrusel captura pantalla === */
+    lv_obj_t *card_cap = lv_obj_create(cont);
+    lv_obj_set_width(card_cap, lv_pct(100));
+    lv_obj_set_height(card_cap, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_cap, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
+    lv_obj_set_style_border_width(card_cap, 1, 0);
+    lv_obj_set_style_radius(card_cap, 12, 0);
+    lv_obj_set_style_pad_all(card_cap, 16, 0);
+    lv_obj_set_style_pad_gap(card_cap, 8, 0);
+    lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *cap_row = lv_obj_create(card_cap);
+    lv_obj_remove_style_all(cap_row);
+    lv_obj_set_size(cap_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(cap_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cap_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(cap_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *cap_title = lv_label_create(cap_row);
+    lv_obj_set_style_text_font(cap_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(cap_title, lv_color_hex(0x29B6F6), 0);
+    lv_label_set_text(cap_title, LV_SYMBOL_IMAGE "  Carrusel captura pantalla");
+
+    ui->capture_switch = lv_switch_create(cap_row);
+    lv_obj_set_size(ui->capture_switch, 50, 28);
+    lv_obj_set_style_bg_color(ui->capture_switch, lv_color_hex(0x29B6F6),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_add_event_cb(ui->capture_switch, cb_capture_carousel_cb,
+                        LV_EVENT_VALUE_CHANGED, ui);
+
+    ui->capture_status_lbl = lv_label_create(card_cap);
+    lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
+    lv_label_set_text(ui->capture_status_lbl,
+                      "Guarda las 8 pantallas de datos en la SD");
+
+    /* Boton: abrir el visor de galeria en pantalla */
+    lv_obj_t *btn_gal = lv_btn_create(card_cap);
+    lv_obj_set_width(btn_gal, lv_pct(100));
+    lv_obj_set_height(btn_gal, 46);
+    lv_obj_set_style_bg_color(btn_gal, lv_color_hex(0x0288D1), 0);
+    lv_obj_set_style_radius(btn_gal, 8, 0);
+    lv_obj_t *lbl_gal = lv_label_create(btn_gal);
+    lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas en pantalla");
+    lv_obj_center(lbl_gal);
+    lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
+}
+
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 {
     style_settings_scrollbar(page_display);
@@ -1146,57 +1214,8 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_add_event_cb(btn_period_inc, ss_period_inc_cb, LV_EVENT_CLICKED, ui);
     lv_obj_set_user_data(btn_period_inc, lbl_period_val);
 
-    /* === Card Carrusel captura pantalla === */
-    lv_obj_t *card_cap = lv_obj_create(cont);
-    lv_obj_set_width(card_cap, lv_pct(100));
-    lv_obj_set_height(card_cap, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_cap, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
-    lv_obj_set_style_border_width(card_cap, 1, 0);
-    lv_obj_set_style_radius(card_cap, 12, 0);
-    lv_obj_set_style_pad_all(card_cap, 16, 0);
-    lv_obj_set_style_pad_gap(card_cap, 8, 0);
-    lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *cap_row = lv_obj_create(card_cap);
-    lv_obj_remove_style_all(cap_row);
-    lv_obj_set_size(cap_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(cap_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(cap_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(cap_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *cap_title = lv_label_create(cap_row);
-    lv_obj_set_style_text_font(cap_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(cap_title, lv_color_hex(0x29B6F6), 0);
-    lv_label_set_text(cap_title, LV_SYMBOL_IMAGE "  Carrusel captura pantalla");
-
-    ui->capture_switch = lv_switch_create(cap_row);
-    lv_obj_set_size(ui->capture_switch, 50, 28);
-    lv_obj_set_style_bg_color(ui->capture_switch, lv_color_hex(0x29B6F6),
-                              LV_STATE_CHECKED | LV_PART_INDICATOR);
-    lv_obj_add_event_cb(ui->capture_switch, cb_capture_carousel_cb,
-                        LV_EVENT_VALUE_CHANGED, ui);
-
-    ui->capture_status_lbl = lv_label_create(card_cap);
-    lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
-    lv_label_set_text(ui->capture_status_lbl,
-                      "Guarda las 8 pantallas de datos en la SD");
-
-    /* Boton: abrir el visor de galeria en pantalla */
-    lv_obj_t *btn_gal = lv_btn_create(card_cap);
-    lv_obj_set_width(btn_gal, lv_pct(100));
-    lv_obj_set_height(btn_gal, 46);
-    lv_obj_set_style_bg_color(btn_gal, lv_color_hex(0x0288D1), 0);
-    lv_obj_set_style_radius(btn_gal, 8, 0);
-    lv_obj_t *lbl_gal = lv_label_create(btn_gal);
-    lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas en pantalla");
-    lv_obj_center(lbl_gal);
-    lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
+    /* (El card "Carrusel captura pantalla" + visor se movio a su propia pagina
+     *  de Settings "Tarjeta SD": create_sd_settings_page.) */
 
     /* === Card Zona horaria (al final) === */
     lv_obj_t *card_tz = lv_obj_create(cont);
@@ -1841,6 +1860,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
     lv_obj_t *page_display = lv_menu_page_create(menu, "DISPLAY");
+    lv_obj_t *page_sd = lv_menu_page_create(menu, "TARJETA SD");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
     /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
      * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
@@ -1879,6 +1899,9 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_display,
         "Display",       "Brillo, salvapantallas, modo noche",
         LV_SYMBOL_EYE_OPEN,   0xBA68C8, populate_display);
+    settings_menu_add_entry(ui, main_page, menu, page_sd,
+        "Tarjeta SD",    "Carrusel de capturas y visor de imagenes",
+        LV_SYMBOL_SD_CARD,    0x29B6F6, populate_sd);
     settings_menu_add_entry(ui, main_page, menu, page_sound,
         "Sonido y avisos","Volumen, jingles y alertas",
         LV_SYMBOL_VOLUME_MAX, 0xFF7043, populate_sound);
@@ -3128,6 +3151,9 @@ static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page) {
 }
 static void populate_display(settings_page_ctx_t *ctx, lv_obj_t *page) {
     create_display_settings_page(ctx->ui, page);
+}
+static void populate_sd(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_sd_settings_page(ctx->ui, page);
 }
 static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page) {
     create_victron_keys_settings_page(ctx->ui, page);

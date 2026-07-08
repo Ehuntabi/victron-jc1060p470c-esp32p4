@@ -30,14 +30,18 @@ LV_FONT_DECLARE(lv_font_montserrat_24_es);
 typedef struct {
     const char *dir;
     const char *ext;    /* extension que se lista */
+    const char *ext2;   /* segunda extension aceptada (NULL si ninguna) */
     const char *label;  /* texto del boton de carpeta */
     const char *empty;  /* mensaje cuando no hay ficheros */
 } gal_folder_t;
 
+/* Solo JPG: el carrusel ya guarda JPG (rapido). Las .bmp viejas que pudiera
+ * quedar en la SD NO se listan (cargaban lento y ensuciaban el listado). El
+ * decode sigue soportando .bmp por si acaso, pero no se enumeran. */
 static const gal_folder_t FOLDERS[] = {
-    { "/sdcard/screenshots", ".bmp", LV_SYMBOL_IMAGE " Carrusel",
+    { "/sdcard/screenshots", ".jpg", NULL, LV_SYMBOL_IMAGE " Carrusel",
       "No hay capturas del carrusel\n(usa el carrusel primero)" },
-    { "/sdcard/vigilancia",  ".jpg", LV_SYMBOL_EYE_OPEN " Vigilancia",
+    { "/sdcard/vigilancia",  ".jpg", NULL, LV_SYMBOL_EYE_OPEN " Vigilancia",
       "No hay fotos de vigilancia" },
 };
 #define GAL_FOLDER_COUNT ((int)(sizeof(FOLDERS) / sizeof(FOLDERS[0])))
@@ -75,7 +79,9 @@ static void gallery_scan(void)
         while ((e = readdir(d)) != NULL && s_count < GAL_MAX_FILES) {
             const char *n = e->d_name;
             size_t l = strlen(n);
-            if (l > 4 && strcasecmp(n + l - 4, f->ext) == 0) {
+            bool match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
+                                     (f->ext2 && strcasecmp(n + l - 4, f->ext2) == 0));
+            if (match) {
                 strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
                 s_files[s_count][GAL_NAME_LEN - 1] = '\0';
                 s_count++;
@@ -179,8 +185,10 @@ static void gallery_load_task(void *arg)
     uint8_t *img = NULL;
     uint8_t *raw = gallery_read_file(path, &flen);
     if (raw) {
-        if (folder == 0) img = gallery_decode_bmp(raw, flen, &w, &h);
-        else             camera_decode_jpeg_rgb565(raw, flen, &img, &w, &h);
+        size_t nl = strlen(s_files[idx]);
+        bool is_bmp = (nl > 4) && (strcasecmp(s_files[idx] + nl - 4, ".bmp") == 0);
+        if (is_bmp) img = gallery_decode_bmp(raw, flen, &w, &h);
+        else        camera_decode_jpeg_rgb565(raw, flen, &img, &w, &h);
         heap_caps_free(raw);
     }
 

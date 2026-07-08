@@ -2750,7 +2750,7 @@ static const struct { ui_view_mode_t mode; const char *name; } CAPTURE_SCREENS[]
  * diagnostico sin serie: distingue "sin PSRAM" de "SD ocupada/error"). */
 static void cap_save(const char *path, int *ok, esp_err_t *first_err)
 {
-    esp_err_t e = screenshot_save_bmp(path);
+    esp_err_t e = screenshot_save_jpeg(path);
     if (e == ESP_OK) (*ok)++;
     else if (*first_err == ESP_OK) *first_err = e;
 }
@@ -2789,25 +2789,26 @@ static void capture_carousel_task(void *arg)
 
     ESP_LOGI("CAPCAR", "Carrusel de captura: 8 pantallas -> %s", TOUR_DIR);
 
-    /* 6 device-views con datos reales. screenshot_save_bmp ya crea el directorio
-     * padre bajo camera_sd_bus_lock, no hace falta mkdir aqui. */
+    /* 6 device-views con datos reales. screenshot_save_jpeg ya crea el directorio
+     * padre bajo camera_sd_bus_lock, no hace falta mkdir aqui. JPG ~10x mas
+     * pequeno que el BMP -> captura y posterior visor mucho mas rapidos. */
     for (size_t i = 0; i < sizeof(CAPTURE_SCREENS) / sizeof(CAPTURE_SCREENS[0]); ++i) {
         tour_set_view(ui, CAPTURE_SCREENS[i].mode);
         tour_settle();
-        snprintf(path, sizeof(path), TOUR_DIR "/%s.bmp", CAPTURE_SCREENS[i].name);
+        snprintf(path, sizeof(path), TOUR_DIR "/%s.jpg", CAPTURE_SCREENS[i].name);
         cap_save(path, &ok, &first_err);
     }
 
     /* Grafico historico de bateria (overlay) */
     if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
     tour_settle();
-    cap_save(TOUR_DIR "/07_log_bateria.bmp", &ok, &first_err);
+    cap_save(TOUR_DIR "/07_log_bateria.jpg", &ok, &first_err);
     if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
 
     /* Grafico de temperaturas del frigo (overlay) */
     if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
     tour_settle();
-    cap_save(TOUR_DIR "/08_log_frigo.bmp", &ok, &first_err);
+    cap_save(TOUR_DIR "/08_log_frigo.jpg", &ok, &first_err);
     if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
 
     /* Restaurar: volver a Live + la vista previa. */

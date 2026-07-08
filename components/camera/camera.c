@@ -342,7 +342,9 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
     uint8_t *in = jpeg_alloc_decoder_mem(len, &in_mc, &in_sz);
     if (!in) return false;
     memcpy(in, jpg, len);
-    uint8_t *ob = jpeg_alloc_decoder_mem((size_t)aw * ah * 2, &out_mc, &out_sz);
+    /* Decodificamos a RGB888 y empaquetamos a RGB565 nosotros: el empaquetado
+     * RGB565 del propio HW daba un tinte violeta en los tonos oscuros. */
+    uint8_t *ob = jpeg_alloc_decoder_mem((size_t)aw * ah * 3, &out_mc, &out_sz);
     if (!ob) { free(in); return false; }
 
     bool ok = false;
@@ -351,7 +353,7 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
         jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
         if (jpeg_new_decoder_engine(&eng, &dec) == ESP_OK) {
             jpeg_decode_cfg_t dc = {
-                .output_format = JPEG_DECODE_OUT_FORMAT_RGB565,
+                .output_format = JPEG_DECODE_OUT_FORMAT_RGB888,
                 .rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_RGB,
                 .conv_std      = JPEG_YUV_RGB_CONV_STD_BT601,
             };
@@ -365,7 +367,24 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
     free(in);
     if (!ok) { free(ob); return false; }
 
-    *out   = ob;
+    /* RGB888 -> RGB565 (formato del framebuffer). El orden de byte del decoder HW
+     * queda invertido respecto al del encoder (naranja<->azul en pantalla), asi
+     * que leemos B,G,R: s[0]=B, s[2]=R. Corrige el swap R<->B en carrusel y
+     * vigilancia (ambos pasan por aqui). Paso de fila = aw. */
+    uint16_t *rgb = heap_caps_malloc((size_t)aw * h * 2, MALLOC_CAP_SPIRAM);
+    if (!rgb) { free(ob); return false; }
+    for (int y = 0; y < h; ++y) {
+        const uint8_t *s = ob + (size_t)y * aw * 3;
+        uint16_t *d = rgb + (size_t)y * aw;
+        for (int x = 0; x < aw; ++x) {
+            uint8_t b = s[0], g = s[1], r = s[2];
+            s += 3;
+            d[x] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+        }
+    }
+    free(ob);
+
+    *out   = (uint8_t *)rgb;
     *out_w = aw;   /* paso de fila = ancho alineado (== ancho real si ya es multiplo de 16) */
     *out_h = h;
     return true;
@@ -415,6 +434,57 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         }
     }
 
+    if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
+    return ok;
+}
+
+/* Codifica un framebuffer RGB565 (p.ej. una captura de pantalla 1024x600) a JPEG
+ * por HW. Reusa el motor del encoder (serializado con s_jpeg_mutex) con buffers
+ * propios del tamano pedido. YUV422 -> exige ancho multiplo de 16 y alto multiplo
+ * de 8 (1024x600 cumple). El que llama hace free(*out). false si no cumple el
+ * tamano, falta memoria o falla el encoder. */
+bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
+                               uint8_t **out, size_t *out_len)
+{
+    if (out) *out = NULL;
+    if (!rgb || !out || !out_len) return false;
+    if (w <= 0 || h <= 0 || (w & 15) || (h & 7)) return false;   /* YUV422: w%16, h%8 */
+
+    bool ok = false;
+    if (s_jpeg_mutex) xSemaphoreTake(s_jpeg_mutex, portMAX_DELAY);
+    if (camera_jpeg_init()) {   /* solo necesitamos el motor s_jpeg_enc */
+        jpeg_encode_memory_alloc_cfg_t in_cfg  = { .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER };
+        jpeg_encode_memory_alloc_cfg_t out_cfg = { .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER };
+        size_t in_sz = 0, out_sz = 0;
+        uint8_t *in = jpeg_alloc_encoder_mem((size_t)w * h * 3, &in_cfg, &in_sz);
+        uint8_t *ob = jpeg_alloc_encoder_mem((size_t)w * h * 3 / 2, &out_cfg, &out_sz);
+        if (in && ob) {
+            const int n = w * h;
+            for (int i = 0; i < n; ++i) {      /* RGB565 -> RGB888 (R,G,B) */
+                uint16_t p = rgb[i];
+                in[i*3+0] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* R */
+                in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
+                in[i*3+2] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* B */
+            }
+            jpeg_encode_cfg_t cfg = {
+                .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
+                .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,
+                .image_quality = quality,
+                .width         = w,
+                .height        = h,
+            };
+            uint32_t jlen = 0;
+            esp_err_t e = jpeg_encoder_process(s_jpeg_enc, &cfg, in, in_sz, ob, out_sz, &jlen);
+            if (e == ESP_OK && jlen) {
+                uint8_t *copy = heap_caps_malloc(jlen, MALLOC_CAP_SPIRAM);
+                if (copy) { memcpy(copy, ob, jlen); *out = copy; *out_len = jlen; ok = true; }
+            } else if (e != ESP_OK) {
+                ESP_LOGW(TAG, "jpeg: encode %dx%d fallo: %s", w, h, esp_err_to_name(e));
+            }
+        }
+        if (in) free(in);
+        if (ob) free(ob);
+    }
     if (s_jpeg_mutex) xSemaphoreGive(s_jpeg_mutex);
     return ok;
 }

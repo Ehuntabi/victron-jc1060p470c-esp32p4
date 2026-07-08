@@ -12,6 +12,10 @@ extern "C" {
  * leer el framebuffer de forma coherente. Devuelve ESP_OK si lo guardo. */
 esp_err_t screenshot_save_bmp(const char *path);
 
+/* Como screenshot_save_bmp pero guarda JPEG (encode por HW): ~10x mas pequeno ->
+ * escritura y posterior lectura en el visor mucho mas rapidas. Lo usa el carrusel. */
+esp_err_t screenshot_save_jpeg(const char *path);
+
 /* Detalle textual del ultimo fallo de screenshot_save_bmp (errno + paso), para
  * mostrarlo en la UI sin depender del monitor serie. Cadena vacia si no hubo. */
 const char *screenshot_last_error(void);

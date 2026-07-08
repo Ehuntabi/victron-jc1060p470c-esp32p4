@@ -46,6 +46,12 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);
 bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
                                uint8_t **out, int *out_w, int *out_h);
 
+/* Codifica un framebuffer RGB565 (w%16==0, h%8==0) a JPEG por HW. THREAD-SAFE.
+ * El que llama hace free(*out). Usado por la captura del carrusel (mucho mas
+ * pequeno y rapido que el BMP). false si el tamano no cumple o falla. */
+bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
+                               uint8_t **out, size_t *out_len);
+
 /* Activa/desactiva el modo vigilancia: con on=true la tarea de camara detecta
  * movimiento y guarda las fotos JPEG en un anillo en RAM (no SD; el bus SDMMC se
  * satura con la camara+C6). Se ven por HTTP en /vigilancia. Lo llama el modo ausente. */
