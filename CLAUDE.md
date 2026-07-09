@@ -1,6 +1,6 @@
-# VictronSolarDisplay - Guition JC1060P470C_I
+# Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Release estable: **v1.0.0**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -18,13 +18,22 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 ## Stack
 - ESP-IDF v5.4.4
 - LVGL para la UI
-- Workspace: ~/victron
+- Workspace: ~/joint/victron
 
 ## Comandos habituales
+- Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.4/export.sh`
 - Compilar: `idf.py build`
-- Flashear: `idf.py -p /dev/ttyACM1 flash`
-- Monitor: `idf.py -p /dev/ttyACM1 monitor`
-- Si pierdes el entorno IDF: `. ~/esp/esp-idf/export.sh`
+- Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
+- Monitor: `idf.py -p /dev/ttyACM0 monitor`
+
+## Versionado / releases
+- La version que se ve en Ajustes -> Acerca de sale SOLA de `git describe`
+  (esp_app_get_description()->version). NO se edita ningun numero en el codigo.
+- Para publicar una version nueva: `./release.sh X.Y.Z` (crea el tag, build limpio
+  anti-gotcha, imagen fusionada, y recuerda push + crear Release + flashear).
+- Gotcha ESP-IDF: la version/fecha se cachea en el configure de CMake; si el About
+  muestra datos viejos, `idf.py reconfigure` + borrar el .obj de esp_app_desc lo
+  refresca (release.sh ya lo hace).
 
 ## Convenciones del proyecto
 - Estética card-based aplicada en Settings (cada página con su color de borde)
