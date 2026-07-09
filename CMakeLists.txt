@@ -27,6 +27,14 @@ if(NOT PROJECT_VER)
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Con -O2, el analisis de GCC saca -Wstringop-truncation / -Wformat-truncation en
+# el idiom seguro `strncpy(dst,src,N); dst[N-1]=0` y en snprintf de struct tm sobre
+# buffers holgados (falsos positivos conocidos, 26 sitios). Los bajamos de ERROR a
+# aviso (siguen visibles) en vez de reescribir string ops por todo el codigo.
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=stringop-truncation" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format-truncation" APPEND)
+
 project(VictronSolarDisplay_JC1060P470C_I)
 
 set_source_files_properties(

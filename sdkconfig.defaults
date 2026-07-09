@@ -11,6 +11,13 @@
 # ── Target ────────────────────────────────────────────────────────────────────
 CONFIG_IDF_TARGET="esp32p4"
 
+# ── Optimizacion del compilador ─────────────────────────────────────────────
+# -O2 (rendimiento) en vez del -Og por defecto de IDF. Assertions se dejan
+# ACTIVAS (no tocar CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_*): -O2 con asserts
+# sigue cazando estados invalidos. Aplicado 2026-07-09 con protocolo known-good
+# (tag sdkconfig-known-good-2026-07-09-pre-O2 de respaldo).
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
 # ── CPU ───────────────────────────────────────────────────────────────────────
 # El módulo ESP32-P4 soporta hasta 400 MHz
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
