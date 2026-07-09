@@ -15,6 +15,7 @@
 #include "esp_wifi_default.h"
 #include "esp_wifi_netif.h"
 #include "esp_private/wifi.h"
+#include "esp_random.h"
 #include "esp_http_server.h"
 #include "camera.h"
 #include "freertos/FreeRTOS.h"
@@ -523,11 +524,12 @@ static const char SETTIME_SCRIPT[] =
 
 /* BasicAuth — credenciales NO hardcoded en el repo.
  *
- * Al primer boot generamos un default único por dispositivo:
+ * Al primer boot generamos un default por dispositivo:
  *   user = "victron"
- *   pass = "v_" + últimos 6 hex MAC del C6 (ej "v_DC078D")
- * Y lo persistimos en NVS. El user puede cambiar ambas desde Settings.
- * En el monitor del primer arranque se imprime el valor para que lo apuntes.
+ *   pass = 8 chars ALEATORIOS (esp_random). NO derivada de la MAC (el esquema
+ *   antiguo "v_<MAC>" era adivinable porque la MAC es el BSSID que se emite).
+ * Se persiste en NVS y se muestra en Ajustes -> Wi-Fi (solo en la pantalla
+ * fisica) via config_server_get_web_credentials().
  *
  * La cadena "Basic <base64>" se calcula en RAM al arrancar el HTTP server
  * y se guarda en s_auth_header. check_basic_auth() solo compara strings. */
@@ -542,15 +544,28 @@ static void http_auth_init(void)
         size_t ul = sizeof(user), pl = sizeof(pass);
         bool need_default_user = (nvs_get_str(h, "http_user", user, &ul) != ESP_OK || ul <= 1);
         bool need_default_pass = (nvs_get_str(h, "http_pass", pass, &pl) != ESP_OK || pl <= 1);
+        /* Migracion de seguridad: la pass por defecto ANTIGUA se derivaba de la
+         * MAC del AP ("v_XXXXXX"), y esa MAC es el BSSID que se emite en cada
+         * beacon -> cualquiera en el AP la podia calcular. Si detectamos ese
+         * patron, la tratamos como "por defecto" y la regeneramos aleatoria. */
+        if (!need_default_pass) {
+            uint8_t mac[6] = {0};
+            esp_wifi_get_mac(WIFI_IF_AP, mac);
+            char legacy[16];
+            snprintf(legacy, sizeof(legacy), "v_%02X%02X%02X",
+                     mac[3], mac[4], mac[5]);
+            if (strcmp(pass, legacy) == 0) need_default_pass = true;
+        }
         if (need_default_user) {
             strcpy(user, "victron");
             nvs_set_str(h, "http_user", user);
         }
         if (need_default_pass) {
-            uint8_t mac[6] = {0};
-            esp_wifi_get_mac(WIFI_IF_AP, mac);
-            snprintf(pass, sizeof(pass), "v_%02X%02X%02X",
-                     mac[3], mac[4], mac[5]);
+            /* Pass ALEATORIA (no derivable de la MAC). Se muestra en
+             * Ajustes -> Wi-Fi para que el dueno la vea (solo en la pantalla). */
+            static const char cs[] = "abcdefghijkmnpqrstuvwxyz23456789";
+            for (int i = 0; i < 8; i++) pass[i] = cs[esp_random() % (sizeof(cs) - 1)];
+            pass[8] = '\0';
             nvs_set_str(h, "http_pass", pass);
         }
         nvs_commit(h);
@@ -572,6 +587,20 @@ static void http_auth_init(void)
         snprintf(s_auth_header, sizeof(s_auth_header), "Basic %.*s",
                  (int)b64_len, (const char *)b64);
     }
+}
+
+/* Getter de las credenciales del portal web (para mostrarlas en Ajustes ->
+ * Wi-Fi). Lee de NVS; si no hay, deja cadenas vacias. */
+void config_server_get_web_credentials(char *user, size_t ulen,
+                                       char *pass, size_t plen)
+{
+    if (user && ulen) user[0] = '\0';
+    if (pass && plen) pass[0] = '\0';
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return;
+    if (user && ulen) { size_t l = ulen; nvs_get_str(h, "http_user", user, &l); }
+    if (pass && plen) { size_t l = plen; nvs_get_str(h, "http_pass", pass, &l); }
+    nvs_close(h);
 }
 
 static esp_err_t check_basic_auth(httpd_req_t *req)
@@ -808,7 +837,9 @@ static esp_err_t post_save(httpd_req_t *req) {
     }
     body[ret] = '\0';
     
-    ESP_LOGI(TAG, "Received form data: %s", body);
+    /* LOGD (no LOGI): el body lleva key=<AES Victron> y log_capture persiste
+     * los INFO a la SD -> no volcar la clave en claro. */
+    ESP_LOGD(TAG, "Received form data: %s", body);
     
     // Parse form data: mac=XXXXXXXXXXXX&key=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
     char mac_str[13] = {0};

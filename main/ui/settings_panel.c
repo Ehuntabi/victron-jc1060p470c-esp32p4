@@ -629,6 +629,49 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text(btn_lbl, "Reactivar");
     lv_obj_center(btn_lbl);
     lv_obj_add_event_cb(btn_react, reactivate_portal_cb, LV_EVENT_CLICKED, NULL);
+
+    /* ── Card 4: credenciales del portal web (solo lectura) ──────────────
+     * La pass HTTP es aleatoria (no derivable de la MAC). Se muestra aqui
+     * para que el dueno pueda entrar a la web; solo visible en la pantalla
+     * fisica del display. */
+    char web_user[33] = {0};
+    char web_pass[33] = {0};
+    config_server_get_web_credentials(web_user, sizeof(web_user),
+                                      web_pass, sizeof(web_pass));
+
+    lv_obj_t *card4 = lv_obj_create(cont);
+    lv_obj_set_width(card4, lv_pct(100));
+    lv_obj_set_height(card4, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card4, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card4, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card4, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card4, 1, 0);
+    lv_obj_set_style_radius(card4, 12, 0);
+    lv_obj_set_style_pad_all(card4, 16, 0);
+    lv_obj_set_style_pad_gap(card4, 6, 0);
+    lv_obj_set_layout(card4, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card4, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *c4_title = lv_label_create(card4);
+    lv_obj_set_style_text_font(c4_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(c4_title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(c4_title, LV_SYMBOL_SETTINGS "  Acceso a la web");
+
+    lv_obj_t *c4_user = lv_label_create(card4);
+    lv_obj_set_style_text_font(c4_user, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text_fmt(c4_user, "Usuario:  %s",
+                          web_user[0] ? web_user : "victron");
+
+    lv_obj_t *c4_pass = lv_label_create(card4);
+    lv_obj_set_style_text_font(c4_pass, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text_fmt(c4_pass, "Clave:  %s",
+                          web_pass[0] ? web_pass : "(sin definir)");
+
+    lv_obj_t *c4_hint = lv_label_create(card4);
+    lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
+    lv_label_set_text(c4_hint,
+                      "Para entrar a la web del display. Solo se ve aqui.");
 }
 
 static void reactivate_portal_cb(lv_event_t *e)
@@ -2266,6 +2309,15 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
     }
 }
 
+/* Periodo del timer de reposo en ms. Con timeout 0 devuelve 0xFFFFFFFF (~49
+ * dias, "nunca") en vez de 0: un lv_timer con periodo 0 dispara en CADA frame,
+ * lo que de noche apagaria la pantalla en bucle sin dejarla despertar. */
+static uint32_t ss_period_ms(ui_state_t *ui)
+{
+    return ui->screensaver.timeout > 0 ? ui->screensaver.timeout * 1000U
+                                       : 0xFFFFFFFF;
+}
+
 /* Aplica el cambio de timeout: persiste en NVS y reprograma el timer */
 static void ss_timeout_apply(ui_state_t *ui)
 {
@@ -2277,10 +2329,7 @@ static void ss_timeout_apply(ui_state_t *ui)
                               ui->screensaver.brightness,
                               ui->screensaver.timeout);
     if (ui->screensaver.timer) {
-        uint32_t ms = ui->screensaver.timeout > 0
-                          ? ui->screensaver.timeout * 1000U
-                          : 0xFFFFFFFF;
-        lv_timer_set_period(ui->screensaver.timer, ms);
+        lv_timer_set_period(ui->screensaver.timer, ss_period_ms(ui));
     }
 }
 
@@ -2299,7 +2348,7 @@ static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
     ui_state_t *ui = lv_event_get_user_data(e);
     if (ui == NULL) return;
     int min = ui->screensaver.timeout / 60;
-    if (min > 0) min--;
+    if (min > 1) min--;   /* minimo 1 min; para desactivar, el interruptor ON/OFF */
     ui->screensaver.timeout = min * 60;
     ss_timeout_apply(ui);
 }
@@ -2311,7 +2360,7 @@ static void screensaver_sync_timer_state(ui_state_t *ui)
 {
     if (!ui || !ui->screensaver.timer) return;
     if (ui->screensaver.enabled || ui->night_mode.enabled) {
-        lv_timer_set_period(ui->screensaver.timer, ui->screensaver.timeout * 1000U);
+        lv_timer_set_period(ui->screensaver.timer, ss_period_ms(ui));
         lv_timer_reset(ui->screensaver.timer);
         lv_timer_resume(ui->screensaver.timer);
     } else {
@@ -2328,7 +2377,7 @@ void ui_settings_screensaver_create_timer(ui_state_t *ui)
      * splash. El brillo se aplica una sola vez al final del boot via
      * night_mode_timer_cb. screensaver_sync_timer_state NO toca el brillo. */
     ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
-                                             ui->screensaver.timeout * 1000U, ui);
+                                             ss_period_ms(ui), ui);
     ui->screensaver.active = false;
     screensaver_sync_timer_state(ui);
 }
@@ -2411,8 +2460,11 @@ static void screensaver_timer_cb(lv_timer_t *timer)
      * nocturno esta activo). El toque la enciende a brillo normal via
      * screensaver_wake y, tras el timeout, vuelve aqui a apagarse. */
     if (night_active_now(ui)) {
-        bsp_display_brightness_set(0);
+        /* active=true ANTES de bajar el brillo: night_mode_timer_cb (esp_timer,
+         * otro core) lee 'active' sin mutex; si lo viera false en la ventana
+         * entre ambas sentencias, reencenderia la pantalla toda la noche. */
         ui->screensaver.active = true;
+        bsp_display_brightness_set(0);
         return;
     }
 

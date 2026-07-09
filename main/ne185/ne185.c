@@ -498,18 +498,18 @@ watcher_skip:;
                 ESP_LOGE(TAG, "uart_read_bytes error rc=%d", n);
             } else if (n > 0) {
                 if (n == 15) {
-                    ESP_LOGI(TAG, "rx15: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                    ESP_LOGD(TAG, "rx15: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
                              buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
                              buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
                              buf[10], buf[11], buf[12], buf[13], buf[14]);
                 } else if (n == 20) {
-                    ESP_LOGI(TAG, "rx20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
+                    ESP_LOGD(TAG, "rx20: %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X | %02X %02X %02X %02X %02X",
                              buf[0],  buf[1],  buf[2],  buf[3],  buf[4],
                              buf[5],  buf[6],  buf[7],  buf[8],  buf[9],
                              buf[10], buf[11], buf[12], buf[13], buf[14],
                              buf[15], buf[16], buf[17], buf[18], buf[19]);
                 } else {
-                    ESP_LOGI(TAG, "rx %d bytes (parcial). b[0..4]=%02X %02X %02X %02X %02X",
+                    ESP_LOGD(TAG, "rx %d bytes (parcial). b[0..4]=%02X %02X %02X %02X %02X",
                              n, buf[0], buf[1], buf[2], buf[3], buf[4]);
                 }
             }

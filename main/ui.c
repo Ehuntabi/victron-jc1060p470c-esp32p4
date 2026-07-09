@@ -301,6 +301,8 @@ void ui_init(void) {
     load_screensaver_settings(&ui->screensaver.enabled,
                               &ui->screensaver.brightness,
                               &ui->screensaver.timeout);
+    /* Minimo 1 min: migra un 0 antiguo (para desactivar esta el switch ON/OFF). */
+    if (ui->screensaver.timeout < 60) ui->screensaver.timeout = 60;
     load_screensaver_mode(&ui->screensaver.mode, &ui->screensaver.rotate_period_min);
     ui->screensaver.rotate_index = 0;
     ui->screensaver.rotate_timer = NULL;

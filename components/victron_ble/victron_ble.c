@@ -252,7 +252,9 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         if (fields.mfg_data_len >= 6) {
             pid = (uint16_t)(fields.mfg_data[4] | (fields.mfg_data[5] << 8));
         }
-        ESP_LOGI(TAG, "[DIAG] adv MAC=%02X:%02X:%02X:%02X:%02X:%02X "
+        /* VDBG (no INFO): 3-10 advs/s pasan por log_capture+UART; solo interesa
+         * en depuracion. Se activa con el flag victron_debug_enabled. */
+        VDBG("[DIAG] adv MAC=%02X:%02X:%02X:%02X:%02X:%02X "
                       "type=%u rssi=%d mfg_len=%u vid=0x%04X pid=0x%04X %s",
                  event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
                  event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0],
