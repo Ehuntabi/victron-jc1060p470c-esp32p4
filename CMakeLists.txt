@@ -9,6 +9,23 @@ if(NOT DEFINED IDF_TARGET)
 endif()
 
 set(EXTRA_C_FLAGS "-Wl,--defsym=hal_disable_nan_tsf=0")
+
+# Version del firmware (About). ESP-IDF por defecto hace `git describe --tags`
+# SIN filtro -> coge el tag mas reciente, y los tags `sdkconfig-known-good-*`
+# rompian el About mostrando "sdkconfig-dev". Fijamos PROJECT_VER contando SOLO
+# tags de version v* -> queda "v1.0.0-N-g<hash>" (el formateador lo muestra como
+# "v1.0.0-dev"). Inmune a cualquier tag que no sea v*.
+execute_process(
+    COMMAND git describe --always --tags --dirty --match "v*.*.*"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE PROJECT_VER
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT PROJECT_VER)
+    set(PROJECT_VER "v?")
+endif()
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(VictronSolarDisplay_JC1060P470C_I)
 
