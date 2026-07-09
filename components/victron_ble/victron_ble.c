@@ -8,6 +8,8 @@
 #include <string.h>
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
@@ -236,6 +238,17 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     static uint32_t s_adv_total = 0;
     static uint32_t s_adv_victron = 0;
     s_adv_total++;
+
+    /* [MEDICION] watermark del stack de la task NimBLE host: aqui corre
+     * data_cb = ui_on_panel_data, que crea vistas LVGL pesadas. En ESP-IDF
+     * uxTaskGetStackHighWaterMark devuelve los BYTES libres minimos historicos.
+     * Si baja de ~512 hay que subir CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE (4096).
+     * Log cada 256 adv (~30-90 s) para no spammear. */
+    if ((s_adv_total % 256) == 0) {
+        UBaseType_t free_min = uxTaskGetStackHighWaterMark(NULL);
+        ESP_LOGW(TAG, "NimBLE host stack: %u bytes libres min (de 4096)",
+                 (unsigned)free_min);
+    }
 
     uint16_t early_vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
         ? (uint16_t)(fields.mfg_data[0] | (fields.mfg_data[1] << 8)) : 0xFFFF;

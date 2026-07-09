@@ -1034,7 +1034,10 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
      * night_mode_timer_cb y luego cuando el usuario mueva el slider. */
     /* Helper: tag el label como user data secundaria via custom property */
     lv_obj_set_user_data(slider_brightness, lbl_val_b);
+    /* VALUE_CHANGED: aplica brillo en vivo (sin tocar NVS). RELEASED: persiste
+     * una sola vez al soltar (evita un nvs_commit por cada paso del arrastre). */
     lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_event_cb(slider_brightness, brightness_slider_event_cb, LV_EVENT_RELEASED, ui);
 
     /* === Card Modo nocturno (auto brillo por hora del RTC) === */
     lv_obj_t *card_nm = lv_obj_create(cont);
@@ -1305,6 +1308,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_slider_set_value(ui->screensaver.slider_brightness, ss_init, LV_ANIM_OFF);
     lv_obj_set_user_data(ui->screensaver.slider_brightness, lbl_val_ss);
     lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    lv_obj_add_event_cb(ui->screensaver.slider_brightness, slider_ss_brightness_event_cb, LV_EVENT_RELEASED, ui);
 
     /* +/- y label dentro de cont_to (mismo estilo que el selector de tiempo del modo) */
     lv_obj_t *btn_dec = lv_btn_create(cont_to);
@@ -2222,13 +2226,17 @@ static void brightness_slider_event_cb(lv_event_t *e)
         lv_slider_set_value(slider, snapped, LV_ANIM_OFF);
         val = snapped;
     }
+    /* Persistir en NVS solo al soltar (RELEASED); en VALUE_CHANGED solo brillo vivo. */
+    bool persist = (lv_event_get_code(e) == LV_EVENT_RELEASED);
     ui->brightness = (uint8_t)val;
-    save_brightness(ui->brightness);
+    if (persist) {
+        save_brightness(ui->brightness);
+        ESP_LOGI(TAG_SETTINGS, "Brightness set to %d", val);
+    }
     apply_brightness_for_now(ui);   /* respeta noche si estamos en franja */
     /* Update label */
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(slider);
     if (lbl) lv_label_set_text_fmt(lbl, "%d%%", val);
-    ESP_LOGI(TAG_SETTINGS, "Brightness set to %d", val);
     /* Ajustar máximo del slider screensaver al nuevo brightness */
     if (ui->screensaver.slider_brightness != NULL) {
         int ss_val = lv_slider_get_value(ui->screensaver.slider_brightness);
@@ -2237,7 +2245,7 @@ static void brightness_slider_event_cb(lv_event_t *e)
         if (ss_val > val) {
             lv_slider_set_value(ui->screensaver.slider_brightness, val, LV_ANIM_OFF);
             ui->screensaver.brightness = (uint8_t)val;
-            save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
+            if (persist) save_screensaver_settings(ui->screensaver.enabled, ui->screensaver.brightness, ui->screensaver.timeout);
         }
     }
 }
@@ -2333,9 +2341,12 @@ static void slider_ss_brightness_event_cb(lv_event_t *e)
         v = snapped;
     }
     ui->screensaver.brightness = v;
-    save_screensaver_settings(ui->screensaver.enabled,
-                              ui->screensaver.brightness,
-                              ui->screensaver.timeout);
+    /* Persistir solo al soltar (RELEASED); en VALUE_CHANGED solo vista previa. */
+    if (lv_event_get_code(e) == LV_EVENT_RELEASED) {
+        save_screensaver_settings(ui->screensaver.enabled,
+                                  ui->screensaver.brightness,
+                                  ui->screensaver.timeout);
+    }
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(ui->screensaver.slider_brightness);
     if (lbl) lv_label_set_text_fmt(lbl, "%d%%", v);
     if (ui->screensaver.active) {
