@@ -47,7 +47,11 @@ extern void ui_gallery_open(void);   /* visor de galeria en pantalla (gallery.c)
 #define WIFI_NAMESPACE "wifi"
 
 static const char *TAG_SETTINGS = "UI_SETTINGS";
-static const char *APP_VERSION = "1.0.0";
+/* La version mostrada en About sale de esp_app_get_description()->version, que
+ * ESP-IDF rellena automaticamente con `git describe` (el tag mas reciente, p.ej.
+ * "v1.0.0"; en builds fuera de un tag, "v1.0.0-3-gABCDEF"). Este texto es solo
+ * un fallback por si la descripcion de la app no estuviera disponible. */
+static const char *APP_VERSION_FALLBACK = "v?";
 
 static void ta_event_cb(lv_event_t *e);
 static void wifi_event_cb(lv_event_t *e);
@@ -2999,7 +3003,7 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text_fmt(lbl_ver_top, "Version: %s    Compilado: %s  %s",
-                          APP_VERSION,
+                          app_desc ? app_desc->version : APP_VERSION_FALLBACK,
                           app_desc ? app_desc->date : __DATE__,
                           app_desc ? app_desc->time : __TIME__);
 
