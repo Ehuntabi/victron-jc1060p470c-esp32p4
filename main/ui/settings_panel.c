@@ -128,6 +128,10 @@ static void view_selection_dropdown_event_cb(lv_event_t *e);
 
 static void screensaver_enable(ui_state_t *ui, bool enable);
 static void screensaver_wake(ui_state_t *ui);
+/* El timer del salvapantallas hace de detector de reposo. Debe correr si el
+ * salvapantallas esta activado O si el modo nocturno esta activado (para poder
+ * apagar de noche aunque el salvapantallas este off). */
+static void screensaver_sync_timer_state(ui_state_t *ui);
 
 /* ── Modo nocturno (auto brillo por hora del RTC) ─────────────── */
 static void night_switch_cb(lv_event_t *e);
@@ -144,24 +148,28 @@ static bool night_in_window(int h, uint8_t s, uint8_t e)
     return h >= s || h < e;     /* cruza medianoche */
 }
 
+/* True si el modo nocturno esta activo y estamos dentro de su franja horaria. */
+static bool night_active_now(ui_state_t *ui)
+{
+    if (!ui || !ui->night_mode.enabled) return false;
+    time_t now = time(NULL);
+    if (now < 1000000000L) return false;      /* RTC aun sin hora valida */
+    struct tm tm_local;
+    localtime_r(&now, &tm_local);
+    return night_in_window(tm_local.tm_hour,
+                           ui->night_mode.start_h,
+                           ui->night_mode.end_h);
+}
+
 static void apply_brightness_for_now(ui_state_t *ui)
 {
     if (!ui) return;
     if (ui->screensaver.active) return;       /* el SS gestiona su brillo */
-    int target = ui->brightness;
-    if (ui->night_mode.enabled) {
-        time_t now = time(NULL);
-        if (now >= 1000000000L) {
-            struct tm tm_local;
-            localtime_r(&now, &tm_local);
-            if (night_in_window(tm_local.tm_hour,
-                                ui->night_mode.start_h,
-                                ui->night_mode.end_h)) {
-                target = 0;   /* franja nocturna: pantalla apagada */
-            }
-        }
-    }
-    bsp_display_brightness_set(target);
+    /* Interactuando (SS inactivo) => brillo normal, AUNQUE sea de noche: el
+     * apagado nocturno lo hace el salvapantallas al quedar en reposo
+     * (screensaver_timer_cb), y el toque siempre despierta a normal. Antes se
+     * ponia 0% aqui y, con el SS inactivo, el toque no lo recuperaba. */
+    bsp_display_brightness_set(ui->brightness);
 }
 
 
@@ -2159,6 +2167,9 @@ static void night_save_and_apply(ui_state_t *ui)
     save_night_mode(ui->night_mode.enabled,
                     ui->night_mode.start_h,
                     ui->night_mode.end_h);
+    /* Si se acaba de activar el modo nocturno con el salvapantallas apagado, el
+     * timer de reposo debe arrancar igualmente (y pararse si ya no hace falta). */
+    screensaver_sync_timer_state(ui);
     apply_brightness_for_now(ui);
 }
 
@@ -2289,24 +2300,33 @@ static void spinbox_ss_time_decrement_event_cb(lv_event_t *e)
     ss_timeout_apply(ui);
 }
 
-void ui_settings_screensaver_create_timer(ui_state_t *ui)
+/* Arranca o pausa el timer de reposo segun haga falta (salvapantallas O modo
+ * nocturno activados). Solo toca el timer, NUNCA el brillo, asi que es seguro
+ * llamarlo en boot sin provocar parpadeos. */
+static void screensaver_sync_timer_state(ui_state_t *ui)
 {
-    if (!ui || ui->screensaver.timer) return;
-    /* Crear timer pausado y, si esta habilitado, simplemente arrancarlo.
-     * No usamos screensaver_enable() aqui porque tocaba el brillo del
-     * sistema en boot -> aparecia un parpadeo (80% -> ui->brightness ->
-     * 80%) antes de mostrar el splash. El brillo se aplica una sola vez
-     * al final del boot via night_mode_timer_cb. */
-    ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
-                                             ui->screensaver.timeout * 1000U, ui);
-    ui->screensaver.active = false;
-    if (ui->screensaver.enabled) {
+    if (!ui || !ui->screensaver.timer) return;
+    if (ui->screensaver.enabled || ui->night_mode.enabled) {
         lv_timer_set_period(ui->screensaver.timer, ui->screensaver.timeout * 1000U);
         lv_timer_reset(ui->screensaver.timer);
         lv_timer_resume(ui->screensaver.timer);
     } else {
         lv_timer_pause(ui->screensaver.timer);
     }
+}
+
+void ui_settings_screensaver_create_timer(ui_state_t *ui)
+{
+    if (!ui || ui->screensaver.timer) return;
+    /* Crear timer y arrancarlo/pausarlo segun estado. No usamos
+     * screensaver_enable() aqui porque tocaba el brillo del sistema en boot ->
+     * aparecia un parpadeo (80% -> ui->brightness -> 80%) antes de mostrar el
+     * splash. El brillo se aplica una sola vez al final del boot via
+     * night_mode_timer_cb. screensaver_sync_timer_state NO toca el brillo. */
+    ui->screensaver.timer = lv_timer_create(screensaver_timer_cb,
+                                             ui->screensaver.timeout * 1000U, ui);
+    ui->screensaver.active = false;
+    screensaver_sync_timer_state(ui);
 }
 
 static void screensaver_enable(ui_state_t *ui, bool enable)
@@ -2317,16 +2337,15 @@ static void screensaver_enable(ui_state_t *ui, bool enable)
     if (enable) {
         ui->screensaver.active = false;
         bsp_display_brightness_set(ui->brightness);
-        lv_timer_set_period(ui->screensaver.timer, ui->screensaver.timeout * 1000U);
-        lv_timer_reset(ui->screensaver.timer);
-        lv_timer_resume(ui->screensaver.timer);
-    } else {
-        lv_timer_pause(ui->screensaver.timer);
-        if (ui->screensaver.active) {
-            bsp_display_brightness_set(ui->brightness);
-            ui->screensaver.active = false;
-        }
+    } else if (ui->screensaver.active && !night_active_now(ui)) {
+        /* Al desactivar el salvapantallas restauramos el brillo SOLO si no
+         * estamos en franja nocturna: de noche el timer sigue corriendo (lo
+         * mantiene screensaver_sync_timer_state) para apagar en reposo, y el
+         * toque despierta igual. */
+        bsp_display_brightness_set(ui->brightness);
+        ui->screensaver.active = false;
     }
+    screensaver_sync_timer_state(ui);
 }
 
 /* Forward declarations para rotacion */
@@ -2381,9 +2400,20 @@ static void screensaver_timer_cb(lv_timer_t *timer)
     }
     /* El modo ausente ya gestiona la pantalla (apagada): no activar screensaver. */
     if (ausente_is_active()) return;
-    if (!ui->screensaver.enabled || ui->screensaver.active) return;
+    if (ui->screensaver.active) return;
 
-    ESP_LOGI("SAVER", "timer fired mode=%d period=%d", ui->screensaver.mode, ui->screensaver.rotate_period_min);
+    /* Franja nocturna: pantalla APAGADA en reposo (sin rotar). Ocurre AUNQUE el
+     * salvapantallas este desactivado (el timer sigue corriendo si el modo
+     * nocturno esta activo). El toque la enciende a brillo normal via
+     * screensaver_wake y, tras el timeout, vuelve aqui a apagarse. */
+    if (night_active_now(ui)) {
+        bsp_display_brightness_set(0);
+        ui->screensaver.active = true;
+        return;
+    }
+
+    /* Fuera de la franja nocturna, solo el salvapantallas (si esta activado). */
+    if (!ui->screensaver.enabled) return;
 
     if (ui->screensaver.mode == UI_SCREENSAVER_MODE_ROTATE) {
         /* No entrar en rotacion si hay una alarma activa: hay que mantener
@@ -2420,9 +2450,16 @@ static void screensaver_wake(ui_state_t *ui)
     }
     /* En modo ausente el toque normal NO despierta la pantalla. */
     if (ausente_is_active()) return;
-    if (ui->screensaver.enabled) {
+    /* El timer de reposo puede estar corriendo por el salvapantallas O por el
+     * modo nocturno: en ambos casos el toque resetea el reloj de inactividad. */
+    if (ui->screensaver.enabled || ui->night_mode.enabled) {
         lv_timer_reset(ui->screensaver.timer);
-        if (ui->screensaver.active) {
+    }
+    /* Si la pantalla esta apagada/atenuada por reposo, el toque la restaura,
+     * venga del salvapantallas o del modo nocturno (active solo lo pone el
+     * timer de reposo, asi que restaurar aqui siempre es correcto). */
+    if (ui->screensaver.active) {
+        {
             bool was_rotating = (ui->screensaver.rotate_timer != NULL);
             bsp_display_brightness_set(ui->brightness);
             ui->screensaver.active = false;

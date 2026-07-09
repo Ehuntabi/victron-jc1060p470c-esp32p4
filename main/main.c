@@ -146,7 +146,13 @@ static void night_mode_timer_cb(void *arg)
         }
         uint8_t luma;
         if (night_win) {
-            target = 0;                 /* franja nocturna: pantalla apagada */
+            /* Franja nocturna: NO forzamos 0 aqui. El apagado en reposo lo hace
+             * el salvapantallas (screensaver_timer_cb -> 0% + active=true) para
+             * que el TOQUE pueda despertar la pantalla (screensaver_wake solo
+             * restaura si active==true). Si apagaramos con active=false, el
+             * toque no reencenderia (bug pantalla negra irrecuperable). De noche
+             * mantenemos brillo manual; el auto-brillo sigue sin aplicar. */
+            target = ui->brightness;
         } else if (s_auto_brightness && camera_get_luma(&luma)) {
             target = luma_to_brightness(luma);
         } else {
