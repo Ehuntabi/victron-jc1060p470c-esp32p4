@@ -62,6 +62,9 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_CONTROLLER_DISABLED=y
+# Stack del host task: 4096 dejaba solo ~628 bytes libres min (medido 2026-07-09,
+# ui_on_panel_data actualiza labels LVGL bajo lock en esta task). 6144 = colchon.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=6144
 
 # LVGL fonts
 # 14/20/24/28/46 estan aliased a Inter en main/fonts/fonts_es.h

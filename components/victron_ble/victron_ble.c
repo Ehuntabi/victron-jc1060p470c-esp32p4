@@ -239,15 +239,20 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     static uint32_t s_adv_victron = 0;
     s_adv_total++;
 
-    /* [MEDICION] watermark del stack de la task NimBLE host: aqui corre
-     * data_cb = ui_on_panel_data, que crea vistas LVGL pesadas. En ESP-IDF
+    /* [CANARY] watermark del stack de la task NimBLE host: aqui corre
+     * data_cb = ui_on_panel_data (updates de labels LVGL bajo lock). En ESP-IDF
      * uxTaskGetStackHighWaterMark devuelve los BYTES libres minimos historicos.
-     * Si baja de ~512 hay que subir CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE (4096).
-     * Log cada 256 adv (~30-90 s) para no spammear. */
-    if ((s_adv_total % 256) == 0) {
+     * Medido 2026-07-09: ~628 con stack 4096 (estable, sin runaway) -> subido a
+     * 6144. Solo logueamos si aparece un MINIMO NUEVO: mudo mientras este bien,
+     * avisa si el margen empeora. */
+    if ((s_adv_total & 0x3F) == 0) {   /* comprobar cada 64 adv, sin spam */
+        static UBaseType_t s_stack_min = 0xFFFFFFFF;
         UBaseType_t free_min = uxTaskGetStackHighWaterMark(NULL);
-        ESP_LOGW(TAG, "NimBLE host stack: %u bytes libres min (de 4096)",
-                 (unsigned)free_min);
+        if (free_min < s_stack_min) {
+            s_stack_min = free_min;
+            ESP_LOGW(TAG, "NimBLE host stack: nuevo minimo %u bytes libres",
+                     (unsigned)free_min);
+        }
     }
 
     uint16_t early_vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
