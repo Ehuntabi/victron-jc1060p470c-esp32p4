@@ -708,7 +708,25 @@ static void autostart_switch_cb(lv_event_t *e)
 static void sd_trip_timer_cb(lv_timer_t *t)
 {
     (void)t;
+    ui_state_t *ui = t ? (ui_state_t *)t->user_data : NULL;
     if (s_trip_label && lv_obj_is_visible(s_trip_label)) trip_label_refresh();
+
+    /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
+    if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
+        FATFS *fs = NULL;
+        DWORD free_clusters = 0;
+        if (f_getfree("0:", &free_clusters, &fs) == FR_OK && fs) {
+            uint64_t sect_per_cluster = fs->csize;
+            uint64_t total_sect = (fs->n_fatent - 2) * sect_per_cluster;
+            uint64_t free_sect  = (uint64_t)free_clusters * sect_per_cluster;
+            uint64_t total_mb = (total_sect * 512ULL) / (1024ULL * 1024ULL);
+            uint64_t free_mb  = (free_sect  * 512ULL) / (1024ULL * 1024ULL);
+            lv_label_set_text_fmt(ui->lbl_about_sd, "SD: %u/%u MB libres",
+                (unsigned)free_mb, (unsigned)total_mb);
+        } else {
+            lv_label_set_text(ui->lbl_about_sd, "SD: no montada");
+        }
+    }
 }
 
 static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
@@ -764,6 +782,11 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(ui->capture_status_lbl,
                       "Guarda las 8 pantallas de datos en la SD");
 
+    ui->lbl_about_sd = lv_label_create(card_cap);
+    lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->lbl_about_sd, lv_color_hex(0x888888), 0);
+    lv_label_set_text(ui->lbl_about_sd, "SD: --");
+
     /* === Card Visor de imagenes (separado del carrusel) === */
     lv_obj_t *card_view = lv_obj_create(cont);
     lv_obj_set_width(card_view, lv_pct(100));
@@ -778,17 +801,23 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_view, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *view_title = lv_label_create(card_view);
+    /* Cabecera: titulo a la izquierda, boton a la derecha */
+    lv_obj_t *view_head = lv_obj_create(card_view);
+    lv_obj_remove_style_all(view_head);
+    lv_obj_set_width(view_head, lv_pct(100));
+    lv_obj_set_height(view_head, LV_SIZE_CONTENT);
+    lv_obj_set_layout(view_head, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(view_head, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(view_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *view_title = lv_label_create(view_head);
+    lv_obj_set_flex_grow(view_title, 1);
     lv_obj_set_style_text_font(view_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
     lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
 
-    lv_obj_t *view_desc = lv_label_create(card_view);
-    lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
-    lv_label_set_text(view_desc, "Ver las capturas del carrusel y la vigilancia");
-
-    lv_obj_t *btn_gal = lv_btn_create(card_view);
+    lv_obj_t *btn_gal = lv_btn_create(view_head);
     lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
     lv_obj_set_height(btn_gal, 46);
     lv_obj_set_style_pad_hor(btn_gal, 24, 0);
@@ -796,9 +825,14 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_radius(btn_gal, 8, 0);
     lv_obj_t *lbl_gal = lv_label_create(btn_gal);
     lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas en pantalla");
+    lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas");
     lv_obj_center(lbl_gal);
     lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *view_desc = lv_label_create(card_view);
+    lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
+    lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
     /* === Card Trip computer (contadores reseteables del viaje) === */
     lv_obj_t *card_trip = lv_obj_create(cont);
@@ -914,8 +948,8 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_add_event_cb(btn_exp, backup_export_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(btn_imp, backup_import_cb, LV_EVENT_CLICKED, ui);
 
-    /* Trip computer: refresco en vivo mientras la card este visible. */
-    lv_timer_create(sd_trip_timer_cb, 1000, NULL);
+    /* Trip computer + info SD: refresco en vivo mientras las cards esten visibles. */
+    lv_timer_create(sd_trip_timer_cb, 1000, ui);
 }
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
@@ -2981,23 +3015,10 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_uptime, "Uptime: --");
 
-    /* Fila RAM + SD */
-    lv_obj_t *row_mem = lv_obj_create(card2);
-    lv_obj_remove_style_all(row_mem);
-    lv_obj_set_width(row_mem, lv_pct(100));
-    lv_obj_set_height(row_mem, LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_mem, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_mem, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_mem, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    ui->lbl_about_heap = lv_label_create(row_mem);
+    /* RAM libre (la info de SD se movio a la pagina Tarjeta SD) */
+    ui->lbl_about_heap = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
-
-    ui->lbl_about_sd = lv_label_create(row_mem);
-    lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_align(ui->lbl_about_sd, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
     ui->lbl_about_ip = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20_es, 0);
@@ -3051,11 +3072,20 @@ static void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     /* Version + fecha/hora de compilacion, todo en una linea. */
     const esp_app_desc_t *app_desc = esp_app_get_description();
+    const char *raw_ver = app_desc ? app_desc->version : APP_VERSION_FALLBACK;
+    /* git describe da "v1.0.0" en un tag exacto, o "v1.0.0-<n>-g<hash>[-dirty]"
+     * en un build intermedio. Mostramos el tag base y, si hay sufijo (no es un
+     * release limpio), "-dev" -> "v1.0.0-dev" en vez del hash feo. */
+    char ver_disp[48];
+    const char *dash = strchr(raw_ver, '-');
+    if (dash) snprintf(ver_disp, sizeof(ver_disp), "%.*s-dev",
+                       (int)(dash - raw_ver), raw_ver);
+    else      snprintf(ver_disp, sizeof(ver_disp), "%s", raw_ver);
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text_fmt(lbl_ver_top, "Version: %s    Compilado: %s  %s",
-                          app_desc ? app_desc->version : APP_VERSION_FALLBACK,
+                          ver_disp,
                           app_desc ? app_desc->date : __DATE__,
                           app_desc ? app_desc->time : __TIME__);
 
@@ -3338,22 +3368,6 @@ static void about_refresh_dynamic(ui_state_t *ui)
         lv_label_set_text_fmt(ui->lbl_about_heap,
             "RAM libre: int %u KB  |  PSRAM %u KB",
             (unsigned)(free_int / 1024), (unsigned)(free_spi / 1024));
-    }
-    /* SD */
-    if (ui->lbl_about_sd) {
-        FATFS *fs = NULL;
-        DWORD free_clusters = 0;
-        if (f_getfree("0:", &free_clusters, &fs) == FR_OK && fs) {
-            uint64_t sect_per_cluster = fs->csize;
-            uint64_t total_sect = (fs->n_fatent - 2) * sect_per_cluster;
-            uint64_t free_sect  = (uint64_t)free_clusters * sect_per_cluster;
-            uint64_t total_mb = (total_sect * 512ULL) / (1024ULL * 1024ULL);
-            uint64_t free_mb  = (free_sect  * 512ULL) / (1024ULL * 1024ULL);
-            lv_label_set_text_fmt(ui->lbl_about_sd, "SD: %u/%u MB libres",
-                (unsigned)free_mb, (unsigned)total_mb);
-        } else {
-            lv_label_set_text(ui->lbl_about_sd, "SD: no montada");
-        }
     }
     /* IP */
     if (ui->lbl_about_ip) {

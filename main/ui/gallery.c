@@ -321,7 +321,7 @@ static lv_obj_t *make_nav_btn(lv_obj_t *parent, const char *sym,
 void ui_gallery_open(void)
 {
     if (s_screen) return;   /* ya abierto */
-    s_folder = 0;
+    s_folder = 1;           /* por defecto: Vigilancia (no el carrusel) */
     gallery_scan();
 
     lv_obj_t *scr = lv_obj_create(lv_scr_act());
