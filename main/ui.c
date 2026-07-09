@@ -86,12 +86,24 @@ static QueueHandle_t s_beep_queue = NULL;
 static void ui_beep_task(void *arg)
 {
     (void)arg;
-    uint8_t dummy;
+    uint8_t jingle;
     while (1) {
-        if (xQueueReceive(s_beep_queue, &dummy, portMAX_DELAY) == pdTRUE) {
-            audio_play_jingle(AUDIO_JINGLE_CONFIRM);
+        if (xQueueReceive(s_beep_queue, &jingle, portMAX_DELAY) == pdTRUE) {
+            audio_play_jingle((audio_jingle_t)jingle);
         }
     }
+}
+
+/* Encola un jingle para que suene en ui_beep_task, NUNCA en el sitio del
+ * llamante (que puede tener el lock LVGL cogido y/o correr en la task NimBLE).
+ * priority=true (alarmas) usa xQueueOverwrite: reemplaza un beep de click
+ * pendiente para no perderse. priority=false (clicks) se descarta si llena. */
+static void ui_enqueue_jingle(audio_jingle_t j, bool priority)
+{
+    if (!s_beep_queue) return;
+    uint8_t v = (uint8_t)j;
+    if (priority) xQueueOverwrite(s_beep_queue, &v);
+    else          xQueueSend(s_beep_queue, &v, 0);
 }
 
 /* Beep corto al pulsar cualquier widget clicable. Encola y vuelve
@@ -99,11 +111,9 @@ static void ui_beep_task(void *arg)
 static void ui_global_click_beep_cb(lv_event_t *e)
 {
     (void)e;
-    if (!s_beep_queue) return;
-    uint8_t v = 1;
-    /* timeout 0 → si la cola esta llena (beep en curso), se descarta el
-     * nuevo beep. Evita acumulacion de beeps por clicks rapidos. */
-    xQueueSend(s_beep_queue, &v, 0);
+    /* Se descarta si la cola esta llena (beep en curso): evita acumulacion
+     * de beeps por clicks rapidos. */
+    ui_enqueue_jingle(AUDIO_JINGLE_CONFIRM, false);
 }
 
 static void health_timer_cb(lv_timer_t *t)
@@ -639,14 +649,17 @@ void ui_on_panel_data(const victron_data_t *d) {
                     /* Cruce a la baja del umbral critico */
                     if (s_last_soc >= crit_th && soc_pct < crit_th && !s_crit_active) {
                         s_crit_active = true;
-                        audio_play_jingle(AUDIO_JINGLE_CRITICAL);
+                        /* Encolar (no sonar aqui): esto corre en la task NimBLE
+                         * con el lock LVGL cogido; sonar sincrono lo congelaria
+                         * ~0.3-1s. La task de audio lo toca fuera del lock. */
+                        ui_enqueue_jingle(AUDIO_JINGLE_CRITICAL, true);
                     }
                     /* Recuperacion */
                     if (soc_pct >= crit_th + 2) s_crit_active = false;
                     /* Cruce a la baja del warning (solo si no ya en critico) */
                     if (s_last_soc >= warn_th && soc_pct < warn_th && soc_pct >= crit_th && !s_warn_active) {
                         s_warn_active = true;
-                        audio_play_jingle(AUDIO_JINGLE_WARNING);
+                        ui_enqueue_jingle(AUDIO_JINGLE_WARNING, true);
                     }
                     if (soc_pct >= warn_th + 2) s_warn_active = false;
                 }
