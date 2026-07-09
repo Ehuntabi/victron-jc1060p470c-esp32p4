@@ -35,7 +35,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=stringop-truncation" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format-truncation" APPEND)
 
-project(VictronSolarDisplay_JC1060P470C_I)
+project(joint_spl_145_control)
 
 set_source_files_properties(
     $ENV{IDF_PATH}/components/bt/host/nimble/nimble/nimble/transport/uart_ll/src/hci_uart.c

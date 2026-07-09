@@ -23,7 +23,7 @@ cd "$(dirname "$0")"
 
 REPO="Ehuntabi/victron-jc1060p470c-esp32p4"
 IDF_EXPORT="$HOME/.espressif/esp-idf-5.4/export.sh"
-APP_BIN="build/VictronSolarDisplay_JC1060P470C_I.bin"
+APP_BIN="build/joint_spl_145_control.bin"
 
 # ── 0) argumentos ────────────────────────────────────────────────────────────
 VER_IN="${1:-}"
