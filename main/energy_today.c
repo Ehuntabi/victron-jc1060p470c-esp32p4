@@ -29,16 +29,23 @@ static struct {
 #define NVS_KEY_YPV  "ypv_mwh"
 #define NVS_KEY_YLD  "yld_mwh"
 
-static void save_nvs(void)
+/* Snapshot para persistir fuera del lock (la escritura a flash no debe retener
+ * s.mtx: el commit/GC del NVS puede tardar y bloquea a los getters de LVGL). */
+typedef struct {
+    int32_t day, year;
+    double pv, ld, ypv, yld;
+} energy_snap_t;
+
+static void write_nvs(const energy_snap_t *snap)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i32(h, NVS_KEY_DAY,  s.day_of_year);
-    nvs_set_i32(h, NVS_KEY_YEAR, s.year);
-    nvs_set_i32(h, NVS_KEY_PV,  (int32_t)s.pv_wh);
-    nvs_set_i32(h, NVS_KEY_LD,  (int32_t)s.loads_wh);
-    nvs_set_i32(h, NVS_KEY_YPV, (int32_t)s.yesterday_pv_wh);
-    nvs_set_i32(h, NVS_KEY_YLD, (int32_t)s.yesterday_loads_wh);
+    nvs_set_i32(h, NVS_KEY_DAY,  snap->day);
+    nvs_set_i32(h, NVS_KEY_YEAR, snap->year);
+    nvs_set_i32(h, NVS_KEY_PV,  (int32_t)snap->pv);
+    nvs_set_i32(h, NVS_KEY_LD,  (int32_t)snap->ld);
+    nvs_set_i32(h, NVS_KEY_YPV, (int32_t)snap->ypv);
+    nvs_set_i32(h, NVS_KEY_YLD, (int32_t)snap->yld);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -72,12 +79,23 @@ static void load_nvs(int today_yday, int today_year)
     }
 }
 
-static void check_day_rollover_locked(void)
+/* Devuelve true si hay que persistir (rollover realizado). El caller hace el
+ * write_nvs FUERA del lock. */
+static bool check_day_rollover_locked(void)
 {
     time_t now = time(NULL);
-    if (now < 1000000000L) return;  /* hora aun no valida */
+    if (now < 1000000000L) return false;  /* hora aun no valida */
     struct tm t;
     localtime_r(&now, &t);
+    if (s.day_of_year < 0) {
+        /* Primera hora valida tras arrancar sin RTC: cargar los contadores
+         * persistidos ANTES de cualquier rollover, para no tomar los ceros
+         * en RAM como "ayer" y sobrescribir el NVS con 0. */
+        s.day_of_year = t.tm_yday;
+        s.year = t.tm_year + 1900;
+        load_nvs(t.tm_yday, t.tm_year + 1900);
+        return false;
+    }
     if (t.tm_yday != s.day_of_year || (t.tm_year + 1900) != s.year) {
         ESP_LOGI(TAG, "Cambio de dia detectado: hoy -> ayer (PV=%.2f Loads=%.2f Wh)",
                  s.pv_wh, s.loads_wh);
@@ -88,8 +106,9 @@ static void check_day_rollover_locked(void)
         s.loads_wh = 0;
         s.day_of_year = t.tm_yday;
         s.year = t.tm_year + 1900;
-        save_nvs();
+        return true;
     }
+    return false;
 }
 
 void energy_today_init(void)
@@ -121,7 +140,7 @@ void energy_today_on_battery(int32_t i_milli, uint16_t v_centi)
         xSemaphoreGive(s.mtx);
         return;
     }
-    check_day_rollover_locked();
+    bool do_save = check_day_rollover_locked();
 
     /* Integramos entre samples reales: necesitamos al menos un sample previo. */
     if (s.last_sample != 0) {
@@ -138,13 +157,22 @@ void energy_today_on_battery(int32_t i_milli, uint16_t v_centi)
             /* Persistencia cada 5 min para no degradar la flash (NVS) */
             static time_t last_save = 0;
             if (now - last_save >= 300) {
-                save_nvs();
+                do_save = true;
                 last_save = now;
             }
         }
     }
     s.last_sample = now;
+
+    /* Snapshot bajo lock; la escritura a flash (nvs_set/commit) se hace FUERA
+     * del lock para no bloquear a los getters (LVGL) durante el commit/GC. */
+    energy_snap_t snap;
+    if (do_save) {
+        snap = (energy_snap_t){ s.day_of_year, s.year, s.pv_wh, s.loads_wh,
+                                s.yesterday_pv_wh, s.yesterday_loads_wh };
+    }
     xSemaphoreGive(s.mtx);
+    if (do_save) write_nvs(&snap);
 }
 
 void energy_today_on_solar_yield(uint16_t yield_centikwh)

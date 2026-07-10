@@ -339,13 +339,37 @@ esp_err_t datalogger_log(const frigo_state_t *frigo)
     return ESP_OK;
 }
 
-int datalogger_get_count(void) { return s_count; }
+int datalogger_get_count(void)
+{
+    if (!s_mutex) return 0;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return 0;
+    int c = s_count;
+    xSemaphoreGive(s_mutex);
+    return c;
+}
+
+/* Copia el entry `index` a *out. El caller DEBE tener s_mutex tomado. Devuelve
+ * false si el indice esta fuera de rango. */
+static bool get_entry_locked(int index, datalogger_entry_t *out)
+{
+    if (index < 0 || index >= s_count) return false;
+    int real = (s_count < DATALOGGER_MAX_ENTRIES) ? index : (s_head + index) % DATALOGGER_MAX_ENTRIES;
+    *out = s_buf[real];
+    return true;
+}
 
 const datalogger_entry_t *datalogger_get_entry(int index)
 {
-    if (index < 0 || index >= s_count) return NULL;
-    int real = (s_count < DATALOGGER_MAX_ENTRIES) ? index : (s_head + index) % DATALOGGER_MAX_ENTRIES;
-    return &s_buf[real];
+    /* Copia bajo lock: leer s_buf/s_head/s_count sin lock mientras
+     * datalogger_log muta bajo s_mutex da una lectura rota. Buffer estatico:
+     * todos los callers publicos corren en el hilo de LVGL y leen la struct
+     * antes de la siguiente llamada. */
+    static datalogger_entry_t copy;
+    if (!s_mutex) return NULL;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return NULL;
+    bool ok = get_entry_locked(index, &copy);
+    xSemaphoreGive(s_mutex);
+    return ok ? &copy : NULL;
 }
 
 char *datalogger_get_csv(void)
@@ -359,15 +383,15 @@ char *datalogger_get_csv(void)
                     "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
         for (int i = 0; i < s_count && pos < (int)size - 80; i++) {
-            const datalogger_entry_t *e = datalogger_get_entry(i);
-            if (!e) continue;
+            datalogger_entry_t e;  /* get_entry_locked: ya tenemos s_mutex */
+            if (!get_entry_locked(i, &e)) continue;
             char ta[10], tc[10], te[10];
-            format_temp(ta, sizeof ta, e->T_Aletas);
-            format_temp(tc, sizeof tc, e->T_Congelador);
-            format_temp(te, sizeof te, e->T_Exterior);
+            format_temp(ta, sizeof ta, e.T_Aletas);
+            format_temp(tc, sizeof tc, e.T_Congelador);
+            format_temp(te, sizeof te, e.T_Exterior);
             pos += snprintf(csv + pos, size - pos,
                             "%s,%s,%s,%s,%d\n",
-                            e->timestamp, ta, tc, te, e->fan_percent);
+                            e.timestamp, ta, tc, te, e.fan_percent);
         }
         xSemaphoreGive(s_mutex);
     }

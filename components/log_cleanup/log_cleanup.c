@@ -17,8 +17,12 @@ static const char *DIRS[] = { "/sdcard/frigo", "/sdcard/bateria" };
 /* Parsea YYYY-MM-DD.csv y devuelve epoch a las 00:00 de ese dia, o 0 si no parsea */
 static time_t parse_csv_date(const char *fname)
 {
-    int y = 0, mo = 0, d = 0;
-    if (sscanf(fname, "%4d-%2d-%2d.csv", &y, &mo, &d) != 3) return 0;
+    int y = 0, mo = 0, d = 0, n = 0;
+    /* %n captura cuantos chars consumio; solo se alcanza si el literal ".csv"
+     * casa. Exigimos ademas que ".csv" sea el final EXACTO del nombre para no
+     * borrar ".txt", ".csv.bak" ni nombres sin extension. */
+    if (sscanf(fname, "%4d-%2d-%2d.csv%n", &y, &mo, &d, &n) != 3) return 0;
+    if (n == 0 || fname[n] != '\0') return 0;
     if (y < 2024 || y > 2100) return 0;
     if (mo < 1 || mo > 12) return 0;
     if (d < 1 || d > 31) return 0;

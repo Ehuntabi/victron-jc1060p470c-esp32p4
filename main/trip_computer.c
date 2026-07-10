@@ -15,20 +15,37 @@ static trip_computer_t s;
 static time_t s_last_sample;
 static SemaphoreHandle_t s_mtx;
 
-static void persist_locked(void)
+/* Snapshot para persistir fuera del lock (el commit/GC del NVS no debe retener
+ * s_mtx: trip_computer_get quedaria bloqueado desde LVGL durante el commit). */
+typedef struct {
+    int64_t reset_epoch, seconds_running;
+    int32_t whc, whd, ahc_m, ahd_m;
+} trip_snap_t;
+
+/* Copia el estado a un snapshot. El caller debe tener s_mtx tomado. */
+static trip_snap_t trip_snapshot_locked(void)
+{
+    trip_snap_t snap = {
+        .reset_epoch     = s.reset_epoch,
+        .seconds_running = s.seconds_running,
+        .whc   = (int32_t)s.wh_charged,
+        .whd   = (int32_t)s.wh_discharged,
+        .ahc_m = (int32_t)(s.ah_charged    * 1000.0),  /* en mAh: preserva decimales */
+        .ahd_m = (int32_t)(s.ah_discharged * 1000.0),
+    };
+    return snap;
+}
+
+static void write_nvs(const trip_snap_t *snap)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i64(h, "reset", s.reset_epoch);
-    nvs_set_i64(h, "secs",  s.seconds_running);
-    int32_t whc = (int32_t)s.wh_charged;
-    int32_t whd = (int32_t)s.wh_discharged;
-    int32_t ahc_m = (int32_t)(s.ah_charged    * 1000.0);
-    int32_t ahd_m = (int32_t)(s.ah_discharged * 1000.0);
-    nvs_set_i32(h, "wh_c", whc);
-    nvs_set_i32(h, "wh_d", whd);
-    nvs_set_i32(h, "ah_c", ahc_m);  /* en mAh para preservar decimales */
-    nvs_set_i32(h, "ah_d", ahd_m);
+    nvs_set_i64(h, "reset", snap->reset_epoch);
+    nvs_set_i64(h, "secs",  snap->seconds_running);
+    nvs_set_i32(h, "wh_c", snap->whc);
+    nvs_set_i32(h, "wh_d", snap->whd);
+    nvs_set_i32(h, "ah_c", snap->ahc_m);
+    nvs_set_i32(h, "ah_d", snap->ahd_m);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -62,7 +79,8 @@ void trip_computer_init(void)
         time_t now = time(NULL);
         if (now >= 1000000000L) {
             s.reset_epoch = now;
-            persist_locked();
+            trip_snap_t snap = trip_snapshot_locked();
+            write_nvs(&snap);
         }
     }
     ESP_LOGI(TAG, "Trip: reset=%lld, Wh +%.1f -%.1f, Ah +%.2f -%.2f, secs=%lld",
@@ -73,6 +91,7 @@ void trip_computer_init(void)
 void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
 {
     if (!s_mtx) trip_computer_init();
+    bool do_save = false;
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     if (now < 1000000000L) {
@@ -100,13 +119,19 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
             /* Persistencia cada 5 min para no degradar la flash (NVS) */
             static time_t s_last_save = 0;
             if (now - s_last_save >= 300) {
-                persist_locked();
+                do_save = true;
                 s_last_save = now;
             }
         }
     }
     s_last_sample = now;
+
+    /* Snapshot bajo lock; el commit a flash se hace FUERA del lock para no
+     * bloquear a trip_computer_get (LVGL/dashboard) durante el commit/GC. */
+    trip_snap_t snap;
+    if (do_save) snap = trip_snapshot_locked();
     xSemaphoreGive(s_mtx);
+    if (do_save) write_nvs(&snap);
 }
 
 void trip_computer_reset(void)
@@ -121,14 +146,17 @@ void trip_computer_reset(void)
     s.ah_discharged = 0;
     s.seconds_running = 0;
     s_last_sample = 0;
-    persist_locked();
+    trip_snap_t snap = trip_snapshot_locked();
     xSemaphoreGive(s_mtx);
+    write_nvs(&snap);
     ESP_LOGI(TAG, "Trip reset");
 }
 
 void trip_computer_get(trip_computer_t *out)
 {
-    if (!s_mtx || !out) return;
+    if (!out) return;
+    memset(out, 0, sizeof(*out));  /* nunca dejar *out sin init (ventana de arranque) */
+    if (!s_mtx) return;
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     *out = s;
     xSemaphoreGive(s_mtx);
