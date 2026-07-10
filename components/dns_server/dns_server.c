@@ -121,10 +121,9 @@ static int parse_dns_request(char *req, size_t req_len, char *dns_reply, size_t 
     header->flags |= QR_FLAG;
 
     uint16_t qd_count = ntohs(header->qd_count);
-    header->an_count = htons(qd_count);
 
-    int reply_len = qd_count * sizeof(dns_answer_t) + req_len;
-    if (reply_len > dns_reply_max_len) {
+    // Worst-case bounds check: at most one answer per question
+    if (qd_count * sizeof(dns_answer_t) + req_len > dns_reply_max_len) {
         return -1;
     }
 
@@ -132,6 +131,7 @@ static int parse_dns_request(char *req, size_t req_len, char *dns_reply, size_t 
     char *cur_ans_ptr = dns_reply + req_len;
     char *cur_qd_ptr = dns_reply + sizeof(dns_header_t);
     char name[128];
+    int answer_count = 0;
 
     // Respond to all questions based on configured rules
     for (int qd_i = 0; qd_i < qd_count; qd_i++) {
@@ -164,22 +164,29 @@ static int parse_dns_request(char *req, size_t req_len, char *dns_reply, size_t 
                     }
                 }
             }
-            if (ip.addr == IPADDR_ANY) {    // no rule applies, continue with another question
-                continue;
+            if (ip.addr != IPADDR_ANY) {    // a rule applies, append the answer
+                dns_answer_t *answer = (dns_answer_t *)cur_ans_ptr;
+
+                answer->ptr_offset = htons(0xC000 | (cur_qd_ptr - dns_reply));
+                answer->type = htons(qd_type);
+                answer->class = htons(qd_class);
+                answer->ttl = htonl(ANS_TTL_SEC);
+
+                ESP_LOGD(TAG, "Answer with PTR offset: 0x%" PRIX16 " and IP 0x%" PRIX32, ntohs(answer->ptr_offset), ip.addr);
+
+                answer->addr_len = htons(sizeof(ip.addr));
+                answer->ip_addr = ip.addr;
+
+                cur_ans_ptr += sizeof(dns_answer_t);
+                answer_count++;
             }
-            dns_answer_t *answer = (dns_answer_t *)cur_ans_ptr;
-
-            answer->ptr_offset = htons(0xC000 | (cur_qd_ptr - dns_reply));
-            answer->type = htons(qd_type);
-            answer->class = htons(qd_class);
-            answer->ttl = htonl(ANS_TTL_SEC);
-
-            ESP_LOGD(TAG, "Answer with PTR offset: 0x%" PRIX16 " and IP 0x%" PRIX32, ntohs(answer->ptr_offset), ip.addr);
-
-            answer->addr_len = htons(sizeof(ip.addr));
-            answer->ip_addr = ip.addr;
         }
+        // Advance to the next question in the packet
+        cur_qd_ptr = name_end_ptr + sizeof(dns_question_t);
     }
+
+    header->an_count = htons(answer_count);
+    int reply_len = req_len + answer_count * sizeof(dns_answer_t);
     return reply_len;
 }
 
@@ -227,7 +234,10 @@ void dns_server_task(void *pvParameters)
             // Error occurred during receiving
             if (len < 0) {
                 ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
-                close(sock);
+                if (sock >= 0) {
+                    close(sock);
+                    sock = -1;
+                }
                 break;
             }
             // Data received

@@ -131,6 +131,7 @@ static void cfg_srv_ap_stop_idempotent(void *arg, esp_event_base_t base,
  * temporizador caduca como pretendemos. */
 #define AP_AUTO_OFF_MS  (15 * 60 * 1000)
 static httpd_handle_t s_httpd = NULL;
+static dns_server_handle_t s_dns = NULL;
 static esp_timer_handle_t s_ap_off_timer = NULL;
 
 static void ap_auto_off_cb(void *arg)
@@ -817,6 +818,17 @@ static esp_err_t handle_static(httpd_req_t *req) {
     return serve_from_spiffs(req, req->uri);
 }
 
+/* true si los n primeros caracteres de s son hex. strtol da 0 en no-hex y
+ * colaria una MAC/clave AES basura como valida -> validar antes de convertir. */
+static bool str_is_hex(const char *s, int n) {
+    for (int i = 0; i < n; i++) {
+        char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+            return false;
+    }
+    return true;
+}
+
 // Handler for POST /save (MAC address and AES key)
 static esp_err_t post_save(httpd_req_t *req) {
     REQUIRE_AUTH(req);
@@ -830,12 +842,18 @@ static esp_err_t post_save(httpd_req_t *req) {
     char *body = malloc(len + 1);
     if (!body) return ESP_FAIL;
     
-    int ret = httpd_req_recv(req, body, len);
-    if (ret <= 0) { 
-        free(body); 
-        return ESP_FAIL; 
+    /* Bucle recv: httpd_req_recv puede devolver menos de len -> body truncado. */
+    int received = 0;
+    while (received < (int)len) {
+        int ret = httpd_req_recv(req, body + received, len - received);
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (ret <= 0) {
+            free(body);
+            return ESP_FAIL;
+        }
+        received += ret;
     }
-    body[ret] = '\0';
+    body[received] = '\0';
     
     /* LOGD (no LOGI): el body lleva key=<AES Victron> y log_capture persiste
      * los INFO a la SD -> no volcar la clave en claro. */
@@ -869,7 +887,13 @@ static esp_err_t post_save(httpd_req_t *req) {
     
     strncpy(mac_str, mac_value, 12);
     mac_str[12] = '\0';
-    
+    if (!str_is_hex(mac_str, 12)) {
+        ESP_LOGE(TAG, "MAC no es hex");
+        free(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "MAC must be 12 hex characters");
+        return ESP_FAIL;
+    }
+
     // Extract AES key
     char *key_param = strstr(body, "key=");
     if (!key_param) {
@@ -892,7 +916,13 @@ static esp_err_t post_save(httpd_req_t *req) {
     
     strncpy(key_str, key_value, 32);
     key_str[32] = '\0';
-    
+    if (!str_is_hex(key_str, 32)) {
+        ESP_LOGE(TAG, "Key no es hex");
+        free(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "AES key must be 32 hex characters");
+        return ESP_FAIL;
+    }
+
     // Parse MAC address from hex string
     for (int i = 0; i < 6; i++) {
         char tmp[3] = { mac_str[i*2], mac_str[i*2+1], 0 };
@@ -1189,11 +1219,11 @@ static void get_latest_csv_path(const char *subdir, char *out, size_t out_len)
 static char *read_file_to_buf(const char *path, size_t *out_len)
 {
     struct stat st;
-    if (stat(path, &st) != 0) return NULL;
-    if (st.st_size <= 0 || st.st_size > 512 * 1024) return NULL; /* limite 512KB */
     /* Serializar el I/O de SD con el GDMA de la camara (no-op si no hay camara).
      * Solo unlock si el lock se consiguio: dar un mutex ajeno = assert de FreeRTOS. */
     bool sdl = camera_sd_bus_lock(3000);
+    if (stat(path, &st) != 0) { if (sdl) camera_sd_bus_unlock(); return NULL; }
+    if (st.st_size <= 0 || st.st_size > 512 * 1024) { if (sdl) camera_sd_bus_unlock(); return NULL; } /* limite 512KB */
     FILE *f = fopen(path, "rb");
     if (!f) { if (sdl) camera_sd_bus_unlock(); return NULL; }
     char *buf = malloc(st.st_size + 1);
@@ -1227,6 +1257,12 @@ static void ts_init(ts_series_t *s, int cap)
     s->y     = malloc(sizeof(float) * cap);
     s->y_max = malloc(sizeof(float) * cap);
     s->y_min = malloc(sizeof(float) * cap);
+    if (!s->x || !s->y || !s->y_max || !s->y_min) {
+        /* Fallo parcial de malloc: liberar lo reservado y dejar todo NULL
+         * para que el guard OOM del caller (if !.x) lo detecte. */
+        free(s->x); free(s->y); free(s->y_max); free(s->y_min);
+        s->x = s->y = s->y_max = s->y_min = NULL;
+    }
     s->n = 0;
     s->cap = cap;
 }
@@ -1996,7 +2032,12 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
     }
 
     struct dirent *de;
-    while ((de = readdir(dp)) != NULL) {
+    while (1) {
+        /* readdir lee sectores de dir: serializar con el GDMA de la camara */
+        bool rdl = camera_sd_bus_lock(3000);
+        de = readdir(dp);
+        if (rdl) camera_sd_bus_unlock();
+        if (de == NULL) break;
         if (de->d_type == DT_DIR) continue;
         char full_path[400];
         snprintf(full_path, sizeof full_path, "%s/%s", src_dir, de->d_name);
@@ -2081,7 +2122,11 @@ esp_err_t config_server_start(void) {
     cfg.max_open_sockets = 4;
     cfg.max_uri_handlers = 32;  /* handlers actuales + /capturas + /captura + margen */
     cfg.max_resp_headers = 16;
-    ESP_ERROR_CHECK(httpd_start(&server, &cfg));
+    esp_err_t herr = httpd_start(&server, &cfg);
+    if (herr != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_start fallo: %s (no reboot)", esp_err_to_name(herr));
+        return herr;
+    }
     s_httpd = server;   /* publicar tras start exitoso */
 
     httpd_uri_t uri_root = { .uri = "/",    .method = HTTP_GET,  .handler = handle_root };
@@ -2151,9 +2196,13 @@ esp_err_t config_server_start(void) {
 
     ESP_LOGI(TAG, "HTTP config server running (with captive‐portal redirect)");
 
-    // Start DNS server for captive portal
-    dns_server_config_t dns_cfg = DNS_SERVER_CONFIG_SINGLE("*", "WIFI_AP_DEF");
-    start_dns_server(&dns_cfg);
+    // Start DNS server for captive portal (solo una vez: cada reactivacion
+    // re-entraba aqui tirando el handle sin stop -> 2a task EADDRINUSE ->
+    // zombie en recvfrom -> fuga de sockets)
+    if (!s_dns) {
+        dns_server_config_t dns_cfg = DNS_SERVER_CONFIG_SINGLE("*", "WIFI_AP_DEF");
+        s_dns = start_dns_server(&dns_cfg);
+    }
 
     return ESP_OK;
 }

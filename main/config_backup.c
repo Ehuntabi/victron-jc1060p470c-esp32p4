@@ -208,7 +208,8 @@ esp_err_t config_backup_import(const char *path)
             if (count >= VICTRON_MAX_DEVICES) break;
             const char *mac  = cJSON_GetObjectItem(d, "mac") ? cJSON_GetObjectItem(d, "mac")->valuestring : NULL;
             const char *khex = cJSON_GetObjectItem(d, "aes_key_hex") ? cJSON_GetObjectItem(d, "aes_key_hex")->valuestring : NULL;
-            const char *name = cJSON_GetObjectItem(d, "name") ? cJSON_GetObjectItem(d, "name")->valuestring : "";
+            cJSON *jname = cJSON_GetObjectItem(d, "name");
+            const char *name = cJSON_IsString(jname) ? jname->valuestring : "";
             bool en = cJSON_IsTrue(cJSON_GetObjectItem(d, "enabled"));
             if (!mac || !khex) continue;
             strncpy(devs[count].mac_address, mac, sizeof(devs[count].mac_address) - 1);
