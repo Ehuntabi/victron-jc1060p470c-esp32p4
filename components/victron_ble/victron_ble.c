@@ -10,6 +10,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "host/ble_hs.h"
@@ -30,6 +31,10 @@ static bool victron_debug_enabled = false;
 // Multiple device configuration
 static victron_device_config_t device_configs[VICTRON_MAX_DEVICES];
 static uint8_t device_count = 0;
+/* Protege device_configs/device_count: se leen en la task NimBLE (hot path)
+ * y se reescriben desde la task UI/HTTP en victron_ble_reload_device_config().
+ * Sin esto un reload podia dejar ver un frame con el array a medio escribir. */
+static SemaphoreHandle_t device_config_mutex = NULL;
 static uint8_t legacy_aes_key[16];  // Fallback for single-key compatibility
 
 typedef enum {
@@ -72,18 +77,25 @@ static const victron_device_config_t* find_device_config_by_mac(const uint8_t ma
     snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
-    // Search for matching device configuration
+    // Search for matching device configuration (bajo mutex: el reload puede
+    // reescribir device_configs/device_count desde otra task a la vez).
+    const victron_device_config_t *found = NULL;
+    if (device_config_mutex) xSemaphoreTake(device_config_mutex, portMAX_DELAY);
     for (int i = 0; i < device_count; i++) {
-        if (device_configs[i].enabled && 
+        if (device_configs[i].enabled &&
             strcasecmp(device_configs[i].mac_address, mac_str) == 0) {
-            VDBG("Found device config for MAC %s: '%s'", 
-                 mac_str, device_configs[i].device_name);
-            return &device_configs[i];
+            found = &device_configs[i];
+            break;
         }
     }
+    if (device_config_mutex) xSemaphoreGive(device_config_mutex);
 
-    VDBG("No device config found for MAC %s", mac_str);
-    return NULL;
+    if (found) {
+        VDBG("Found device config for MAC %s: '%s'", mac_str, found->device_name);
+    } else {
+        VDBG("No device config found for MAC %s", mac_str);
+    }
+    return found;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -95,6 +107,13 @@ void victron_ble_init(void)
     /* NVS ya viene inicializado por main.c; no repetimos. Si esa
      * inicializacion fallara aqui haria ESP_ERROR_CHECK -> panic loop
      * infinito sin oportunidad de recuperacion. */
+
+    if (device_config_mutex == NULL) {
+        device_config_mutex = xSemaphoreCreateMutex();
+        if (device_config_mutex == NULL) {
+            ESP_LOGE(TAG, "Failed to create device config mutex");
+        }
+    }
 
     // Load multiple device configurations
     if (load_victron_devices(device_configs, &device_count, VICTRON_MAX_DEVICES) == ESP_OK) {
@@ -143,8 +162,17 @@ void victron_ble_set_debug(bool enabled)
 void victron_ble_reload_device_config(void)
 {
     ESP_LOGI(TAG, "Reloading Victron device configuration");
-    
-    if (load_victron_devices(device_configs, &device_count, VICTRON_MAX_DEVICES) == ESP_OK) {
+
+    /* La escritura del array se hace bajo mutex para que la task NimBLE no
+     * lea device_configs/device_count a medio actualizar (1 frame basura). */
+    if (device_config_mutex) xSemaphoreTake(device_config_mutex, portMAX_DELAY);
+    esp_err_t load_err = load_victron_devices(device_configs, &device_count, VICTRON_MAX_DEVICES);
+    if (load_err != ESP_OK) {
+        device_count = 0;
+    }
+    if (device_config_mutex) xSemaphoreGive(device_config_mutex);
+
+    if (load_err == ESP_OK) {
         ESP_LOGI(TAG, "Reloaded %d Victron device configurations", device_count);
         for (int i = 0; i < device_count; i++) {
             if (device_configs[i].enabled) {
@@ -153,13 +181,12 @@ void victron_ble_reload_device_config(void)
                          device_configs[i].enabled ? "YES" : "NO");
             }
         }
-        
+
         // Refresh the UI device list to show the updated configuration
         extern void ui_refresh_victron_device_list(void);
         ui_refresh_victron_device_list();
     } else {
         ESP_LOGW(TAG, "Failed to reload device configurations");
-        device_count = 0;
     }
 }
 
@@ -285,7 +312,7 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
 
     /* Cada 200 advs totales, logue stats globales para ver volumen del scan. */
     if ((s_adv_total % 200) == 0) {
-        ESP_LOGW(TAG, "[STATS] adv total=%lu, victron=%lu (%.1f%%)",
+        ESP_LOGD(TAG, "[STATS] adv total=%lu, victron=%lu (%.1f%%)",
                  (unsigned long)s_adv_total, (unsigned long)s_adv_victron,
                  s_adv_total ? 100.0 * s_adv_victron / s_adv_total : 0.0);
     }
@@ -348,9 +375,9 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     // Check if we should ignore unknown devices
     if (device_config == NULL && device_count > 0) {
         // If we have configured devices, ignore packets from unknown MACs
-        // Subido a LOGW temporalmente para diagnosticar Orion DC/DC no recibido:
-        // si veo este WARN con la MAC del Orion -> esta mal anadido al NVS
-        ESP_LOGW(TAG, "MAC desconocida %02X:%02X:%02X:%02X:%02X:%02X NO en NVS - descartado",
+        // Bajado a LOGD: en operacion normal cada advertisement de un Victron
+        // ajeno (device_count>0) disparaba este WARN en el hot path NimBLE.
+        ESP_LOGD(TAG, "MAC desconocida %02X:%02X:%02X:%02X:%02X:%02X NO en NVS - descartado",
                  event->disc.addr.val[5], event->disc.addr.val[4], event->disc.addr.val[3],
                  event->disc.addr.val[2], event->disc.addr.val[1], event->disc.addr.val[0]);
         return 0;
@@ -473,8 +500,10 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 tail |= ((uint64_t)b[8 + i]) << (8 * i);
 
             uint8_t aux_input = tail & 0x03; tail >>= 2;
-            int32_t current_bits  = sign_extend(tail & ((1u << 22) - 1u), 22); tail >>= 22;
-            int32_t consumed_bits = sign_extend(tail & ((1u << 20) - 1u), 20); tail >>= 20;
+            uint32_t current_raw  = tail & ((1u << 22) - 1u);
+            int32_t current_bits  = sign_extend(current_raw, 22); tail >>= 22;
+            uint32_t consumed_raw = tail & ((1u << 20) - 1u);
+            int32_t consumed_bits = sign_extend(consumed_raw, 20); tail >>= 20;
             uint32_t soc_bits = tail & ((1u << 10) - 1u);
 
             float current_A   = current_bits / 1000.0f;
@@ -502,6 +531,13 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                  * (0x3FF) lo gestiona el UI (>1000). */
                 if (voltage_raw == 0x7FFF)
                     parsed.record.battery.battery_voltage_centi = 0;
+                /* Corriente (22-bit) y consumed Ah (20-bit) tienen su propio
+                 * centinela NA (todo unos); sign_extend los volvia -1 y la UI
+                 * mostraba -0.001 A / -0.1 Ah falsos. Mismo trato que el voltaje. */
+                if (current_raw == 0x3FFFFF)
+                    parsed.record.battery.battery_current_milli = 0;
+                if (consumed_raw == 0xFFFFF)
+                    parsed.record.battery.consumed_ah_deci = 0;
                 data_cb(&parsed);
             }
             break;
