@@ -207,20 +207,19 @@ static void frigo_update_cb(const frigo_state_t *state)
                           && (T > alerts_get_freezer_temp_c());
             if (alarma != s_alarm_active) {
                 s_alarm_active = alarma;
-                if (lvgl_port_lock(50)) {
-                    ui_set_freezer_alarm(s_ui, alarma);
-                    lvgl_port_unlock();
-                }
+                /* ui_set_freezer_alarm solo escribe un bool (no toca LVGL):
+                 * llamarlo FUERA del lock para que el estado de alarma se
+                 * propague aunque lvgl_port_lock haga timeout; si no, el flanco
+                 * no se reintenta y la alarma nunca se muestra/quita. */
+                ui_set_freezer_alarm(s_ui, alarma);
             }
         } else {
             /* temperatura bajando o estable — resetear contador */
             s_rising_since = 0;
             if (s_alarm_active) {
                 s_alarm_active = false;
-                if (lvgl_port_lock(50)) {
-                    ui_set_freezer_alarm(s_ui, false);
-                    lvgl_port_unlock();
-                }
+                /* Fuera del lock: escritor de bool seguro sin LVGL (ver arriba). */
+                ui_set_freezer_alarm(s_ui, false);
             }
         }
         s_temp_prev = T;

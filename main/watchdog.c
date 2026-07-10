@@ -90,6 +90,29 @@ static void wd_set_forced_reason_nvs(uint8_t code)
     nvs_close(h);
 }
 
+/* Task de un solo uso: escribe el motivo en NVS y muere. Se lanza aparte del
+ * monitor porque nvs_open NO admite timeout: si el hang que disparo el
+ * watchdog retiene el lock de flash/NVS, nvs_open bloquea para siempre. */
+static void wd_reason_writer_task(void *arg)
+{
+    wd_set_forced_reason_nvs((uint8_t)(uintptr_t)arg);
+    vTaskDelete(NULL);
+}
+
+/* Reinicio forzado GARANTIZADO: la escritura del motivo es best-effort en una
+ * task aparte (si se cuelga en flash/NVS no arrastra al reset) y esta funcion
+ * solo hace operaciones sin flash antes de esp_restart(), que SIEMPRE se
+ * alcanza. En el caso sano el motivo se persiste en la ventana de 100 ms; en
+ * un hang de clase flash se pierde solo el diagnostico, no el reinicio. */
+static void wd_force_reset(uint8_t reason_code)
+{
+    xTaskCreate(wd_reason_writer_task, "wd_reason", 3072,
+                (void *)(uintptr_t)reason_code, tskIDLE_PRIORITY + 1, NULL);
+    bsp_display_brightness_set(0);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_restart();
+}
+
 /* Lee y BORRA el motivo forzado. Devuelve 0 si no habia. */
 static uint8_t wd_take_forced_reason_nvs(void)
 {
@@ -144,15 +167,14 @@ static void wd_monitor_task(void *arg)
                      consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
             if (consecutive_fail >= WD_LVGL_FAIL_THRESHOLD) {
                 ESP_LOGE(TAG, "UI congelada — reset controlado (sin flush SD)");
-                wd_set_forced_reason_nvs(1);   /* R4: registrar el motivo */
                 /* No hacemos flush a SD aqui: si el cuelgue lo causa el
                  * propio subsistema de SD/FAT (mutex retenido por una task
                  * muerta), datalogger_flush() / battery_history_flush()
                  * deadlock-an y el reset nunca ocurre. Preferimos perder
-                 * el ultimo bloque de muestras antes que no reiniciar. */
-                bsp_display_brightness_set(0);
-                vTaskDelay(pdMS_TO_TICKS(100));
-                esp_restart();
+                 * el ultimo bloque de muestras antes que no reiniciar. El
+                 * motivo (1) se escribe best-effort dentro de wd_force_reset,
+                 * que garantiza el esp_restart. */
+                wd_force_reset(1);   /* R4: registrar el motivo + reset */
             }
         }
 
@@ -163,10 +185,7 @@ static void wd_monitor_task(void *arg)
             if (stalled >= 0) {
                 ESP_LOGE(TAG, "Tarea %d sin latido >10s — reset controlado",
                          stalled);
-                wd_set_forced_reason_nvs(2);   /* R4: registrar el motivo */
-                bsp_display_brightness_set(0);
-                vTaskDelay(pdMS_TO_TICKS(100));
-                esp_restart();
+                wd_force_reset(2);   /* R4: registrar el motivo + reset garantizado */
             }
         }
     }
