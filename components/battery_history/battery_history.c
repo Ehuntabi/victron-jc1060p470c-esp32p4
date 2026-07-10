@@ -13,7 +13,7 @@
 #include <errno.h>
 
 static void bh_flush_to_sd_impl(void);
-static void bh_flush_to_sd_dated(time_t file_date);
+static bool bh_flush_to_sd_dated(time_t file_date);
 static void bh_reset_for_new_day(void);
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
@@ -48,6 +48,10 @@ static SemaphoreHandle_t s_bufs_mutex = NULL;
 static esp_timer_handle_t s_sample_timer = NULL;
 static esp_timer_handle_t s_bh_flush_timer = NULL;
 static bool s_bh_dir_ok = false;
+/* Serializa flushes concurrentes (timer 60s vs boton Reiniciar de settings_panel)
+ * para que solo uno use el snapshot estatico s_flush_snapshot[] a la vez
+ * (mismo patron que s_flush_mutex de datalogger.c). */
+static SemaphoreHandle_t s_flush_mutex = NULL;
 
 /* Filtro anti-duplicados: solo se escriben puntos con ts > este umbral.
  * En fichero scope (no static dentro de la funcion) para que sea reutilizable
@@ -160,8 +164,12 @@ static void sample_timer_cb(void *arg)
         int day_id = (lt.tm_year + 1900) * 366 + lt.tm_yday;
         if (s_last_local_day >= 0 && day_id != s_last_local_day) {
             time_t yest = now_w - lt.tm_hour * 3600 - lt.tm_min * 60 - lt.tm_sec - 1;
-            bh_flush_to_sd_dated(yest);
-            bh_reset_for_new_day();
+            /* Solo reiniciar el ring si el volcado de ayer tuvo exito; si fallo,
+             * NO borrar: los datos quedan en el ring y el flush de 60s los
+             * reintegra en el proximo ciclo. */
+            if (bh_flush_to_sd_dated(yest)) {
+                bh_reset_for_new_day();
+            }
         }
         s_last_local_day = day_id;
     }
@@ -225,12 +233,20 @@ static void bh_flush_to_sd_impl(void)
 /* file_date: fecha (time_t) para elegir el fichero diario destino; 0 = ahora.
  * Se usa el valor != 0 al cerrar el dia anterior justo tras medianoche, para
  * que los ultimos puntos de ayer caigan en el fichero de ayer y no en el nuevo. */
-static void bh_flush_to_sd_dated(time_t file_date)
+static bool bh_flush_to_sd_dated(time_t file_date)
 {
-    if (!s_bufs) return;
+    if (!s_bufs) return false;
+    /* Serializa flushes concurrentes: si otro flush ya esta en curso, salir sin
+     * tocar el snapshot estatico (patron take(...,0)->return de datalogger). */
+    if (s_flush_mutex && xSemaphoreTake(s_flush_mutex, 0) != pdTRUE) {
+        return false;
+    }
     /* Comprobar si /sdcard existe (datalogger lo monta) */
     struct stat st;
-    if (stat("/sdcard", &st) != 0) return;
+    if (stat("/sdcard", &st) != 0) {
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return false;
+    }
 
     /* Crear directorio bateria si hace falta */
     if (!s_bh_dir_ok) {
@@ -244,7 +260,8 @@ static void bh_flush_to_sd_dated(time_t file_date)
                 s_bh_dir_ok = true;
             } else {
                 ESP_LOGW(TAG, "mkdir %s falló (errno=%d)", BH_LOG_DIR, errno);
-                return;
+                if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+                return false;
             }
         }
     }
@@ -260,6 +277,13 @@ static void bh_flush_to_sd_dated(time_t file_date)
      * el lock antes de tocar la SD. */
     int32_t max_ts_seen[BH_SRC_COUNT] = {0};
     bool   snapshot_capped[BH_SRC_COUNT] = {false};
+    /* Reloj-atras (web settimeofday): si la hora actual es anterior al umbral
+     * anti-duplicados, este quedaria en el futuro y filtraria todo punto nuevo
+     * como "ya escrito". Al detectarlo, resetear el umbral para esa fuente. */
+    int32_t now_ts = now_seconds();
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (now_ts < s_last_flushed_ts[s]) s_last_flushed_ts[s] = 0;
+    }
     BH_LOCK();
     for (int s = 0; s < BH_SRC_COUNT; ++s) {
         s_flush_snapshot[s].n = 0;
@@ -301,19 +325,25 @@ static void bh_flush_to_sd_dated(time_t file_date)
 
     int total_pending = 0;
     for (int s = 0; s < BH_SRC_COUNT; ++s) total_pending += s_flush_snapshot[s].n;
-    if (total_pending == 0) return;
+    if (total_pending == 0) {
+        /* Nada pendiente = ya estaba todo persistido: exito para el rollover. */
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return true;
+    }
 
     /* === FASE 2: Escritura sin lock. === */
     /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Si no se
      * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego. */
     if (!camera_sd_bus_lock(2500)) {
-        return;
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return false;
     }
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));
         camera_sd_bus_unlock();
-        return;
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return false;
     }
     bool io_error = false;
     if (need_header) {
@@ -356,7 +386,8 @@ static void bh_flush_to_sd_dated(time_t file_date)
 
     if (io_error) {
         ESP_LOGW(TAG, "I/O error escribiendo %s; reintentaremos en proximo flush", path);
-        return;
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return false;
     }
     /* Solo si la escritura fue limpia avanzamos el umbral anti-duplicados,
      * para que un fallo de SD se reintegre en el proximo ciclo. */
@@ -368,6 +399,8 @@ static void bh_flush_to_sd_dated(time_t file_date)
     if (total_written > 0) {
         ESP_LOGI(TAG, "Volcadas %d entradas a %s", total_written, path);
     }
+    if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+    return true;
 }
 
 static void bh_flush_timer_cb(void *arg)
@@ -382,6 +415,14 @@ esp_err_t battery_history_init(void)
         s_bufs_mutex = xSemaphoreCreateMutex();
         if (!s_bufs_mutex) {
             ESP_LOGE(TAG, "No se pudo crear mutex");
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    /* Mutex que serializa flushes concurrentes (patron datalogger) */
+    if (!s_flush_mutex) {
+        s_flush_mutex = xSemaphoreCreateMutex();
+        if (!s_flush_mutex) {
+            ESP_LOGE(TAG, "No se pudo crear flush mutex");
             return ESP_ERR_NO_MEM;
         }
     }
