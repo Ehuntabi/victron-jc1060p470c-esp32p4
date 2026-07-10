@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
 #include "nvs.h"
@@ -35,6 +36,9 @@ static bool s_muted  = false;
  * audio_cancel_playback la incrementa. Asi una llamada nueva no resetea
  * la cancelacion de otra anterior aun en curso. */
 static volatile uint32_t s_audio_gen = 0;
+/* Serializa audio_play_tones: nunca dos reproducciones a la vez sobre s_codec.
+ * La alarma espera (wait_if_busy), un click aborta si esta ocupado. */
+static SemaphoreHandle_t s_play_mtx = NULL;
 
 static void load_audio_prefs(void)
 {
@@ -66,8 +70,18 @@ esp_err_t audio_set_volume(int vol)
 {
     if (vol < 0) vol = 0;
     if (vol > 100) vol = 100;
+    if (vol == s_volume) return ESP_OK;   /* no reescribir el mismo valor en NVS */
     s_volume = vol;
     save_audio_prefs();
+    if (s_codec) esp_codec_dev_set_out_vol(s_codec, vol);
+    return ESP_OK;
+}
+
+/* Ajusta el volumen del HW SIN persistir en NVS (para subidas transitorias
+ * como la alarma, que restaura despues). NO toca s_volume ni graba flash. */
+esp_err_t audio_set_volume_transient(uint8_t vol)
+{
+    if (vol > 100) vol = 100;
     if (s_codec) esp_codec_dev_set_out_vol(s_codec, vol);
     return ESP_OK;
 }
@@ -86,6 +100,10 @@ bool audio_is_muted(void) { return s_muted; }
 
 esp_err_t audio_init(i2c_master_bus_handle_t bus)
 {
+    if (!s_play_mtx) {
+        s_play_mtx = xSemaphoreCreateMutex();
+        if (!s_play_mtx) { ESP_LOGE(TAG, "crear s_play_mtx fallo"); return ESP_ERR_NO_MEM; }
+    }
 
     /* 1. Configurar I2S TX */
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM, I2S_ROLE_MASTER);
@@ -188,11 +206,18 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     return ESP_OK;
 }
 
-esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
+esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if_busy)
 {
     if (!s_codec) return ESP_ERR_INVALID_STATE;
     if (s_muted) return ESP_OK;
     if (!notes || count == 0) return ESP_ERR_INVALID_ARG;
+
+    /* Serializar sobre s_codec: la alarma espera un poco (wait_if_busy),
+     * un click aborta de inmediato si ya hay una reproduccion en curso. */
+    if (s_play_mtx) {
+        TickType_t to = wait_if_busy ? pdMS_TO_TICKS(2000) : 0;
+        if (xSemaphoreTake(s_play_mtx, to) != pdTRUE) return ESP_ERR_TIMEOUT;
+    }
     uint32_t my_gen = s_audio_gen;
 
     /* Asegurar PA encendido durante toda la secuencia */
@@ -204,6 +229,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
     int16_t *buf = malloc(buf_bytes);
     if (!buf) {
         gpio_set_level(PA_CTRL, 0);
+        if (s_play_mtx) xSemaphoreGive(s_play_mtx);
         return ESP_ERR_NO_MEM;
     }
 
@@ -265,6 +291,7 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count)
     for (int i = 0; i < 4; ++i) esp_codec_dev_write(s_codec, buf, buf_bytes);
     gpio_set_level(PA_CTRL, 0);
     free(buf);
+    if (s_play_mtx) xSemaphoreGive(s_play_mtx);
     return ESP_OK;
 }
 
@@ -276,25 +303,25 @@ esp_err_t audio_play_jingle(audio_jingle_t j)
             static const audio_note_t notes[] = {
                 {523, 100}, {659, 100}, {784, 100}, {1047, 200},
             };
-            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
         case AUDIO_JINGLE_CRITICAL: {
             static const audio_note_t notes[] = {
                 {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 300},
             };
-            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
         case AUDIO_JINGLE_WARNING: {
             static const audio_note_t notes[] = {
                 {784, 120}, {0, 60}, {659, 120},
             };
-            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
         case AUDIO_JINGLE_CONFIRM: {
             static const audio_note_t notes[] = {
                 {1319, 80},
             };
-            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]));
+            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
     }
     return ESP_ERR_INVALID_ARG;

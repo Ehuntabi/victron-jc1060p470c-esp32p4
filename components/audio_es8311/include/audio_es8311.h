@@ -21,11 +21,17 @@ typedef enum {
 } audio_jingle_t;
 
 esp_err_t audio_init(i2c_master_bus_handle_t bus);
-esp_err_t audio_play_tones(const audio_note_t *notes, size_t count);
+/* wait_if_busy: true (alarma) espera a que termine otra reproduccion en curso;
+ * false (click/jingle) aborta y devuelve ESP_ERR_TIMEOUT si ya suena algo.
+ * Garantiza que nunca hay dos reproducciones a la vez sobre el codec. */
+esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if_busy);
 esp_err_t audio_play_jingle(audio_jingle_t jingle);
 
 /* Volumen 0..100 (persistente en NVS namespace 'audio'). */
 esp_err_t audio_set_volume(int vol);
+/* Ajusta el volumen del HW SIN persistir en NVS (subidas transitorias como la
+ * alarma, que luego restaura el valor previo). No toca s_volume ni graba flash. */
+esp_err_t audio_set_volume_transient(uint8_t vol);
 int       audio_get_volume(void);
 
 /* Mute global (persistente). Cuando esta muted, audio_play_* no produce nada. */

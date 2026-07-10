@@ -94,6 +94,8 @@ typedef struct {
     lv_obj_t *btn_lout;
     lv_obj_t *btn_pump;
     bool      grey_aligned;      /* one-shot: ancho 230V + base alineada a limpias */
+    lv_timer_t *camper_tick_timer; /* refresco periodico widgets camper */
+    lv_timer_t *fan_rotate_timer;  /* animacion rotacion ventilador */
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -305,10 +307,11 @@ static void overview_alarm_task(void *arg)
             /* Subir al maximo solo durante el pitido y restaurar despues
              * para no afectar el volumen normal del usuario. */
             int prev_vol = audio_get_volume();
-            audio_set_volume(100);
+            audio_set_volume_transient(100);
             audio_play_tones(s_alarm_pattern,
-                             sizeof(s_alarm_pattern) / sizeof(s_alarm_pattern[0]));
-            audio_set_volume(prev_vol);
+                             sizeof(s_alarm_pattern) / sizeof(s_alarm_pattern[0]),
+                             true);
+            audio_set_volume_transient(prev_vol);
         }
     }
 }
@@ -904,8 +907,8 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
-    lv_timer_create(overview_camper_tick_cb, 500, ov);
-    lv_timer_create(overview_fan_rotate_cb,  150, ov);
+    ov->camper_tick_timer = lv_timer_create(overview_camper_tick_cb, 500, ov);
+    ov->fan_rotate_timer  = lv_timer_create(overview_fan_rotate_cb,  150, ov);
 
     /* Cola y tarea para la alarma sonora de 5 s (no bloquea LVGL). */
     if (!s_alarm_queue) {
@@ -1001,6 +1004,7 @@ static void overview_update(ui_device_view_t *view, const victron_data_t *data)
                 ui_card_pulse(ov->card_solar);
                 /* Si no hay BMV, también usamos los datos de batería del Solar */
                 if (!ov->bat.has_data) {
+                    ov->bat.has_data = true;
                     ov->bat.voltage_centi = s->battery_voltage_centi;
                     ov->bat.current_milli = (int32_t)s->battery_current_deci * 100;
                     ov->bat.last_update_ms = now;
@@ -1100,7 +1104,7 @@ static void overview_render(ui_overview_view_t *ov)
         ui_pill_set(ov->pill_dcdc_state, "-", UI_COLOR_TEXT_DIM);
 
     /* ── TTG ──────────────────────────────────────────────────── */
-    if (bat_fresh && ov->bat.ttg_min != 0xFFFFFFFF && ov->bat.ttg_min > 0) {
+    if (bat_fresh && (uint16_t)ov->bat.ttg_min != 0xFFFF && ov->bat.ttg_min > 0) {
         if (ov->bat.ttg_min >= 1440) {
             /* ≥ 24h → días y horas */
             snprintf(buf, sizeof(buf), "%ud %uh",
@@ -1409,6 +1413,9 @@ static void overview_hide(ui_device_view_t *view)
 static void overview_destroy(ui_device_view_t *view)
 {
     if (!view) return;
+    ui_overview_view_t *ov = (ui_overview_view_t *)view;
+    if (ov->camper_tick_timer) { lv_timer_del(ov->camper_tick_timer); ov->camper_tick_timer = NULL; }
+    if (ov->fan_rotate_timer)  { lv_timer_del(ov->fan_rotate_timer);  ov->fan_rotate_timer  = NULL; }
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
 }
