@@ -2432,11 +2432,12 @@ static void bh_chart_load_day(void)
         if (wb <= wa) wb = wa + 1;
         if (wb > n) wb = n;
         int wn = wb - wa;
+        const int CHART_MAX_PTS = 300;  /* mismo limite seguro que la rama HOY (WDT) */
         int pts_cnt = wn > 0 ? wn : 2;
-        if (pts_cnt > 1500) pts_cnt = 1500;
+        if (pts_cnt > CHART_MAX_PTS) pts_cnt = CHART_MAX_PTS;
         if (pts_cnt < 2) pts_cnt = 2;
         lv_chart_set_point_count(s_bh_chart, pts_cnt);
-        int step = (wn > 1500) ? (wn + 1499) / 1500 : 1;
+        int step = (wn > CHART_MAX_PTS) ? (wn + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
         int32_t bmin = INT32_MAX, bmax = INT32_MIN;
         int idx = 0;
         for (int i = wa; i < wb; i += step) {

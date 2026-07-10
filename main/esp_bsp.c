@@ -265,7 +265,11 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config,
                         TAG, "esp_lcd_new_dsi_bus");
 
     /* ── 2. IO DBI (canal de comandos/parámetros) ────────────────────────── */
-    esp_lcd_panel_io_handle_t io;
+    /* Init a NULL antes de cualquier `goto err`: si el io_dbi de abajo falla,
+     * el salto se lleva por delante la inicializacion de disp_panel y la ruta
+     * de error usaria punteros basura. */
+    esp_lcd_panel_io_handle_t io         = NULL;
+    esp_lcd_panel_handle_t    disp_panel = NULL;
     const esp_lcd_dbi_io_config_t dbi_cfg = {
         .virtual_channel = 0,
         .lcd_cmd_bits    = 8,
@@ -338,7 +342,6 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config,
     /* Enviar init sequence ANTES del DPI panel (bus en modo LP/comando) */
     
 
-    esp_lcd_panel_handle_t disp_panel = NULL;
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_jd9165(io, &panel_dev_cfg, &disp_panel),
                       err, TAG, "esp_lcd_new_panel_jd9165");
     ESP_GOTO_ON_ERROR(esp_lcd_panel_reset(disp_panel), err, TAG, "Panel reset");

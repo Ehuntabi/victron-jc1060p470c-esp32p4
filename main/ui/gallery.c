@@ -72,24 +72,33 @@ static void gallery_scan(void)
 {
     s_count = 0;
     const gal_folder_t *f = &FOLDERS[s_folder];
-    if (!camera_sd_bus_lock(3000)) return;
+    /* No retener el bus de la SD durante TODO el escaneo (congelaba el hilo
+     * LVGL hasta 3 s): se toma solo alrededor de cada operacion y se suelta
+     * entre entradas, igual que gallery_read_file entre trozos. */
+    if (!camera_sd_bus_lock(2000)) return;
     DIR *d = opendir(f->dir);
-    if (d) {
-        struct dirent *e;
-        while ((e = readdir(d)) != NULL && s_count < GAL_MAX_FILES) {
-            const char *n = e->d_name;
-            size_t l = strlen(n);
-            bool match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
-                                     (f->ext2 && strcasecmp(n + l - 4, f->ext2) == 0));
-            if (match) {
-                strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
-                s_files[s_count][GAL_NAME_LEN - 1] = '\0';
-                s_count++;
-            }
-        }
-        closedir(d);
-    }
     camera_sd_bus_unlock();
+    if (!d) return;
+
+    while (s_count < GAL_MAX_FILES) {
+        if (!camera_sd_bus_lock(1000)) break;
+        struct dirent *e = readdir(d);
+        if (e == NULL) { camera_sd_bus_unlock(); break; }
+        const char *n = e->d_name;
+        size_t l = strlen(n);
+        bool match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
+                                 (f->ext2 && strcasecmp(n + l - 4, f->ext2) == 0));
+        if (match) {
+            strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
+            s_files[s_count][GAL_NAME_LEN - 1] = '\0';
+            s_count++;
+        }
+        camera_sd_bus_unlock();
+    }
+
+    bool cl = camera_sd_bus_lock(1000);
+    closedir(d);
+    if (cl) camera_sd_bus_unlock();
     if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
 }
 

@@ -31,6 +31,7 @@
 #include "esp_app_desc.h"
 #include "esp_vfs_fat.h"
 #include "ff.h"
+#include "camera.h"   /* camera_sd_bus_lock: coordinar SD con el GDMA de la camara */
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "watchdog.h"
@@ -526,7 +527,10 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_CANCEL, ui);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_READY, ui);
-    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    /* Persistir en NVS solo al confirmar (READY/DEFOCUSED), no por cada tecla
+     * (evita un nvs_commit por pulsacion -> desgaste de flash). */
+    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_DEFOCUSED, ui);
 
     /* Password row */
     lv_obj_t *pass_row = lv_obj_create(card1);
@@ -562,7 +566,10 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_CANCEL, ui);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_READY, ui);
-    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+    /* Persistir en NVS solo al confirmar (READY/DEFOCUSED), no por cada tecla
+     * (evita un nvs_commit por pulsacion -> desgaste de flash). */
+    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_READY, ui);
+    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_DEFOCUSED, ui);
 
     /* === Card 2: Portal web (mitad ancho, lado dcho) === */
     lv_obj_t *card2 = lv_obj_create(cont);
@@ -713,6 +720,10 @@ static void sd_trip_timer_cb(lv_timer_t *t)
 
     /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
     if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
+        /* f_getfree escanea la FAT (bloqueante): tomar el bus de la SD sin
+         * esperar (timeout 0); si la camara lo tiene, saltar esta actualizacion
+         * para no congelar el render. */
+        if (!camera_sd_bus_lock(0)) return;
         FATFS *fs = NULL;
         DWORD free_clusters = 0;
         if (f_getfree("0:", &free_clusters, &fs) == FR_OK && fs) {
@@ -726,6 +737,7 @@ static void sd_trip_timer_cb(lv_timer_t *t)
         } else {
             lv_label_set_text(ui->lbl_about_sd, "SD: no montada");
         }
+        camera_sd_bus_unlock();
     }
 }
 

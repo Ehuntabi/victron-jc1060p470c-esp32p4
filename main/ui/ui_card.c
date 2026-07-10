@@ -749,7 +749,7 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
     if (!tank) return;
     lv_obj_t *fill = lv_obj_get_child(tank, 0);
     lv_obj_t *lbl  = lv_obj_get_child(tank, 1);
-    if (!fill || !lbl) return;
+    if (!fill) return;   /* lbl solo existe en modos verticales (guardado en su rama) */
 
     ui_tank_kind_t kind = (ui_tank_kind_t)(intptr_t)lv_obj_get_user_data(tank_box);
 
