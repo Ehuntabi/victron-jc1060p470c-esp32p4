@@ -61,6 +61,7 @@ static void about_refresh_dynamic(ui_state_t *ui);
 static void about_timer_cb(lv_timer_t *t);
 /* Trip computer + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
 static lv_obj_t *s_trip_label = NULL;
+static lv_obj_t *s_sd_dump_ip = NULL;   /* card "Volcado por WiFi": muestra la URL viva */
 static void trip_label_refresh(void);
 static void trip_reset_btn_cb(lv_event_t *e);
 static void backup_export_cb(lv_event_t *e);
@@ -718,6 +719,16 @@ static void sd_trip_timer_cb(lv_timer_t *t)
     ui_state_t *ui = t ? (ui_state_t *)t->user_data : NULL;
     if (s_trip_label && lv_obj_is_visible(s_trip_label)) trip_label_refresh();
 
+    /* URL viva de la card "Volcado por WiFi" (IP del AP). No toca la SD, asi que
+     * va antes del bloque de f_getfree (que puede salir pronto si el bus esta ocupado). */
+    if (s_sd_dump_ip && lv_obj_is_visible(s_sd_dump_ip)) {
+        esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        esp_netif_ip_info_t ipi = {0};
+        if (ap && esp_netif_get_ip_info(ap, &ipi) == ESP_OK && ipi.ip.addr != 0) {
+            lv_label_set_text_fmt(s_sd_dump_ip, "http://" IPSTR "/data", IP2STR(&ipi.ip));
+        }
+    }
+
     /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
     if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
         /* f_getfree escanea la FAT (bloqueante): tomar el bus de la SD sin
@@ -845,6 +856,45 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
+
+    /* === Card Volcado por WiFi (descargar carpetas de la SD sin desmontarla) === */
+    lv_obj_t *card_dump = lv_obj_create(cont);
+    lv_obj_set_width(card_dump, lv_pct(100));
+    lv_obj_set_height(card_dump, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_dump, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_dump, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_dump, lv_color_hex(0x66BB6A), 0);  /* verde */
+    lv_obj_set_style_border_width(card_dump, 1, 0);
+    lv_obj_set_style_radius(card_dump, 12, 0);
+    lv_obj_set_style_pad_all(card_dump, 16, 0);
+    lv_obj_set_style_pad_gap(card_dump, 8, 0);
+    lv_obj_set_layout(card_dump, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_dump, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *dump_title = lv_label_create(card_dump);
+    lv_obj_set_style_text_font(dump_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(dump_title, lv_color_hex(0x66BB6A), 0);
+    lv_label_set_text(dump_title, LV_SYMBOL_DOWNLOAD "  Volcado por WiFi");
+
+    lv_obj_t *dump_desc = lv_label_create(card_dump);
+    lv_obj_set_style_text_font(dump_desc, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(dump_desc, lv_color_hex(0x888888), 0);
+    lv_label_set_text(dump_desc,
+        "Conectate al WiFi del equipo y abre en el navegador:");
+
+    s_sd_dump_ip = lv_label_create(card_dump);
+    lv_obj_set_style_text_font(s_sd_dump_ip, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_sd_dump_ip, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(s_sd_dump_ip, "http://192.168.4.1/data");
+
+    lv_obj_t *dump_hint = lv_label_create(card_dump);
+    lv_obj_set_style_text_font(dump_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(dump_hint, lv_color_hex(0x888888), 0);
+    lv_label_set_long_mode(dump_hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(dump_hint, lv_pct(100));
+    lv_label_set_text(dump_hint,
+        "Elige la carpeta a descargar: frigo, bateria, capturas, "
+        "vigilancia, config o logs.");
 
     /* === Card Trip computer (contadores reseteables del viaje) === */
     lv_obj_t *card_trip = lv_obj_create(cont);

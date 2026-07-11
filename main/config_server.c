@@ -1876,6 +1876,11 @@ static esp_err_t handle_data_index(httpd_req_t *req)
         "background:#141821;color:#eee;border:2px solid #2D3340;border-radius:14px;"
         "text-decoration:none;max-width:420px;text-align:center}"
         ".btn:active{background:#2D3340}"
+        "h2{color:#FF9800;font-size:16px;margin:24px auto 8px;max-width:420px}"
+        ".dl{display:flex;flex-wrap:wrap;gap:10px;max-width:420px;margin:0 auto}"
+        ".dl a{flex:1 1 40%;color:#4FC3F7;text-decoration:none;text-align:center;"
+        "padding:14px;background:#141821;border:1px solid #2D3340;border-radius:10px}"
+        ".dl a:active{background:#2D3340}"
         "</style></head><body>"
         "<nav>"
           "<a href='/dashboard'>Dashboard</a>"
@@ -1885,6 +1890,15 @@ static esp_err_t handle_data_index(httpd_req_t *req)
         "<h1>Logs historicos</h1>"
         "<a class='btn' href='/data/frigo'>FRIGO</a>"
         "<a class='btn' href='/data/bateria'>BATERIA</a>"
+        "<h2>Volcado por WiFi: elige la carpeta a descargar (.tar)</h2>"
+        "<div class='dl'>"
+          "<a href='/data/frigo.tar'>frigo</a>"
+          "<a href='/data/bateria.tar'>bateria</a>"
+          "<a href='/data/capturas.tar'>capturas</a>"
+          "<a href='/data/vigilancia.tar'>vigilancia</a>"
+          "<a href='/data/config.tar'>config</a>"
+          "<a href='/data/logs.tar'>logs</a>"
+        "</div>"
         "</body></html>";
     httpd_resp_sendstr(req, html);
     return ESP_OK;
@@ -2102,6 +2116,32 @@ static esp_err_t handle_data_bateria_tar(httpd_req_t *req)
     return handle_tar_dir(req, "/sdcard/bateria", "bateria.tar");
 }
 
+static esp_err_t handle_data_capturas_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    return handle_tar_dir(req, "/sdcard/screenshots", "capturas.tar");
+}
+
+static esp_err_t handle_data_vigilancia_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    return handle_tar_dir(req, "/sdcard/vigilancia", "vigilancia.tar");
+}
+
+static esp_err_t handle_data_config_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    return handle_tar_dir(req, "/sdcard/config_backup", "config.tar");
+}
+
+/* Logs de sistema = ficheros sueltos log_*.txt en la RAIZ de la SD. handle_tar_dir
+ * salta las subcarpetas, asi que solo empaqueta esos ficheros de nivel superior. */
+static esp_err_t handle_data_logs_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    return handle_tar_dir(req, "/sdcard", "logs.tar");
+}
+
 esp_err_t config_server_start(void) {
     /* Idempotente: si el server ya está arriba (p.ej. tras auto-off + STA
      * nuevo que lo reactiva) no hacemos nada. */
@@ -2179,6 +2219,14 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_frigo_tar);
     httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
     httpd_register_uri_handler(server, &uri_data_bat_tar);
+    httpd_uri_t uri_data_cap_tar = { .uri = "/data/capturas.tar", .method = HTTP_GET, .handler = handle_data_capturas_tar };
+    httpd_register_uri_handler(server, &uri_data_cap_tar);
+    httpd_uri_t uri_data_vig_tar = { .uri = "/data/vigilancia.tar", .method = HTTP_GET, .handler = handle_data_vigilancia_tar };
+    httpd_register_uri_handler(server, &uri_data_vig_tar);
+    httpd_uri_t uri_data_cfg_tar = { .uri = "/data/config.tar", .method = HTTP_GET, .handler = handle_data_config_tar };
+    httpd_register_uri_handler(server, &uri_data_cfg_tar);
+    httpd_uri_t uri_data_logs_tar = { .uri = "/data/logs.tar", .method = HTTP_GET, .handler = handle_data_logs_tar };
+    httpd_register_uri_handler(server, &uri_data_logs_tar);
     httpd_uri_t uri_vig = { .uri = "/vigilancia", .method = HTTP_GET, .handler = handle_vigilancia };
     httpd_register_uri_handler(server, &uri_vig);
     httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
