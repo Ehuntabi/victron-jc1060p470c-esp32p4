@@ -15,3 +15,7 @@ homeassistant*.tar.gz
 
 # Capturas runtime NE185 reverse engineering
 logs/
+
+# Volcados locales de la SD por WiFi (.tar descargados, no van al repo)
+descargas/
+*.part
