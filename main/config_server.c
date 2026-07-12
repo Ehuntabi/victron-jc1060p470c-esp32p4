@@ -162,6 +162,16 @@ static void ap_off_timer_arm(void)
     ESP_LOGI(TAG, "AP auto-off armado: %d min sin clientes", AP_AUTO_OFF_MS / 60000);
 }
 
+/* Rearma el auto-off SIN loggear: se llama en cada peticion autenticada para que
+ * el server no se apague mientras la app (u otro cliente) esta sondeando. A los
+ * 15 min de la ULTIMA peticion valida se apaga solo (se conserva el ahorro). */
+static void ap_off_timer_kick(void)
+{
+    if (!s_ap_off_timer) return;
+    esp_timer_stop(s_ap_off_timer);
+    esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
+}
+
 /* Logs visibles cuando un cliente intenta asociarse / desconectarse. En
  * esp_hosted rpc_wrap loggea estos eventos solo a nivel VERBOSE, por eso sin
  * estos handlers los intentos del movil son invisibles en monitor.  */
@@ -611,6 +621,7 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
                                                   auth, sizeof(auth));
     if (err == ESP_OK && s_auth_header[0] != '\0' &&
         strcmp(auth, s_auth_header) == 0) {
+        ap_off_timer_kick();   /* peticion valida -> mantener el HTTP server vivo */
         return ESP_OK;
     }
     httpd_resp_set_status(req, "401 Unauthorized");

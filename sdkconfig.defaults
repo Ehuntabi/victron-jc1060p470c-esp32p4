@@ -103,3 +103,10 @@ CONFIG_ESP_VIDEO_ENABLE_MIPI_CSI_VIDEO_DEVICE=y
 CONFIG_CAMERA_SC2336=y
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=8192
 # CONFIG_ESP_VIDEO_ENABLE_DVP_VIDEO_DEVICE is not set
+
+# ── Servidor HTTP (config web + API de la app Android) ────────────────────────
+# Buffer de cabeceras de peticion. El default 512 se queda corto en el login
+# Basic-Auth desde navegador movil (User-Agent + Accept + cookies + Authorization
+# se pasan de 512 -> error "Header fields are too long"). 2048 da margen a
+# navegador y app; coste ~+1.5KB por conexion. 2026-07-12.
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
