@@ -753,17 +753,26 @@ static esp_err_t handle_control(httpd_req_t *req) {
         got += r;
     }
     body[got] = 0;
+
+    /* Aceptar dev/mode tanto en el BODY (form-encoded) como en el QUERY string,
+     * para que cualquier cliente funcione (la app Android los envia en el body,
+     * pero otros clientes/curl pueden usar el query). */
+    char query[80] = {0};
+    httpd_req_get_url_query_str(req, query, sizeof query);
+    char params[164];
+    snprintf(params, sizeof params, "%s&%s", body, query);
+
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
 
-    if      (strstr(body, "dev=luz_int")) { ne185_send_cmd('i'); httpd_resp_sendstr(req, "ok luz_int"); }
-    else if (strstr(body, "dev=luz_ext")) { ne185_send_cmd('o'); httpd_resp_sendstr(req, "ok luz_ext"); }
-    else if (strstr(body, "dev=bomba"))   { ne185_send_cmd('p'); httpd_resp_sendstr(req, "ok bomba"); }
-    else if (strstr(body, "dev=fan")) {
+    if      (strstr(params, "dev=luz_int")) { ne185_send_cmd('i'); httpd_resp_sendstr(req, "ok luz_int"); }
+    else if (strstr(params,"dev=luz_ext")) { ne185_send_cmd('o'); httpd_resp_sendstr(req, "ok luz_ext"); }
+    else if (strstr(params,"dev=bomba"))   { ne185_send_cmd('p'); httpd_resp_sendstr(req, "ok bomba"); }
+    else if (strstr(params,"dev=fan")) {
         frigo_mode_t m = FRIGO_MODE_AUTO;
-        if      (strstr(body, "mode=off"))  m = FRIGO_MODE_OFF;
-        else if (strstr(body, "mode=50"))   m = FRIGO_MODE_50;
-        else if (strstr(body, "mode=100"))  m = FRIGO_MODE_100;
-        else if (strstr(body, "mode=auto")) m = FRIGO_MODE_AUTO;
+        if      (strstr(params, "mode=off")) m = FRIGO_MODE_OFF;
+        else if (strstr(params,"mode=50"))   m = FRIGO_MODE_50;
+        else if (strstr(params,"mode=100"))  m = FRIGO_MODE_100;
+        else if (strstr(params,"mode=auto")) m = FRIGO_MODE_AUTO;
         frigo_set_mode(m);
         httpd_resp_sendstr(req, "ok fan");
     } else {
