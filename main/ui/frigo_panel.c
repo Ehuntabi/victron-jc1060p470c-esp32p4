@@ -342,7 +342,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * exactamente el mismo tamano visual cuando van lado a lado. */
     lv_obj_t *card_sensors = lv_obj_create(tab);
     lv_obj_set_width(card_sensors, lv_pct(49));
-    lv_obj_set_height(card_sensors, 470);
+    lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
@@ -379,7 +379,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* === Card 2: Ventilador y temperaturas (verde) === */
     lv_obj_t *card_fan = lv_obj_create(tab);
     lv_obj_set_width(card_fan, lv_pct(49));
-    lv_obj_set_height(card_fan, 470);  /* misma altura que card_sensors */
+    lv_obj_set_height(card_fan, LV_SIZE_CONTENT);  /* ajusta al contenido, sin marco sobrante */
     lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
@@ -391,6 +391,10 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_pad_gap(card_fan, 24, 0);
     lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
+    /* Centrado horizontal de los hijos (las filas a pct(100) no se ven
+     * afectadas; centra los elementos mas estrechos como la fila PWM min). */
+    lv_obj_set_flex_align(card_fan, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
 
     /* Fila ventilador */
@@ -554,9 +558,16 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 
+    /* Separador visual entre las filas Min/Max y el suelo PWM. */
+    lv_obj_t *sep2 = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(sep2);
+    lv_obj_set_size(sep2, lv_pct(85), 1);
+    lv_obj_set_style_bg_color(sep2, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(sep2, LV_OPA_30, 0);
+
     /* PWM min - suelo de arranque del ventilador (calibracion del MOSFET).
-     * Al fondo de la card. Aplica en todos los modos (sobre todo en AUTO a
-     * bajas temperaturas); por eso NO se bloquea en modo manual. */
+     * Al fondo de la card, centrado. Aplica en todos los modos (sobre todo en
+     * AUTO a bajas temperaturas); por eso NO se bloquea en modo manual. */
     lv_obj_t *col_fanmin = lv_obj_create(card_fan);
     lv_obj_remove_style_all(col_fanmin);
     lv_obj_set_layout(col_fanmin, LV_LAYOUT_FLEX);
