@@ -36,6 +36,9 @@ static lv_obj_t *s_btn_tmin_m  = NULL;
 static lv_obj_t *s_btn_tmin_p  = NULL;
 static lv_obj_t *s_btn_tmax_m  = NULL;
 static lv_obj_t *s_btn_tmax_p  = NULL;
+static lv_obj_t *s_btn_fanmin_m  = NULL;
+static lv_obj_t *s_btn_fanmin_p  = NULL;
+static lv_obj_t *s_lbl_fanmin_val = NULL;
 
 static ui_state_t *s_ui = NULL;
 
@@ -204,6 +207,38 @@ static void btn_tmax_plus_cb(lv_event_t *e)
     refresh_threshold_labels();
 }
 
+/* Suelo PWM: % minimo al que el ventilador gira (calibracion del MOSFET).
+ * Rango 0..60 en pasos de 5 (mismo criterio que valida frigo_set_fan_min). */
+static void refresh_fanmin_label(void)
+{
+    if (!s_lbl_fanmin_val) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d %%", st.fan_min_pct);
+    lv_label_set_text(s_lbl_fanmin_val, buf);
+}
+static void btn_fanmin_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t p = st.fan_min_pct;
+    if (p >= 5) p -= 5;
+    frigo_set_fan_min(p);
+    refresh_fanmin_label();
+}
+static void btn_fanmin_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t p = st.fan_min_pct;
+    if (p + 5 <= 60) p += 5;
+    frigo_set_fan_min(p);
+    refresh_fanmin_label();
+}
+
 /* ── Construir opciones dropdown ─────────────────────────────── */
 static void build_sensor_options(char *buf, size_t len, const frigo_state_t *st)
 {
@@ -307,7 +342,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * exactamente el mismo tamano visual cuando van lado a lado. */
     lv_obj_t *card_sensors = lv_obj_create(tab);
     lv_obj_set_width(card_sensors, lv_pct(49));
-    lv_obj_set_height(card_sensors, 380);
+    lv_obj_set_height(card_sensors, 470);
     lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
@@ -344,7 +379,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* === Card 2: Ventilador y temperaturas (verde) === */
     lv_obj_t *card_fan = lv_obj_create(tab);
     lv_obj_set_width(card_fan, lv_pct(49));
-    lv_obj_set_height(card_fan, 380);  /* misma altura que card_sensors */
+    lv_obj_set_height(card_fan, 470);  /* misma altura que card_sensors */
     lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
@@ -518,6 +553,49 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* PWM min - suelo de arranque del ventilador (calibracion del MOSFET).
+     * Al fondo de la card. Aplica en todos los modos (sobre todo en AUTO a
+     * bajas temperaturas); por eso NO se bloquea en modo manual. */
+    lv_obj_t *col_fanmin = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(col_fanmin);
+    lv_obj_set_layout(col_fanmin, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_fanmin, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_fanmin, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_fanmin, 8, 0);
+    lv_obj_set_size(col_fanmin, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *lbl_fanmin = lv_label_create(col_fanmin);
+    lv_obj_set_style_text_font(lbl_fanmin, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_fanmin, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(lbl_fanmin, "PWM min:");
+
+    s_btn_fanmin_m = lv_btn_create(col_fanmin);
+    lv_obj_set_size(s_btn_fanmin_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_fanmin_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_fmm = lv_label_create(s_btn_fanmin_m);
+    lv_label_set_text(lbl_fmm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_fmm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_fmm);
+    lv_obj_add_event_cb(s_btn_fanmin_m, btn_fanmin_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_fanmin_val = lv_label_create(col_fanmin);
+    lv_obj_set_style_text_font(s_lbl_fanmin_val, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(s_lbl_fanmin_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_fanmin_val, 80);
+    lv_obj_set_style_text_align(s_lbl_fanmin_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d %%", st->fan_min_pct); lv_label_set_text(s_lbl_fanmin_val, buf); }
+
+    s_btn_fanmin_p = lv_btn_create(col_fanmin);
+    lv_obj_set_size(s_btn_fanmin_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_fanmin_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_fmp = lv_label_create(s_btn_fanmin_p);
+    lv_label_set_text(lbl_fmp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_fmp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_fmp);
+    lv_obj_add_event_cb(s_btn_fanmin_p, btn_fanmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* Estado visual inicial del segmented control + thresholds segun modo
      * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */

@@ -6,6 +6,7 @@ idf_component_register(
         espressif__ds18b20
         esp_driver_ledc
         esp_driver_gpio
+        esp_timer
         nvs_flash
         log
         freertos

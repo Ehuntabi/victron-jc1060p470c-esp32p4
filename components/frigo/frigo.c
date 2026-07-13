@@ -3,6 +3,7 @@
 #include "ds18b20.h"
 #include "driver/ledc.h"
 #include "driver/gpio.h"
+#include "esp_timer.h"
 #include "nvs.h"
 #include "esp_log.h"
 #include "esp_check.h"
@@ -18,6 +19,7 @@ static const char *TAG = "FRIGO";
 #define NVS_KEY_ASSIGN   "assign"
 #define NVS_KEY_TMIN     "tmin"
 #define NVS_KEY_TMAX     "tmax"
+#define NVS_KEY_FANMIN   "fanmin"
 
 #define READ_INTERVAL_MS   2000
 #define DS18B20_CONV_MS     800
@@ -32,6 +34,7 @@ static frigo_state_t      s_state = {
     .T_Exterior   = -127.0f,
     .T_min        = 35,
     .T_max        = 45,
+    .fan_min_pct  = FRIGO_FAN_MIN_DUTY_PCT,
     .assignment   = {0, 1, 2},
 };
 static SemaphoreHandle_t  s_mutex = NULL;
@@ -55,6 +58,7 @@ static void nvs_load(void)
     uint8_t v;
     if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
     if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
+    if (nvs_get_u8(h, NVS_KEY_FANMIN, &v) == ESP_OK) s_state.fan_min_pct = v;
     nvs_close(h);
 }
 
@@ -67,6 +71,7 @@ static void nvs_save_task(void *arg)
             nvs_set_blob(h, NVS_KEY_ASSIGN, s_state.assignment, FRIGO_MAX_SENSORS);
             nvs_set_u8(h, NVS_KEY_TMIN, s_state.T_min);
             nvs_set_u8(h, NVS_KEY_TMAX, s_state.T_max);
+            nvs_set_u8(h, NVS_KEY_FANMIN, s_state.fan_min_pct);
             xSemaphoreGive(s_mutex);
         }
         nvs_commit(h);
@@ -82,6 +87,30 @@ static void nvs_save(void)
 }
 
 /* ── PWM ─────────────────────────────────────────────────────── */
+/* Ultimo % efectivamente aplicado al LEDC (tras suelo/kickstart). Sirve para
+ * detectar el paso de parado->girando y disparar el pulso de arranque. */
+static uint8_t          s_last_applied = 0;
+/* Kickstart no bloqueante: al arrancar de parado damos 100% durante
+ * FRIGO_FAN_KICKSTART_MS y una callback de esp_timer baja al objetivo. No se
+ * puede usar vTaskDelay porque fan_set_percent se llama con s_mutex tomado
+ * (congelaria UI/HTTP, que leen el estado bajo el mismo mutex). */
+static esp_timer_handle_t s_kick_timer = NULL;
+static volatile uint8_t   s_kick_target = 0;
+
+/* Duty crudo al LEDC (0-100% -> 0-1023 en 10 bits). */
+static void fan_apply_duty(uint8_t pct)
+{
+    uint32_t duty = ((uint32_t)pct * 1023) / 100;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL, duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL);
+}
+
+/* Fin del pulso de arranque: baja del 100% al objetivo real. */
+static void fan_kick_done_cb(void *arg)
+{
+    fan_apply_duty(s_kick_target);
+}
+
 static void fan_pwm_init(void)
 {
     ledc_timer_config_t timer = {
@@ -102,13 +131,40 @@ static void fan_pwm_init(void)
         .hpoint     = 0,
     };
     ledc_channel_config(&ch);
+
+    const esp_timer_create_args_t kick = {
+        .callback = fan_kick_done_cb,
+        .name     = "fan_kick",
+    };
+    if (esp_timer_create(&kick, &s_kick_timer) != ESP_OK) {
+        ESP_LOGW(TAG, "kickstart timer no creado; arranque sin pulso");
+        s_kick_timer = NULL;
+    }
 }
 
 static void fan_set_percent(uint8_t pct)
 {
-    uint32_t duty = ((uint32_t)pct * 1023) / 100;
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL, duty);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL);
+    /* Suelo: con PWM sobre la alimentacion (MOSFET) por debajo de este % el
+     * ventilador no llega a girar; lo forzamos al minimo util. Ajustable desde
+     * la UI (s_state.fan_min_pct, persistido en NVS). 0 = sin suelo / apagado.
+     * Llamada siempre con s_mutex tomado, asi que leer s_state es seguro. */
+    uint8_t floor_pct = s_state.fan_min_pct;
+    if (pct > 0 && pct < floor_pct) pct = floor_pct;
+
+    if (s_kick_timer && s_last_applied == 0 && pct > 0) {
+        /* Parado -> girando: pulso 100% y la callback baja al objetivo. */
+        s_kick_target = pct;
+        fan_apply_duty(100);
+        esp_timer_stop(s_kick_timer);   /* por si venia armado */
+        esp_timer_start_once(s_kick_timer,
+                             (uint64_t)FRIGO_FAN_KICKSTART_MS * 1000);
+    } else {
+        /* Cambio en marcha o parada: si hay un kickstart pendiente, cancelarlo
+         * para que no pise este valor. */
+        if (s_kick_timer) esp_timer_stop(s_kick_timer);
+        fan_apply_duty(pct);
+    }
+    s_last_applied = pct;
 }
 
 /* ── Lógica ventilador proporcional con histéresis ───────────── */
@@ -352,6 +408,18 @@ esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max)
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         s_state.T_min = t_min;
         s_state.T_max = t_max;
+        xSemaphoreGive(s_mutex);
+    }
+    nvs_save();
+    return ESP_OK;
+}
+
+esp_err_t frigo_set_fan_min(uint8_t pct)
+{
+    if (pct > 60)      return ESP_ERR_INVALID_ARG;   /* techo de cordura */
+    if (pct % 5 != 0)  return ESP_ERR_INVALID_ARG;   /* pasos de 5 como los umbrales */
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_state.fan_min_pct = pct;
         xSemaphoreGive(s_mutex);
     }
     nvs_save();
