@@ -140,17 +140,23 @@ static void ap_auto_off_cb(void *arg)
 {
     (void)arg;
     if (!s_httpd) return;   /* ya parado */
-    /* No apagar el portal mientras siga habiendo algun cliente asociado al AP
-     * (p.ej. el movil con la app abierta): si lo apagaramos, el cliente seguiria
-     * asociado (no genera un nuevo STA_CONNECTED) y el portal no volveria a
-     * arrancar solo -> "conectado pero sin datos". Reabrimos la ventana y
-     * seguimos; solo se apaga cuando NO queda nadie conectado. */
+    /* El mini C6 esta SIEMPRE asociado al AP (recibe la telemetria UDP por
+     * broadcast), asi que "hay algun cliente" contaria SIEMPRE al mini y el
+     * portal no se apagaria nunca (testigo verde fijo, se pierde el ahorro).
+     * Mantenemos el portal vivo solo si hay ALGUN cliente ADEMAS del mini (el
+     * movil con la app): es decir, >= 2 STAs asociados. Si lo apagaramos con el
+     * movil aun asociado, este no genera un nuevo STA_CONNECTED y el portal no
+     * volveria a arrancar solo -> "conectado pero sin datos". La actividad HTTP
+     * tambien lo mantiene vivo aparte, via ap_off_timer_kick en cada peticion. */
     wifi_sta_list_t stas = { 0 };
-    if (esp_wifi_ap_get_sta_list(&stas) == ESP_OK && stas.num > 0) {
+    esp_err_t err = esp_wifi_ap_get_sta_list(&stas);
+    if (err != ESP_OK || stas.num >= 2) {
+        /* err != ESP_OK: no pudimos consultar (glitch del RPC a la C6) -> por
+         * seguridad asumimos que puede haber alguien y seguimos vivos. */
         ap_off_timer_kick();
         return;
     }
-    ESP_LOGI(TAG, "Auto-off: sin clientes asociados, parando HTTP server");
+    ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
     httpd_stop(s_httpd);
     s_httpd = NULL;
     /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */

@@ -1399,6 +1399,13 @@ static lv_chart_series_t *s_ser_aletas     = NULL;
 static lv_chart_series_t *s_ser_congelador = NULL;
 static lv_chart_series_t *s_ser_exterior   = NULL;
 static lv_chart_series_t *s_ser_fan        = NULL;
+/* Leyenda-boton: cada elemento muestra/oculta su serie. Guardamos etiqueta,
+ * punto y color para poder atenuarlos al ocultar. Estado por sesion de pantalla
+ * (las series se recrean al abrir -> todo visible por defecto). */
+static lv_obj_t   *s_frigo_leg_lbl[4] = {NULL};
+static lv_obj_t   *s_frigo_leg_dot[4] = {NULL};
+static lv_color_t  s_frigo_leg_col[4];
+static bool        s_frigo_ser_hidden[4] = {false};
 static lv_obj_t *s_frigo_lbl_date = NULL;    /* header con la fecha */
 static lv_obj_t *s_frigo_xlabels = NULL;     /* contenedor de etiquetas hora */
 static lv_obj_t *s_frigo_lbl_zoom = NULL;
@@ -1429,6 +1436,7 @@ static int s_frigo_loaded_n   = 0;
 static void frigo_chart_load_day(void);
 static void frigo_chart_gesture_cb(lv_event_t *e);
 static void frigo_chart_touch_cb(lv_event_t *e);
+static void frigo_legend_toggle_cb(lv_event_t *e);
 static void frigo_apply_window(void);
 static void frigo_update_zoom_label(void);
 
@@ -1505,18 +1513,38 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_color_hex(0xFFAA00)
     };
     for (int i = 0; i < 4; i++) {
-        lv_obj_t *dot = lv_obj_create(scr);
+        s_frigo_leg_col[i]    = colores[i];
+        s_frigo_ser_hidden[i] = false;
+
+        /* Cada elemento de la leyenda es un boton: al tocarlo se muestra/oculta
+         * su linea en la grafica. El contenedor transparente es el area tactil. */
+        lv_obj_t *item = lv_obj_create(scr);
+        lv_obj_remove_style_all(item);
+        lv_obj_set_size(item, 150, 34);
+        /* Grupo centrado: 4 items de paso 165 ocupan (3*165 + 150) px. */
+        lv_obj_set_pos(item, (LV_HOR_RES - (3 * 165 + 150)) / 2 + i * 165, 560);
+        lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(item, frigo_legend_toggle_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)i);
+
+        lv_obj_t *dot = lv_obj_create(item);
         lv_obj_remove_style_all(dot);
         lv_obj_set_size(dot, 16, 16);
         lv_obj_set_style_bg_color(dot, colores[i], 0);
         lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(dot, 8, 0);
-        lv_obj_set_pos(dot, 10 + i * 120, 55);
-        lv_obj_t *lbl = lv_label_create(scr);
+        lv_obj_align(dot, LV_ALIGN_LEFT_MID, 2, 0);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_CLICKABLE);  /* el toque lo recibe el item */
+
+        lv_obj_t *lbl = lv_label_create(item);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_24_es, 0);
         lv_obj_set_style_text_color(lbl, colores[i], 0);
         lv_label_set_text(lbl, leyenda[i]);
-        lv_obj_set_pos(lbl, 30 + i * 120, 50);
+        lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 24, 0);
+
+        s_frigo_leg_dot[i] = dot;
+        s_frigo_leg_lbl[i] = lbl;
     }
 
     s_frigo_win_a = 0.0f;
@@ -1543,8 +1571,8 @@ void ui_show_chart_screen(ui_state_t *ui)
     s_chart = lv_chart_create(scr);
     /* Estrechado para dejar margen a las etiquetas de los dos ejes Y (LVGL las
      * dibuja fuera del borde del chart): temp a la izquierda, fan% a la derecha. */
-    lv_obj_set_size(s_chart, LV_HOR_RES - 150, LV_VER_RES - 140);
-    lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -30);
+    lv_obj_set_size(s_chart, LV_HOR_RES - 150, LV_VER_RES - 186);
+    lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -76);
     lv_obj_clear_flag(s_chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_chart, frigo_chart_touch_cb, LV_EVENT_ALL, NULL);
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
@@ -1594,6 +1622,27 @@ void ui_show_chart_screen(ui_state_t *ui)
 
     /* Gestures para navegar entre dias */
     lv_obj_add_event_cb(scr, frigo_chart_gesture_cb, LV_EVENT_GESTURE, NULL);
+}
+
+/* Toca un elemento de la leyenda -> muestra/oculta su serie y atenua la etiqueta. */
+static void frigo_legend_toggle_cb(lv_event_t *e)
+{
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (i < 0 || i >= 4 || !s_chart) return;
+    lv_chart_series_t *ser = (i == 0) ? s_ser_aletas
+                           : (i == 1) ? s_ser_congelador
+                           : (i == 2) ? s_ser_exterior
+                                      : s_ser_fan;
+    if (!ser) return;
+    bool hide = !s_frigo_ser_hidden[i];
+    s_frigo_ser_hidden[i] = hide;
+    lv_chart_hide_series(s_chart, ser, hide);
+    if (s_frigo_leg_lbl[i])
+        lv_obj_set_style_text_color(s_frigo_leg_lbl[i],
+            hide ? lv_color_hex(0x555555) : s_frigo_leg_col[i], 0);
+    if (s_frigo_leg_dot[i])
+        lv_obj_set_style_bg_opa(s_frigo_leg_dot[i],
+            hide ? LV_OPA_30 : LV_OPA_COVER, 0);
 }
 
 static void update_frigo_xlabels_today(int n)
@@ -1891,6 +1940,10 @@ static lv_obj_t *s_bh_xlabels  = NULL;
 static lv_obj_t *s_bh_lbl_zoom = NULL;
 static lv_obj_t *s_bh_totals[BH_SRC_COUNT] = {NULL};
 static lv_chart_series_t *s_bh_series[BH_SRC_COUNT] = {NULL};
+/* Leyenda-boton: tocar el total de una fuente (BM/Solar/Orion/AC) muestra/oculta
+ * su serie. Guardamos su color para restaurar la etiqueta al mostrarla. */
+static bool     s_bh_hidden[BH_SRC_COUNT] = {false};
+static uint32_t s_bh_col[BH_SRC_COUNT]    = {0};
 /* Nombres cortos para la fila de totales (cabe en una sola linea). El nombre
  * completo (battery_history_source_name) se sigue usando en el CSV. */
 static const char *s_bh_short_names[BH_SRC_COUNT] = {
@@ -1972,6 +2025,19 @@ static void bh_screen_close_cb(lv_event_t *e)
 {
     (void)e;
     ui_close_battery_history_screen();
+}
+
+/* Toca el total de una fuente -> muestra/oculta su serie y atenua la etiqueta. */
+static void bh_legend_toggle_cb(lv_event_t *e)
+{
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (i < 0 || i >= BH_SRC_COUNT || !s_bh_chart || !s_bh_series[i]) return;
+    bool hide = !s_bh_hidden[i];
+    s_bh_hidden[i] = hide;
+    lv_chart_hide_series(s_bh_chart, s_bh_series[i], hide);
+    if (s_bh_totals[i])
+        lv_obj_set_style_text_color(s_bh_totals[i],
+            hide ? lv_color_hex(0x555555) : lv_color_hex(s_bh_col[i]), 0);
 }
 
 /* Formatea las etiquetas del eje Y con 1 decimal: los valores del chart se
@@ -2087,8 +2153,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
      * quepan en horizontal sin envolver). */
     lv_obj_t *totals_cont = lv_obj_create(scr);
     lv_obj_remove_style_all(totals_cont);
-    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 26);
-    lv_obj_align(totals_cont, LV_ALIGN_TOP_LEFT, 16, 52);
+    lv_obj_set_size(totals_cont, LV_HOR_RES - 32, 30);
+    lv_obj_align(totals_cont, LV_ALIGN_BOTTOM_LEFT, 16, -8);
     lv_obj_set_layout(totals_cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(totals_cont, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(totals_cont, 8, 0);
@@ -2103,9 +2169,16 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         lv_obj_t *l = lv_label_create(totals_cont);
         lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 4);
         lv_obj_set_style_text_color(l, lv_color_hex(colors[i]), 0);
-        lv_obj_set_style_text_font(l, &lv_font_montserrat_14_es, 0);
+        lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
         lv_label_set_text_fmt(l, "%s +0.0/-0.0 Ah", s_bh_short_names[i]);
+        /* La etiqueta de total es tambien el boton de leyenda: tocar = mostrar/
+         * ocultar esa fuente en la grafica. */
+        lv_obj_add_flag(l, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(l, bh_legend_toggle_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)i);
+        s_bh_col[i]    = colors[i];
+        s_bh_hidden[i] = false;
         s_bh_totals[i] = l;
     }
 
@@ -2149,8 +2222,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
      * las etiquetas del eje Y a la IZQUIERDA del borde del chart (x_ofs =
      * coords.x1), asi que si el chart llega al borde de pantalla las etiquetas
      * se salen. Con el chart centrado y mas estrecho, caben en pantalla. */
-    lv_obj_set_size(chart, LV_HOR_RES - 150, LV_VER_RES - 178);
-    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -44);
+    lv_obj_set_size(chart, LV_HOR_RES - 150, LV_VER_RES - 210);
+    lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -76);
     lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(chart, bh_chart_touch_cb, LV_EVENT_ALL, NULL);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
