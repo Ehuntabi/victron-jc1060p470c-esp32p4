@@ -2,6 +2,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 #include "esp_err.h"
 
 // Initialize & start Wi-Fi Soft-AP for configuration portal
@@ -14,3 +15,7 @@ esp_err_t config_server_start(void);
 // en Ajustes -> Wi-Fi. Deja cadenas vacias si no hay.
 void config_server_get_web_credentials(char *user, size_t ulen,
                                        char *pass, size_t plen);
+
+// true si el servidor HTTP (portal web 192.168.4.1) esta activo ahora mismo.
+// Sondear esto NO toca flash (solo comprueba un puntero), es seguro por tick.
+bool config_server_is_running(void);

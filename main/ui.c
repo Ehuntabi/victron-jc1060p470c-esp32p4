@@ -186,6 +186,7 @@ static void volume_icon_timer_cb(lv_timer_t *t)
      * toda la sesion. */
     if (ui->lbl_wifi) {
         static int last_en = -1;
+        static int last_portal = -1;
         static int cached_en = -1;
         if (cached_en < 0) {
             nvs_handle_t h;
@@ -196,10 +197,19 @@ static void volume_icon_timer_cb(lv_timer_t *t)
             }
             cached_en = en;
         }
-        if (cached_en != last_en) {
-            lv_obj_set_style_text_color(ui->lbl_wifi,
-                cached_en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+        /* config_server_is_running() solo mira un puntero (no toca flash), asi que
+         * es seguro sondearlo cada tick. El portal puede apagarse solo (auto-off),
+         * por eso el color se refresca segun su estado real, no solo al arrancar. */
+        int portal = cached_en ? (config_server_is_running() ? 1 : 0) : 0;
+        if (cached_en != last_en || portal != last_portal) {
+            /* Verde: portal web accesible. Azul: WiFi encendido pero portal
+             * apagado. Gris: WiFi deshabilitado. */
+            uint32_t color = !cached_en ? 0x666666
+                           : portal     ? 0x00C851
+                                        : 0x4FC3F7;
+            lv_obj_set_style_text_color(ui->lbl_wifi, lv_color_hex(color), 0);
             last_en = cached_en;
+            last_portal = portal;
         }
     }
 }

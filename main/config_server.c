@@ -134,11 +134,23 @@ static httpd_handle_t s_httpd = NULL;
 static dns_server_handle_t s_dns = NULL;
 static esp_timer_handle_t s_ap_off_timer = NULL;
 
+static void ap_off_timer_kick(void);   /* fwd */
+
 static void ap_auto_off_cb(void *arg)
 {
     (void)arg;
     if (!s_httpd) return;   /* ya parado */
-    ESP_LOGI(TAG, "Auto-off: 15 min sin nuevas conexiones, parando HTTP server");
+    /* No apagar el portal mientras siga habiendo algun cliente asociado al AP
+     * (p.ej. el movil con la app abierta): si lo apagaramos, el cliente seguiria
+     * asociado (no genera un nuevo STA_CONNECTED) y el portal no volveria a
+     * arrancar solo -> "conectado pero sin datos". Reabrimos la ventana y
+     * seguimos; solo se apaga cuando NO queda nadie conectado. */
+    wifi_sta_list_t stas = { 0 };
+    if (esp_wifi_ap_get_sta_list(&stas) == ESP_OK && stas.num > 0) {
+        ap_off_timer_kick();
+        return;
+    }
+    ESP_LOGI(TAG, "Auto-off: sin clientes asociados, parando HTTP server");
     httpd_stop(s_httpd);
     s_httpd = NULL;
     /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
@@ -172,6 +184,11 @@ static void ap_off_timer_kick(void)
     esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
 }
 
+bool config_server_is_running(void)
+{
+    return s_httpd != NULL;
+}
+
 /* Logs visibles cuando un cliente intenta asociarse / desconectarse. En
  * esp_hosted rpc_wrap loggea estos eventos solo a nivel VERBOSE, por eso sin
  * estos handlers los intentos del movil son invisibles en monitor.  */
@@ -194,7 +211,10 @@ static void cfg_srv_ap_sta_disconnected(void *arg, esp_event_base_t base,
     ESP_LOGI(TAG, "Cliente DESCONECTADO: MAC=%02x:%02x:%02x:%02x:%02x:%02x aid=%d",
              e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
              e->aid);
-    /* No tocamos el timer aquí — lo gestiona el handler de CONNECTED. */
+    /* Al irse un cliente reiniciamos la cuenta atras del auto-off: si era el
+     * ultimo, el portal se apagara 15 min despues (ahorro cuando no hay nadie).
+     * Si aun quedan clientes, ap_auto_off_cb volvera a rearmar al caducar. */
+    ap_off_timer_arm();
 }
 static void cfg_srv_ap_probe_req(void *arg, esp_event_base_t base,
                                    int32_t id, void *data)
