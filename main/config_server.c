@@ -2065,6 +2065,12 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         return ESP_FAIL;
     }
 
+    /* Ceder CPU cada ~32 KB enviados: httpd (prio 5) es mas prioritario que
+     * LVGL (prio 4); sin esto, un .tar grande ahoga la UI y el watchdog SW la da
+     * por colgada (3/3) -> esp_restart. Ademas deja respirar a la pila WiFi
+     * (evita el drop de conexion en descargas medianas). */
+    size_t bytes_since_yield = 0;
+
     struct dirent *de;
     while (1) {
         /* readdir lee sectores de dir: serializar con el GDMA de la camara */
@@ -2102,6 +2108,11 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
             if (n == 0) break;
             if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { remaining = 0; break; }
             remaining -= n;
+            bytes_since_yield += n;
+            if (bytes_since_yield >= 32768) {
+                bytes_since_yield = 0;
+                vTaskDelay(1);   /* ceder CPU a LVGL/WDT/WiFi (evita el reset por asfixia) */
+            }
         }
         bool sl2 = camera_sd_bus_lock(3000);
         fclose(f);
@@ -2175,6 +2186,11 @@ esp_err_t config_server_start(void) {
     httpd_handle_t server = NULL;
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.uri_match_fn = httpd_uri_match_wildcard;
+    /* Prioridad por debajo de LVGL (prio 4): el default del httpd es 5 y ahogaba
+     * a la UI durante descargas grandes (.tar) -> el watchdog SW daba LVGL por
+     * colgada (3/3) y forzaba reset. Con prio 3 LVGL siempre preempta al httpd.
+     * Junto con el yield periodico en handle_tar_dir elimina la asfixia. */
+    cfg.task_priority = 3;
     cfg.stack_size = 20480;  /* lv_snapshot en /captura renderiza toda la pantalla
                               * en la tarea del httpd; 8192 se desbordaba y colgaba */
     cfg.send_wait_timeout = 30;
