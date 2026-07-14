@@ -1,0 +1,33 @@
+# Configuracion de clangd para este proyecto ESP-IDF (ESP32-P4, RISC-V).
+#
+# ESP-IDF genera build/compile_commands.json (CMAKE_EXPORT_COMPILE_COMMANDS=ON),
+# pero usa el gcc cruzado riscv32-esp-elf con banderas que clang no entiende:
+#  - -march con extensiones propias de Espressif (xesploop / xespv / xesppie)
+#  - -mabi=ilp32f y varias -f... especificas de GCC
+# Las quitamos y forzamos un target riscv32 generico; asi clangd puede indexar,
+# navegar (ir a definicion, referencias) y avisar de errores sin atascarse.
+#
+# Requisitos: tener clangd instalado y haber compilado al menos una vez
+# (`idf.py build`) para que exista build/compile_commands.json.
+
+CompileFlags:
+  # Buscar compile_commands.json en la carpeta build/ (relativa a este .clangd).
+  CompilationDatabase: build
+  Add:
+    - --target=riscv32-esp-elf
+    - -Wno-unknown-warning-option
+    - -Wno-unknown-attributes
+  Remove:
+    - -march=*                    # extensiones esp (xesploop/xespv/xesppie): clang no las conoce
+    - -mabi=*
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -fno-jump-tables
+    - -mlongcalls                 # (xtensa; inofensivo si no aparece)
+    - -mtext-section-literals     # (xtensa)
+
+# Silenciar ruido tipico de headers de sistema del toolchain cruzado.
+Diagnostics:
+  Suppress:
+    - builtin_definition
+    - drv_unknown_argument
