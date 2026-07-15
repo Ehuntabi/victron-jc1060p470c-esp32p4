@@ -61,13 +61,11 @@ static void about_refresh_dynamic(ui_state_t *ui);
 static void about_timer_cb(lv_timer_t *t);
 /* Trip computer + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
 static lv_obj_t *s_trip_label = NULL;
-static lv_obj_t *s_sd_dump_ip = NULL;   /* card "Volcado por WiFi": muestra la URL viva */
 static void trip_label_refresh(void);
 static void trip_reset_btn_cb(lv_event_t *e);
 static void backup_export_cb(lv_event_t *e);
 static void backup_import_cb(lv_event_t *e);
 static void sd_trip_timer_cb(lv_timer_t *t);
-static void reboot_msgbox_cb(lv_event_t *e);
 static void reboot_btn_cb(lv_event_t *e);
 static void brightness_slider_event_cb(lv_event_t *e);
 static void ss_mode_changed_cb(lv_event_t *e)
@@ -719,16 +717,6 @@ static void sd_trip_timer_cb(lv_timer_t *t)
     ui_state_t *ui = t ? (ui_state_t *)t->user_data : NULL;
     if (s_trip_label && lv_obj_is_visible(s_trip_label)) trip_label_refresh();
 
-    /* URL viva de la card "Volcado por WiFi" (IP del AP). No toca la SD, asi que
-     * va antes del bloque de f_getfree (que puede salir pronto si el bus esta ocupado). */
-    if (s_sd_dump_ip && lv_obj_is_visible(s_sd_dump_ip)) {
-        esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-        esp_netif_ip_info_t ipi = {0};
-        if (ap && esp_netif_get_ip_info(ap, &ipi) == ESP_OK && ipi.ip.addr != 0) {
-            lv_label_set_text_fmt(s_sd_dump_ip, "http://" IPSTR "/data", IP2STR(&ipi.ip));
-        }
-    }
-
     /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
     if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
         /* f_getfree escanea la FAT (bloqueante): tomar el bus de la SD sin
@@ -857,44 +845,6 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
-    /* === Card Volcado por WiFi (descargar carpetas de la SD sin desmontarla) === */
-    lv_obj_t *card_dump = lv_obj_create(cont);
-    lv_obj_set_width(card_dump, lv_pct(100));
-    lv_obj_set_height(card_dump, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_dump, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_dump, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_dump, lv_color_hex(0x66BB6A), 0);  /* verde */
-    lv_obj_set_style_border_width(card_dump, 1, 0);
-    lv_obj_set_style_radius(card_dump, 12, 0);
-    lv_obj_set_style_pad_all(card_dump, 16, 0);
-    lv_obj_set_style_pad_gap(card_dump, 8, 0);
-    lv_obj_set_layout(card_dump, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_dump, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *dump_title = lv_label_create(card_dump);
-    lv_obj_set_style_text_font(dump_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(dump_title, lv_color_hex(0x66BB6A), 0);
-    lv_label_set_text(dump_title, LV_SYMBOL_DOWNLOAD "  Volcado por WiFi");
-
-    lv_obj_t *dump_desc = lv_label_create(card_dump);
-    lv_obj_set_style_text_font(dump_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(dump_desc, lv_color_hex(0x888888), 0);
-    lv_label_set_text(dump_desc,
-        "Conectate al WiFi del equipo y abre en el navegador:");
-
-    s_sd_dump_ip = lv_label_create(card_dump);
-    lv_obj_set_style_text_font(s_sd_dump_ip, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_sd_dump_ip, lv_color_hex(0x4FC3F7), 0);
-    lv_label_set_text(s_sd_dump_ip, "http://192.168.4.1/data");
-
-    lv_obj_t *dump_hint = lv_label_create(card_dump);
-    lv_obj_set_style_text_font(dump_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(dump_hint, lv_color_hex(0x888888), 0);
-    lv_label_set_long_mode(dump_hint, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(dump_hint, lv_pct(100));
-    lv_label_set_text(dump_hint,
-        "Elige la carpeta a descargar: frigo, bateria, capturas, "
-        "vigilancia, config o logs.");
 
     /* === Card Trip computer (contadores reseteables del viaje) === */
     lv_obj_t *card_trip = lv_obj_create(cont);
@@ -3000,26 +2950,110 @@ static void trip_label_refresh(void)
     lv_label_set_text(s_trip_label, buf);
 }
 
-static void trip_reset_msgbox_cb(lv_event_t *e)
+/* === Dialogo de confirmacion con el estilo del aviso de Victron Keys =======
+ * Modal grande (600x280), fondo oscurecido, borde y titulo rosa, texto grande
+ * centrado y botones 220x60. Un unico helper para TODAS las confirmaciones, asi
+ * quedan identicas en estilo y tamano. La accion (on_confirm) se ejecuta solo si
+ * se pulsa el boton derecho; el modal se cierra siempre. */
+typedef void (*ui_confirm_action_t)(void);
+static lv_obj_t *s_confirm_modal = NULL;
+static ui_confirm_action_t s_confirm_action = NULL;
+
+static void ui_confirm_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *mbox = lv_event_get_current_target(e);
-    uint16_t btn_id = lv_msgbox_get_active_btn(mbox);
-    if (btn_id == 0) {  /* "Si" */
-        trip_computer_reset();
-        trip_label_refresh();
-    }
-    lv_msgbox_close(mbox);
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
+    const char *txt = lbl ? lv_label_get_text(lbl) : "";
+    bool ok = (txt && strcmp(txt, "Cancelar") != 0);  /* el izquierdo siempre es Cancelar */
+    ui_confirm_action_t action = s_confirm_action;
+    if (s_confirm_modal) { lv_obj_del(s_confirm_modal); s_confirm_modal = NULL; }
+    s_confirm_action = NULL;
+    if (ok && action) action();
+}
+
+static void ui_show_confirm_dialog(const char *title, const char *msg,
+                                   const char *ok_txt, ui_confirm_action_t on_confirm)
+{
+    if (s_confirm_modal) return;
+    s_confirm_action = on_confirm;
+
+    /* Fondo modal a pantalla completa (mismo que el aviso de Victron Keys) */
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_confirm_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title_lbl = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title_lbl, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title_lbl, lv_color_hex(0xE91E63), 0);
+    lv_label_set_text(title_lbl, title);
+
+    lv_obj_t *msg_lbl = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg_lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(msg_lbl, lv_color_white(), 0);
+    lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg_lbl, lv_pct(100));
+    lv_obj_set_style_text_align(msg_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg_lbl, msg);
+
+    lv_obj_t *row_btns = lv_obj_create(dlg);
+    lv_obj_remove_style_all(row_btns);
+    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_cancel = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_cancel, 220, 60);
+    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_cancel, 12, 0);
+    lv_obj_t *lc = lv_label_create(btn_cancel);
+    lv_label_set_text(lc, "Cancelar");
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lc);
+    lv_obj_add_event_cb(btn_cancel, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_ok = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_ok, 220, 60);
+    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_radius(btn_ok, 12, 0);
+    lv_obj_t *lo = lv_label_create(btn_ok);
+    lv_label_set_text(lo, ok_txt);
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lo);
+    lv_obj_add_event_cb(btn_ok, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void do_trip_reset_action(void)
+{
+    trip_computer_reset();
+    trip_label_refresh();
 }
 
 static void trip_reset_btn_cb(lv_event_t *e)
 {
     (void)e;
-    static const char *btns[] = {"Si", "Cancelar", ""};
-    lv_obj_t *mbox = lv_msgbox_create(NULL, "Trip computer",
-        "Resetear contadores del viaje? Esta accion no se puede deshacer.",
-        btns, false);
-    lv_obj_add_event_cb(mbox, trip_reset_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_center(mbox);
+    ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Trip computer",
+        "Resetear contadores del viaje?\nEsta accion no se puede deshacer.",
+        "Resetear", do_trip_reset_action);
 }
 
 /* ── Callbacks Backup/Restore configuración ───────────────────── */
@@ -3467,32 +3501,22 @@ static void about_timer_cb(lv_timer_t *t)
     about_refresh_dynamic(ui);
 }
 
-static void reboot_msgbox_cb(lv_event_t *e)
+static void do_reboot_action(void)
 {
-    lv_obj_t *mbox = lv_event_get_current_target(e);
-    uint16_t btn_id = lv_msgbox_get_active_btn(mbox);
-    if (btn_id == 0) {
-        ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
-        lv_msgbox_close(mbox);
-        /* Flush datos antes de reiniciar */
-        ESP_LOGI("UI", "Flushing data before restart...");
-        datalogger_flush();
-        battery_history_flush();
-        vTaskDelay(pdMS_TO_TICKS(200));
-        esp_restart();
-    } else {
-        lv_msgbox_close(mbox);
-    }
+    ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
+    ESP_LOGI("UI", "Flushing data before restart...");
+    datalogger_flush();
+    battery_history_flush();
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
 }
 
 static void reboot_btn_cb(lv_event_t *e)
 {
-    static const char *btns[] = {"Si", "No", ""};
-    lv_obj_t *mbox = lv_msgbox_create(NULL, "Reiniciar",
+    (void)e;
+    ui_show_confirm_dialog(LV_SYMBOL_POWER "  Reiniciar",
         "Estas seguro de que quieres reiniciar el dispositivo?",
-        btns, false);
-    lv_obj_center(mbox);
-    lv_obj_add_event_cb(mbox, reboot_msgbox_cb, LV_EVENT_VALUE_CHANGED, NULL);
+        "Reiniciar", do_reboot_action);
 }
 
 static void logs_btn_bat_cb(lv_event_t *e)
