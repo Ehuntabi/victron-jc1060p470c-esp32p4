@@ -62,6 +62,17 @@ static void reboot_timer_cb(void *arg)
     esp_restart();
 }
 
+/* Empuja telemetria (Victron SoC/PV + NE185 shore/fresh) al modo excedente
+ * solar del frigo, cada 1 s. fresh = todos los buses recientes. */
+static void frigo_solar_feed_cb(void *arg)
+{
+    dashboard_snapshot_t snap;
+    dashboard_state_snapshot(&snap);
+    ne185_data_t ne; ne185_get(&ne);
+    bool fresh = snap.bat_fresh && snap.solar_fresh && ne.fresh;
+    frigo_solar_feed(snap.soc_deci, snap.pv_w, ne.shore, fresh);
+}
+
 /* ── Backup periódico de hora a NVS ──────────────────────────── */
 static void rtc_backup_timer_cb(void *arg)
 {
@@ -516,6 +527,16 @@ void app_main(void)
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
+
+    /* Feed periodico de telemetria (Victron SoC/PV + NE185 shore/fresh)
+     * al modo excedente solar del frigo. */
+    const esp_timer_create_args_t sol_feed = {
+        .callback = frigo_solar_feed_cb,
+        .name     = "sol_feed",
+    };
+    esp_timer_handle_t sol_feed_timer;
+    if (esp_timer_create(&sol_feed, &sol_feed_timer) == ESP_OK)
+        esp_timer_start_periodic(sol_feed_timer, 1000000);  /* 1 s */
 
     logSection("Setup complete");
 }

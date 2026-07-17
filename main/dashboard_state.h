@@ -29,6 +29,10 @@ typedef struct {
     uint16_t soc_deci;
     uint16_t bat_v_centi;
     int32_t  bat_i_milli;
+    bool     solar_has;
+    uint16_t pv_w;
+    bool     bat_fresh;    /* SoC recibido en los ultimos 30 s */
+    bool     solar_fresh;  /* PV recibido en los ultimos 30 s */
 
     bool     dcdc_has;
     uint16_t dc_in_v_centi;

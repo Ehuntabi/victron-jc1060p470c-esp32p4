@@ -5,6 +5,7 @@
 #include "frigo.h"         /* congelador: temp/ventilador para /api/state */
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -15,9 +16,11 @@ static struct {
     int32_t  bat_i_milli;
     uint16_t ttg_min;
     uint16_t bat_alarm;
+    uint32_t bat_ms;
 
     bool     solar_has;
     uint16_t pv_w;
+    uint32_t solar_ms;
     uint16_t solar_yield_centikwh;
     int16_t  solar_i_deci;
     uint8_t  solar_state;
@@ -55,6 +58,7 @@ void dashboard_state_on_record(const victron_data_t *data)
         case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
             const victron_record_battery_monitor_t *b = &data->record.battery;
             s.bat_has = true;
+            s.bat_ms = (uint32_t)(esp_timer_get_time() / 1000);
             s.soc_deci = b->soc_deci_percent;
             s.bat_v_centi = b->battery_voltage_centi;
             s.bat_i_milli = b->battery_current_milli;
@@ -65,6 +69,7 @@ void dashboard_state_on_record(const victron_data_t *data)
         case VICTRON_BLE_RECORD_LYNX_SMART_BMS: {
             const victron_record_lynx_smart_bms_t *b = &data->record.lynx;
             s.bat_has = true;
+            s.bat_ms = (uint32_t)(esp_timer_get_time() / 1000);
             s.soc_deci = b->soc_deci_percent;
             s.bat_v_centi = b->battery_voltage_centi;
             s.bat_i_milli = (int32_t)b->battery_current_deci * 100;
@@ -74,6 +79,7 @@ void dashboard_state_on_record(const victron_data_t *data)
         case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
             const victron_record_solar_charger_t *sc = &data->record.solar;
             s.solar_has = true;
+            s.solar_ms = (uint32_t)(esp_timer_get_time() / 1000);
             s.pv_w = sc->pv_power_w;
             s.solar_yield_centikwh = sc->yield_today_centikwh;
             s.solar_i_deci = sc->battery_current_deci;
@@ -116,6 +122,11 @@ void dashboard_state_snapshot(dashboard_snapshot_t *out)
     out->dc_in_v_centi  = s.dc_in_v_centi;
     out->dc_out_v_centi = s.dc_out_v_centi;
     out->dc_state       = s.dc_state;
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    out->solar_has   = s.solar_has;
+    out->pv_w        = s.pv_w;
+    out->bat_fresh   = s.bat_has   && ((uint32_t)(now - s.bat_ms)   < 30000u);
+    out->solar_fresh = s.solar_has && ((uint32_t)(now - s.solar_ms) < 30000u);
     unlock();
 }
 
