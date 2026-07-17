@@ -434,9 +434,10 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_border_width(card_fan, 1, 0);
     lv_obj_set_style_radius(card_fan, 12, 0);
     lv_obj_set_style_pad_all(card_fan, 16, 0);
-    /* pad_gap mas amplio para que Auto/OFF y Min/Max esten claramente
-     * separados visualmente (antes 12). */
-    lv_obj_set_style_pad_gap(card_fan, 24, 0);
+    /* pad_gap recortado (era 24) para que el borde inferior de esta card
+     * quede mas cerca del de la card de sensores; sigue separando bien
+     * Auto/OFF de Min/Max (antes de esto, 12). */
+    lv_obj_set_style_pad_gap(card_fan, 14, 0);
     lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
     /* Centrado horizontal de los hijos (las filas a pct(100) no se ven
