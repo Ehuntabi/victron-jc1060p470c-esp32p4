@@ -36,6 +36,7 @@
 #include "log_browser.h"
 #include "health_score.h"
 #include "screenshot.h"
+#include "frigo.h"
 #include "esp_heap_caps.h"
 #include <sys/stat.h>
 #include <math.h>
@@ -136,6 +137,16 @@ static void health_timer_cb(lv_timer_t *t)
     lv_obj_set_width(ui->lbl_health,
                      (lvl == HEALTH_OK) ? 60 : LV_SIZE_CONTENT);
     lv_label_set_text(ui->lbl_health, txt);
+}
+
+static void solar_indicator_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_solar) return;
+    if (frigo_solar_get_active())
+        lv_obj_clear_flag(ui->lbl_solar, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(ui->lbl_solar, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void volume_icon_timer_cb(lv_timer_t *t)
@@ -459,6 +470,20 @@ void ui_init(void) {
     lv_obj_set_size(ui->lbl_health, 60, 38);
     lv_obj_set_style_text_align(ui->lbl_health, LV_TEXT_ALIGN_CENTER, 0);
 
+    /* Indicador "frigo con excedente solar activo". Oculto hasta que el
+     * modo excedente solar del frigo esta realmente tirando de el. */
+    ui->lbl_solar = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_solar, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->lbl_solar, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(ui->lbl_solar, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_solar, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_solar, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_solar, 4, 0);
+    lv_label_set_text(ui->lbl_solar, LV_SYMBOL_CHARGE " 12V sol");
+    lv_obj_set_size(ui->lbl_solar, 110, 38);
+    lv_obj_set_style_text_align(ui->lbl_solar, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(ui->lbl_solar, LV_OBJ_FLAG_HIDDEN);
+
     /* Botón de navegación Live↔Settings — estilo discreto idéntico a los
      * demás iconos de estado de la barra (sin fondo destacado). */
     ui->btn_nav = lv_label_create(ui->bottom_bar);
@@ -480,6 +505,7 @@ void ui_init(void) {
     lv_obj_add_event_cb(ui->tabview, nav_icon_sync_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_timer_create(volume_icon_timer_cb, 500, ui);
+    lv_timer_create(solar_indicator_timer_cb, 2000, ui);
     lv_timer_create(health_timer_cb, 5000, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
