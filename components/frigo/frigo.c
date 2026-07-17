@@ -535,7 +535,42 @@ esp_err_t frigo_solar_set_soc_off(uint8_t pct)
     return ESP_OK;
 }
 
-bool    frigo_solar_get_enabled(void) { return s_sol_en; }
-uint8_t frigo_solar_get_soc_on(void)  { return s_sol_on_pct; }
-uint8_t frigo_solar_get_soc_off(void) { return s_sol_off_pct; }
-bool    frigo_solar_get_active(void)  { return s_sol_sm.active; }
+bool frigo_solar_get_enabled(void)
+{
+    bool v = false;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        v = s_sol_en;
+        xSemaphoreGive(s_mutex);
+    }
+    return v;
+}
+
+uint8_t frigo_solar_get_soc_on(void)
+{
+    uint8_t v = 95;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        v = s_sol_on_pct;
+        xSemaphoreGive(s_mutex);
+    }
+    return v;
+}
+
+uint8_t frigo_solar_get_soc_off(void)
+{
+    uint8_t v = 80;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        v = s_sol_off_pct;
+        xSemaphoreGive(s_mutex);
+    }
+    return v;
+}
+
+bool frigo_solar_get_active(void)
+{
+    bool v = false;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        v = s_sol_sm.active;
+        xSemaphoreGive(s_mutex);
+    }
+    return v;
+}
