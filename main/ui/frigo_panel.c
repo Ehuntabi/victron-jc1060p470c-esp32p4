@@ -513,32 +513,41 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_bg_opa(sep, LV_OPA_30, 0);
 
-    /* Fila T_Min y T_Max */
+    /* Fila T_Min y T_Max: dos columnas lado a lado (min | max); cada
+     * columna lleva su etiqueta arriba y su selector +/- centrado debajo. */
     lv_obj_t *row_t = lv_obj_create(card_fan);
     lv_obj_remove_style_all(row_t);
     lv_obj_set_style_bg_opa(row_t, LV_OPA_TRANSP, 0);
     lv_obj_set_width(row_t, lv_pct(100));
     lv_obj_set_height(row_t, LV_SIZE_CONTENT);
     lv_obj_set_layout(row_t, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_t, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(row_t, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_t, 12, 0);
+    lv_obj_set_flex_flow(row_t, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_t, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* T_Min - layout horizontal compacto */
+    /* T_Min - columna: etiqueta arriba, selector +/- centrado debajo */
     lv_obj_t *col_min = lv_obj_create(row_t);
     lv_obj_remove_style_all(col_min);
     lv_obj_set_layout(col_min, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_min, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_flow(col_min, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(col_min, 8, 0);
-    lv_obj_set_size(col_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_width(col_min, lv_pct(50));
+    lv_obj_set_height(col_min, LV_SIZE_CONTENT);
 
     lv_obj_t *lbl_tmin = lv_label_create(col_min);
     lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_tmin, "Min:");
 
-    s_btn_tmin_m = lv_btn_create(col_min);
+    lv_obj_t *sel_min = lv_obj_create(col_min);
+    lv_obj_remove_style_all(sel_min);
+    lv_obj_set_layout(sel_min, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(sel_min, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sel_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(sel_min, 8, 0);
+    lv_obj_set_size(sel_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    s_btn_tmin_m = lv_btn_create(sel_min);
     lv_obj_set_size(s_btn_tmin_m, 44, 44);
     lv_obj_set_style_radius(s_btn_tmin_m, 8, 0);
     lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
@@ -548,14 +557,14 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_mm);
     lv_obj_add_event_cb(s_btn_tmin_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
-    s_lbl_tmin_val = lv_label_create(col_min);
+    s_lbl_tmin_val = lv_label_create(sel_min);
     lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(s_lbl_tmin_val, lv_color_white(), 0);
     lv_obj_set_width(s_lbl_tmin_val, 80);
     lv_obj_set_style_text_align(s_lbl_tmin_val, LV_TEXT_ALIGN_CENTER, 0);
     { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_min); lv_label_set_text(s_lbl_tmin_val, buf); }
 
-    s_btn_tmin_p = lv_btn_create(col_min);
+    s_btn_tmin_p = lv_btn_create(sel_min);
     lv_obj_set_size(s_btn_tmin_p, 44, 44);
     lv_obj_set_style_radius(s_btn_tmin_p, 8, 0);
     lv_obj_set_style_bg_color(s_btn_tmin_p, lv_color_hex(0x4FC3F7), 0);
@@ -565,21 +574,30 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_mp);
     lv_obj_add_event_cb(s_btn_tmin_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
-    /* T_Max - layout horizontal compacto */
+    /* T_Max - columna: etiqueta arriba, selector +/- centrado debajo */
     lv_obj_t *col_max = lv_obj_create(row_t);
     lv_obj_remove_style_all(col_max);
     lv_obj_set_layout(col_max, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(col_max, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_flow(col_max, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(col_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(col_max, 8, 0);
-    lv_obj_set_size(col_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_width(col_max, lv_pct(50));
+    lv_obj_set_height(col_max, LV_SIZE_CONTENT);
 
     lv_obj_t *lbl_tmax = lv_label_create(col_max);
     lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(lbl_tmax, "Max:");
 
-    s_btn_tmax_m = lv_btn_create(col_max);
+    lv_obj_t *sel_max = lv_obj_create(col_max);
+    lv_obj_remove_style_all(sel_max);
+    lv_obj_set_layout(sel_max, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(sel_max, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sel_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(sel_max, 8, 0);
+    lv_obj_set_size(sel_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    s_btn_tmax_m = lv_btn_create(sel_max);
     lv_obj_set_size(s_btn_tmax_m, 44, 44);
     lv_obj_set_style_radius(s_btn_tmax_m, 8, 0);
     lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
@@ -589,14 +607,14 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_xm);
     lv_obj_add_event_cb(s_btn_tmax_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
 
-    s_lbl_tmax_val = lv_label_create(col_max);
+    s_lbl_tmax_val = lv_label_create(sel_max);
     lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(s_lbl_tmax_val, lv_color_white(), 0);
     lv_obj_set_width(s_lbl_tmax_val, 80);
     lv_obj_set_style_text_align(s_lbl_tmax_val, LV_TEXT_ALIGN_CENTER, 0);
     { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_max); lv_label_set_text(s_lbl_tmax_val, buf); }
 
-    s_btn_tmax_p = lv_btn_create(col_max);
+    s_btn_tmax_p = lv_btn_create(sel_max);
     lv_obj_set_size(s_btn_tmax_p, 44, 44);
     lv_obj_set_style_radius(s_btn_tmax_p, 8, 0);
     lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
