@@ -1383,6 +1383,12 @@ static lv_chart_series_t *s_ser_aletas     = NULL;
 static lv_chart_series_t *s_ser_congelador = NULL;
 static lv_chart_series_t *s_ser_exterior   = NULL;
 static lv_chart_series_t *s_ser_fan        = NULL;
+/* Banda del excedente solar: comparte el eje secundario (0..100) con s_ser_fan
+ * porque el proyecto fija ese rango una sola vez al crear el chart
+ * (lv_chart_set_range en ui_show_chart_screen); no se puede pedir un rango
+ * 0..1 propio sin romper la escala del fan%. Se dibuja como marca baja
+ * (valor bajo del 0..100) solo en las muestras activas. */
+static lv_chart_series_t *s_ser_solar      = NULL;
 /* Leyenda-boton: cada elemento muestra/oculta su serie. Guardamos etiqueta,
  * punto y color para poder atenuarlos al ocultar. Estado por sesion de pantalla
  * (las series se recrean al abrir -> todo visible por defecto). */
@@ -1580,6 +1586,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_exterior   = lv_chart_add_series(s_chart, colores[2], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_fan        = lv_chart_add_series(s_chart, colores[3], LV_CHART_AXIS_SECONDARY_Y);
+    s_ser_solar      = lv_chart_add_series(s_chart, lv_color_hex(0xE0900A), LV_CHART_AXIS_SECONDARY_Y);
 
     /* Contenedor de labels horarios bajo el chart */
     s_frigo_xlabels = lv_obj_create(scr);
@@ -1710,6 +1717,7 @@ static void frigo_chart_load_day(void)
     lv_chart_set_all_value(s_chart, s_ser_congelador, LV_CHART_POINT_NONE);
     lv_chart_set_all_value(s_chart, s_ser_exterior,   LV_CHART_POINT_NONE);
     lv_chart_set_all_value(s_chart, s_ser_fan,        LV_CHART_POINT_NONE);
+    lv_chart_set_all_value(s_chart, s_ser_solar,      LV_CHART_POINT_NONE);
 
     if (s_frigo_day_idx < 0) {
         int count = datalogger_get_count();
@@ -1738,6 +1746,8 @@ static void frigo_chart_load_day(void)
             lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
                 e->T_Exterior > -120.0f ? (int16_t)e->T_Exterior : LV_CHART_POINT_NONE);
             lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_percent);
+            lv_chart_set_value_by_id(s_chart, s_ser_solar, idx,
+                e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
         }
         frigo_apply_temp_range(t_min, t_max);
         /* Pasamos `count` (el raw del datalogger), no `valid`: las
@@ -1787,6 +1797,8 @@ static void frigo_chart_load_day(void)
             lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
                 isnan(e->t_exter)  ? LV_CHART_POINT_NONE : (int16_t)e->t_exter);
             lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_pct);
+            lv_chart_set_value_by_id(s_chart, s_ser_solar, idx,
+                e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
         }
         frigo_apply_temp_range(t_min, t_max);
         update_frigo_xlabels_from_buf(n);
