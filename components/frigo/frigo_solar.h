@@ -1,4 +1,4 @@
-/* frigo_solar.h — Maquina de estados PURA del modo "aprovechar excedente solar".
+/* frigo_solar.h - Maquina de estados PURA del modo "aprovechar excedente solar".
  * Sin dependencias de hardware ni FreeRTOS: testeable en host (gcc). */
 #pragma once
 #include <stdint.h>

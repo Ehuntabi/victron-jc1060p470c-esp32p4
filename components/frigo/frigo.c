@@ -494,6 +494,7 @@ void frigo_addr_to_str(const frigo_sensor_addr_t *sensor, char *buf, size_t len)
 
 void frigo_solar_feed(uint16_t soc_deci, uint16_t pv_w, bool shore, bool fresh)
 {
+    if (!s_mutex) return;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     s_sol_soc_deci = soc_deci;
     s_sol_pv_w     = pv_w;
@@ -537,6 +538,7 @@ esp_err_t frigo_solar_set_soc_off(uint8_t pct)
 
 bool frigo_solar_get_enabled(void)
 {
+    if (!s_mutex) return false;
     bool v = false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_en;
@@ -547,6 +549,7 @@ bool frigo_solar_get_enabled(void)
 
 uint8_t frigo_solar_get_soc_on(void)
 {
+    if (!s_mutex) return 95;
     uint8_t v = 95;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_on_pct;
@@ -557,6 +560,7 @@ uint8_t frigo_solar_get_soc_on(void)
 
 uint8_t frigo_solar_get_soc_off(void)
 {
+    if (!s_mutex) return 80;
     uint8_t v = 80;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_off_pct;
@@ -567,6 +571,7 @@ uint8_t frigo_solar_get_soc_off(void)
 
 bool frigo_solar_get_active(void)
 {
+    if (!s_mutex) return false;
     bool v = false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_sm.active;
