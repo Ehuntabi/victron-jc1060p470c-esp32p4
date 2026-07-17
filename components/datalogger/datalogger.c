@@ -225,7 +225,7 @@ static void flush_pending_to_sd_impl(void)
 
     bool io_error = false;
     if (need_header) {
-        if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n") < 0) {
+        if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n") < 0) {
             io_error = true;
         }
     }
@@ -238,8 +238,8 @@ static void flush_pending_to_sd_impl(void)
         format_temp(ta, sizeof ta, e->T_Aletas);
         format_temp(tc, sizeof tc, e->T_Congelador);
         format_temp(te, sizeof te, e->T_Exterior);
-        int r = fprintf(f, "%s,%s,%s,%s,%d\n",
-                        e->timestamp, ta, tc, te, e->fan_percent);
+        int r = fprintf(f, "%s,%s,%s,%s,%d,%d\n",
+                        e->timestamp, ta, tc, te, e->fan_percent, e->excedente_solar ? 1 : 0);
         if (r < 0 || ferror(f)) { io_error = true; break; }
         written++;
     }
@@ -317,6 +317,7 @@ esp_err_t datalogger_log(const frigo_state_t *frigo)
     entry.T_Congelador = frigo->T_Congelador;
     entry.T_Exterior   = frigo->T_Exterior;
     entry.fan_percent  = frigo->fan_percent;
+    entry.excedente_solar = frigo_solar_get_active();
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Log descartado: timeout tomando mutex");
         return ESP_ERR_TIMEOUT;
@@ -380,7 +381,7 @@ char *datalogger_get_csv(void)
     if (!csv) return NULL;
     int pos = 0;
     pos += snprintf(csv + pos, size - pos,
-                    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+                    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n");
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
         for (int i = 0; i < s_count && pos < (int)size - 80; i++) {
             datalogger_entry_t e;  /* get_entry_locked: ya tenemos s_mutex */
@@ -390,8 +391,8 @@ char *datalogger_get_csv(void)
             format_temp(tc, sizeof tc, e.T_Congelador);
             format_temp(te, sizeof te, e.T_Exterior);
             pos += snprintf(csv + pos, size - pos,
-                            "%s,%s,%s,%s,%d\n",
-                            e.timestamp, ta, tc, te, e.fan_percent);
+                            "%s,%s,%s,%s,%d,%d\n",
+                            e.timestamp, ta, tc, te, e.fan_percent, e.excedente_solar ? 1 : 0);
         }
         xSemaphoreGive(s_mutex);
     }

@@ -24,6 +24,7 @@ typedef struct {
     float t_congel;
     float t_exter;
     int   fan_pct;
+    int   excedente_solar;   /* 0/1; 0 si el CSV no tiene la columna (formato viejo) */
 } frigo_log_entry_t;
 
 int  log_browser_load_frigo(const char *path,

@@ -110,6 +110,7 @@ int log_browser_load_frigo(const char *path,
         e->t_congel = fields[2][0] ? strtof(fields[2], NULL) : NAN;
         e->t_exter  = fields[3][0] ? strtof(fields[3], NULL) : NAN;
         e->fan_pct  = fields[4][0] ? atoi(fields[4]) : 0;
+        e->excedente_solar = (nf >= 6 && fields[5][0]) ? atoi(fields[5]) : 0;
         n++;
     }
     fclose(f);
