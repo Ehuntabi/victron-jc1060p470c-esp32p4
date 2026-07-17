@@ -34,6 +34,9 @@ Spec de referencia: `docs/superpowers/specs/2026-07-17-frigo-excedente-solar-des
 - `components/frigo/test/test_frigo_solar.c` — **CREAR** (Task 2): test host gcc.
 - `components/frigo/frigo.{c,h}` — Task 3 (GPIO + NVS + API + tick).
 - `main/ui/frigo_panel.c` — Task 5 (toggle + ajustes +/-).
+- `components/datalogger/datalogger.{c,h}` — Task 7 (columna `excedente_solar` en el CSV/RAM).
+- `main/log_browser.{c,h}` — Task 7 (parser tolerante de la columna nueva).
+- `main/ui.c` — Task 6 (indicador) y Task 8 (banda ámbar en la gráfica del frigo).
 
 ---
 
@@ -862,6 +865,173 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
+### Task 7: Registrar la columna `excedente_solar` en el datalogger
+
+Añade a cada muestra del registro histórico del frigo un campo 0/1 con si en ese momento estaba tirando del excedente solar. Compatible hacia atrás (CSV viejos sin la columna se leen como 0).
+
+**Files:**
+- Modify: `components/datalogger/datalogger.h` (campo en `datalogger_entry_t`), `components/datalogger/datalogger.c` (rellenar campo + cabecera/fila CSV en SD y en RAM), `main/log_browser.h` (campo en `frigo_log_entry_t`), `main/log_browser.c` (parseo tolerante)
+
+**Interfaces:**
+- Consumes: `frigo_solar_get_active()` (Task 3).
+- Produces: `datalogger_entry_t.excedente_solar` (bool) y `frigo_log_entry_t.excedente_solar` (int 0/1), que consume Task 8.
+
+- [ ] **Step 1: Añadir el campo a `datalogger_entry_t` — `components/datalogger/datalogger.h`**
+
+En el struct (tras `uint8_t fan_percent;`):
+
+```c
+    bool    excedente_solar;   /* 1 = frigo alimentado por excedente solar en esa muestra */
+```
+
+- [ ] **Step 2: Rellenar el campo en `datalogger_log` — `components/datalogger/datalogger.c:311`**
+
+Tras `entry.fan_percent = frigo->fan_percent;` (línea 319) añade:
+
+```c
+    entry.excedente_solar = frigo_solar_get_active();
+```
+
+(`datalogger.h` ya incluye `frigo.h`, que declara `frigo_solar_get_active()`. Se llama desde el callback `frigo_update_cb`, que corre sin el mutex del componente frigo, así que no hay reentrada.)
+
+- [ ] **Step 3: Cabecera y fila del CSV en SD — `components/datalogger/datalogger.c`**
+
+Cabecera (línea 228), añade la columna al final:
+
+```c
+        if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n") < 0) {
+```
+
+Fila (líneas 241-242):
+
+```c
+        int r = fprintf(f, "%s,%s,%s,%s,%d,%d\n",
+                        e->timestamp, ta, tc, te, e->fan_percent, e->excedente_solar ? 1 : 0);
+```
+
+- [ ] **Step 4: Cabecera y fila del CSV desde RAM — `datalogger_get_csv()`**
+
+Cabecera (línea 382-383):
+
+```c
+    pos += snprintf(csv + pos, size - pos,
+                    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n");
+```
+
+Fila (líneas 392-394):
+
+```c
+            pos += snprintf(csv + pos, size - pos,
+                            "%s,%s,%s,%s,%d,%d\n",
+                            e.timestamp, ta, tc, te, e.fan_percent, e.excedente_solar ? 1 : 0);
+```
+
+- [ ] **Step 5: Campo en el parser — `main/log_browser.h`**
+
+En `frigo_log_entry_t` (tras `int fan_pct;`):
+
+```c
+    int   excedente_solar;   /* 0/1; 0 si el CSV no tiene la columna (formato viejo) */
+```
+
+- [ ] **Step 6: Parseo tolerante — `main/log_browser.c:104-113`**
+
+El array `fields[8]` y `csv_split(line, fields, 8)` ya admiten 6+ columnas; el guard `nf < 5` se mantiene (los CSV viejos de 5 columnas siguen valiendo). Tras `e->fan_pct = fields[4][0] ? atoi(fields[4]) : 0;` (línea 112) añade:
+
+```c
+        e->excedente_solar = (nf >= 6 && fields[5][0]) ? atoi(fields[5]) : 0;
+```
+
+- [ ] **Step 7: Compilar**
+
+```bash
+. ~/.espressif/esp-idf-5.4/export.sh
+cd /home/jc/joint/victron
+idf.py build
+```
+
+Expected: build **OK**.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add components/datalogger/datalogger.h components/datalogger/datalogger.c main/log_browser.h main/log_browser.c
+git commit -m "feat(datalogger): registrar columna excedente_solar en el log del frigo
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 8: Pintar la banda del excedente solar en la gráfica del frigo
+
+En la gráfica de temperaturas del frigo (LVGL), dibuja una marca/banda ámbar a lo largo del eje de tiempo en los tramos en que el modo estuvo activo.
+
+**Files:**
+- Modify: `main/ui.c` (función `frigo_chart_load_day`, ~línea 1679, y los dos bucles que rellenan las series)
+
+**Interfaces:**
+- Consumes: `datalogger_get_entry(i)->excedente_solar` (hoy, desde RAM) y `s_frigo_buf[i].excedente_solar` (días pasados, del parser Task 7).
+- Produces: nada.
+
+- [ ] **Step 1: Leer el patrón de series existente**
+
+En `main/ui.c`, localiza `frigo_chart_load_day` (~1679) y cómo se crean/rellenan las series existentes `s_ser_aletas` / `s_ser_congelador` / `s_ser_exterior` / `s_ser_fan` (creación con `lv_chart_add_series`, y los dos bucles de relleno: HOY desde `datalogger_get_entry(i)` ~1701-1714, y días pasados desde `s_frigo_buf[i]` ~1751-1763). La serie nueva se añade siguiendo ese mismo patrón.
+
+- [ ] **Step 2: Crear la serie del excedente en un eje secundario**
+
+Junto a la creación de las otras series, añade una serie ámbar en el eje Y secundario con rango 0..1, para que no distorsione la escala de temperaturas y quede como una banda baja:
+
+```c
+    lv_chart_set_axis_range(chart, LV_CHART_AXIS_SECONDARY_Y, 0, 1);
+    lv_chart_series_t *s_ser_solar =
+        lv_chart_add_series(chart, lv_color_hex(0xE0900A), LV_CHART_AXIS_SECONDARY_Y);
+```
+
+(Usa el mismo `chart` y el mismo estilo de grosor que las demás series; el ámbar `0xE0900A` es la identidad "solar" del proyecto.)
+
+- [ ] **Step 3: Rellenar la serie en el bucle de HOY (RAM)**
+
+En el bucle que lee `datalogger_get_entry(i)` (~1701-1714), junto a los `lv_chart_set_next_value(chart, s_ser_aletas, ...)`, añade:
+
+```c
+        const datalogger_entry_t *de = datalogger_get_entry(i);   /* si no hay ya un puntero 'e' en el bucle, usa el existente */
+        lv_chart_set_next_value(chart, s_ser_solar,
+                                de->excedente_solar ? 1 : LV_CHART_POINT_NONE);
+```
+
+(Si el bucle ya tiene un puntero a la entrada, reúsalo en vez de volver a llamar a `datalogger_get_entry`. Los puntos inactivos usan `LV_CHART_POINT_NONE` para que la banda solo se dibuje cuando estuvo activo.)
+
+- [ ] **Step 4: Rellenar la serie en el bucle de DÍAS PASADOS (CSV)**
+
+En el bucle que lee `s_frigo_buf[i]` (~1751-1763), añade:
+
+```c
+        lv_chart_set_next_value(chart, s_ser_solar,
+                                s_frigo_buf[i].excedente_solar ? 1 : LV_CHART_POINT_NONE);
+```
+
+- [ ] **Step 5: Compilar**
+
+```bash
+. ~/.espressif/esp-idf-5.4/export.sh
+cd /home/jc/joint/victron
+idf.py build
+```
+
+Expected: build **OK**. (La verificación visual —que la banda ámbar aparezca en los tramos activos— la hace el usuario al flashear.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add main/ui.c
+git commit -m "feat(ui): banda de excedente solar en la grafica del frigo
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
@@ -873,6 +1043,8 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Relé GPIO1 + arranque OFF + diodo (HW) → Task 3 (init) + Global Constraints.
 - Toggle + SoC ajustables en menú frigo → Task 5.
 - Indicador vista principal → Task 6.
+- Registro histórico del excedente (columna CSV + parser) → Task 7.
+- Visualización del excedente en la gráfica (banda ámbar) → Task 8.
 - Persistencia NVS → Task 3 (load/save) + verificación Task 5 Step 5.
 - Prerrequisito PZEM → Task 1.
 - Prueba por inyección sin sol/Victron/230V → Task 2 (host) + Task 4 Step 6 (banco).

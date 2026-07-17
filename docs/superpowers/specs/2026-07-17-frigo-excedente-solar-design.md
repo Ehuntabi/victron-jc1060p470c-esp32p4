@@ -200,6 +200,26 @@ el flag `shore` falsos desde consola/UI y observar GPIO1 por log, **sin necesida
 de sol real, Victron ni 230V**. Esto cubre los criterios 1–5 en banco. El
 criterio 6 se prueba con reset.
 
+## Registro histórico (logs del frigo)
+
+El registro histórico del frigo debe guardar, en cada muestra, si en ese momento
+está tirando del excedente solar, para poder revisar en el tiempo cuánto se ha
+aprovechado el sol.
+
+- **Fuente del dato:** `frigo_solar_get_active()` (bool, ya expuesto por el
+  componente frigo).
+- **Registro:** el componente `datalogger` (muestra cada 5 min a CSV diario en
+  SD, `/sdcard/frigo/AAAA-MM-DD.csv`, más buffer en RAM) gana un campo
+  `excedente_solar` (0/1) en `datalogger_entry_t`, y una columna `excedente_solar`
+  al final de la cabecera y de cada fila (escritura a SD y volcado desde RAM). El
+  parser `log_browser` lo lee; es **compatible hacia atrás** (los CSV viejos sin
+  la columna se toleran como campo vacío/0).
+- **Visualización:** en la gráfica del dispositivo (LVGL, `frigo_chart_load_day`)
+  se dibuja una **marca/banda ámbar** a lo largo del eje de tiempo en los tramos
+  en que el modo estuvo activo (una serie dedicada que se pinta en los puntos
+  activos y `LV_CHART_POINT_NONE` en los inactivos). La vista web `/data` muestra
+  la columna nueva automáticamente (vuelca el CSV).
+
 ## Fuera de alcance (YAGNI)
 
 - No se mide el consumo real del frigo (el suelo de SoC hace innecesario medirlo).
