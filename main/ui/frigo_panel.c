@@ -255,22 +255,24 @@ static void refresh_solon_label(void)
     if (!s_lbl_solon) return;
     lv_label_set_text_fmt(s_lbl_solon, "Activar a SoC: %d%%", frigo_solar_get_soc_on());
 }
+static void refresh_soloff_label(void)
+{
+    if (!s_lbl_soloff) return;
+    lv_label_set_text_fmt(s_lbl_soloff, "Cortar a SoC: %d%%", frigo_solar_get_soc_off());
+}
 static void btn_solon_minus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     frigo_solar_set_soc_on(frigo_solar_get_soc_on() - 1);
     refresh_solon_label();
+    refresh_soloff_label();
 }
 static void btn_solon_plus_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     frigo_solar_set_soc_on(frigo_solar_get_soc_on() + 1);
     refresh_solon_label();
-}
-static void refresh_soloff_label(void)
-{
-    if (!s_lbl_soloff) return;
-    lv_label_set_text_fmt(s_lbl_soloff, "Cortar a SoC: %d%%", frigo_solar_get_soc_off());
+    refresh_soloff_label();
 }
 static void btn_soloff_minus_cb(lv_event_t *e)
 {
