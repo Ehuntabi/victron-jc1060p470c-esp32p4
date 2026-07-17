@@ -1,4 +1,5 @@
 #include "frigo.h"
+#include "frigo_solar.h"
 #include "onewire_bus.h"
 #include "ds18b20.h"
 #include "driver/ledc.h"
@@ -20,6 +21,9 @@ static const char *TAG = "FRIGO";
 #define NVS_KEY_TMIN     "tmin"
 #define NVS_KEY_TMAX     "tmax"
 #define NVS_KEY_FANMIN   "fanmin"
+#define NVS_KEY_SOL_EN   "sol_en"
+#define NVS_KEY_SOL_ON   "sol_on"
+#define NVS_KEY_SOL_OFF  "sol_off"
 
 #define READ_INTERVAL_MS   2000
 #define DS18B20_CONV_MS     800
@@ -46,6 +50,17 @@ static ds18b20_device_handle_t s_devs[FRIGO_MAX_SENSORS] = {0};
  * s_state para no pisar los valores simulados (evita el parpadeo de las temps). */
 static volatile bool s_sim_mode = false;
 
+/* Modo excedente solar: config + estado + ultima telemetria empujada por main. */
+static bool     s_sol_en      = false;
+static uint8_t  s_sol_on_pct  = 95;
+static uint8_t  s_sol_off_pct = 80;
+static frigo_solar_sm_t s_sol_sm = {0};
+static uint16_t s_sol_soc_deci = 0;
+static uint16_t s_sol_pv_w     = 0;
+static bool     s_sol_shore    = false;
+static bool     s_sol_fresh    = false;
+static uint32_t s_sol_feed_ms  = 0;
+
 /* ── NVS ─────────────────────────────────────────────────────── */
 static void nvs_load(void)
 {
@@ -59,6 +74,10 @@ static void nvs_load(void)
     if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
     if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
     if (nvs_get_u8(h, NVS_KEY_FANMIN, &v) == ESP_OK) s_state.fan_min_pct = v;
+    uint8_t sv;
+    if (nvs_get_u8(h, NVS_KEY_SOL_EN,  &sv) == ESP_OK) s_sol_en      = sv ? true : false;
+    if (nvs_get_u8(h, NVS_KEY_SOL_ON,  &sv) == ESP_OK) s_sol_on_pct  = sv;
+    if (nvs_get_u8(h, NVS_KEY_SOL_OFF, &sv) == ESP_OK) s_sol_off_pct = sv;
     nvs_close(h);
 }
 
@@ -72,6 +91,9 @@ static void nvs_save_task(void *arg)
             nvs_set_u8(h, NVS_KEY_TMIN, s_state.T_min);
             nvs_set_u8(h, NVS_KEY_TMAX, s_state.T_max);
             nvs_set_u8(h, NVS_KEY_FANMIN, s_state.fan_min_pct);
+            nvs_set_u8(h, NVS_KEY_SOL_EN,  s_sol_en ? 1 : 0);
+            nvs_set_u8(h, NVS_KEY_SOL_ON,  s_sol_on_pct);
+            nvs_set_u8(h, NVS_KEY_SOL_OFF, s_sol_off_pct);
             xSemaphoreGive(s_mutex);
         }
         nvs_commit(h);
@@ -190,11 +212,36 @@ static uint8_t compute_fan(float t_aletas, uint8_t t_min, uint8_t t_max,
     return pct;
 }
 
+/* Un tick de la maquina de estados del modo excedente solar. Se llama en cada
+ * iteracion de frigo_task (~1-3 s; MIN_ON=30min tolera esa cadencia). */
+static void frigo_solar_tick(void)
+{
+    bool relay;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    /* Frescura efectiva: main debe refrescar; si deja de hacerlo, no fresco. */
+    bool fresh = s_sol_fresh && ((uint32_t)(now - s_sol_feed_ms) < 3000u);
+    frigo_solar_in_t in = {
+        .enabled = s_sol_en, .soc_deci = s_sol_soc_deci, .pv_w = s_sol_pv_w,
+        .shore = s_sol_shore, .fresh = fresh, .soc_on_pct = s_sol_on_pct,
+        .soc_off_pct = s_sol_off_pct, .now_ms = now,
+    };
+    bool prev = s_sol_sm.active;
+    relay = frigo_solar_eval(&in, &s_sol_sm);
+    xSemaphoreGive(s_mutex);
+
+    gpio_set_level(FRIGO_SOLAR_RELAY_GPIO, relay ? 1 : 0);
+    if (relay != prev)
+        ESP_LOGI(TAG, "Excedente solar: frigo 12V %s (SoC=%.1f%% PV=%dW)",
+                 relay ? "ON" : "OFF", s_sol_soc_deci / 10.0f, s_sol_pv_w);
+}
+
 /* ── Tarea de lectura ────────────────────────────────────────── */
 static void frigo_task(void *arg)
 {
     while (1) {
         if (s_hb_cb) s_hb_cb();  /* latido watchdog */
+        frigo_solar_tick();
 
         /* Modo simulacion (banco sin sondas): manda el sim, aqui NO tocamos
          * s_state para no pisar sus valores. El watchdog ya se alimento arriba. */
@@ -293,6 +340,17 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
     }
 
     nvs_load();
+
+    /* Rele piloto del modo excedente solar: salida, apagado al arrancar. */
+    gpio_config_t sol_cfg = {
+        .pin_bit_mask = 1ULL << FRIGO_SOLAR_RELAY_GPIO,
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&sol_cfg);
+    gpio_set_level(FRIGO_SOLAR_RELAY_GPIO, 0);
 
     onewire_bus_config_t bus_cfg = { .bus_gpio_num = FRIGO_ONEWIRE_GPIO };
     onewire_bus_rmt_config_t rmt_cfg = { .max_rx_bytes = 10 };
@@ -433,3 +491,51 @@ void frigo_addr_to_str(const frigo_sensor_addr_t *sensor, char *buf, size_t len)
              (uint8_t)(a>>56), (uint8_t)(a>>48), (uint8_t)(a>>40), (uint8_t)(a>>32),
              (uint8_t)(a>>24), (uint8_t)(a>>16), (uint8_t)(a>>8),  (uint8_t)(a));
 }
+
+void frigo_solar_feed(uint16_t soc_deci, uint16_t pv_w, bool shore, bool fresh)
+{
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    s_sol_soc_deci = soc_deci;
+    s_sol_pv_w     = pv_w;
+    s_sol_shore    = shore;
+    s_sol_fresh    = fresh;
+    s_sol_feed_ms  = (uint32_t)(esp_timer_get_time() / 1000);
+    xSemaphoreGive(s_mutex);
+}
+
+esp_err_t frigo_solar_set_enabled(bool on)
+{
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return ESP_ERR_TIMEOUT;
+    s_sol_en = on;
+    xSemaphoreGive(s_mutex);
+    nvs_save();
+    return ESP_OK;
+}
+
+esp_err_t frigo_solar_set_soc_on(uint8_t pct)
+{
+    if (pct < 80)  pct = 80;
+    if (pct > 100) pct = 100;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return ESP_ERR_TIMEOUT;
+    s_sol_on_pct = pct;
+    if (s_sol_off_pct > (uint8_t)(pct - 5)) s_sol_off_pct = pct - 5;  /* mantener histeresis */
+    xSemaphoreGive(s_mutex);
+    nvs_save();
+    return ESP_OK;
+}
+
+esp_err_t frigo_solar_set_soc_off(uint8_t pct)
+{
+    if (pct < 50) pct = 50;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return ESP_ERR_TIMEOUT;
+    if (pct > (uint8_t)(s_sol_on_pct - 5)) pct = s_sol_on_pct - 5;
+    s_sol_off_pct = pct;
+    xSemaphoreGive(s_mutex);
+    nvs_save();
+    return ESP_OK;
+}
+
+bool    frigo_solar_get_enabled(void) { return s_sol_en; }
+uint8_t frigo_solar_get_soc_on(void)  { return s_sol_on_pct; }
+uint8_t frigo_solar_get_soc_off(void) { return s_sol_off_pct; }
+bool    frigo_solar_get_active(void)  { return s_sol_sm.active; }

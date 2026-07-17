@@ -13,6 +13,11 @@
 #define FRIGO_FAN_KICKSTART_MS 700 /* pulso 100% al arrancar de parado para romper la inercia */
 #define FRIGO_MAX_SENSORS     3
 
+/* ── Modo "aprovechar excedente solar" (rele 12V del frigo) ──────
+ * GPIO1 (JP1, liberado del PZEM). Rele piloto que inyecta 13V a la bobina del
+ * rele tocho que hoy activa el D+ en marcha. Nivel alto = rele energizado. */
+#define FRIGO_SOLAR_RELAY_GPIO   1
+
 typedef enum {
     FRIGO_SLOT_ALETAS     = 0,
     FRIGO_SLOT_CONGELADOR = 1,
@@ -75,3 +80,17 @@ esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max);
 esp_err_t frigo_set_fan_min(uint8_t pct);
 void frigo_set_mode(frigo_mode_t m);
 void frigo_addr_to_str(const frigo_sensor_addr_t *addr, char *buf, size_t len);
+
+/* main empuja telemetria Victron + NE185 (~1 Hz). shore = hay 230V.
+ * fresh = false si falta dato reciente de cualquiera de los dos buses. */
+void frigo_solar_feed(uint16_t soc_deci, uint16_t pv_w, bool shore, bool fresh);
+
+/* Config del modo (persiste en NVS namespace "frigo"). */
+esp_err_t frigo_solar_set_enabled(bool on);
+esp_err_t frigo_solar_set_soc_on(uint8_t pct);   /* clamp 80..100 */
+esp_err_t frigo_solar_set_soc_off(uint8_t pct);  /* clamp 50..(soc_on-5) */
+bool     frigo_solar_get_enabled(void);
+uint8_t  frigo_solar_get_soc_on(void);
+uint8_t  frigo_solar_get_soc_off(void);
+/* Estado ON real (rele activado por excedente). Para el indicador principal. */
+bool     frigo_solar_get_active(void);
