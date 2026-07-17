@@ -40,6 +40,9 @@ static lv_obj_t *s_btn_fanmin_m  = NULL;
 static lv_obj_t *s_btn_fanmin_p  = NULL;
 static lv_obj_t *s_lbl_fanmin_val = NULL;
 
+static lv_obj_t *s_lbl_solon  = NULL;
+static lv_obj_t *s_lbl_soloff = NULL;
+
 static ui_state_t *s_ui = NULL;
 
 #define COL_NAME_W   250   /* ancho fijo columna nombre */
@@ -237,6 +240,49 @@ static void btn_fanmin_plus_cb(lv_event_t *e)
     if (p + 5 <= 60) p += 5;
     frigo_set_fan_min(p);
     refresh_fanmin_label();
+}
+
+/* Modo "Excedente solar a 12V": switch ON/OFF + SoC de activacion/corte
+ * (paso 1 %, rango 80..100 / 50..soc_on-5, ver frigo_solar_set_soc_*). */
+static void sw_solar_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    frigo_solar_set_enabled(on);
+}
+static void refresh_solon_label(void)
+{
+    if (!s_lbl_solon) return;
+    lv_label_set_text_fmt(s_lbl_solon, "Activar a SoC: %d%%", frigo_solar_get_soc_on());
+}
+static void btn_solon_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_on(frigo_solar_get_soc_on() - 1);
+    refresh_solon_label();
+}
+static void btn_solon_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_on(frigo_solar_get_soc_on() + 1);
+    refresh_solon_label();
+}
+static void refresh_soloff_label(void)
+{
+    if (!s_lbl_soloff) return;
+    lv_label_set_text_fmt(s_lbl_soloff, "Cortar a SoC: %d%%", frigo_solar_get_soc_off());
+}
+static void btn_soloff_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_off(frigo_solar_get_soc_off() - 1);
+    refresh_soloff_label();
+}
+static void btn_soloff_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_off(frigo_solar_get_soc_off() + 1);
+    refresh_soloff_label();
 }
 
 /* ── Construir opciones dropdown ─────────────────────────────── */
@@ -607,6 +653,104 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_fmp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_fmp);
     lv_obj_add_event_cb(s_btn_fanmin_p, btn_fanmin_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Separador visual entre el suelo PWM y el modo excedente solar. */
+    lv_obj_t *sep3 = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(sep3);
+    lv_obj_set_size(sep3, lv_pct(85), 1);
+    lv_obj_set_style_bg_color(sep3, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(sep3, LV_OPA_30, 0);
+
+    /* Modo "Excedente solar a 12V": switch ON/OFF. */
+    lv_obj_t *row_solar_sw = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(row_solar_sw);
+    lv_obj_set_layout(row_solar_sw, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_solar_sw, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_solar_sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_solar_sw, 8, 0);
+    lv_obj_set_size(row_solar_sw, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *lbl_solar_sw = lv_label_create(row_solar_sw);
+    lv_obj_set_style_text_font(lbl_solar_sw, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_solar_sw, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(lbl_solar_sw, "Excedente solar a 12V:");
+
+    lv_obj_t *sw_solar = lv_switch_create(row_solar_sw);
+    lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* SoC de activacion (paso 1 %, rango 80..100). */
+    lv_obj_t *col_solon = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(col_solon);
+    lv_obj_set_layout(col_solon, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_solon, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_solon, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_solon, 8, 0);
+    lv_obj_set_size(col_solon, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *btn_solon_m = lv_btn_create(col_solon);
+    lv_obj_set_size(btn_solon_m, 44, 44);
+    lv_obj_set_style_radius(btn_solon_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_solon_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_som = lv_label_create(btn_solon_m);
+    lv_label_set_text(lbl_som, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_som, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_som);
+    lv_obj_add_event_cb(btn_solon_m, btn_solon_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_solon = lv_label_create(col_solon);
+    lv_obj_set_style_text_font(s_lbl_solon, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_solon, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_solon, 180);
+    lv_obj_set_style_text_align(s_lbl_solon, LV_TEXT_ALIGN_CENTER, 0);
+    refresh_solon_label();
+
+    lv_obj_t *btn_solon_p = lv_btn_create(col_solon);
+    lv_obj_set_size(btn_solon_p, 44, 44);
+    lv_obj_set_style_radius(btn_solon_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_solon_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_sop = lv_label_create(btn_solon_p);
+    lv_label_set_text(lbl_sop, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_sop, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sop);
+    lv_obj_add_event_cb(btn_solon_p, btn_solon_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Suelo de corte (paso 1 %, rango 50..soc_on-5). */
+    lv_obj_t *col_soloff = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(col_soloff);
+    lv_obj_set_layout(col_soloff, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_soloff, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_soloff, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_soloff, 8, 0);
+    lv_obj_set_size(col_soloff, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *btn_soloff_m = lv_btn_create(col_soloff);
+    lv_obj_set_size(btn_soloff_m, 44, 44);
+    lv_obj_set_style_radius(btn_soloff_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_soloff_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_sfm = lv_label_create(btn_soloff_m);
+    lv_label_set_text(lbl_sfm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_sfm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sfm);
+    lv_obj_add_event_cb(btn_soloff_m, btn_soloff_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_soloff = lv_label_create(col_soloff);
+    lv_obj_set_style_text_font(s_lbl_soloff, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_soloff, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_soloff, 180);
+    lv_obj_set_style_text_align(s_lbl_soloff, LV_TEXT_ALIGN_CENTER, 0);
+    refresh_soloff_label();
+
+    lv_obj_t *btn_soloff_p = lv_btn_create(col_soloff);
+    lv_obj_set_size(btn_soloff_p, 44, 44);
+    lv_obj_set_style_radius(btn_soloff_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_soloff_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_sfp = lv_label_create(btn_soloff_p);
+    lv_label_set_text(lbl_sfp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_sfp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sfp);
+    lv_obj_add_event_cb(btn_soloff_p, btn_soloff_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* Estado visual inicial del segmented control + thresholds segun modo
      * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */
