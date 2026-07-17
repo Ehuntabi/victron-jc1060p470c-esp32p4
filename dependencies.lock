@@ -67,7 +67,7 @@ dependencies:
     - esp32s31
     version: 2.2.0
   espressif/esp_codec_dev:
-    component_hash: df70f10af8d7b922add7b9d07372c9c97ab356e58d72b7a892050227c2d44348
+    component_hash: 8a58569aed3c6e8d858da5419eba4d54ee905d7709cdbe01c42101c1ed0c5319
     dependencies:
     - name: idf
       require: private
@@ -75,7 +75,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.5.11
+    version: 1.6.1
   espressif/esp_h264:
     component_hash: 40cb64e697a8cfd787453165f6ce54e1fb8601844448eb073d677b9f9fde071e
     dependencies:
