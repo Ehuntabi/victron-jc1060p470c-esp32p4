@@ -13,7 +13,7 @@ typedef enum {
 } health_level_t;
 
 /* Evalua el estado global combinando BLE timeout, alarmas Victron, SoC,
- * freezer, PZEM, watchdog resets, etc. Si `reason_out` no es NULL escribe
+ * freezer, watchdog resets, etc. Si `reason_out` no es NULL escribe
  * un string corto con el motivo dominante (max ~24 chars). */
 health_level_t health_score_evaluate(char *reason_out, size_t maxlen);
 

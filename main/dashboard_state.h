@@ -23,7 +23,7 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen);
 
 /* Snapshot atómico del estado interno, para consumidores que no quieren
  * parsear JSON (ej: publisher ESP-NOW). Solo campos cacheados aquí; otros
- * módulos (pzem, ne185, frigo, trip) exponen sus propios getters. */
+ * módulos (ne185, frigo, trip) exponen sus propios getters. */
 typedef struct {
     bool     bat_has;
     uint16_t soc_deci;

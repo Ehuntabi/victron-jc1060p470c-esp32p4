@@ -34,7 +34,6 @@
 #include "log_capture/log_capture.h"
 #include "energy_today.h"
 #include "trip_computer.h"
-#include "pzem004t.h"
 #include "ne185/ne185.h"
 #include "net/udp_tx.h"
 #include "sim_overview.h"
@@ -441,19 +440,6 @@ void app_main(void)
     alerts_init();
     energy_today_init();
     trip_computer_init();
-
-    /* PZEM-004T v3 (AC 220 V) en UART2: TX=GPIO1 (pin 7), RX=GPIO2 (pin 9)
-     * del JP1 — reasignados desde GPIO32/33 (pines 19/21) para caber en el
-     * conector IDC 2x10 y librar GPIO20 (pin 17) que es el único con ADC1.
-     * Si no hay modulo fisico, sigue funcionando: marca has_data=false. */
-    pzem_config_t pzem_cfg = {
-        .uart_num       = UART_NUM_2,
-        .tx_gpio        = GPIO_NUM_1,
-        .rx_gpio        = GPIO_NUM_2,
-        .slave_address  = 0x01,
-        .poll_period_ms = 2000,
-    };
-    pzem_init(&pzem_cfg);
 
     /* NE185 (RS-485 directo via MAX485 onboard, UART1 GPIO 26/27).
      * Habla con el derivador Nordelettronica NE185 que sustituye al

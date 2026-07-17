@@ -1,7 +1,6 @@
 #include "dashboard_state.h"
 #include "energy_today.h"
 #include "trip_computer.h"
-#include "pzem004t.h"
 #include "ne185/ne185.h"   /* camper: luces/bomba/tanques/230V para /api/state */
 #include "frigo.h"         /* congelador: temp/ventilador para /api/state */
 #include "freertos/FreeRTOS.h"
@@ -125,7 +124,7 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
     if (!buf || maxlen < 256) return 0;
 
     /* Snapshot bajo nuestro mutex. Las llamadas a otros modulos
-     * (energy_today, trip_computer, pzem_get) toman sus propios mutex —
+     * (energy_today, trip_computer) toman sus propios mutex —
      * llamarlas con el nuestro retenido crea un orden de adquisicion que
      * podria deadlock-ear si algun cambio futuro hace que esos modulos
      * llamen a dashboard_state_on_record bajo su lock. */
@@ -154,7 +153,6 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
     trip_computer_t trip; trip_computer_get(&trip);
     int trip_hours = (int)(trip.seconds_running / 3600);
     int trip_min   = (int)((trip.seconds_running % 3600) / 60);
-    pzem_data_t pz; pzem_get(&pz);
     int n = snprintf(buf, maxlen,
         "{"
           "\"battery\":{"
@@ -192,16 +190,6 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
             "\"discharged_kwh\":%.2f,"
             "\"charged_ah\":%.1f,"
             "\"discharged_ah\":%.1f"
-          "},"
-          "\"ac\":{"
-            "\"has\":%s,"
-            "\"voltage_v\":%.1f,"
-            "\"current_a\":%.3f,"
-            "\"power_w\":%.1f,"
-            "\"energy_wh\":%u,"
-            "\"freq_hz\":%.1f,"
-            "\"pf\":%.2f,"
-            "\"alarm\":%s"
           "}"
         "}",
         bat_has   ? "true" : "false",
@@ -229,12 +217,7 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
         trip.wh_charged / 1000.0,
         trip.wh_discharged / 1000.0,
         trip.ah_charged,
-        trip.ah_discharged,
-
-        pz.has_data ? "true" : "false",
-        pz.voltage_v, pz.current_a, pz.power_w,
-        (unsigned)pz.energy_wh, pz.freq_hz, pz.power_factor,
-        pz.alarm ? "true" : "false");
+        trip.ah_discharged);
 
     /* Añadir camper (NE185) y frigo, que el Overview lee por dentro y la app
      * necesita por HTTP. Se insertan dentro del objeto raiz: retroceder sobre el

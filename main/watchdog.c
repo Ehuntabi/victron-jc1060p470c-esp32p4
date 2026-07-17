@@ -25,7 +25,7 @@ static const char *s_reason_str = "Unknown";
 #define WD_LVGL_FAIL_THRESHOLD 3      /* fallos consecutivos para reset */
 
 /* Vigilancia de tareas por heartbeat. Umbral generoso (margen amplio sobre
- * la cadencia mas lenta, pzem ~2s) para no provocar resets espureos. */
+ * la cadencia mas lenta) para no provocar resets espureos. */
 #define WD_TASK_TIMEOUT_US     (10LL * 1000000LL)  /* 10 s sin latido -> reset */
 
 static volatile int64_t s_last_beat[WD_TASK_COUNT];   /* 0 = nunca latio */

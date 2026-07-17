@@ -28,7 +28,6 @@ const char *watchdog_last_reset_reason(void);
  * Una tarea que nunca late (p.ej. no arranco) simplemente no se vigila. */
 typedef enum {
     WD_TASK_NE185 = 0,
-    WD_TASK_PZEM,
     WD_TASK_FRIGO,
     WD_TASK_COUNT
 } wd_task_t;

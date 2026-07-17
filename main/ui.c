@@ -33,7 +33,6 @@
 #include "datalogger.h"
 #include "dashboard_state.h"
 #include "trip_computer.h"
-#include "pzem004t.h"
 #include "log_browser.h"
 #include "health_score.h"
 #include "screenshot.h"
@@ -137,31 +136,6 @@ static void health_timer_cb(lv_timer_t *t)
     lv_obj_set_width(ui->lbl_health,
                      (lvl == HEALTH_OK) ? 60 : LV_SIZE_CONTENT);
     lv_label_set_text(ui->lbl_health, txt);
-}
-
-static void ac_indicator_timer_cb(lv_timer_t *t)
-{
-    ui_state_t *ui = (ui_state_t *)t->user_data;
-    if (!ui || !ui->lbl_ac) return;
-    pzem_data_t pz;
-    pzem_get(&pz);
-    if (!pz.has_data) {
-        lv_obj_add_flag(ui->lbl_ac, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    lv_obj_clear_flag(ui->lbl_ac, LV_OBJ_FLAG_HIDDEN);
-    char buf[24];
-    if (pz.voltage_v >= 50.0f) {
-        /* AC presente: muestra potencia activa */
-        snprintf(buf, sizeof(buf), "AC %dW", (int)(pz.power_w + 0.5f));
-        lv_label_set_text(ui->lbl_ac, buf);
-        lv_obj_set_style_text_color(ui->lbl_ac,
-            pz.alarm ? lv_color_hex(0xFF4444) : lv_color_hex(0x00C851), 0);
-    } else {
-        /* PZEM conectado pero sin tension AC */
-        lv_label_set_text(ui->lbl_ac, "AC --");
-        lv_obj_set_style_text_color(ui->lbl_ac, lv_color_hex(0x888888), 0);
-    }
 }
 
 static void volume_icon_timer_cb(lv_timer_t *t)
@@ -485,21 +459,6 @@ void ui_init(void) {
     lv_obj_set_size(ui->lbl_health, 60, 38);
     lv_obj_set_style_text_align(ui->lbl_health, LV_TEXT_ALIGN_CENTER, 0);
 
-    /* Indicador AC 220V (PZEM-004T). Aparece solo cuando el modulo PZEM
-     * esta presente: si hay tension AC muestra "AC <W>" en verde, si esta
-     * conectado pero sin AC muestra "AC" en gris, oculto si no hay PZEM. */
-    ui->lbl_ac = lv_label_create(ui->bottom_bar);
-    lv_obj_set_style_text_font(ui->lbl_ac, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ui->lbl_ac, lv_color_hex(0x888888), 0);
-    lv_obj_set_style_bg_opa(ui->lbl_ac, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_ac, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_pad_all(ui->lbl_ac, 4, 0);
-    lv_obj_set_style_radius(ui->lbl_ac, 4, 0);
-    lv_label_set_text(ui->lbl_ac, "AC");
-    lv_obj_set_size(ui->lbl_ac, 110, 38);
-    lv_obj_set_style_text_align(ui->lbl_ac, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_add_flag(ui->lbl_ac, LV_OBJ_FLAG_HIDDEN);
-
     /* Botón de navegación Live↔Settings — estilo discreto idéntico a los
      * demás iconos de estado de la barra (sin fondo destacado). */
     ui->btn_nav = lv_label_create(ui->bottom_bar);
@@ -521,7 +480,6 @@ void ui_init(void) {
     lv_obj_add_event_cb(ui->tabview, nav_icon_sync_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_timer_create(volume_icon_timer_cb, 500, ui);
-    lv_timer_create(ac_indicator_timer_cb, 2000, ui);
     lv_timer_create(health_timer_cb, 5000, ui);
 
     lv_obj_add_event_cb(ui->tab_live, tabview_touch_event_cb, LV_EVENT_PRESSED, ui);
