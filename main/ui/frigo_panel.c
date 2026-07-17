@@ -656,15 +656,34 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_fmp);
     lv_obj_add_event_cb(s_btn_fanmin_p, btn_fanmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
-    /* Separador visual entre el suelo PWM y el modo excedente solar. */
-    lv_obj_t *sep3 = lv_obj_create(card_fan);
-    lv_obj_remove_style_all(sep3);
-    lv_obj_set_size(sep3, lv_pct(85), 1);
-    lv_obj_set_style_bg_color(sep3, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_bg_opa(sep3, LV_OPA_30, 0);
+    /* Estado visual inicial del segmented control + thresholds segun modo
+     * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */
+    apply_mode_visual(st->mode);
+
+    /* === Card 3: Aprovechar excedente solar (ambar) ===
+     * Card propia, a todo el ancho, al final de la pagina. */
+    lv_obj_t *card_solar = lv_obj_create(tab);
+    lv_obj_set_width(card_solar, lv_pct(100));
+    lv_obj_set_height(card_solar, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_solar, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_solar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
+    lv_obj_set_style_border_width(card_solar, 1, 0);
+    lv_obj_set_style_radius(card_solar, 12, 0);
+    lv_obj_set_style_pad_all(card_solar, 16, 0);
+    lv_obj_set_style_pad_gap(card_solar, 16, 0);
+    lv_obj_set_layout(card_solar, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_solar, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card_solar, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_solar_sec = lv_label_create(card_solar);
+    lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
+    lv_label_set_text(lbl_solar_sec, "Aprovechar excedente solar");
 
     /* Modo "Excedente solar a 12V": switch ON/OFF. */
-    lv_obj_t *row_solar_sw = lv_obj_create(card_fan);
+    lv_obj_t *row_solar_sw = lv_obj_create(card_solar);
     lv_obj_remove_style_all(row_solar_sw);
     lv_obj_set_layout(row_solar_sw, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_solar_sw, LV_FLEX_FLOW_ROW);
@@ -683,7 +702,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     /* SoC de activacion (paso 1 %, rango 80..100). */
-    lv_obj_t *col_solon = lv_obj_create(card_fan);
+    lv_obj_t *col_solon = lv_obj_create(card_solar);
     lv_obj_remove_style_all(col_solon);
     lv_obj_set_layout(col_solon, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_solon, LV_FLEX_FLOW_ROW);
@@ -719,7 +738,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_add_event_cb(btn_solon_p, btn_solon_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* Suelo de corte (paso 1 %, rango 50..soc_on-5). */
-    lv_obj_t *col_soloff = lv_obj_create(card_fan);
+    lv_obj_t *col_soloff = lv_obj_create(card_solar);
     lv_obj_remove_style_all(col_soloff);
     lv_obj_set_layout(col_soloff, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_soloff, LV_FLEX_FLOW_ROW);
@@ -753,10 +772,6 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_sfp, &lv_font_montserrat_24, 0);
     lv_obj_center(lbl_sfp);
     lv_obj_add_event_cb(btn_soloff_p, btn_soloff_plus_cb, LV_EVENT_CLICKED, NULL);
-
-    /* Estado visual inicial del segmented control + thresholds segun modo
-     * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */
-    apply_mode_visual(st->mode);
 
     /* Overlay Exterior */
     lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());
