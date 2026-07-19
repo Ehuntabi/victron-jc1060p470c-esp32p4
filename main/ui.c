@@ -211,6 +211,15 @@ static void nav_icon_sync_cb(lv_event_t *e);
 static void volume_btn_event_cb(lv_event_t *e);
 static void wifi_btn_event_cb(lv_event_t *e);
 static lv_timer_t *s_idle_to_live_timer;
+
+/* Overlay de detalle de una card del Overview (Solar/Bateria/DC-DC): se abre al
+ * pulsar la card y se cierra con el boton volver o tras 1 min sin tocar. */
+static bool      s_card_detail_active   = false;
+static lv_obj_t *s_card_detail_back_btn = NULL;
+/* Ultimo record recibido por fuente, para pintar el detalle al instante. */
+static victron_data_t s_last_solar;   static bool s_has_solar   = false;
+static victron_data_t s_last_battery; static bool s_has_battery = false;
+static victron_data_t s_last_dcdc;    static bool s_has_dcdc    = false;
 #define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
 static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
@@ -624,6 +633,16 @@ void ui_on_panel_data(const victron_data_t *d) {
     }
     s_last_ble_data_us = esp_timer_get_time();
 
+    /* Cache del ultimo record por fuente para el detalle instantaneo de las
+     * cards del Overview (Solar/Bateria/DC-DC). */
+    switch (d->type) {
+        case VICTRON_BLE_RECORD_SOLAR_CHARGER:   s_last_solar = *d;   s_has_solar = true;   break;
+        case VICTRON_BLE_RECORD_BATTERY_MONITOR: s_last_battery = *d; s_has_battery = true; break;
+        case VICTRON_BLE_RECORD_DCDC_CONVERTER:
+        case VICTRON_BLE_RECORD_ORION_XS:        s_last_dcdc = *d;    s_has_dcdc = true;    break;
+        default: break;
+    }
+
     /* Battery history: alimenta el modulo con la corriente del dispositivo */
     switch (d->type) {
         case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
@@ -832,6 +851,8 @@ static void idle_to_live_timer_cb(lv_timer_t *t)
     /* Cerrar overlays si quedaran abiertos (chart frigo, histórico batería) */
     ui_close_chart_screen();
     ui_close_battery_history_screen();
+    /* Detalle de card abierto -> volver a la principal tras 1 min sin tocar. */
+    ui_close_card_detail();
 }
 
 void ui_notify_user_activity(void)
@@ -839,6 +860,86 @@ void ui_notify_user_activity(void)
     ui_state_t *ui = &g_ui;
     if (s_idle_to_live_timer) lv_timer_reset(s_idle_to_live_timer);
     ui_settings_panel_on_user_activity(ui);
+}
+
+/* ── Detalle a pantalla completa de una card del Overview ──────────────
+ * Reusa las vistas de detalle ya existentes (registry) como active_view y un
+ * unico boton flotante de "volver". El retorno a la principal tras 1 min lo
+ * hace el idle_to_live_timer (que llama a ui_close_card_detail). */
+static void card_detail_back_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_close_card_detail();
+}
+
+static void ui_card_detail_ensure_back_btn(void)
+{
+    if (s_card_detail_back_btn) return;
+    lv_obj_t *btn = lv_btn_create(lv_layer_top());
+    lv_obj_set_size(btn, 54, 54);
+    lv_obj_align(btn, LV_ALIGN_TOP_LEFT, 10, 10);
+    lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1E2635), 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_90, 0);
+    lv_obj_set_style_border_width(btn, 1, 0);
+    lv_obj_set_style_border_color(btn, lv_color_hex(0x4A5568), 0);
+    lv_obj_add_event_cb(btn, card_detail_back_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, LV_SYMBOL_LEFT);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(lbl);
+    s_card_detail_back_btn = btn;
+}
+
+void ui_show_card_detail(ui_state_t *ui, victron_record_type_t category)
+{
+    if (!ui) return;
+    /* Resolver tipo concreto + ultimo dato conocido para pintar al instante. */
+    victron_record_type_t type = category;
+    const victron_data_t *cached = NULL;
+    switch (category) {
+        case VICTRON_BLE_RECORD_SOLAR_CHARGER:
+            if (s_has_solar) cached = &s_last_solar;
+            break;
+        case VICTRON_BLE_RECORD_BATTERY_MONITOR:
+            if (s_has_battery) cached = &s_last_battery;
+            break;
+        case VICTRON_BLE_RECORD_DCDC_CONVERTER:
+        case VICTRON_BLE_RECORD_ORION_XS:
+            if (s_has_dcdc) { cached = &s_last_dcdc; type = s_last_dcdc.type; }
+            break;
+        default:
+            break;
+    }
+    ui_device_view_t *view = ui_view_registry_ensure(ui, type, ui->tab_live);
+    if (!view || !view->show) return;
+
+    if (ui->active_view && ui->active_view->hide) ui->active_view->hide(ui->active_view);
+    if (ui->default_view && ui->default_view->hide) ui->default_view->hide(ui->default_view);
+    if (ui->overview_view && ui->overview_view->hide) ui->overview_view->hide(ui->overview_view);
+    view->show(view);
+    ui->active_view = view;
+    s_card_detail_active = true;
+
+    if (cached && view->update) view->update(view, cached);
+
+    ui_card_detail_ensure_back_btn();
+    lv_obj_clear_flag(s_card_detail_back_btn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(s_card_detail_back_btn);
+
+    /* Arrancar el minuto desde cero al abrir. */
+    if (s_idle_to_live_timer) lv_timer_reset(s_idle_to_live_timer);
+}
+
+void ui_close_card_detail(void)
+{
+    if (!s_card_detail_active) return;
+    ui_state_t *ui = &g_ui;
+    s_card_detail_active = false;
+    if (ui->active_view && ui->active_view->hide) ui->active_view->hide(ui->active_view);
+    ui->active_view = NULL;
+    if (ui->overview_view && ui->overview_view->show) ui->overview_view->show(ui->overview_view);
+    if (s_card_detail_back_btn) lv_obj_add_flag(s_card_detail_back_btn, LV_OBJ_FLAG_HIDDEN);
 }
 
 bool ui_screensaver_is_active(void)
@@ -974,6 +1075,13 @@ void ui_set_ble_mac(const uint8_t *mac) {
 static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
 {
     if (ui == NULL) {
+        return;
+    }
+
+    /* Mientras hay un detalle de card abierto, congelamos la seleccion de
+     * vista: el detalle es la active_view y se sigue alimentando por
+     * active_view->update; no dejamos que el siguiente advert lo cambie. */
+    if (s_card_detail_active) {
         return;
     }
 

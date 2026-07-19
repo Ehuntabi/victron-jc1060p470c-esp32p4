@@ -132,28 +132,41 @@ static void night_mode_timer_cb(void *arg)
     static int s_last_target = -1;
     int target;
 
+    /* ¿Estamos dentro de la franja nocturna? Se usa en dos ramas (reposo con
+     * salvapantallas activo y reposo sin el), asi que se calcula una sola vez. */
+    bool night_win = false;
+    if (ui->night_mode.enabled) {
+        time_t now = time(NULL);
+        if (now >= 1000000000L) {
+            struct tm tm_local;
+            localtime_r(&now, &tm_local);
+            night_win = night_hour_in_window(tm_local.tm_hour,
+                                             ui->night_mode.start_h,
+                                             ui->night_mode.end_h);
+        }
+    }
+
     if (ausente_is_active()) {
         /* Modo ausente: precedencia MAXIMA -> pantalla apagada y se mantiene asi. */
         target = 0;
     } else if (ui->screensaver.active) {
-        /* El screensaver gestiona su propio brillo. */
-        if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
-        return;
+        if (night_win) {
+            /* En reposo dentro de la franja nocturna la pantalla debe estar
+             * APAGADA, aunque el salvapantallas solo la hubiera atenuado (caso:
+             * el salvapantallas ya estaba activo en modo Atenuar cuando entro la
+             * hora de noche; ni este cb ni screensaver_timer_cb reevaluaban el
+             * apagado porque ambos salen si active==true). El toque la despierta
+             * via screensaver_wake (restaura porque active==true). */
+            target = 0;
+        } else {
+            /* Fuera de la noche, el salvapantallas gestiona su propio brillo. */
+            if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
+            return;
+        }
     } else {
         /* Precedencia: franja nocturna (pantalla APAGADA por horario) > auto-brillo
          * por luminosidad de la camara > brillo manual. El modo noche NUNCA lo pisa
          * el auto-brillo (requisito del usuario). */
-        bool night_win = false;
-        if (ui->night_mode.enabled) {
-            time_t now = time(NULL);
-            if (now >= 1000000000L) {
-                struct tm tm_local;
-                localtime_r(&now, &tm_local);
-                night_win = night_hour_in_window(tm_local.tm_hour,
-                                                 ui->night_mode.start_h,
-                                                 ui->night_mode.end_h);
-            }
-        }
         uint8_t luma;
         if (night_win) {
             /* Franja nocturna: NO forzamos 0 aqui. El apagado en reposo lo hace

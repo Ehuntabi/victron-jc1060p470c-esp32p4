@@ -72,6 +72,7 @@ typedef struct {
     lv_obj_t *lbl_freezer_temp;  /* T_Congelador valor numerico (fuente grande) */
     lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
     lv_obj_t *img_fan;           /* icono ventilador (animado, debajo 230V) */
+    lv_obj_t *arc_fan;           /* aro-gauge del PWM 0..100 % alrededor del ventilador */
     int       fan_angle_deci;    /* angulo actual rotacion (0..3599) */
     /* ── Alarmas (S1 vacio / R1 lleno / SOC < 30 % / Frigo > umbral) ── */
     bool      alarm_s1_muted;
@@ -232,6 +233,37 @@ static void ov_dcdc_state_pill_cb(lv_event_t *e)
     if (ov) ov_show_state_info(ov->dcdc.state);
 }
 
+/* Pulsar el cuerpo de una card abre su detalle a pantalla completa. Los pills
+ * de estado conservan su propio handler (los clicks no burbujean en LVGL v8). */
+static void ov_card_solar_clicked(lv_event_t *e)
+{
+    ui_overview_view_t *ov = lv_event_get_user_data(e);
+    if (ov) ui_show_card_detail(ov->base.ui, VICTRON_BLE_RECORD_SOLAR_CHARGER);
+}
+static void ov_card_dcdc_clicked(lv_event_t *e)
+{
+    ui_overview_view_t *ov = lv_event_get_user_data(e);
+    if (ov) ui_show_card_detail(ov->base.ui, VICTRON_BLE_RECORD_DCDC_CONVERTER);
+}
+
+/* Robustez del toque: los contenedores hijos de una card (header, filas,
+ * metricas) se crean con lv_obj_create y capturan el toque -o lo interpretan
+ * como scroll- antes de que llegue a la card. Recorremos su arbol y hacemos que
+ * los hijos NO scrolleen y BURBUJEEN el evento hacia la card, para que un toque
+ * en cualquier parte abra el detalle. `except` (el pill de estado) se excluye
+ * para que conserve su propio handler. */
+static void ov_card_make_tappable(lv_obj_t *obj, lv_obj_t *except)
+{
+    uint32_t n = lv_obj_get_child_cnt(obj);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *ch = lv_obj_get_child(obj, i);
+        if (ch == except) continue;
+        lv_obj_clear_flag(ch, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(ch, LV_OBJ_FLAG_EVENT_BUBBLE);
+        ov_card_make_tappable(ch, except);
+    }
+}
+
 /* Pastilla de estado pequena (fuente 14 + poco relleno), pulsable. Se crea
  * como ultimo hijo de la card para que quede al fondo, bajo los valores. */
 static lv_obj_t *ov_make_state_pill(lv_obj_t *card)
@@ -333,7 +365,11 @@ static void alarm_mute_r1_cb(lv_event_t *e)
 static void alarm_mute_soc_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) ov->alarm_soc_muted = true;
+    if (ov) {
+        /* Un solo gesto: silenciar la alarma SoC y abrir el detalle de bateria. */
+        ov->alarm_soc_muted = true;
+        ui_show_card_detail(ov->base.ui, VICTRON_BLE_RECORD_BATTERY_MONITOR);
+    }
     audio_cancel_playback();
 }
 static void alarm_mute_freezer_cb(lv_event_t *e)
@@ -557,6 +593,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->pill_solar_state = ov_make_state_pill(ov->card_solar);
     lv_obj_add_event_cb(ov->pill_solar_state, ov_solar_state_pill_cb,
                         LV_EVENT_CLICKED, ov);
+    /* Pulsar la card (fuera del pill) abre el detalle Solar a pantalla completa. */
+    lv_obj_add_flag(ov->card_solar, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ov->card_solar, ov_card_solar_clicked, LV_EVENT_CLICKED, ov);
 
     /* (Agua limpia movida a la fila de indicadores de abajo) */
 
@@ -679,6 +718,16 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     ov->pill_dcdc_state = ov_make_state_pill(ov->card_loads);
     lv_obj_add_event_cb(ov->pill_dcdc_state, ov_dcdc_state_pill_cb,
                         LV_EVENT_CLICKED, ov);
+    /* Pulsar la card (fuera del pill) abre el detalle DC/DC a pantalla completa. */
+    lv_obj_add_flag(ov->card_loads, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ov->card_loads, ov_card_dcdc_clicked, LV_EVENT_CLICKED, ov);
+
+    /* Toque robusto en las 3 cards: que un tap en cualquier parte (metricas,
+     * cabecera...) abra el detalle, no solo en el fondo desnudo. Los pills de
+     * estado se excluyen para conservar su propio handler. */
+    ov_card_make_tappable(ov->card_solar, ov->pill_solar_state);
+    ov_card_make_tappable(ov->card_bat,   NULL);
+    ov_card_make_tappable(ov->card_loads, ov->pill_dcdc_state);
 
     /* (230V movido a la fila de indicadores de abajo) */
 
@@ -896,10 +945,36 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
          * numero grande en vez de pegarse al fondo del row. */
         lv_obj_set_style_pad_bottom(ov->lbl_freezer_unit, 6, 0);
 
-        /* Ventilador (debajo dentro de la card) */
-        ov->img_fan = lv_img_create(card_fridge);
+        /* Ventilador (debajo dentro de la card): aro-gauge del PWM 0..100 %
+         * con el ventilador girando en el centro. El nivel (0 gris ->
+         * 50 naranja -> 100 rojo) lo lleva el aro; la aspa queda neutra. */
+        lv_obj_t *fan_wrap = lv_obj_create(card_fridge);
+        lv_obj_remove_style_all(fan_wrap);
+        lv_obj_set_size(fan_wrap, 96, 96);
+        lv_obj_clear_flag(fan_wrap, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Aro: gauge de 270 grados abierto por abajo (hueco centrado en las
+         * 6 en punto), se llena en sentido horario desde abajo-izquierda. */
+        ov->arc_fan = lv_arc_create(fan_wrap);
+        lv_obj_set_size(ov->arc_fan, 96, 96);
+        lv_obj_center(ov->arc_fan);
+        lv_arc_set_bg_angles(ov->arc_fan, 135, 45);
+        lv_arc_set_range(ov->arc_fan, 0, 100);
+        lv_arc_set_value(ov->arc_fan, 0);
+        /* Es un medidor, no un control: sin knob y sin interaccion tactil. */
+        lv_obj_clear_flag(ov->arc_fan, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_style(ov->arc_fan, NULL, LV_PART_KNOB);
+        lv_obj_set_style_arc_width(ov->arc_fan, 6, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(ov->arc_fan, 6, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(ov->arc_fan, UI_COLOR_TEXT_DIM, LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(ov->arc_fan, LV_OPA_30, LV_PART_MAIN);
+        lv_obj_set_style_arc_color(ov->arc_fan, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
+
+        /* Ventilador centrado sobre el aro; sigue girando (aspa neutra). */
+        ov->img_fan = lv_img_create(fan_wrap);
         lv_img_set_src(ov->img_fan, &icon_fan);
         lv_img_set_pivot(ov->img_fan, 40, 40);
+        lv_obj_center(ov->img_fan);
         lv_obj_set_style_img_recolor(ov->img_fan, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_img_recolor_opa(ov->img_fan, LV_OPA_COVER, 0);
         ov->fan_angle_deci = 0;
@@ -1332,18 +1407,25 @@ static void overview_render(ui_overview_view_t *ov)
                 lv_obj_set_style_text_opa(ov->lbl_freezer_unit, opa, 0);
             }
         }
-        if (fs && ov->img_fan) {
+        if (fs && ov->arc_fan) {
             uint8_t p = fs->fan_percent;
             if (p > 100) p = 100;
-            /* Interpolacion lineal entre gris (UI_COLOR_TEXT_DIM 0x8A93A6) y
-             * cyan (UI_COLOR_CYAN 0x4FC3F7) en funcion del porcentaje. */
-            uint8_t r_off = 0x8A, g_off = 0x93, b_off = 0xA6;
-            uint8_t r_on  = 0x4F, g_on  = 0xC3, b_on  = 0xF7;
-            uint8_t r = r_off + ((int)(r_on - r_off) * p) / 100;
-            uint8_t g = g_off + ((int)(g_on - g_off) * p) / 100;
-            uint8_t b = b_off + ((int)(b_on - b_off) * p) / 100;
-            lv_color_t c = lv_color_make(r, g, b);
-            lv_obj_set_style_img_recolor(ov->img_fan, c, 0);
+            lv_arc_set_value(ov->arc_fan, p);
+            /* Color del nivel en dos tramos: gris 0x8A93A6 (0 %) -> naranja
+             * 0xFF9800 (50 %) -> rojo 0xFF4444 (100 %). */
+            uint8_t r, g, b;
+            if (p < 50) {
+                r = 0x8A + ((int)(0xFF - 0x8A) * p) / 50;
+                g = 0x93 + ((int)(0x98 - 0x93) * p) / 50;
+                b = 0xA6 + ((int)(0x00 - 0xA6) * p) / 50;
+            } else {
+                int q = p - 50;
+                r = 0xFF;
+                g = 0x98 + ((int)(0x44 - 0x98) * q) / 50;
+                b = 0x00 + ((int)(0x44 - 0x00) * q) / 50;
+            }
+            lv_obj_set_style_arc_color(ov->arc_fan, lv_color_make(r, g, b),
+                                       LV_PART_INDICATOR);
         }
     }
 

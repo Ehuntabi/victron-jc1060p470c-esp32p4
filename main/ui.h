@@ -45,6 +45,14 @@ bool ui_get_freezer_alarm(void);
 void ui_show_chart_screen(ui_state_t *ui);
 void ui_show_battery_history_screen(ui_state_t *ui);
 
+/* Abre a pantalla completa la vista de detalle de una card del Overview
+ * (Solar / Bateria / DC-DC). `category` es el tipo de record; para DC-DC se
+ * resuelve al Orion concreto (Tr 0x04 u XS 0x0F) segun el ultimo dato recibido.
+ * Se cierra con el boton volver, con ui_close_card_detail() o solo tras 1 min
+ * sin interaccion (reusa el timer idle-to-live). */
+void ui_show_card_detail(ui_state_t *ui, victron_record_type_t category);
+void ui_close_card_detail(void);
+
 /* true si hay alguna alarma activa (no silenciada) en la vista Overview
  * (S1 agua/ R1 agua / SoC / congelador). La consulta el salvapantallas para
  * no rotar mientras hay alarma. */

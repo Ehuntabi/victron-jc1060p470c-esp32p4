@@ -12,8 +12,7 @@ static const char *TAG = "FRIGO_PANEL";
 static lv_obj_t *s_lbl_aletas     = NULL;
 static lv_obj_t *s_lbl_congelador = NULL;
 static lv_obj_t *s_lbl_exterior   = NULL;
-static lv_obj_t *s_lbl_fan        = NULL;  /* legacy, no se usa (visual LED ahora) */
-static lv_obj_t *s_fan_leds[2]    = { NULL, NULL };  /* 2 LEDs verdes: 50%, 100% */
+static lv_obj_t *s_lbl_fan        = NULL;  /* % real del PWM del ventilador */
 static lv_obj_t *s_lbl_exterior_overlay = NULL;
 
 static lv_obj_t *s_dd_aletas     = NULL;
@@ -460,25 +459,13 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
-    /* Indicador LED del nivel del ventilador (estilo CLEAN_H de tanques):
-     * 2 LEDs verdes que se encienden segun el porcentaje. Gris cuando off. */
-    lv_obj_t *fan_ind = lv_obj_create(row_fan_hdr);
-    lv_obj_remove_style_all(fan_ind);
-    lv_obj_set_size(fan_ind, LV_SIZE_CONTENT, 20);
-    lv_obj_set_layout(fan_ind, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(fan_ind, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(fan_ind, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(fan_ind, 6, 0);
-    for (int i = 0; i < 2; i++) {
-        lv_obj_t *led = lv_obj_create(fan_ind);
-        lv_obj_remove_style_all(led);
-        lv_obj_set_size(led, 16, 16);
-        lv_obj_set_style_radius(led, LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_bg_color(led, lv_color_hex(0x444444), 0);
-        lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
-        s_fan_leds[i] = led;
-    }
+    /* Valor real del PWM del ventilador (%). Vira gris->naranja->rojo igual que
+     * el aro-gauge de la vista principal, para que ambas representaciones del
+     * ventilador sean coherentes. */
+    s_lbl_fan = lv_label_create(row_fan_hdr);
+    lv_obj_set_style_text_font(s_lbl_fan, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(s_lbl_fan, lv_color_hex(0x8A93A6), 0);
+    lv_label_set_text(s_lbl_fan, "-- %");
 
     /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
     lv_obj_t *row_mode = lv_obj_create(card_fan);
@@ -907,20 +894,26 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
             snprintf(buf, sizeof(buf), "%.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior, buf);
     }
-    /* Indicador LED del ventilador: 2 verdes.
-     * Buckets: 0-24% -> 0 verdes, 25-74% -> 1 verde, 75-100% -> 2 verdes.
-     * Matchea los modos discretos OFF/50%/100% y queda razonable en Auto. */
-    {
+    /* Valor real del PWM del ventilador (%), con color gris->naranja->rojo (0
+     * gris -> 50 naranja -> 100 rojo), mismo criterio que el aro de la principal. */
+    if (s_lbl_fan) {
         uint8_t pct = state->fan_percent;
-        int leds_on = (pct >= 75) ? 2 : (pct >= 25) ? 1 : 0;
-        lv_color_t on_color  = lv_color_hex(0x00C851);  /* verde */
-        lv_color_t off_color = lv_color_hex(0x444444);  /* gris */
-        for (int i = 0; i < 2; i++) {
-            if (s_fan_leds[i]) {
-                lv_obj_set_style_bg_color(s_fan_leds[i],
-                                          (i < leds_on) ? on_color : off_color, 0);
-            }
+        if (pct > 100) pct = 100;
+        char fbuf[8];
+        snprintf(fbuf, sizeof(fbuf), "%u %%", pct);
+        lv_label_set_text(s_lbl_fan, fbuf);
+        uint8_t r, g, b;
+        if (pct < 50) {
+            r = 0x8A + ((int)(0xFF - 0x8A) * pct) / 50;
+            g = 0x93 + ((int)(0x98 - 0x93) * pct) / 50;
+            b = 0xA6 + ((int)(0x00 - 0xA6) * pct) / 50;
+        } else {
+            int q = pct - 50;
+            r = 0xFF;
+            g = 0x98 + ((int)(0x44 - 0x98) * q) / 50;
+            b = 0x00 + ((int)(0x44 - 0x00) * q) / 50;
         }
+        lv_obj_set_style_text_color(s_lbl_fan, lv_color_make(r, g, b), 0);
     }
     if (s_lbl_exterior_overlay) {
         char buf[32];
