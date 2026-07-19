@@ -36,9 +36,9 @@ PINS = {
     4:  (C_5V,  "VOUT-BAT", "", C_TXT_WHITE),       # FIX: era NC
     5:  (C_GND, "GND", "", C_TXT_WHITE),
     6:  (C_GND, "GND", "", C_TXT_WHITE),
-    7:  (C_USE, "GPIO 1", "PZEM UART2 TX", C_TXT_DARK),
+    7:  (C_USE, "GPIO 1", "Rele excedente solar", C_TXT_DARK),
     8:  (C_NC,  "NC", "no conectado", C_TXT_DARK),
-    9:  (C_USE, "GPIO 2", "PZEM UART2 RX", C_TXT_DARK),
+    9:  (C_FREE, "GPIO 2", "", C_TXT_WHITE),         # liberado del PZEM
     10: (C_USE, "GPIO 47 Touch", "EN USO — Touch interno", C_TXT_DARK),
     11: (C_FREE, "GPIO 3", "", C_TXT_WHITE),
     12: (C_FREE, "GPIO 46", "", C_TXT_WHITE),

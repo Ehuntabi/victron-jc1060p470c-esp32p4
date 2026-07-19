@@ -93,7 +93,7 @@
 <p><strong>Guition JC1060P470C_I</strong> · ESP32-P4 + ESP32-C6 (Wi-Fi/BT) · DSI 1024×600 · touch GT911</p>
 <div class="meta">
 Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / Guition JC1060P470C_I).<br>
-Última revisión: 12 mayo 2026 · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
+Última revisión: 19 julio 2026 · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 </div>
 
 <h2>1. Resumen del módulo</h2>
@@ -105,16 +105,16 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <li>RTC RX8025T (I2C 0x32) con pila CR1220.</li>
 <li>microSD slot 0 con SDMMC IOMUX dedicado.</li>
 <li>Codec audio ES8311 + amplificador NS4150.</li>
-<li>UART2 cableable al PZEM-004T (medidor de red 230 V).</li>
+<li><strong>GPIO 1</strong> (JP1) = relé piloto del <strong>modo excedente solar</strong> del frigo (antes UART2/PZEM-004T, ya retirado).</li>
 <li><strong>RS-485 onboard via MAX485 (U8) en UART1, conector J4 — para hablar con el derivador NE185</strong>.</li>
-<li>Cabeceras GPIO libres para sensores DS18B20 (frigo) y PWM (ventilador).</li>
+<li>Frigo trivalente: sensores <strong>DS18B20</strong> en <strong>GPIO 4</strong> (JP1 pin 13) y <strong>ventilador PWM</strong> en <strong>GPIO 5</strong> (JP1 pin 15).</li>
 </ul>
 
 <h2>2. Display MIPI-DSI (panel JD9165BA)</h2>
 <table>
 <tr><th>Función</th><th>Pin ESP32-P4</th><th>Notas</th></tr>
 <tr><td>Backlight (PWM)</td><td>GPIO 23</td><td>LEDC timer 1 / canal 1</td></tr>
-<tr><td>Reset panel</td><td>GPIO 27</td><td>Activo bajo</td></tr>
+<tr><td>Reset panel</td><td>GPIO 0 (NC en firmware)</td><td>LCD_RST va a GPIO 0 en el esquemático, pero GPIO 0 es <em>strapping</em> → el firmware lo deja sin conectar (<code>BSP_LCD_RST = NC</code>), sin reset por software. <strong>GPIO 27 NO es el reset del panel: es la RX del NE185.</strong></td></tr>
 <tr><td>MIPI-DSI clk + data</td><td>PHY interno</td><td>2 lanes, bitrate 750 Mbps, dotclk 52 MHz</td></tr>
 <tr><td>LDO PHY DSI</td><td>LDO ch 3</td><td>2500 mV → VDD_MIPI_DPHY</td></tr>
 </table>
@@ -174,14 +174,15 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
 <tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup a 3.3 V: <b>4.7 kΩ</b> con cable corto. Con <b>cable largo (~2 m)</b> bajar a <b>1 kΩ</b> (más capacidad de bus → 4.7 kΩ se queda flojo y falla la lectura).</td></tr>
 <tr><td>Ventilador PWM</td><td>GPIO 5</td><td>JP1 pin 15</td><td>LEDC 25 kHz, control por T_Aletas</td></tr>
+<tr><td>Relé excedente solar</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Relé piloto: nivel alto inyecta 13 V a la bobina del relé tocho que activa el D+ en marcha del frigo trivalente. GPIO liberado del PZEM. Componente <code>components/frigo/frigo_solar.c</code>.</td></tr>
 </table>
 
-<h2>9. PZEM-004T v3 — medidor red 230 V (UART2)</h2>
+<h2>9. Modo excedente solar — relé piloto del frigo (GPIO 1)</h2>
 <table>
 <tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>UART2 TX</td><td>GPIO 1</td><td>JP1 pin 7</td><td>9600 baud 8N1, addr 0x01 (movido desde GPIO 32 / pin 19 para caber en IDC 2x10)</td></tr>
-<tr><td>UART2 RX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Polling 2000 ms (movido desde GPIO 33 / pin 21; deja GPIO 20 libre para ADC)</td></tr>
+<tr><td>Relé piloto excedente solar</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Nivel alto = relé energizado. Inyecta 13 V a la bobina del relé tocho que activa el D+ en marcha del frigo trivalente. Máquina de estados en <code>components/frigo/frigo_solar.c</code>, <code>#define FRIGO_SOLAR_RELAY_GPIO 1</code>.</td></tr>
 </table>
+<p class="nota"><strong>El PZEM-004T se retiró</strong> (no se instala): liberó <strong>GPIO 1</strong> (ahora relé solar), <strong>GPIO 2</strong> (libre) y <strong>UART2</strong> por completo.</p>
 
 <h2 style="page-break-before: always; break-before: page;">10. NE185 RS-485 directo (UART1, MAX485 onboard)</h2>
 <div class="new">
@@ -210,7 +211,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <h2>11. Mapa global de pines GPIO</h2>
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
-<tr><td>0</td><td>GPIO out</td><td>Reset panel JD9165BA (LCD_RST según esquemático real)</td></tr>
+<tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr>
 <tr><td>4</td><td>1-Wire</td><td>DS18B20 (JP1 pin 13, pullup 4.7 kΩ; 1 kΩ si cable ~2 m)</td></tr>
 <tr><td>5</td><td>LEDC PWM</td><td>Ventilador frigo (JP1 pin 15, 25 kHz)</td></tr>
 <tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
@@ -225,14 +226,13 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
 <tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
 <tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
-<tr><td>1</td><td>UART2 TX</td><td><strong>PZEM-004T</strong> (JP1 pin 7)</td></tr>
-<tr><td>2</td><td>UART2 RX</td><td><strong>PZEM-004T</strong> (JP1 pin 9)</td></tr>
+<tr><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
 <tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr>
 <tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
 <tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
 </table>
-<p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 3, 20, 45, 46).</p>
+<p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 2, 3, 20, 32, 45, 46).</p>
 
 <h2 style="page-break-before: always; break-before: page;">12. LDO internos del ESP32-P4</h2>
 <table>
@@ -245,7 +245,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <ul>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 PZEM-004T (GPIO 1/2 → JP1 pines 7/9).</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 sin usar (PZEM-004T retirado); GPIO 1 (JP1 pin 7) = relé excedente solar, GPIO 2 (pin 9) libre.</li>
 <li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
 </ul>
 
@@ -290,8 +290,8 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
   <tr><td>2, 4</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr>
   <tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr>
   <tr><td>8</td><td>NC</td><td>No conectado</td></tr>
-  <tr><td>7</td><td>GPIO 1</td><td><strong>PZEM UART2 TX</strong></td></tr>
-  <tr><td>9</td><td>GPIO 2</td><td><strong>PZEM UART2 RX</strong></td></tr>
+  <tr><td>7</td><td>GPIO 1</td><td><strong>Relé excedente solar</strong> (frigo)</td></tr>
+  <tr><td>9</td><td>GPIO 2</td><td>Libre</td></tr>
   <tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr>
   <tr><td>11</td><td>GPIO 3</td><td>Libre</td></tr>
   <tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr>
@@ -308,9 +308,9 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
 
 <ul class="reco-compact">
 <li><strong>Alimentación:</strong> 3.3 V en pines 1, 3, 18; 5 V (VOUT-BAT) en pines 2, 4. GND en 5/6/16.</li>
-<li><strong>UART libre extra:</strong> ninguno completo; quedan GPIOs 3, 20, 32, 33, 45, 46 sueltos.</li>
-<li><strong>ADC:</strong> GPIO 20 (pin 17) tendría ADC1 CH4 pero ahora se usa como PZEM RX. <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
-<li><strong>Reasignables si no usas el frigo:</strong> GPIO 4 (pin 13) y GPIO 5 (pin 15).</li>
+<li><strong>UART libre extra:</strong> ninguno completo; quedan GPIOs 2, 3, 20, 32, 33, 45, 46 sueltos.</li>
+<li><strong>ADC:</strong> GPIO 20 (pin 17) tiene ADC1 CH4 disponible (el PZEM se retiró y ya no ocupa GPIO). <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
+<li><strong>Reasignables si no usas el frigo:</strong> GPIO 1 (pin 7, relé solar), GPIO 4 (pin 13) y GPIO 5 (pin 15).</li>
 <li><strong>Niveles:</strong> 3.3 V TTL. Para 5 V o RS-232/RS-485 usar level-shifter/transceiver externo.</li>
 </ul>
 </div>
@@ -352,7 +352,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>RTC RX8025T (backup CR1220 + NVS)</li>
 <li>Audio ES8311 + NS4150</li>
 <li>LDO interno PHY MIPI-DSI</li>
-<li>PZEM-004T UART2 (firmware listo, pendiente cableado físico al medidor)</li>
+<li><strong>Modo excedente solar</strong> del frigo — relé piloto GPIO 1 (firmware listo; pendiente cablear el relé físico al frigo)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
 compilado y flasheado; UART1 GPIO 26/27, conector J4; conectado y funcionando — control de luces y bomba operativo)</li>
 <li><strong>Cámara OV02C10</strong> (MIPI-CSI): auto-brillo del display + captura de foto/snapshot JPEG (ver sección 18)</li>
