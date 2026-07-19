@@ -38,13 +38,13 @@ PINS = {
     6:  (C_GND, "GND", "", C_TXT_WHITE),
     7:  (C_USE, "GPIO 1", "Rele excedente solar", C_TXT_DARK),
     8:  (C_NC,  "NC", "no conectado", C_TXT_DARK),
-    9:  (C_FREE, "GPIO 2", "", C_TXT_WHITE),         # liberado del PZEM
+    9:  (C_FREE, "GPIO 2", "", C_TXT_WHITE),         # libre
     10: (C_USE, "GPIO 47 Touch", "EN USO — Touch interno", C_TXT_DARK),
     11: (C_FREE, "GPIO 3", "", C_TXT_WHITE),
     12: (C_FREE, "GPIO 46", "", C_TXT_WHITE),
     13: (C_USE, "GPIO 4", "DS18B20 Frigo", C_TXT_DARK),
     14: (C_FREE, "GPIO 45", "", C_TXT_WHITE),
-    15: (C_USE, "GPIO 5", "Fan PWM Frigo", C_TXT_DARK),
+    15: (C_USE, "GPIO 5", "PWM Ventilador frigo", C_TXT_DARK),
     16: (C_GND, "GND", "", C_TXT_WHITE),
     17: (C_FREE, "GPIO 20 ADC", "", C_TXT_WHITE),
     18: (C_3V3, "VCC3V3", "", C_TXT_WHITE),
