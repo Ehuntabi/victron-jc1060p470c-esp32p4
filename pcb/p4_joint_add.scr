@@ -1,0 +1,46 @@
+# ==========================================================================
+# p4_joint rev B - anadir rele excedente solar + fix D2 + U1->LR7843
+# EJECUTAR en el editor de ESQUEMA de p4_joint.sch:  File > Execute Script...
+#
+# v1 - NO probado en EAGLE (no se puede sin abrirlo). La 1a ejecucion ES la
+#      prueba. Si un ADD falla por el nombre exacto del device/variant, usa el
+#      autocompletado del ADD en la GUI (te da el nombre real) y me lo dices.
+#
+# Ajusta la ruta del USE a tu EAGLE (Wine mapea J: -> /home/jc/joint).
+# El CABLEADO no va aqui: hazlo en la GUI con la lista del .md (mas fiable).
+# ==========================================================================
+
+GRID mm;
+USE 'J:\victron\pcb\p4_joint_add.lbr';
+
+# ---- 1) U1 (MOSFET ventilador, se llama U$1 en el .sch) -> LR7843 ----
+#     Mismo footprint TO-252; solo cambia valor y LCSC.
+VALUE   U$1 'LR7843';
+ATTRIBUTE U$1 LCSC 'C9900160403';
+
+# ---- 2) Anadir piezas nuevas (colocacion aprox; muevelas luego) ----
+# Q1: driver del rele (N-MOS SOT-23 de la libreria 'zetex').
+#     Si 'NMOSSOT23' no es el nombre exacto, mira el autocompletado de zetex.
+ADD NMOSSOT23@zetex 'Q1' R0 (150 -50);
+VALUE   'Q1' '2N7002';
+ATTRIBUTE 'Q1' LCSC 'C8545';
+
+# D3: flyback del rele (SS14 / SMA, de p4_joint_add). LCSC ya en el device.
+ADD SS14@p4_joint_add 'D3' R0 (165 -45);
+
+# R5: pulldown de puerta 10k ; R6: serie de puerta 100R (resistor existente).
+ADD R@eagle-ltspice 'R5' R0 (150 -62);
+VALUE   'R5' '10k';
+ATTRIBUTE 'R5' LCSC 'C25804';
+ADD R@eagle-ltspice 'R6' R0 (138 -50);
+VALUE   'R6' '100';
+ATTRIBUTE 'R6' LCSC 'C22775';
+
+# K1: rele JS1aPF-B-12V (THT, a mano). Footprint provisional -> verifica cotas.
+ADD JS1APF-B-12V@p4_joint_add 'K1' R0 (178 -55);
+
+# RELE_OUT: borna de salida hacia el rele tocho (reusa KK-156-2 como FAN_OUT).
+ADD KK-156-2@con-molex 'RELE_OUT' R0 (195 -55);
+
+# Fin. Ahora: cablea segun la lista del .md, arregla D2 (Replace -> SS14),
+# ajusta las cotas del rele, DRC, y DFM de JLCPCB antes de pedir.
