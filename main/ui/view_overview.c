@@ -366,16 +366,22 @@ static void alarm_mute_soc_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
     if (ov) {
-        /* Un solo gesto: silenciar la alarma SoC y abrir el detalle de bateria. */
+        /* Un solo gesto: silenciar la alarma SoC y abrir los logs de bateria
+         * (atajo a la pantalla de historico). */
         ov->alarm_soc_muted = true;
-        ui_show_card_detail(ov->base.ui, VICTRON_BLE_RECORD_BATTERY_MONITOR);
+        ui_show_battery_history_screen(ov->base.ui);
     }
     audio_cancel_playback();
 }
 static void alarm_mute_freezer_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) ov->alarm_freezer_muted = true;
+    if (ov) {
+        /* Un solo gesto: silenciar la alarma del congelador y abrir los logs
+         * del frigorifico (atajo a la grafica de Temperaturas). */
+        ov->alarm_freezer_muted = true;
+        ui_show_chart_screen(ov->base.ui);
+    }
     audio_cancel_playback();
 }
 
@@ -885,8 +891,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(card_fridge, LV_OBJ_FLAG_SCROLLABLE);
 
-        /* Congelador (arriba dentro de la card) — clickable para
-         * silenciar la alarma. */
+        /* Congelador (arriba dentro de la card). El toque (silenciar alarma +
+         * abrir logs del frigo) se gestiona a nivel de card_fridge, para que
+         * responda en TODA la card, no solo aqui. */
         lv_obj_t *col_freezer = lv_obj_create(card_fridge);
         lv_obj_remove_style_all(col_freezer);
         lv_obj_set_size(col_freezer, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -895,9 +902,6 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_flex_align(col_freezer, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_gap(col_freezer, 2, 0);
-        lv_obj_add_flag(col_freezer, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(col_freezer, alarm_mute_freezer_cb,
-                            LV_EVENT_CLICKED, ov);
 
         lv_obj_t *t_row = lv_obj_create(col_freezer);
         lv_obj_remove_style_all(t_row);
@@ -978,6 +982,15 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_img_recolor(ov->img_fan, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_img_recolor_opa(ov->img_fan, LV_OPA_COVER, 0);
         ov->fan_angle_deci = 0;
+
+        /* Toda la card del frigo es un atajo a los logs (grafica Temperaturas):
+         * un toque en cualquier parte -congelador, ventilador o hueco- silencia
+         * la alarma del congelador y abre la pantalla. Como los contenedores
+         * hijos capturan el toque, se hace que burbujeen el evento hasta la card
+         * (mismo patron que Solar/Bateria/DC-DC). */
+        lv_obj_add_flag(card_fridge, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(card_fridge, alarm_mute_freezer_cb, LV_EVENT_CLICKED, ov);
+        ov_card_make_tappable(card_fridge, NULL);
     }
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
