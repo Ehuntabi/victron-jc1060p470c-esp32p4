@@ -226,7 +226,26 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 
 </div><!--/sec-->
 <div class="sec">
-<h2>11. Mapa global de pines GPIO</h2>
+<h2>11. LDO internos del ESP32-P4</h2>
+<table>
+<tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr>
+<tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr>
+<tr><td>LDO ch 4</td><td>3300 mV</td><td>TF_VCC microSD</td><td>Activado por <code>datalogger_init()</code> antes del mount</td></tr>
+</table>
+
+</div><!--/sec-->
+<div class="sec">
+<h2>12. Buses compartidos / consideraciones</h2>
+<ul>
+<li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
+<li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 sin usar; GPIO 1 (JP1 pin 7) = relé excedente solar, GPIO 2 (pin 9) libre.</li>
+<li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
+</ul>
+
+</div><!--/sec-->
+<div class="sec">
+<h2>13. Mapa global de pines GPIO</h2>
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
 <tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr>
@@ -251,25 +270,6 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
 </table>
 <p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 2, 3, 20, 32, 45, 46).</p>
-
-</div><!--/sec-->
-<div class="sec">
-<h2>12. LDO internos del ESP32-P4</h2>
-<table>
-<tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr>
-<tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr>
-<tr><td>LDO ch 4</td><td>3300 mV</td><td>TF_VCC microSD</td><td>Activado por <code>datalogger_init()</code> antes del mount</td></tr>
-</table>
-
-</div><!--/sec-->
-<div class="sec">
-<h2>13. Buses compartidos / consideraciones</h2>
-<ul>
-<li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
-<li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 sin usar; GPIO 1 (JP1 pin 7) = relé excedente solar, GPIO 2 (pin 9) libre.</li>
-<li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
-</ul>
 
 </div><!--/sec-->
 <div class="sec">
