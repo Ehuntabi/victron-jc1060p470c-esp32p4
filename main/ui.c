@@ -220,6 +220,12 @@ static lv_obj_t *s_card_detail_back_btn = NULL;
 static victron_data_t s_last_solar;   static bool s_has_solar   = false;
 static victron_data_t s_last_battery; static bool s_has_battery = false;
 static victron_data_t s_last_dcdc;    static bool s_has_dcdc    = false;
+
+/* Altura fija (mA) del pulso on/off del Orion Tr en el log de bateria: el Orion
+ * Tr (0x04) NO reporta corriente, solo estado, asi que dibujamos esta altura
+ * mientras carga y 0 cuando no. Sirve para ver CUANDO y CUANTO tiempo carga; NO
+ * es corriente real (ajustable). */
+#define ORION_TR_ON_MILLIAMPS  10000   /* 10 A */
 #define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
 static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
@@ -693,6 +699,19 @@ void ui_on_panel_data(const victron_data_t *d) {
             battery_history_update_latest(BH_SRC_AC_CHARGER,
                 (int32_t)d->record.ac_charger.battery_current_1_deci * 100, 0);
             break;
+        case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
+            /* Orion Tr (0x04): no da corriente, solo estado. Pulso on/off en la
+             * serie OrionTR: altura fija mientras carga, 0 cuando no -> se ve
+             * cuando y cuanto tiempo carga. El "total Ah" de esta serie sera
+             * altura*tiempo, NO amperios-hora reales. */
+            uint8_t st = d->record.dcdc.device_state;
+            bool charging = (st == VIC_STATE_BULK || st == VIC_STATE_ABSORPTION ||
+                             st == VIC_STATE_FLOAT || st == VIC_STATE_STORAGE ||
+                             st == VIC_STATE_EQUALIZE || st == VIC_STATE_POWER_SUPPLY);
+            battery_history_update_latest(BH_SRC_ORION_XS,
+                charging ? ORION_TR_ON_MILLIAMPS : 0, 0);
+            break;
+        }
         default:
             break;
     }
@@ -2562,9 +2581,18 @@ static void bh_chart_load_day(void)
                 float ch = 0, dis = 0;
                 battery_history_get_totals((bh_source_t)s, &ch, &dis);
                 if (s_bh_totals[s]) {
-                    lv_label_set_text_fmt(s_bh_totals[s],
-                        "%s +%.1f/-%.1f Ah",
-                        s_bh_short_names[s], ch, dis);
+                    if (s == BH_SRC_ORION_XS) {
+                        /* OrionTR es un pulso on/off de altura fija: el "Ah" no
+                         * es real. Lo mostramos como horas de carga
+                         * (carga_Ah / altura_en_A). */
+                        float hours = ch / (ORION_TR_ON_MILLIAMPS / 1000.0f);
+                        lv_label_set_text_fmt(s_bh_totals[s], "%s %.1f h",
+                                              s_bh_short_names[s], hours);
+                    } else {
+                        lv_label_set_text_fmt(s_bh_totals[s],
+                            "%s +%.1f/-%.1f Ah",
+                            s_bh_short_names[s], ch, dis);
+                    }
                 }
                 /* Yield al scheduler tras cada serie para que IDLE0 corra y
                  * el task_wdt no salte. Con 4 series x ~1500 puntos y un
