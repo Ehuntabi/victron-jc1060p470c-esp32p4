@@ -13,6 +13,7 @@
 #include "../dashboard_state.h"
 #include "frigo.h"
 #include "../ne185/ne185.h"
+#include "../ui.h"
 #include "esp_log.h"
 #include "esp_crc.h"
 #include "lwip/sockets.h"
@@ -89,6 +90,9 @@ static void build_msg(mini_msg_t *out)
     } else {
         out->exterior_temp_centi = MINI_NO_DATA_I16;
     }
+
+    /* Salvapantallas: el mini atenúa su pantalla cuando el 7" está dormido. */
+    out->screensaver = ui_screensaver_is_active() ? 1 : 0;
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
     out->crc32 = esp_crc32_le(0, (const uint8_t *)out,

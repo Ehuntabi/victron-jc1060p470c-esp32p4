@@ -59,7 +59,7 @@ struct __attribute__((packed)) mini_msg {
     /* Exterior. Sin sensor todavía en el 7" -> se envía MINI_NO_DATA_I16. */
     int16_t  exterior_temp_centi;
     uint8_t  _pad5;
-    uint8_t  _pad6;
+    uint8_t  screensaver;         /* 1 = el 7"(P4) está en salvapantallas → el mini atenúa su pantalla */
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };
