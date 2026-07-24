@@ -111,7 +111,6 @@ typedef struct ui_state {
     lv_obj_t *lbl_volume;
     lv_obj_t *lbl_wifi;
     lv_obj_t *lbl_solar;          /* indicador "frigo con excedente solar" en barra inferior */
-    lv_obj_t *lbl_health;         /* Health score (verde/ambar/rojo) */
     lv_obj_t *lbl_ne185_sniff;    /* Contador SNIFF NE185 (oculto si count=0) */
     lv_obj_t *bottom_bar;         // Indicador BLE
     lv_obj_t *btn_nav;            // Botón toggle Live↔Settings en bottom_bar
