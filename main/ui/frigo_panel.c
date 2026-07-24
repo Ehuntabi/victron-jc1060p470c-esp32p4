@@ -310,57 +310,45 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
                                   uint8_t dd_selected,
                                   lv_event_cb_t dd_cb)
 {
-    /* Contenedor en columna */
+    /* Contenedor en UNA fila: Nombre + temperatura + selector en la misma linea */
     lv_obj_t *row = lv_obj_create(parent);
     lv_obj_remove_style_all(row);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_layout(row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(row, 4, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row, 8, 0);
     lv_obj_set_style_pad_bottom(row, 8, 0);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* Linea 1: Nombre */
+    /* Nombre (ancho fijo para que las temperaturas de las 3 filas queden alineadas) */
     lv_obj_t *lbl_name = lv_label_create(row);
     lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_name, lv_color_white(), 0);
+    lv_obj_set_width(lbl_name, 120);
     lv_label_set_text(lbl_name, nombre);
 
-    /* Linea 2: temperatura + dropdown */
-    lv_obj_t *sub = lv_obj_create(row);
-    lv_obj_remove_style_all(sub);
-    lv_obj_set_width(sub, lv_pct(100));
-    lv_obj_set_height(sub, LV_SIZE_CONTENT);
-    lv_obj_set_layout(sub, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(sub, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(sub, 8, 0);
-    lv_obj_set_flex_align(sub, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *lbl_val = lv_label_create(sub);
+    /* Temperatura, justificada a la derecha (termina junto al selector) */
+    lv_obj_t *lbl_val = lv_label_create(row);
     lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
-    /* Ancho para '-12.5 °C' (8 chars a 20pt ~ 100 px). 110 deja margen.
-     * Texto justificado a la derecha: '-- °C' y '-12.5 °C' terminan en
-     * el mismo borde junto al dropdown (no se desplazan a la izquierda). */
-    lv_obj_set_width(lbl_val, 110);
+    lv_obj_set_width(lbl_val, 95);   /* holgado: el Congelador llega a "-18.5 °C" (signo -) */
     lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
     *lbl_val_out = lbl_val;
 
-    lv_obj_t *dd = lv_dropdown_create(sub);
-    /* Ancho fijo razonable en vez de flex_grow(1) que lo expandia hasta
-     * llenar toda la card. Cabe 'Sensor 8 (1A2B3C)' a 24pt. */
-    lv_obj_set_width(dd, 220);
-    lv_obj_set_height(dd, 50);
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_24_es, 0);
-    /* La flecha del dropdown (LV_PART_INDICATOR) es LV_SYMBOL_DOWN. Inter
-     * (alias de _es) no incluye los LV_SYMBOL_* -> forzamos Montserrat
-     * built-in para el indicator para que la flecha se vea. */
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_24, LV_PART_INDICATOR);
+    /* Selector: ocupa el resto de la fila */
+    lv_obj_t *dd = lv_dropdown_create(row);
+    lv_obj_set_flex_grow(dd, 1);
+    lv_obj_set_height(dd, 44);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20_es, 0);
+    /* La flecha (LV_PART_INDICATOR) es LV_SYMBOL_DOWN; Inter(_es) no la trae ->
+     * Montserrat built-in para el indicator. */
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, LV_PART_INDICATOR);
     lv_obj_t *dd_list = lv_dropdown_get_list(dd);
     if (dd_list) {
-        lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_24_es, 0);
+        lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_20_es, 0);
     }
     lv_dropdown_set_options(dd, opts);
     lv_dropdown_set_selected(dd, dd_selected);
@@ -683,32 +671,37 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_align(card_solar, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *lbl_solar_sec = lv_label_create(card_solar);
+    /* Cabecera: titulo a la izquierda y el switch a la derecha, misma linea. */
+    lv_obj_t *row_solar_hdr = lv_obj_create(card_solar);
+    lv_obj_remove_style_all(row_solar_hdr);
+    lv_obj_set_width(row_solar_hdr, lv_pct(100));
+    lv_obj_set_height(row_solar_hdr, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_solar_hdr, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_solar_hdr, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_solar_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_solar_sec = lv_label_create(row_solar_hdr);
     lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
     lv_label_set_text(lbl_solar_sec, "Aprovechar excedente solar");
 
-    /* Modo "Excedente solar a 12V": switch ON/OFF. */
-    lv_obj_t *row_solar_sw = lv_obj_create(card_solar);
-    lv_obj_remove_style_all(row_solar_sw);
-    lv_obj_set_layout(row_solar_sw, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_solar_sw, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_solar_sw, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_solar_sw, 8, 0);
-    lv_obj_set_size(row_solar_sw, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-
-    lv_obj_t *lbl_solar_sw = lv_label_create(row_solar_sw);
-    lv_obj_set_style_text_font(lbl_solar_sw, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_solar_sw, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(lbl_solar_sw, "Excedente solar a 12V:");
-
-    lv_obj_t *sw_solar = lv_switch_create(row_solar_sw);
+    lv_obj_t *sw_solar = lv_switch_create(row_solar_hdr);
     lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    /* Activar y Cortar en la MISMA linea (dos selectores lado a lado). */
+    lv_obj_t *row_soc = lv_obj_create(card_solar);
+    lv_obj_remove_style_all(row_soc);
+    lv_obj_set_width(row_soc, lv_pct(100));
+    lv_obj_set_height(row_soc, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_soc, 16, 0);
+
     /* SoC de activacion (paso 1 %, rango 80..100). */
-    lv_obj_t *col_solon = lv_obj_create(card_solar);
+    lv_obj_t *col_solon = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_solon);
     lv_obj_set_layout(col_solon, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_solon, LV_FLEX_FLOW_ROW);
@@ -744,7 +737,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_add_event_cb(btn_solon_p, btn_solon_plus_cb, LV_EVENT_CLICKED, NULL);
 
     /* Suelo de corte (paso 1 %, rango 50..soc_on-5). */
-    lv_obj_t *col_soloff = lv_obj_create(card_solar);
+    lv_obj_t *col_soloff = lv_obj_create(row_soc);
     lv_obj_remove_style_all(col_soloff);
     lv_obj_set_layout(col_soloff, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_soloff, LV_FLEX_FLOW_ROW);
@@ -823,6 +816,14 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_label_set_long_mode(s_lbl_exterior_overlay, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(s_lbl_exterior_overlay, "--.- \xc2\xb0""C");
+
+    /* Igualar la altura de la card de sensores a la del ventilador (la mas alta),
+     * para que ambas queden simetricas cuando van lado a lado. */
+    lv_obj_update_layout(tab);
+    lv_coord_t h_fan = lv_obj_get_height(card_fan);
+    if (h_fan > lv_obj_get_height(card_sensors)) {
+        lv_obj_set_height(card_sensors, h_fan);
+    }
 
     ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
 }

@@ -622,6 +622,13 @@ void ui_on_panel_data(const victron_data_t *d) {
         trip_computer_on_battery((int32_t)b->battery_current_deci * 100,
                                  b->battery_voltage_centi);
     }
+    /* Aporte de la placa solar (MPPT): se acumula aparte, medido en la salida
+     * del cargador hacia la bateria. */
+    if (d->type == VICTRON_BLE_RECORD_SOLAR_CHARGER) {
+        const victron_record_solar_charger_t *sc = &d->record.solar;
+        trip_computer_on_solar((int32_t)sc->battery_current_deci * 100,
+                               sc->battery_voltage_centi);
+    }
 
     ui_state_t *ui = &g_ui;
 

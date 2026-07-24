@@ -34,6 +34,7 @@
 #include "log_capture/log_capture.h"
 #include "energy_today.h"
 #include "trip_computer.h"
+#include "ui/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
 #include "ne185/ne185.h"
 #include "net/udp_tx.h"
 #include "sim_overview.h"
@@ -534,6 +535,9 @@ void app_main(void)
     /* Splash visible al menos 1.5 s desde su creacion, luego ocultar. */
     if (lvgl_port_lock(0)) {
         splash_hide();
+        /* Aviso emergente de arranque: ofrecer empezar un viaje nuevo
+         * (reset del trip computer). Sale en cada arranque. */
+        ui_show_new_trip_dialog();
         lvgl_port_unlock();
     }
 

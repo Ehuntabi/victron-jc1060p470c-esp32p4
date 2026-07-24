@@ -13,6 +13,9 @@ typedef struct {
     double wh_discharged;     /* energia saliente acumulada */
     double ah_charged;        /* carga entrante (A*h) */
     double ah_discharged;     /* carga saliente (A*h) */
+    double wh_solar;          /* energia aportada por la placa solar (MPPT) */
+    double ah_solar;          /* carga aportada por la placa solar (A*h) */
+    int64_t solar_seconds;    /* tiempo con la placa cargando (corriente > 0) */
     int64_t seconds_running;  /* tiempo "activo" (con sample en intervalo) */
 } trip_computer_t;
 
@@ -21,6 +24,11 @@ void trip_computer_init(void);
 
 /* Hook: integra energia/carga entre samples reales del BMV. */
 void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi);
+
+/* Hook: integra la energia que aporta la placa solar (MPPT), medida en su
+ * salida hacia la bateria. Se acumula aparte de la carga neta del shunt
+ * (no es un subconjunto exacto: parte puede ir directa al consumo). */
+void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
 
 /* Reset manual de todos los contadores. Guarda inmediatamente en NVS. */
 void trip_computer_reset(void);

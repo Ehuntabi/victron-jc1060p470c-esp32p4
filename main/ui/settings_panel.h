@@ -47,5 +47,10 @@ void ui_settings_panel_show_page(int idx);
  * de Settings (ui->wifi.ap_enable) si está creado. */
 void ui_show_wifi_restart_dialog(ui_state_t *ui);
 
+/* Mostrar el aviso emergente de arranque "Nuevo viaje?" (misma estetica que
+ * los demas dialogos): "Seguir viaje" no toca nada; "Nuevo viaje" resetea el
+ * trip computer. Se llama una vez al terminar el arranque. */
+void ui_show_new_trip_dialog(void);
+
 #endif /* UI_SETTINGS_PANEL_H */
 void ui_settings_screensaver_create_timer(ui_state_t *ui);

@@ -570,7 +570,9 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_READY, ui);
     lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_DEFOCUSED, ui);
 
-    /* === Card 2: Portal web (mitad ancho, lado dcho) === */
+    /* === Card 2: Pagina inicial del portal + Reactivar (mitad ancho, dcho) ===
+     * El desplegable de pagina inicial y, JUSTO DEBAJO, el boton para
+     * reactivar el portal web (antes era una card independiente a lo ancho). */
     lv_obj_t *card2 = lv_obj_create(cont);
     lv_obj_set_width(card2, lv_pct(49));
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
@@ -580,18 +582,30 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_width(card2, 1, 0);
     lv_obj_set_style_radius(card2, 12, 0);
     lv_obj_set_style_pad_all(card2, 16, 0);
-    lv_obj_set_style_pad_gap(card2, 12, 0);
+    lv_obj_set_style_pad_gap(card2, 24, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
+    /* Reparte las dos filas en vertical: desplegable arriba, Reactivar abajo,
+     * de modo que llenen la card (misma altura que "Punto de acceso"). */
+    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    lv_obj_t *card2_title = lv_label_create(card2);
+    /* Fila 1: titulo + desplegable de pagina inicial */
+    lv_obj_t *card2_row1 = lv_obj_create(card2);
+    lv_obj_remove_style_all(card2_row1);
+    lv_obj_set_width(card2_row1, lv_pct(100));
+    lv_obj_set_height(card2_row1, LV_SIZE_CONTENT);
+    lv_obj_set_layout(card2_row1, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2_row1, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *card2_title = lv_label_create(card2_row1);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_LIST "  Pagina inicial portal");
 
     /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
-    lv_obj_t *dd_portal = lv_dropdown_create(card2);
+    lv_obj_t *dd_portal = lv_dropdown_create(card2_row1);
     lv_obj_set_width(dd_portal, 200);
     lv_dropdown_set_options(dd_portal, "Keys\nLogs\nDashboard");
     {
@@ -606,25 +620,24 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     }
     lv_obj_add_event_cb(dd_portal, portal_page_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* ── Card 3: botón "Reactivar portal web" ───────────────────────────
+    /* Fila 2: Portal web + boton Reactivar, justo debajo del desplegable.
      * El servidor HTTP se apaga solo tras 15 min sin nuevas asociaciones
-     * (auto-off por seguridad). Este botón lo arranca de nuevo sin tener
-     * que reasociar el móvil ni reiniciar el display. */
-    lv_obj_t *card3 = lv_obj_create(cont);
-    lv_obj_set_width(card3, lv_pct(100));
-    lv_obj_set_height(card3, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_all(card3, 12, 0);
-    lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+     * (auto-off por seguridad). Este boton lo arranca de nuevo sin tener
+     * que reasociar el movil ni reiniciar el display. */
+    lv_obj_t *card2_row2 = lv_obj_create(card2);
+    lv_obj_remove_style_all(card2_row2);
+    lv_obj_set_width(card2_row2, lv_pct(100));
+    lv_obj_set_height(card2_row2, LV_SIZE_CONTENT);
+    lv_obj_set_layout(card2_row2, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2_row2, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2_row2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *card3_title = lv_label_create(card3);
-    lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x4FC3F7), 0);
-    lv_label_set_text(card3_title, LV_SYMBOL_REFRESH "  Portal web");
+    lv_obj_t *card2_react_title = lv_label_create(card2_row2);
+    lv_obj_set_style_text_font(card2_react_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(card2_react_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(card2_react_title, LV_SYMBOL_REFRESH "  Portal web");
 
-    lv_obj_t *btn_react = lv_btn_create(card3);
+    lv_obj_t *btn_react = lv_btn_create(card2_row2);
     lv_obj_set_height(btn_react, 44);
     lv_obj_set_style_pad_hor(btn_react, 16, 0);
     lv_obj_set_style_radius(btn_react, 8, 0);
@@ -678,6 +691,14 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
     lv_label_set_text(c4_hint,
                       "Para entrar a la web del display. Solo se ve aqui.");
+
+    /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
+     * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */
+    lv_obj_update_layout(cont);
+    lv_coord_t h_ap = lv_obj_get_height(card1);
+    if (h_ap > lv_obj_get_height(card2)) {
+        lv_obj_set_height(card2, h_ap);
+    }
 }
 
 static void reactivate_portal_cb(lv_event_t *e)
@@ -1141,9 +1162,22 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         }
     }
 
-    /* === Card Vista por defecto === */
-    lv_obj_t *card3 = lv_obj_create(cont);
-    lv_obj_set_width(card3, lv_pct(100));
+    /* === Fila con dos cards al 49%: Vista por defecto + Pantalla de bienvenida ===
+     * No caben en una sola linea fisica (los dos titulos + desplegables se pasan
+     * de ancho), asi que van como dos cards lado a lado, cada una con su titulo
+     * arriba y el desplegable debajo. */
+    lv_obj_t *row_views = lv_obj_create(cont);
+    lv_obj_remove_style_all(row_views);
+    lv_obj_set_width(row_views, lv_pct(100));
+    lv_obj_set_height(row_views, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_views, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_views, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_views, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    /* === Card Vista por defecto (49%, izda) === */
+    lv_obj_t *card3 = lv_obj_create(row_views);
+    lv_obj_set_width(card3, lv_pct(49));
     lv_obj_set_height(card3, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
@@ -1155,20 +1189,13 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *card3_row = lv_obj_create(card3);
-    lv_obj_remove_style_all(card3_row);
-    lv_obj_set_size(card3_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(card3_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card3_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card3_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *card3_title = lv_label_create(card3_row);
+    lv_obj_t *card3_title = lv_label_create(card3);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
 
-    ui->view_selection.dropdown = lv_dropdown_create(card3_row);
-    lv_obj_set_width(ui->view_selection.dropdown, 280);
+    ui->view_selection.dropdown = lv_dropdown_create(card3);
+    lv_obj_set_width(ui->view_selection.dropdown, lv_pct(100));
     lv_dropdown_set_options(ui->view_selection.dropdown,
         "Auto Detection\n"
         "Default Battery View\n"
@@ -1187,9 +1214,9 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_dropdown_set_selected(ui->view_selection.dropdown, (uint16_t)ui->view_selection.mode);
     lv_obj_add_event_cb(ui->view_selection.dropdown, view_selection_dropdown_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
-    /* === Card Splash (logo de bienvenida al boot) === */
-    lv_obj_t *card_sp = lv_obj_create(cont);
-    lv_obj_set_width(card_sp, lv_pct(100));
+    /* === Card Splash / Pantalla de bienvenida (49%, dcha) === */
+    lv_obj_t *card_sp = lv_obj_create(row_views);
+    lv_obj_set_width(card_sp, lv_pct(49));
     lv_obj_set_height(card_sp, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_sp, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card_sp, LV_OPA_COVER, 0);
@@ -1197,11 +1224,9 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_width(card_sp, 1, 0);
     lv_obj_set_style_radius(card_sp, 12, 0);
     lv_obj_set_style_pad_all(card_sp, 16, 0);
-    lv_obj_set_style_pad_gap(card_sp, 10, 0);
+    lv_obj_set_style_pad_gap(card_sp, 12, 0);
     lv_obj_set_layout(card_sp, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_sp, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card_sp, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_flow(card_sp, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *sp_title = lv_label_create(card_sp);
     lv_obj_set_style_text_font(sp_title, &lv_font_montserrat_24_es, 0);
@@ -1209,7 +1234,7 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_label_set_text(sp_title, LV_SYMBOL_IMAGE "  Pantalla de bienvenida");
 
     lv_obj_t *sp_dd = lv_dropdown_create(card_sp);
-    lv_obj_set_width(sp_dd, 220);
+    lv_obj_set_width(sp_dd, lv_pct(100));
     lv_dropdown_set_options(sp_dd, "Sin splash\nLogo furgo");
     {
         uint8_t m = 1;
@@ -2937,15 +2962,31 @@ static void trip_label_refresh(void)
         localtime_r((time_t *)&t.reset_epoch, &tm_l);
         strftime(start_str, sizeof(start_str), "%d/%m %H:%M", &tm_l);
     }
-    int hours = (int)(t.seconds_running / 3600);
-    int minutes = (int)((t.seconds_running % 3600) / 60);
-    char buf[160];
+    /* Tiempo de viaje = reloj transcurrido desde el ultimo "Nuevo viaje"
+     * (siempre avanza, aunque no llegue telemetria del BMV). */
+    int64_t elapsed = 0;
+    if (t.reset_epoch > 0) {
+        time_t now = time(NULL);
+        if (now >= (time_t)t.reset_epoch) elapsed = (int64_t)now - t.reset_epoch;
+    }
+    int hours = (int)(elapsed / 3600);
+    int minutes = (int)((elapsed % 3600) / 60);
+
+    /* Medias solares por dia (proyeccion: divide por los dias exactos
+     * transcurridos, aunque sean horas). Guardamos contra division por cero. */
+    double days = (elapsed > 0) ? (double)elapsed / 86400.0 : 0.0;
+    double solar_h_day  = (days > 0.0) ? (t.solar_seconds / 3600.0) / days : 0.0;
+    double solar_ah_day = (days > 0.0) ? t.ah_solar / days : 0.0;
+
+    char buf[288];
     snprintf(buf, sizeof(buf),
-        "Desde %s   |   %dh %02dm activo\n"
-        "Cargado: %.2f kWh  (%.1f Ah)\n"
-        "Consumido: %.2f kWh  (%.1f Ah)",
+        "Iniciado %s   |   %dh %02dm\n"
+        "Total cargado: %.2f kWh %.1f Ah  "
+        "(Solar: %.2f kWh %.1f Ah, %.1f h/dia, %.0f Ah/dia)\n"
+        "Consumido: %.2f kWh  %.1f Ah",
         start_str, hours, minutes,
         t.wh_charged / 1000.0, t.ah_charged,
+        t.wh_solar / 1000.0, t.ah_solar, solar_h_day, solar_ah_day,
         t.wh_discharged / 1000.0, t.ah_discharged);
     lv_label_set_text(s_trip_label, buf);
 }
@@ -3054,6 +3095,102 @@ static void trip_reset_btn_cb(lv_event_t *e)
     ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Trip computer",
         "Resetear contadores del viaje?\nEsta accion no se puede deshacer.",
         "Resetear", do_trip_reset_action);
+}
+
+/* ── Aviso de arranque "Nuevo viaje?" ─────────────────────────────
+ * Misma estetica que ui_show_confirm_dialog, pero con dos botones
+ * explicitos: "Seguir viaje" (no toca nada) y "Nuevo viaje" (resetea).
+ * No reutiliza ui_show_confirm_dialog porque ese detecta el boton por el
+ * texto "Cancelar"; aqui queremos etiquetas propias. */
+static lv_obj_t *s_newtrip_modal = NULL;
+
+static void newtrip_close(void)
+{
+    if (s_newtrip_modal) { lv_obj_del(s_newtrip_modal); s_newtrip_modal = NULL; }
+}
+
+static void newtrip_keep_cb(lv_event_t *e)
+{
+    (void)e;
+    newtrip_close();
+}
+
+static void newtrip_reset_cb(lv_event_t *e)
+{
+    (void)e;
+    trip_computer_reset();
+    trip_label_refresh();   /* seguro aunque la card aun no exista (chequea s_trip_label) */
+    newtrip_close();
+}
+
+void ui_show_new_trip_dialog(void)
+{
+    if (s_newtrip_modal) return;
+
+    /* Fondo modal a pantalla completa (identico al resto de dialogos). */
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_newtrip_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0x00C851), 0);  /* verde: viaje */
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(title, LV_SYMBOL_REFRESH "  Nuevo viaje");
+
+    lv_obj_t *msg = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, lv_pct(100));
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg, "Empezar un viaje nuevo?\nSe pondran a cero los contadores del viaje.");
+
+    lv_obj_t *row_btns = lv_obj_create(dlg);
+    lv_obj_remove_style_all(row_btns);
+    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_keep = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_keep, 240, 60);
+    lv_obj_set_style_bg_color(btn_keep, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_keep, 12, 0);
+    lv_obj_t *lk = lv_label_create(btn_keep);
+    lv_label_set_text(lk, "Seguir viaje");
+    lv_obj_set_style_text_font(lk, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lk);
+    lv_obj_add_event_cb(btn_keep, newtrip_keep_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_new = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_new, 240, 60);
+    lv_obj_set_style_bg_color(btn_new, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_radius(btn_new, 12, 0);
+    lv_obj_t *ln = lv_label_create(btn_new);
+    lv_label_set_text(ln, LV_SYMBOL_REFRESH "  Nuevo viaje");
+    lv_obj_set_style_text_font(ln, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(ln, lv_color_hex(0x0A0A0A), 0);  /* texto oscuro sobre verde */
+    lv_obj_center(ln);
+    lv_obj_add_event_cb(btn_new, newtrip_reset_cb, LV_EVENT_CLICKED, NULL);
 }
 
 /* ── Callbacks Backup/Restore configuración ───────────────────── */
