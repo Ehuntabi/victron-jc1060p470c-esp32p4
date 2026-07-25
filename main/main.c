@@ -28,6 +28,7 @@
 #include "ui/ausente_mode.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
+#include "mbedtls/base64.h"   /* TEMPORAL: foto por serie */
 #include "esp_task_wdt.h"
 #include "watchdog.h"
 #include "config_storage.h"
@@ -279,6 +280,46 @@ static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
         lv_indev_t *indev = lv_indev_get_act();
         if (indev) lv_indev_wait_release(indev);
     }
+}
+
+/* ─── TEMPORAL (rama tmp/foto-por-serie) ──────────────────────────────────
+ * Vuelca UNA foto JPEG de la camara por el puerto serie, en base64, para poder
+ * mirarla desde el PC (que no tiene WiFi y no alcanza el AP de la pantalla).
+ * NO debe entrar en ninguna release. */
+static void foto_serie_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(15000));   /* dar tiempo a que la camara tenga frames */
+    uint8_t *jpg = NULL;
+    size_t   len = 0;
+    if (!camera_snapshot_jpeg(&jpg, &len)) {
+        printf("\n<<<FOTO-ERROR>>>\n");
+        vTaskDelete(NULL);
+        return;
+    }
+    static unsigned char b64[4 * 512 + 8];
+    const size_t CH = 3 * 512;   /* multiplo de 3 -> sin relleno en trozos intermedios */
+    /* Callar los logs mientras dura el volcado: si un ESP_LOGx de otra tarea se
+     * cuela en medio de una linea base64, esa linea se pierde y la foto llega
+     * incompleta (visto: faltaban 2 trozos de 1536 B). */
+    esp_log_level_set("*", ESP_LOG_NONE);
+    printf("\n<<<FOTO-INI %u>>>\n", (unsigned)len);
+    fflush(stdout);
+    for (size_t off = 0; off < len; off += CH) {
+        size_t n = (len - off < CH) ? (len - off) : CH;
+        size_t o = 0;
+        if (mbedtls_base64_encode(b64, sizeof(b64), &o, jpg + off, n) == 0) {
+            fwrite(b64, 1, o, stdout);
+            fputc('\n', stdout);
+            fflush(stdout);
+        }
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+    printf("<<<FOTO-FIN>>>\n");
+    fflush(stdout);
+    esp_log_level_set("*", ESP_LOG_INFO);   /* devolver los logs */
+    free(jpg);
+    vTaskDelete(NULL);
 }
 
 /* Tarea one-shot: 30s tras boot vuelca el buffer log_capture a SD con el
@@ -544,6 +585,9 @@ void app_main(void)
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
+
+    /* TEMPORAL (rama tmp/foto-por-serie): volcar una foto por el puerto serie. */
+    xTaskCreate(foto_serie_task, "foto_serie", 4096, NULL, 3, NULL);
 
     /* Feed periodico de telemetria (Victron SoC/PV + NE185 shore/fresh)
      * al modo excedente solar del frigo. */

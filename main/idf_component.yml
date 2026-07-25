@@ -24,4 +24,8 @@ dependencies:
   # esp_cam_sensor + esp_ipa. CLAVADO a 2.2.0: la 2.3.0 rompe la captura RAW en
   # IDF 5.4.4 (llama a esp_isp_new_processor con salida RAW, que el ISP del 5.4.4
   # rechaza; el bypass real requiere IDF>=5.5.0). NO subir sin IDF>=5.5.
-  espressif/esp_video: '==2.2.0'
+  # esp_video FORKEADO a components/espressif__esp_video/ con un parche que
+  # enciende el demosaico del ISP al arrancar el pipeline (el original crea el
+  # procesador pero deja los modulos apagados -> salida casi cruda). NO se
+  # declara aqui para que gane la copia local, igual que esp_lcd_jd9165.
+  # espressif/esp_video: '==2.2.0'
