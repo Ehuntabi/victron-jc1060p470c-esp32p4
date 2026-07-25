@@ -43,6 +43,24 @@ static lv_obj_t *s_lbl_hint  = NULL;
 static lv_obj_t *s_xlabels   = NULL;
 static lv_obj_t *s_totales[4] = { NULL, NULL, NULL, NULL };
 static bool      s_modo_dias = false;
+/* Las dos primeras etiquetas del pie son la LEYENDA: tocarlas muestra u oculta
+ * su serie, igual que en el historico de bateria. Al apagarse se ponen grises. */
+static bool      s_oculta[2] = { false, false };
+static const uint32_t s_col[2] = { 0xFFD54F, 0x4FC3F7 };
+
+static void sol_legend_toggle_cb(lv_event_t *e)
+{
+    const int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (i < 0 || i > 1 || !s_chart) return;
+    lv_chart_series_t *ser = (i == 0) ? s_ser_a : s_ser_b;
+    if (!ser) return;
+    s_oculta[i] = !s_oculta[i];
+    lv_chart_hide_series(s_chart, ser, s_oculta[i]);
+    if (s_totales[i]) {
+        lv_obj_set_style_text_color(s_totales[i],
+            lv_color_hex(s_oculta[i] ? 0x555555 : s_col[i]), 0);
+    }
+}
 
 static void sol_close_cb(lv_event_t *e)
 {
@@ -85,16 +103,28 @@ static void sol_cargar_hoy(void)
         for (int c = 0; c < SOL_CHART_PTS; c++) {
             const size_t ini = (size_t)((uint64_t)c * n / SOL_CHART_PTS);
             const size_t fin = (size_t)((uint64_t)(c + 1) * n / SOL_CHART_PTS);
-            int pico = 0;
-            bool hay = false;
+            int pico = 0, pico_bat = 0;
+            bool hay = false, hay_bat = false;
             for (size_t i = ini; i < fin && i < n; i++) {
-                if (!pts[i].valid || pts[i].pv_watts < 0) continue;
-                hay = true;
-                if (pts[i].pv_watts > pico) pico = pts[i].pv_watts;
+                if (!pts[i].valid) continue;
+                if (pts[i].pv_watts >= 0) {
+                    hay = true;
+                    if (pts[i].pv_watts > pico) pico = pts[i].pv_watts;
+                }
+                /* Potencia hacia la bateria = corriente x tension del cargador. */
+                if (pts[i].centi_volts > 0 && pts[i].milli_amps > 0) {
+                    const int w = (int)(((int64_t)pts[i].milli_amps *
+                                         pts[i].centi_volts) / 100000);
+                    hay_bat = true;
+                    if (w > pico_bat) pico_bat = w;
+                }
             }
             lv_chart_set_value_by_id(s_chart, s_ser_a, c,
                                      hay ? pico : LV_CHART_POINT_NONE);
+            lv_chart_set_value_by_id(s_chart, s_ser_b, c,
+                                     hay_bat ? pico_bat : LV_CHART_POINT_NONE);
             if (pico > max_w) max_w = pico;
+            if (pico_bat > max_w) max_w = pico_bat;
         }
         /* Horas reales en el eje X, tomadas del primer y ultimo punto. */
         if (n > 0 && t0 > 1704067200) {
@@ -118,7 +148,8 @@ static void sol_cargar_hoy(void)
     lv_chart_refresh(s_chart);
 
     lv_label_set_text(s_lbl_rotulo, "HOY (24H)");
-    lv_label_set_text(s_lbl_hint, "Potencia del panel  -  el boton cambia a dias");
+    lv_label_set_text(s_lbl_hint,
+        "Toca un valor para mostrarlo u ocultarlo  -  el boton cambia a dias");
 }
 
 /* ── Modo POR DIAS: produccion contra consumo ─────────────────────────────── */
@@ -162,9 +193,11 @@ static void sol_cargar_dias(void)
 
     lv_label_set_text(s_lbl_rotulo, "POR DIAS");
     lv_label_set_text(s_lbl_hint,
-        (n > 0) ? "Ambar: producido  -  Azul: consumido  (kWh)"
+        (n > 0) ? "Toca un valor para mostrarlo u ocultarlo  (kWh por dia)"
                 : "Aun no hay dias completos: empieza manana");
 }
+
+static void sol_actualizar_totales(void);
 
 static void sol_toggle_modo_cb(lv_event_t *e)
 {
@@ -173,6 +206,7 @@ static void sol_toggle_modo_cb(lv_event_t *e)
     lv_label_set_text(s_lbl_modo, s_modo_dias ? "Por dias" : "Hoy");
     if (s_modo_dias) sol_cargar_dias();
     else             sol_cargar_hoy();
+    sol_actualizar_totales();
 }
 
 /* Fila de totales al pie, en el mismo formato que la de bateria. */
@@ -183,20 +217,38 @@ static void sol_actualizar_totales(void)
     trip_computer_t viaje;
     trip_computer_get(&viaje);
 
+    /* Los dos primeros son la LEYENDA (se pueden apagar); los otros dos, info. */
     if (s_totales[0]) {
-        lv_label_set_text_fmt(s_totales[0], "Hoy %.2f kWh / %.1f h",
-                              (double)hoy.kwh, (double)hoy.horas);
+        if (s_modo_dias) {
+            lv_label_set_text_fmt(s_totales[0], "Producido %.2f kWh/dia",
+                                  (double)solar_daily_avg(30));
+        } else {
+            lv_label_set_text_fmt(s_totales[0], "Panel: hoy %.2f kWh",
+                                  (double)hoy.kwh);
+        }
     }
     if (s_totales[1]) {
-        lv_label_set_text_fmt(s_totales[1], "Pico %d W", (int)hoy.pico_w);
+        if (s_modo_dias) {
+            lv_label_set_text_fmt(s_totales[1], "Consumido %.2f kWh/dia",
+                                  (double)solar_daily_avg_consumo(30));
+        } else {
+            lv_label_set_text(s_totales[1], "A bateria");
+        }
     }
     if (s_totales[2]) {
-        lv_label_set_text_fmt(s_totales[2], "Media %.2f kWh/dia",
-                              (double)solar_daily_avg(30));
+        lv_label_set_text_fmt(s_totales[2], "Pico %d W  /  %.1f h",
+                              (int)hoy.pico_w, (double)hoy.horas);
     }
     if (s_totales[3]) {
         lv_label_set_text_fmt(s_totales[3], "Viaje %.2f kWh",
                               viaje.wh_solar / 1000.0);
+    }
+    /* Respetar el gris de las que estan apagadas. */
+    for (int i = 0; i < 2; ++i) {
+        if (s_totales[i]) {
+            lv_obj_set_style_text_color(s_totales[i],
+                lv_color_hex(s_oculta[i] ? 0x555555 : s_col[i]), 0);
+        }
     }
 }
 
@@ -306,7 +358,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     lv_obj_set_layout(totals, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(totals, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(totals, 8, 0);
-    static const uint32_t col[4] = { 0xFFD54F, 0xFF8A65, 0xAED581, 0x4FC3F7 };
+    static const uint32_t col[4] = { 0xFFD54F, 0x4FC3F7, 0xAED581, 0xFF8A65 };
     for (int i = 0; i < 4; ++i) {
         lv_obj_t *l = lv_label_create(totals);
         lv_obj_set_width(l, (LV_HOR_RES - 32 - 24) / 4);
@@ -314,6 +366,12 @@ void ui_show_solar_history_screen(ui_state_t *ui)
         lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
         lv_label_set_text(l, "--");
+        /* Las dos primeras son la leyenda: tocarlas apaga o enciende su serie. */
+        if (i < 2) {
+            lv_obj_add_flag(l, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_event_cb(l, sol_legend_toggle_cb, LV_EVENT_CLICKED,
+                                (void *)(intptr_t)i);
+        }
         s_totales[i] = l;
     }
     sol_actualizar_totales();

@@ -657,8 +657,11 @@ void ui_on_panel_data(const victron_data_t *d) {
             break;
         }
         case VICTRON_BLE_RECORD_SOLAR_CHARGER:
+            /* Con la tension se puede dibujar tambien la potencia que entra a
+             * la bateria, y compararla con la que da el panel. */
             battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
-                (int32_t)d->record.solar.battery_current_deci * 100, 0);
+                (int32_t)d->record.solar.battery_current_deci * 100,
+                (int32_t)d->record.solar.battery_voltage_centi);
             /* Potencia del PANEL (produccion real): va aparte de la corriente
              * que entra a la bateria, porque parte puede ir directa al consumo. */
             battery_history_update_pv((int32_t)d->record.solar.pv_power_w);

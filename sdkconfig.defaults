@@ -124,3 +124,9 @@ CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=8192
 # se pasan de 512 -> error "Header fields are too long"). 2048 da margen a
 # navegador y app; coste ~+1.5KB por conexion. 2026-07-12.
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
+
+# Decimales en las etiquetas de LVGL. Sin esto, lv_label_set_text_fmt("%.1f")
+# escribe la letra "f" en vez del numero: se veia "+f/-f Ah" en el historico de
+# bateria y en la nevera. LVGL trae su propio sprintf y por defecto va sin
+# soporte de coma flotante.
+CONFIG_LV_SPRINTF_USE_FLOAT=y
