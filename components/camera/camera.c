@@ -41,18 +41,9 @@ static const char *TAG = "camera";
  * que alguien entra; cooldown entre fotos ya son 4s). */
 #define CAM_SURV_IDLE_MS  1500
 
-/* Brillo del sensor (controles V4L2, no software). Exposicion en lineas
- * (VTS 2-lane = 2328 -> max util ~2320) y ganancia analogica (rango OV02C10
- * 0x10-0xf8 = 1x-15.5x). Subidos para que la foto no salga oscura. Tunear aqui. */
-#define CAM_EXPOSURE  1600
-/* Ganancia del OV02C10 = INDICE en su mapa (ov02c10_again_map, 0..58 = 1x..15.5x),
- * se fija con V4L2_CID_GAIN. 24 ~= 7x (sube el sujeto a contraluz). Tunear aqui. */
-#define CAM_GAIN_IDX  24
-/* En VIGILANCIA la pantalla esta apagada -> escena oscura (brillo ~24). Subimos
- * exposicion y ganancia para fotos mas claras. Exposicion cerca del max (VTS~2320)
- * y un punto mas de ganancia. (Compromiso: algo mas de grano / posible movido). */
-#define CAM_EXPOSURE_SURV  2300   /* mas luz via tiempo (no mete ruido como la ganancia) */
-#define CAM_GAIN_IDX_SURV  26     /* 26 (no 32): el auto-niveles ya sube brillo -> menos grano */
+/* Ya NO se fija exposicion ni ganancia: las lleva el control automatico del ISP,
+ * que se reajusta en cada fotograma (tambien en vigilancia, con la pantalla
+ * apagada). Antes habia dos juegos de valores fijos aqui. */
 
 /* Luminosidad media del frame (0-255), suavizada. La actualiza camera_stream_task
  * y la consume el auto-brillo. s_luma_valid=true cuando hay al menos un frame. */
@@ -66,37 +57,43 @@ bool camera_get_luma(uint8_t *out_luma)
     return true;
 }
 
-/* ── Thumbnail en COLOR (debayer BGGR -> RGB, para snapshot HTTP) ─────────────
- * El frame es RAW10 MIPI-packed: 4 pixeles en 5 bytes; los 4 primeros bytes de
- * cada grupo son los 8 MSB de 4 pixeles -> los usamos (8 bits limpios).
- * Bayer BGGR: en la celda 2x2 -> B(par,par) G(impar,par)+(par,impar) R(impar,impar).
- * Guardamos en orden BGR (el de BMP), 3 bytes/px, doble buffer en PSRAM. */
-#define SRC_W    1928
-#define SRC_H    1092
-/* Resolucion nativa del debayer 2x2 (cada pixel = una celda Bayer): maxima
- * nitidez sin interpolar. 964x546 = 1928x1092 / 2. */
-#define THUMB_W  964
-#define THUMB_H  546
+/* ── Miniatura en color a partir de la imagen YA REVELADA por el ISP ─────────
+ * Antes aqui habia un revelado por SOFTWARE completo (debayer, balance de
+ * blancos gray-world, auto-niveles por histograma, gamma y realce de
+ * saturacion) sobre el RAW10 del sensor. Ya no hace falta: con el driver oficial
+ * del OV02C10 y su perfil de ajuste, el ISP del P4 entrega RGB565 revelado, con
+ * balance de blancos, correccion de color, reduccion de ruido y exposicion
+ * automatica hechos por HARDWARE. Aqui solo queda reducir a la mitad.
+ *
+ * Lo que se gana: ~8 MB de PSRAM y el grueso del trabajo de CPU por fotograma,
+ * ademas de mejor imagen (el ISP expone bien el contraluz, que era el punto
+ * flaco del auto-niveles por software). */
+#define SRC_W    1920
+#define SRC_H    1080
+/* Mitad exacta: media de cada bloque 2x2, sin interpolar. */
+#define THUMB_W  960
+#define THUMB_H  540
 static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
-/* Acumulador para promediado temporal (media movil anti-grano). Guarda el valor
- * de display en 12.4 fijo (valor<<4). La constante = 2^CAM_EMA_SHIFT frames:
- * mas = menos grano pero mas arrastre de movimiento. 8 arrastraba ("movida"),
- * 4 es el compromiso. 1 = sin promediado. Tunear aqui. */
-#define CAM_EMA_SHIFT 2
-static uint16_t     *s_accum      = NULL;
-static volatile bool s_no_temporal = false;  /* en vigilancia: sin promediado (mas nitido) */
 
-/* Byte MSB (8 bits) del pixel (x,y) del RAW10 MIPI-packed. */
-static inline uint8_t raw_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
+/* Pixel RGB565 (2 bytes, little endian) del frame del ISP. */
+static inline uint16_t rgb565_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
 {
-    uint32_t off = (uint32_t)y * stride + (uint32_t)(x >> 2) * 5 + (uint32_t)(x & 3);
-    return (off < bytes) ? p[off] : 0;
+    uint32_t off = (uint32_t)y * stride + (uint32_t)x * 2;
+    return (off + 1 < bytes) ? (uint16_t)(p[off] | (p[off + 1] << 8)) : 0;
 }
 
-/* Luma media (0-255) del centro del frame para el auto-brillo. Muestrea los bytes
- * MSB via raw_px (0-255 limpios). OJO: NO leer el RAW10 como 16-bit/px (va packed
- * 4px/5B) -> daria una señal en diente de sierra (mod 256) inservible. */
+/* Brillo (0-255) de un pixel, para el auto-brillo y la deteccion de movimiento. */
+static inline uint8_t luma_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
+{
+    const uint16_t v = rgb565_px(p, bytes, stride, x, y);
+    const int r = ((v >> 11) & 0x1f) << 3;
+    const int g = ((v >> 5)  & 0x3f) << 2;
+    const int b = (v & 0x1f) << 3;
+    return (uint8_t)((r + 2 * g + b) / 4);
+}
+
+/* Luma media (0-255) del centro del frame, para el auto-brillo de la pantalla. */
 static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
 {
     uint32_t stride = bytes / SRC_H;
@@ -105,113 +102,80 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
     uint32_t cnt = 0;
     for (int y = SRC_H / 4; y < SRC_H * 3 / 4; y += 8)
         for (int x = SRC_W / 4; x < SRC_W * 3 / 4; x += 8) {
-            sum += raw_px(p, bytes, stride, x, y);
+            sum += luma_px(p, bytes, stride, x, y);
             cnt++;
         }
     return cnt ? (uint8_t)(sum / cnt) : 0;
 }
 
-/* LUT de gamma para subir las sombras de la foto sin reventar las altas luces.
- * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
- * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
- * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
-#define CAM_GAMMA 0.55f   /* mas bajo: levanta sombras (sujeto a contraluz menos oscuro) */
-static uint8_t s_gamma_lut[256];
-static bool    s_gamma_ready = false;
-static void gamma_init(void)
-{
-    for (int i = 0; i < 256; i++) {
-        s_gamma_lut[i] = (uint8_t)(powf((float)i / 255.0f, CAM_GAMMA) * 255.0f + 0.5f);
-    }
-    s_gamma_ready = true;
-}
-
+/* RGB565 1920x1080 -> BGR888 960x540, promediando cada bloque 2x2 (baja el ruido
+ * y recupera algo del color que se pierde al empaquetar a 5-6-5). */
 static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
 {
-    if (!s_gamma_ready) gamma_init();
-    uint32_t stride = bytes / SRC_H;   /* ~2410 para RAW10 1928 packed */
+    const uint32_t stride = bytes / SRC_H;
+    if (stride == 0) return;
 
-    /* Pase 1: balance de blancos gray-world (medias de canal) + histograma de luma
-     * para auto-niveles. Muestra coarse (1 de cada 4x4) y SOLO de la zona CENTRAL
-     * (50% central): medicion ponderada al centro -> expone para el sujeto del
-     * primer plano e ignora un contraluz/ventana de los bordes. */
-    uint64_t sB = 0, sG = 0, sR = 0;
-    uint32_t n = 0, nwb = 0;
-    uint32_t hist[256] = {0};
-    const int cy0 = THUMB_H / 4, cy1 = THUMB_H - THUMB_H / 4;
-    const int cx0 = THUMB_W / 4, cx1 = THUMB_W - THUMB_W / 4;
-    for (int oy = cy0; oy < cy1; oy += 4) {
-        int sy = (oy * SRC_H / THUMB_H) & ~1;
-        for (int ox = cx0; ox < cx1; ox += 4) {
-            int sx = (ox * SRC_W / THUMB_W) & ~1;
-            int b = raw_px(p, bytes, stride, sx, sy);
-            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
-                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
-            int r = raw_px(p, bytes, stride, sx + 1, sy + 1);
-            n++;
-            hist[(b + 2 * g + r) / 4]++;   /* luma aprox (todos, para auto-niveles) */
-            /* WB gray-world SOLO con pixeles bien expuestos: los quemados (ventana a
-             * contraluz) desvian las medias y meten dominante (verde/magenta). */
-            if (b < 200 && g < 200 && r < 200) { sB += b; sG += g; sR += r; nwb++; }
+    for (int oy = 0; oy < THUMB_H; oy++) {
+        const int sy = oy * 2;
+        for (int ox = 0; ox < THUMB_W; ox++) {
+            const int sx = ox * 2;
+            int r = 0, g = 0, b = 0;
+            for (int dy = 0; dy < 2; dy++) {
+                for (int dx = 0; dx < 2; dx++) {
+                    const uint16_t v = rgb565_px(p, bytes, stride, sx + dx, sy + dy);
+                    r += ((v >> 11) & 0x1f) << 3;
+                    g += ((v >> 5)  & 0x3f) << 2;
+                    b += (v & 0x1f) << 3;
+                }
+            }
+            uint8_t *d = &dst[((uint32_t)oy * THUMB_W + ox) * 3];
+            d[0] = (uint8_t)(b >> 2);
+            d[1] = (uint8_t)(g >> 2);
+            d[2] = (uint8_t)(r >> 2);
         }
     }
-    float mB = nwb ? (float)sB / nwb : 1, mG = nwb ? (float)sG / nwb : 1, mR = nwb ? (float)sR / nwb : 1;
-    float gB = (mB > 1.0f) ? mG / mB : 1.0f;
-    float gR = (mR > 1.0f) ? mG / mR : 1.0f;
-    if (gB > 4.0f) gB = 4.0f;
-    if (gB < 0.25f) gB = 0.25f;
-    if (gR > 4.0f) gR = 4.0f;
-    if (gR < 0.25f) gR = 0.25f;
 
-    /* Auto-niveles: percentiles 2% (lo) y 98% (hi) del histograma -> estirar a
-     * 0-255. Sube brillo Y contraste adaptandose a la luz de la escena. */
-    uint32_t lo_th = n / 50, hi_th = n - n / 50;   /* 2% / 98% */
-    int lo = 0, hi = 255;
+    /* Estirado de niveles, SOLO si la escena sale muy apagada. De noche, y sobre
+     * todo en vigilancia (con la pantalla apagada), no hay luz: el control
+     * automatico del ISP se queda al maximo y aun asi la foto sale casi negra.
+     * Esto la hace visible.
+     *
+     * Es barato: se hace sobre la miniatura ya reducida (0,5 Mpx) en vez de sobre
+     * el fotograma entero (2 Mpx), y con una sola ganancia comun a los tres
+     * canales, asi que NO deshace el balance de blancos que ha hecho el ISP.
+     * Si la escena ya tiene rango (dia, interior con luz) no toca nada. */
+    uint32_t hist[256] = {0};
+    const uint32_t npx = (uint32_t)THUMB_W * THUMB_H;
+    for (uint32_t i = 0; i < npx; i += 8) {
+        const uint8_t *q = &dst[i * 3];
+        hist[(q[2] + 2 * q[1] + q[0]) / 4]++;
+    }
+    const uint32_t muestras = (npx + 7) / 8;
     uint32_t acc = 0;
-    for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= lo_th) { lo = i; break; } }
+    int lo = 0, hi = 255;
+    for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= muestras / 50) { lo = i; break; } }
     acc = 0;
-    for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n - hi_th) { hi = i; break; } }
-    if (hi <= lo) hi = lo + 1;
-    float lscale = 255.0f / (float)(hi - lo);
+    for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= muestras / 100) { hi = i; break; } }
 
-    /* Pase 2: debayer + WB + auto-niveles + gamma. */
-    for (int oy = 0; oy < THUMB_H; oy++) {
-        int sy = (oy * SRC_H / THUMB_H) & ~1;   /* alinear al inicio de la celda 2x2 */
-        for (int ox = 0; ox < THUMB_W; ox++) {
-            int sx = (ox * SRC_W / THUMB_W) & ~1;
-            int b = (int)(raw_px(p, bytes, stride, sx, sy) * gB);
-            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
-                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
-            int r = (int)(raw_px(p, bytes, stride, sx + 1, sy + 1) * gR);
-            /* auto-niveles (estiramiento por percentiles) */
-            b = (int)((b - lo) * lscale);
-            g = (int)((g - lo) * lscale);
-            r = (int)((r - lo) * lscale);
-            if (b < 0) b = 0;
-            if (b > 255) b = 255;
-            if (g < 0) g = 0;
-            if (g > 255) g = 255;
-            if (r < 0) r = 0;
-            if (r > 255) r = 255;
-            uint32_t idx = ((uint32_t)oy * THUMB_W + ox) * 3;
-            uint8_t *d = &dst[idx];
-            int fb = s_gamma_lut[b], fg = s_gamma_lut[g], fr = s_gamma_lut[r];  /* valor display */
-            if (s_accum && !s_no_temporal) {
-                /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. En
-                 * vigilancia se desactiva (s_no_temporal): con movimiento el promediado
-                 * deja 'fantasmas'; un frame fresco sale mas nitido (a costa de grano). */
-                uint16_t *a = &s_accum[idx];
-                a[0] = a[0] - (a[0] >> CAM_EMA_SHIFT) + (uint16_t)(fb << (4 - CAM_EMA_SHIFT));
-                a[1] = a[1] - (a[1] >> CAM_EMA_SHIFT) + (uint16_t)(fg << (4 - CAM_EMA_SHIFT));
-                a[2] = a[2] - (a[2] >> CAM_EMA_SHIFT) + (uint16_t)(fr << (4 - CAM_EMA_SHIFT));
-                d[0] = a[0] >> 4;
-                d[1] = a[1] >> 4;
-                d[2] = a[2] >> 4;
-            } else {
-                d[0] = fb;
-                d[1] = fg;
-                d[2] = fr;
-            }
+    /* Margen: por debajo de 190 de recorrido util, la imagen esta apagada. */
+    if (hi - lo < 190 && hi > lo) {
+        /* Tabla de 256 entradas = estirado + realce de sombras, aplicada de una
+         * sola pasada. El estirado a secas no basta de noche: sube el maximo pero
+         * deja la cara en la parte baja de la escala. La curva de realce (gamma
+         * <1) levanta los medios y bajos, que es donde esta el sujeto.
+         * Cuanto mas apagada la escena, mas realce (0,55 a oscuras, 1,0 con luz).
+         * Ojo: sube tambien el ruido; por eso solo se aplica cuando hace falta. */
+        const int escala = (255 * 256) / (hi - lo);        /* 8.8 fijo */
+        const float realce = 0.55f + 0.45f * ((float)(hi - lo) / 190.0f);
+        uint8_t lut[256];
+        for (int i = 0; i < 256; i++) {
+            int v = (i - lo) * escala >> 8;
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            lut[i] = (uint8_t)(powf((float)v / 255.0f, realce) * 255.0f + 0.5f);
+        }
+        for (uint32_t i = 0; i < npx * 3; i++) {
+            dst[i] = lut[dst[i]];
         }
     }
 }
@@ -226,11 +190,14 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
  * El JPEG por HW codifica en PSRAM (no toca la SD) y deja una salida ~80KB ->
  * escritura corta como las del datalogger -> NO choca. Sigue el ejemplo oficial
  * esp-idf/examples/peripherals/jpeg/jpeg_encode. */
-#define JPEG_W        960   /* recorte del thumbnail 964 -> 960 (multiplo de 16) */
-#define JPEG_H        544   /* recorte del thumbnail 546 -> 544 (multiplo de 16) */
+#define JPEG_W        960   /* el thumbnail ya es 960 (multiplo de 16) */
+#define JPEG_H        528   /* recorte del thumbnail 540 -> 528 (multiplo de 16) */
 /* 85: mejora sobre 80 sin disparar el tamano. 92+YUV444 daba ~500KB/foto -> el
  * tráfico del encoder (2D-DMA) + servir esas imagenes por WiFi saturaba el bus -> INT WDT. */
-#define JPEG_QUALITY  85
+#define JPEG_QUALITY  78
+/* 4:2:0 en vez de 4:2:2: la mitad de datos de color; el grano de color (el que
+ * peor comprime) se promedia y casi desaparece. */
+#define JPEG_SUBSAMPLING  JPEG_DOWN_SAMPLING_YUV420
 static jpeg_encoder_handle_t s_jpeg_enc = NULL;
 static uint8_t  *s_jpeg_in  = NULL;     /* RGB888 (jpeg_alloc_encoder_mem) */
 static uint8_t  *s_jpeg_out = NULL;     /* bitstream JPEG (jpeg_alloc_encoder_mem) */
@@ -349,7 +316,7 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
     return true;
 }
 
-/* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
+/* Codifica el ultimo thumbnail (BGR 960x540) a JPEG (recorte 960x528, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
  * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
@@ -361,7 +328,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         int act = s_thumb_act;
         if (act >= 0 && s_thumb[act] != NULL) {
             const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
-            /* Copiar el recorte 960x544 a la entrada RGB888 (swap B<->R). */
+            /* Copiar el recorte 960x528 a la entrada RGB888 (swap B<->R). */
             for (int y = 0; y < JPEG_H; y++) {
                 const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
                 uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
@@ -373,7 +340,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
-                .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,
+                .sub_sample    = JPEG_SUBSAMPLING,
                 .image_quality = JPEG_QUALITY,
                 .width         = JPEG_W,
                 .height        = JPEG_H,
@@ -553,9 +520,17 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
 #define MOT_MAX_PHOTOS    300    /* tope por SESION de vigilancia (anti-runaway) */
 
+/* Rafaga de calibracion: el control automatico de exposicion del ISP ajusta UN
+ * paso por fotograma, y aqui vamos a 1 fotograma cada 1,5-2 s (throttle para no
+ * bloquear la SD). Al arrancar o al cambiar de modo eso son minutos hasta que se
+ * asienta -> las fotos salian oscuras. Con esta rafaga corta a ritmo normal se
+ * calibra en ~1 s y luego se vuelve al ritmo lento. */
+#define CAM_WARMUP_FRAMES  40
+#define CAM_WARMUP_MS      25    /* ~30 fps durante la rafaga */
+static volatile int s_warmup = CAM_WARMUP_FRAMES;   /* tambien al arrancar */
+
 static volatile bool s_surveillance = false;
 static volatile bool s_mot_reset    = false;
-static volatile bool s_ctrl_dirty   = true;   /* re-aplicar exposicion/ganancia en la tarea */
 static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
 
 /* Cerrojo de bus camara<->SD. El DMA de la camara (GDMA) contiende con el
@@ -681,9 +656,8 @@ static void vig_sd_drain_task(void *arg)
 void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
-    s_no_temporal = on;   /* vigilancia: sin promediado temporal (mas nitido con movimiento) */
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
-    s_ctrl_dirty = true;  /* aplicar exposicion/ganancia de vigilancia (mas brillo) o normal */
+    s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
     if (on) s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
                                  * no acumulado de por vida (si no, dejaba de capturar) */
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
@@ -711,7 +685,6 @@ static void cam_task_cleanup(int fd, uint8_t **buf, uint32_t *len, int nbuf)
         if (buf[i] && buf[i] != MAP_FAILED) munmap(buf[i], len[i]);
     if (s_thumb[0]) { free(s_thumb[0]); s_thumb[0] = NULL; }
     if (s_thumb[1]) { free(s_thumb[1]); s_thumb[1] = NULL; }
-    if (s_accum)    { free(s_accum);    s_accum = NULL; }
     if (fd >= 0) close(fd);
 }
 
@@ -729,19 +702,13 @@ static void camera_stream_task(void *arg)
     }
     const int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    /* Preferir RAW10 (salida nativa del sensor, ISP en bypass, sin IPA). */
-    uint32_t pick_fmt = 0;
-    for (int i = 0; ; i++) {
-        struct v4l2_fmtdesc fdsc = { .index = i, .type = type };
-        if (ioctl(fd, VIDIOC_ENUM_FMT, &fdsc) != 0) break;
-        if (strstr((char *)fdsc.description, "RAW10") != NULL) {
-            pick_fmt = fdsc.pixelformat;
-            break;
-        }
-    }
+    /* Pedir RGB565: la imagen YA REVELADA por el ISP (color, balance de blancos,
+     * ruido y exposicion automatica, todo por hardware). Antes se pedia RAW10 y
+     * se revelaba por software en downscale_rgb(), que costaba CPU y memoria y
+     * exponia peor los contraluces. */
     struct v4l2_format fmt = { .type = type };
     ioctl(fd, VIDIOC_G_FMT, &fmt);
-    if (pick_fmt) fmt.fmt.pix.pixelformat = pick_fmt;
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB565;
     /* S_FMT dispara ov02c10_set_format() -> escribe el init del sensor. */
     if (ioctl(fd, VIDIOC_S_FMT, &fmt) != 0) {
         ESP_LOGE(TAG, "stream: S_FMT falla");
@@ -773,8 +740,8 @@ static void camera_stream_task(void *arg)
      * la reserva, seguimos solo con la luma. */
     s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
     s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
-    /* Acumulador para promediado temporal (quita grano). Si falla, seguimos sin el. */
-    s_accum = heap_caps_calloc(THUMB_W * THUMB_H * 3, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+    /* Ya NO se reserva el acumulador de promediado temporal (eran 3,1 MB de PSRAM):
+     * el ruido lo quita ahora el filtro del ISP por hardware. */
 
     /* UN solo STREAMON. Ciclar STREAMON/STREAMOFF crashea el driver CSI de esp_video
      * (esp_cam_ctlr_csi_start -> dw_gdma set_src_addr sobre canal ya liberado -> Store
@@ -830,13 +797,9 @@ static void camera_stream_task(void *arg)
          * bus solo se toma alrededor del QBUF+settle (abajo) -> ventana minima, no
          * bloquea la tarea esp_timer durante el encode. */
 
-        /* Re-aplicar exposicion/ganancia al arranque y en cada cambio de modo:
-         * vigilancia usa valores mas altos (escena oscura con pantalla apagada). */
-        if (s_ctrl_dirty) {
-            s_ctrl_dirty = false;
-            cam_set_ctrl(fd, V4L2_CID_EXPOSURE, surv ? CAM_EXPOSURE_SURV : CAM_EXPOSURE, "exposure");
-            cam_set_ctrl(fd, V4L2_CID_GAIN, surv ? CAM_GAIN_IDX_SURV : CAM_GAIN_IDX, "gain(idx)");
-        }
+        /* NO se fijan exposicion ni ganancia a mano: las lleva el control
+         * automatico del ISP, que se reajusta en cada fotograma. Ponerlas a pelo
+         * peleaba con el y dejaba la imagen quemada o negra segun la escena. */
 
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
@@ -871,7 +834,7 @@ static void camera_stream_task(void *arg)
                     int y = gy * SRC_H / MOT_GH;
                     for (int gx = 0; gx < MOT_GW; gx++) {
                         int x = gx * SRC_W / MOT_GW;
-                        grid[gy * MOT_GW + gx] = raw_px(buf[b.index], b.bytesused, stride, x, y);
+                        grid[gy * MOT_GW + gx] = luma_px(buf[b.index], b.bytesused, stride, x, y);
                     }
                 }
                 if (s_mot_reset) { have_prev = false; s_mot_reset = false; }
@@ -947,9 +910,16 @@ static void camera_stream_task(void *arg)
             camera_sd_bus_unlock();
         }
 
-        /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s. */
-        int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
-        if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
+        /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s.
+         * Durante la rafaga de calibracion vamos a ritmo normal para que el
+         * control automatico del ISP se asiente. */
+        if (s_warmup > 0) {
+            s_warmup--;
+            vTaskDelay(pdMS_TO_TICKS(CAM_WARMUP_MS));
+        } else {
+            int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
+            if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
+        }
     }
 }
 
