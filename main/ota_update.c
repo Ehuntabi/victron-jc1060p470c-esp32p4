@@ -2,7 +2,7 @@
  *
  * Para que sirve: hasta ahora, actualizar exigia cable USB y el portatil al lado
  * de la pantalla. Con esto se sube el fichero desde el navegador del movil,
- * estando en la caravana.
+ * estando en la autocaravana.
  *
  * Como funciona: la flash tiene DOS huecos de firmware (ver partitions.csv). Lo
  * que se sube se escribe en el que NO se esta usando, y solo se marca para
