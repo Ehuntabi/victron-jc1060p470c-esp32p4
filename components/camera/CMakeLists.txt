@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "camera.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_video esp_cam_sensor driver esp_timer esp_driver_jpeg
+    REQUIRES esp_video esp_cam_sensor driver esp_timer esp_driver_jpeg esp_driver_ppa
 )

@@ -14,6 +14,8 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
+#include "driver/ppa.h"           /* acelerador de imagen del P4: reduce por HW */
+#include "esp_cache.h"
 #include "driver/jpeg_decode.h"   /* decoder JPEG por HW (galeria: fotos de vigilancia) */
 #include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
 #include "esp_task_wdt.h"         /* vigilar la tarea de camara (DQBUF puede colgarse) */
@@ -70,10 +72,13 @@ bool camera_get_luma(uint8_t *out_luma)
  * flaco del auto-niveles por software). */
 #define SRC_W    1920
 #define SRC_H    1080
-/* Mitad exacta: media de cada bloque 2x2, sin interpolar. */
+/* Mitad exacta. La reduccion la hace el PPA (acelerador de imagen del P4), no la
+ * CPU: lee el RGB565 del ISP y escribe RGB888 ya reducido. */
 #define THUMB_W  960
 #define THUMB_H  540
-static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* BGR, 3 bytes/px */
+#define THUMB_SZ (((uint32_t)THUMB_W * THUMB_H * 3 + 63) & ~63u)   /* alineado a cache */
+static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* RGB888, 3 bytes/px */
+static ppa_client_handle_t s_ppa  = NULL;
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
 
 /* Pixel RGB565 (2 bytes, little endian) del frame del ISP. */
@@ -108,47 +113,63 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
     return cnt ? (uint8_t)(sum / cnt) : 0;
 }
 
-/* RGB565 1920x1080 -> BGR888 960x540, promediando cada bloque 2x2 (baja el ruido
- * y recupera algo del color que se pierde al empaquetar a 5-6-5). */
-static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
+/* RGB565 1920x1080 -> RGB888 960x540 usando el PPA (acelerador de imagen del P4).
+ * Antes esto lo hacia la CPU pixel a pixel; ahora solo prepara la orden y espera.
+ * Devuelve false si el acelerador no esta disponible (se sigue sin miniatura). */
+static bool downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
 {
-    const uint32_t stride = bytes / SRC_H;
-    if (stride == 0) return;
-
-    for (int oy = 0; oy < THUMB_H; oy++) {
-        const int sy = oy * 2;
-        for (int ox = 0; ox < THUMB_W; ox++) {
-            const int sx = ox * 2;
-            int r = 0, g = 0, b = 0;
-            for (int dy = 0; dy < 2; dy++) {
-                for (int dx = 0; dx < 2; dx++) {
-                    const uint16_t v = rgb565_px(p, bytes, stride, sx + dx, sy + dy);
-                    r += ((v >> 11) & 0x1f) << 3;
-                    g += ((v >> 5)  & 0x3f) << 2;
-                    b += (v & 0x1f) << 3;
-                }
-            }
-            uint8_t *d = &dst[((uint32_t)oy * THUMB_W + ox) * 3];
-            d[0] = (uint8_t)(b >> 2);
-            d[1] = (uint8_t)(g >> 2);
-            d[2] = (uint8_t)(r >> 2);
+    if (!s_ppa) {
+        const ppa_client_config_t cfg = { .oper_type = PPA_OPERATION_SRM };
+        if (ppa_register_client(&cfg, &s_ppa) != ESP_OK) {
+            ESP_LOGW(TAG, "PPA no disponible: sin miniatura");
+            return false;
         }
     }
+    if (bytes < (uint32_t)SRC_W * SRC_H * 2) return false;
 
-    /* Estirado de niveles, SOLO si la escena sale muy apagada. De noche, y sobre
-     * todo en vigilancia (con la pantalla apagada), no hay luz: el control
-     * automatico del ISP se queda al maximo y aun asi la foto sale casi negra.
-     * Esto la hace visible.
+    const ppa_srm_oper_config_t op = {
+        .in = {
+            .buffer         = p,
+            .pic_w          = SRC_W,
+            .pic_h          = SRC_H,
+            .block_w        = SRC_W,
+            .block_h        = SRC_H,
+            .block_offset_x = 0,
+            .block_offset_y = 0,
+            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+        },
+        .out = {
+            .buffer      = dst,
+            .buffer_size = THUMB_SZ,
+            .pic_w       = THUMB_W,
+            .pic_h       = THUMB_H,
+            .srm_cm      = PPA_SRM_COLOR_MODE_RGB888,
+        },
+        .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+        .scale_x        = 0.5f,
+        .scale_y        = 0.5f,
+        .mode           = PPA_TRANS_MODE_BLOCKING,
+    };
+    if (ppa_do_scale_rotate_mirror(s_ppa, &op) != ESP_OK) {
+        ESP_LOGW(TAG, "PPA: fallo al reducir");
+        return false;
+    }
+    /* El PPA escribe por DMA: invalidar cache antes de leerlo desde la CPU. */
+    esp_cache_msync(dst, THUMB_SZ, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+
+    /* Estirado de niveles + realce de sombras, SOLO si la escena sale muy apagada.
+     * De noche, y sobre todo en vigilancia (con la pantalla apagada), no hay luz:
+     * el control automatico del ISP se queda al maximo y aun asi la foto sale casi
+     * negra. Esto la hace visible.
      *
-     * Es barato: se hace sobre la miniatura ya reducida (0,5 Mpx) en vez de sobre
-     * el fotograma entero (2 Mpx), y con una sola ganancia comun a los tres
-     * canales, asi que NO deshace el balance de blancos que ha hecho el ISP.
-     * Si la escena ya tiene rango (dia, interior con luz) no toca nada. */
+     * Es lo unico que sigue haciendo la CPU, y sobre la miniatura ya reducida
+     * (0,5 Mpx) con una tabla de 256 entradas en una sola pasada. Usa una ganancia
+     * comun a los tres canales: NO deshace el balance de blancos del ISP. */
     uint32_t hist[256] = {0};
     const uint32_t npx = (uint32_t)THUMB_W * THUMB_H;
     for (uint32_t i = 0; i < npx; i += 8) {
-        const uint8_t *q = &dst[i * 3];
-        hist[(q[2] + 2 * q[1] + q[0]) / 4]++;
+        const uint8_t *q = &dst[i * 3];             /* RGB888 */
+        hist[(q[0] + 2 * q[1] + q[2]) / 4]++;
     }
     const uint32_t muestras = (npx + 7) / 8;
     uint32_t acc = 0;
@@ -159,12 +180,6 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
 
     /* Margen: por debajo de 190 de recorrido util, la imagen esta apagada. */
     if (hi - lo < 190 && hi > lo) {
-        /* Tabla de 256 entradas = estirado + realce de sombras, aplicada de una
-         * sola pasada. El estirado a secas no basta de noche: sube el maximo pero
-         * deja la cara en la parte baja de la escala. La curva de realce (gamma
-         * <1) levanta los medios y bajos, que es donde esta el sujeto.
-         * Cuanto mas apagada la escena, mas realce (0,55 a oscuras, 1,0 con luz).
-         * Ojo: sube tambien el ruido; por eso solo se aplica cuando hace falta. */
         const int escala = (255 * 256) / (hi - lo);        /* 8.8 fijo */
         const float realce = 0.55f + 0.45f * ((float)(hi - lo) / 190.0f);
         uint8_t lut[256];
@@ -178,6 +193,7 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             dst[i] = lut[dst[i]];
         }
     }
+    return true;
 }
 
 /* Suelo de PSRAM libre a preservar para los buffers DMA del SDIO del C6: si se
@@ -327,16 +343,13 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
     if (camera_jpeg_init()) {
         int act = s_thumb_act;
         if (act >= 0 && s_thumb[act] != NULL) {
-            const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
-            /* Copiar el recorte 960x528 a la entrada RGB888 (swap B<->R). */
+            const uint8_t *src = s_thumb[act];   /* RGB888, THUMB_W*3 por fila */
+            /* La miniatura ya viene en RGB888 del acelerador: copia directa de
+             * filas, sin intercambiar canales (antes venia en BGR). */
             for (int y = 0; y < JPEG_H; y++) {
-                const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
-                uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
-                for (int x = 0; x < JPEG_W; x++) {
-                    d[x*3 + 0] = s[x*3 + 2];   /* R <- src.R (BGR[2]) */
-                    d[x*3 + 1] = s[x*3 + 1];   /* G */
-                    d[x*3 + 2] = s[x*3 + 0];   /* B <- src.B (BGR[0]) */
-                }
+                memcpy(&s_jpeg_in[(uint32_t)y * JPEG_W * 3],
+                       &src[(uint32_t)y * THUMB_W * 3],
+                       (size_t)JPEG_W * 3);
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
@@ -738,8 +751,8 @@ static void camera_stream_task(void *arg)
 
     /* Thumbnails RGB (BGR) para el snapshot HTTP (doble buffer en PSRAM). Si falla
      * la reserva, seguimos solo con la luma. */
-    s_thumb[0] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
-    s_thumb[1] = heap_caps_malloc(THUMB_W * THUMB_H * 3, MALLOC_CAP_SPIRAM);
+    s_thumb[0] = heap_caps_aligned_alloc(64, THUMB_SZ, MALLOC_CAP_SPIRAM);
+    s_thumb[1] = heap_caps_aligned_alloc(64, THUMB_SZ, MALLOC_CAP_SPIRAM);
     /* Ya NO se reserva el acumulador de promediado temporal (eran 3,1 MB de PSRAM):
      * el ruido lo quita ahora el filtro del ISP por hardware. */
 
@@ -822,8 +835,9 @@ static void camera_stream_task(void *arg)
 
             if (s_thumb[0] && s_thumb[1]) {
                 int back = (s_thumb_act == 0) ? 1 : 0;
-                downscale_rgb(buf[b.index], b.bytesused, s_thumb[back]);
-                s_thumb_act = back;   /* publicar */
+                if (downscale_rgb(buf[b.index], b.bytesused, s_thumb[back])) {
+                    s_thumb_act = back;   /* publicar */
+                }
             }
 
             /* Vigilancia (modo ausente): deteccion de movimiento + foto a SD. */
