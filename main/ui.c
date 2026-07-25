@@ -1876,12 +1876,22 @@ static void frigo_chart_load_day(void)
         if (wb <= wa) wb = wa + 1;
         if (wb > n) wb = n;
         int wn = wb - wa;
+        /* Mismo tope y downsample que la grafica de bateria (ver
+         * ui_show_battery_history_screen): con varias series, un
+         * lv_chart_set_point_count grande cuelga taskLVGL > 5 s -> WDT. Aqui hay
+         * 5 series y el buffer admite hasta FRIGO_LOG_MAX_ENTRIES (1500); un CSV
+         * real son ~288 lineas (log cada 5 min), asi que hoy no se alcanza, pero
+         * el tope evita que un cambio de cadencia lo reviva. */
+        const int CHART_MAX_PTS = 300;
         int pts = wn > 0 ? wn : 2;
+        if (pts > CHART_MAX_PTS) pts = CHART_MAX_PTS;
+        if (pts < 2) pts = 2;
         lv_chart_set_point_count(s_chart, pts);
+        int step = (wn > CHART_MAX_PTS) ? (wn + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
         float t_min = 9999.0f, t_max = -9999.0f;
-        for (int i = wa; i < wb; i++) {
+        int idx = 0;
+        for (int i = wa; i < wb && idx < pts; i += step, ++idx) {
             const frigo_log_entry_t *e = &s_frigo_buf[i];
-            int idx = i - wa;
             if (!isnan(e->t_aletas))  { if (e->t_aletas  < t_min) t_min = e->t_aletas;  if (e->t_aletas  > t_max) t_max = e->t_aletas; }
             if (!isnan(e->t_congel))  { if (e->t_congel  < t_min) t_min = e->t_congel;  if (e->t_congel  > t_max) t_max = e->t_congel; }
             if (!isnan(e->t_exter))   { if (e->t_exter   < t_min) t_min = e->t_exter;   if (e->t_exter   > t_max) t_max = e->t_exter; }

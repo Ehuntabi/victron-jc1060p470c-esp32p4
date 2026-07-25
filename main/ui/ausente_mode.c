@@ -143,6 +143,10 @@ void ausente_request(bool on)
         if (s_state == AUS_PENDING) {
             clear_countdown();
             s_state = AUS_OFF;
+            /* Igual que al salir del modo activo: si la cancelacion vino de
+             * fuera del switch (HTTP /ausente?off), el switch de Ajustes se
+             * quedaba en ON mintiendo sobre el estado real. */
+            settings_ausente_sync_switch(false);
             ESP_LOGI(TAG, "cuenta atras cancelada");
         } else if (s_state == AUS_ACTIVE) {
             s_state = AUS_OFF;
