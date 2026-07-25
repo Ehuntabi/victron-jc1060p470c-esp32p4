@@ -3,7 +3,7 @@ file(GLOB SOURCES "*.c" "ui/*.c" "fonts/*.c" "icons/*.c" "ne185/*.c" "net/*.c" "
 idf_component_register(
     SRCS       ${SOURCES}
     INCLUDE_DIRS "."
-    PRIV_REQUIRES
+    PRIV_REQUIRES app_update
         # ── Heredadas del proyecto original ───────────────────────────────────
         config_storage
         victron_ble

@@ -4,6 +4,7 @@
 #include "victron_ble.h"
 #include "dashboard_state.h"
 #include "esp_spiffs.h"
+#include "ota_update.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "nvs_flash.h"
@@ -688,6 +689,17 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
 #define REQUIRE_AUTH(req) do { \
     if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
 } while (0)
+
+/* Envoltorios de la actualizacion por Wi-Fi: exigen contrasena y delegan en
+ * ota_update.c. */
+static esp_err_t handle_ota_page(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
+    return ota_update_page(req);
+}
+static esp_err_t handle_ota_post(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
+    return ota_update_receive(req);
+}
 
 // GET /snapshot -> foto JPEG del ultimo frame de la camara. Requiere auth (expone la
 // camara). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
@@ -2243,6 +2255,13 @@ esp_err_t config_server_start(void) {
 
     httpd_uri_t uri_save = { .uri = "/save", .method = HTTP_POST, .handler = post_save };
     httpd_register_uri_handler(server, &uri_save);
+
+    /* Actualizacion del firmware por Wi-Fi (ota_update.c). Con contrasena: deja
+     * escribir el firmware entero, asi que no puede quedar abierta. */
+    httpd_uri_t uri_ota_get = { .uri = "/ota", .method = HTTP_GET, .handler = handle_ota_page };
+    httpd_register_uri_handler(server, &uri_ota_get);
+    httpd_uri_t uri_ota_post = { .uri = "/ota", .method = HTTP_POST, .handler = handle_ota_post };
+    httpd_register_uri_handler(server, &uri_ota_post);
 
     // Register captive portal handlers BEFORE the catch-all!
     httpd_uri_t uri_generate_204 = { .uri = "/generate_204", .method = HTTP_GET, .handler = handle_captive_redirect };

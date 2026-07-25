@@ -1,5 +1,23 @@
-# Name,    Type, SubType, Offset,    Size,      Flags
-nvs,       data, nvs,     0x9000,    0x4000,
-otadata,   data, ota,     0xd000,    0x2000,
-factory,   app,  factory, 0x10000,   0x300000,
-spiffs,    data, spiffs,  0x310000,  0x0F0000,
+# Reparto de la flash de 16 MB.
+#
+# Dos huecos de firmware (ota_0 / ota_1) para poder ACTUALIZAR POR WI-FI: la
+# actualizacion se escribe en el hueco que NO se esta usando, y solo se arranca
+# desde el si se ha grabado entera. Si algo falla a medias, sigue arrancando la
+# version anterior: no se puede quedar a medias.
+#
+# nvs conserva su sitio y tamano de siempre (0x9000 / 0x4000): la configuracion,
+# las claves Victron y los ajustes NO se pierden al pasar a este reparto.
+#
+# La particion spiffs (la web: index.html, estilos, imagenes) se MUEVE. No pasa
+# nada: se genera al compilar y se graba junto al firmware. OJO: una
+# actualizacion por Wi-Fi NO la toca, solo cambia el firmware; si algun dia
+# cambia la web, hay que grabar por cable.
+#
+# Ocupado: 9 MB de 16. Quedan 7 MB libres.
+#
+# Name,     Type, SubType, Offset,    Size,      Flags
+nvs,        data, nvs,     0x9000,    0x4000,
+otadata,    data, ota,     0xd000,    0x2000,
+ota_0,      app,  ota_0,   0x10000,   0x400000,
+ota_1,      app,  ota_1,   0x410000,  0x400000,
+spiffs,     data, spiffs,  0x810000,  0x0F0000,
