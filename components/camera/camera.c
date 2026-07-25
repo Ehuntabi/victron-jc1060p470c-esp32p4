@@ -83,7 +83,9 @@ static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
  * de display en 12.4 fijo (valor<<4). La constante = 2^CAM_EMA_SHIFT frames:
  * mas = menos grano pero mas arrastre de movimiento. 8 arrastraba ("movida"),
  * 4 es el compromiso. 1 = sin promediado. Tunear aqui. */
-#define CAM_EMA_SHIFT 2
+/* 0 = SIN promediado. Con un frame cada CAM_IDLE_MS (2 s), promediar 4 mezcla 8
+ * SEGUNDOS de escena: quien se mueva sale como un fantasma transparente. */
+#define CAM_EMA_SHIFT 0
 static uint16_t     *s_accum      = NULL;
 static volatile bool s_no_temporal = false;  /* en vigilancia: sin promediado (mas nitido) */
 
@@ -115,7 +117,19 @@ static uint8_t frame_luma(const uint8_t *p, uint32_t bytes)
  * <1 aclara, =1 lineal. 0.5 (raiz) aclaraba demasiado ("muy clara"); 0.72 es un
  * punto intermedio. Solo afecta a la imagen mostrada, NO al frame_luma (que lee
  * el frame crudo) -> el auto-brillo no se ve afectado. Tunear aqui. */
-#define CAM_GAMMA 0.55f   /* mas bajo: levanta sombras (sujeto a contraluz menos oscuro) */
+/* 0.70 (antes 0.55): con el auto-niveles corregido no hace falta levantar las
+ * sombras a lo bruto, y hacerlo amplificaba el ruido (que engorda el JPEG). */
+#define CAM_GAMMA 0.70f
+/* Realce de saturacion: el sensor da el color PLANO (filtros solapados) y no hay
+ * matriz de correccion; se compensa separando cada canal de su luminancia. */
+#define CAM_SATURACION 1.40f
+/* Ventana de pixeles fiables para el balance de blancos gray-world. */
+#define CAM_WB_MIN   16
+#define CAM_WB_MAX  200
+/* Percentiles del auto-niveles. El alto NO puede ser 98 %: en contraluz los
+ * quemados caben en ese 2 % restante, hi se va a 255 y el estirado no hace nada. */
+#define CAM_LEVELS_LO_PCT   2
+#define CAM_LEVELS_HI_PCT  90
 static uint8_t s_gamma_lut[256];
 static bool    s_gamma_ready = false;
 static void gamma_init(void)
@@ -144,34 +158,50 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
         int sy = (oy * SRC_H / THUMB_H) & ~1;
         for (int ox = cx0; ox < cx1; ox += 4) {
             int sx = (ox * SRC_W / THUMB_W) & ~1;
-            int b = raw_px(p, bytes, stride, sx, sy);
-            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
-                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
-            int r = raw_px(p, bytes, stride, sx + 1, sy + 1);
+            /* GBRG, NO BGGR: el init pone 0x3820=0xa8 (volteo vertical), que
+             * intercambia las filas y con ellas el orden de color. Celda 2x2:
+             * G(0,0) B(1,0) R(0,1) G(1,1). Sin esto el verde iba al canal azul
+             * y la imagen salia sin color. */
+            int g = ((int)raw_px(p, bytes, stride, sx, sy) +
+                     (int)raw_px(p, bytes, stride, sx + 1, sy + 1)) / 2;
+            int b = raw_px(p, bytes, stride, sx + 1, sy);
+            int r = raw_px(p, bytes, stride, sx, sy + 1);
             n++;
             hist[(b + 2 * g + r) / 4]++;   /* luma aprox (todos, para auto-niveles) */
             /* WB gray-world SOLO con pixeles bien expuestos: los quemados (ventana a
              * contraluz) desvian las medias y meten dominante (verde/magenta). */
-            if (b < 200 && g < 200 && r < 200) { sB += b; sG += g; sR += r; nwb++; }
+            if (b > CAM_WB_MIN && g > CAM_WB_MIN && r > CAM_WB_MIN &&
+                b < CAM_WB_MAX && g < CAM_WB_MAX && r < CAM_WB_MAX) {
+                sB += b; sG += g; sR += r; nwb++;
+            }
         }
     }
-    float mB = nwb ? (float)sB / nwb : 1, mG = nwb ? (float)sG / nwb : 1, mR = nwb ? (float)sR / nwb : 1;
-    float gB = (mB > 1.0f) ? mG / mB : 1.0f;
-    float gR = (mR > 1.0f) ? mG / mR : 1.0f;
-    if (gB > 4.0f) gB = 4.0f;
-    if (gB < 0.25f) gB = 0.25f;
-    if (gR > 4.0f) gR = 4.0f;
-    if (gR < 0.25f) gR = 0.25f;
-
-    /* Auto-niveles: percentiles 2% (lo) y 98% (hi) del histograma -> estirar a
-     * 0-255. Sube brillo Y contraste adaptandose a la luz de la escena. */
-    uint32_t lo_th = n / 50, hi_th = n - n / 50;   /* 2% / 98% */
+    uint32_t lo_th = (uint32_t)((uint64_t)n * CAM_LEVELS_LO_PCT / 100);
+    uint32_t hi_th = (uint32_t)((uint64_t)n * CAM_LEVELS_HI_PCT / 100);
     int lo = 0, hi = 255;
     uint32_t acc = 0;
     for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= lo_th) { lo = i; break; } }
     acc = 0;
-    for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= n - hi_th) { hi = i; break; } }
+    for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= hi_th) { hi = i; break; } }
     if (hi <= lo) hi = lo + 1;
+
+    /* Ganancias de blanco DESPUES de conocer lo: el gray-world debe medirse sobre
+     * la senal con el punto negro YA restado. Al reves daba tinte: un gris neutro
+     * (30,30,30) con gB=gR=0.78, lo=16 y lscale=10.6 salia G=148 B=78 R=78. */
+    float gB = 1.0f, gR = 1.0f;
+    if (nwb > n / 20) {
+        float mB = (float)sB / nwb - (float)lo;
+        float mG = (float)sG / nwb - (float)lo;
+        float mR = (float)sR / nwb - (float)lo;
+        if (mG > 1.0f) {
+            if (mB > 1.0f) gB = mG / mB;
+            if (mR > 1.0f) gR = mG / mR;
+        }
+        if (gB > 4.0f) gB = 4.0f;
+        if (gB < 0.25f) gB = 0.25f;
+        if (gR > 4.0f) gR = 4.0f;
+        if (gR < 0.25f) gR = 0.25f;
+    }
     float lscale = 255.0f / (float)(hi - lo);
 
     /* Pase 2: debayer + WB + auto-niveles + gamma. */
@@ -179,14 +209,18 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
         int sy = (oy * SRC_H / THUMB_H) & ~1;   /* alinear al inicio de la celda 2x2 */
         for (int ox = 0; ox < THUMB_W; ox++) {
             int sx = (ox * SRC_W / THUMB_W) & ~1;
-            int b = (int)(raw_px(p, bytes, stride, sx, sy) * gB);
-            int g = ((int)raw_px(p, bytes, stride, sx + 1, sy) +
-                     (int)raw_px(p, bytes, stride, sx, sy + 1)) / 2;
-            int r = (int)(raw_px(p, bytes, stride, sx + 1, sy + 1) * gR);
-            /* auto-niveles (estiramiento por percentiles) */
+            /* GBRG (ver nota del pase 1). */
+            int g = ((int)raw_px(p, bytes, stride, sx, sy) +
+                     (int)raw_px(p, bytes, stride, sx + 1, sy + 1)) / 2;
+            int b = raw_px(p, bytes, stride, sx + 1, sy);
+            int r = raw_px(p, bytes, stride, sx, sy + 1);
+            /* 1) punto negro + estirado: IGUAL en los tres canales. */
             b = (int)((b - lo) * lscale);
             g = (int)((g - lo) * lscale);
             r = (int)((r - lo) * lscale);
+            /* 2) balance de blancos SOBRE la senal ya normalizada. */
+            b = (int)(b * gB);
+            r = (int)(r * gR);
             if (b < 0) b = 0;
             if (b > 255) b = 255;
             if (g < 0) g = 0;
@@ -196,6 +230,15 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             uint32_t idx = ((uint32_t)oy * THUMB_W + ox) * 3;
             uint8_t *d = &dst[idx];
             int fb = s_gamma_lut[b], fg = s_gamma_lut[g], fr = s_gamma_lut[r];  /* valor display */
+            {   /* Realce de saturacion alrededor de la luminancia del pixel. */
+                int yl = (fr + 2 * fg + fb) / 4;
+                fr = yl + (int)((fr - yl) * CAM_SATURACION);
+                fg = yl + (int)((fg - yl) * CAM_SATURACION);
+                fb = yl + (int)((fb - yl) * CAM_SATURACION);
+                if (fr < 0) { fr = 0; } else if (fr > 255) { fr = 255; }
+                if (fg < 0) { fg = 0; } else if (fg > 255) { fg = 255; }
+                if (fb < 0) { fb = 0; } else if (fb > 255) { fb = 255; }
+            }
             if (s_accum && !s_no_temporal) {
                 /* Promediado temporal (EMA cte 8): accum = val<<4. Quita grano. En
                  * vigilancia se desactiva (s_no_temporal): con movimiento el promediado
@@ -230,7 +273,10 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
 #define JPEG_H        544   /* recorte del thumbnail 546 -> 544 (multiplo de 16) */
 /* 85: mejora sobre 80 sin disparar el tamano. 92+YUV444 daba ~500KB/foto -> el
  * tráfico del encoder (2D-DMA) + servir esas imagenes por WiFi saturaba el bus -> INT WDT. */
-#define JPEG_QUALITY  85
+#define JPEG_QUALITY  78
+/* 4:2:0 en vez de 4:2:2: la mitad de datos de color; el grano de color (el que
+ * peor comprime) se promedia y casi desaparece. */
+#define JPEG_SUBSAMPLING  JPEG_DOWN_SAMPLING_YUV420
 static jpeg_encoder_handle_t s_jpeg_enc = NULL;
 static uint8_t  *s_jpeg_in  = NULL;     /* RGB888 (jpeg_alloc_encoder_mem) */
 static uint8_t  *s_jpeg_out = NULL;     /* bitstream JPEG (jpeg_alloc_encoder_mem) */
@@ -373,7 +419,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
-                .sub_sample    = JPEG_DOWN_SAMPLING_YUV422,
+                .sub_sample    = JPEG_SUBSAMPLING,
                 .image_quality = JPEG_QUALITY,
                 .width         = JPEG_W,
                 .height        = JPEG_H,
