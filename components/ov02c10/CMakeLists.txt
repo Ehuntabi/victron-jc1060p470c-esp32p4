@@ -1,3 +1,6 @@
+# Driver OFICIAL del OV02C10, tal cual del PR de Espressif
+# (espressif/esp-video-components#46). No tocar a mano: si hace falta cambiar
+# algo, mirar antes si el PR ya lo trae.
 idf_component_register(
     SRCS "ov02c10.c"
     INCLUDE_DIRS "include"
@@ -5,6 +8,6 @@ idf_component_register(
     REQUIRES esp_cam_sensor
 )
 
-# Forzar que el linker conserve el objeto (y con el la seccion .esp_cam_sensor_detect_fn
-# del registro a 0x36). Sin esto el archivo se descarta al no referenciarse ningun simbolo.
+# Sin esto el linker descarta el objeto (nadie referencia sus simbolos) y con el
+# se pierde el registro de auto-deteccion en SCCB 0x36.
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-u ov02c10_detect")

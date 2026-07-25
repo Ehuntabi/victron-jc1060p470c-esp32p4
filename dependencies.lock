@@ -67,7 +67,7 @@ dependencies:
     - esp32s31
     version: 2.2.0
   espressif/esp_codec_dev:
-    component_hash: 8a58569aed3c6e8d858da5419eba4d54ee905d7709cdbe01c42101c1ed0c5319
+    component_hash: 4779f31a3ba3f9b38aee1afe6ccb9ba8f6108dc3a6e77d39d7d714e9a215371b
     dependencies:
     - name: idf
       require: private
@@ -75,7 +75,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.6.1
+    version: 1.6.2
   espressif/esp_h264:
     component_hash: 40cb64e697a8cfd787453165f6ce54e1fb8601844448eb073d677b9f9fde071e
     dependencies:
@@ -92,7 +92,7 @@ dependencies:
   espressif/esp_hosted:
     dependencies: []
     source:
-      path: components/espressif__esp_hosted
+      path: /home/jc/joint/victron/components/espressif__esp_hosted
       type: local
     version: 0.0.27
   espressif/esp_ipa:
@@ -122,7 +122,7 @@ dependencies:
       type: service
     version: 1.2.1
   espressif/esp_lcd_touch_gt911:
-    component_hash: 6029febef66eefd0910d527d7f30292779ccbf22a8dedd2bd69466acf0068a7b
+    component_hash: 07f678e4202d79bbad917805dcec4134ff08344177720f32ec4898267ad9e394
     dependencies:
     - name: espressif/esp_lcd_touch
       registry_url: https://components.espressif.com
@@ -134,7 +134,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.2.0~2
+    version: 1.2.0~3
   espressif/esp_lvgl_port:
     component_hash: fb6c1fdfe70d4ca39a035d63ca394a35f17ec84ce16ff98ecb13a54155d75da4
     dependencies:
