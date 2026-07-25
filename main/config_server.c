@@ -1966,6 +1966,7 @@ static esp_err_t handle_data_index(httpd_req_t *req)
           "<a href='/data/vigilancia.tar'>vigilancia</a>"
           "<a href='/data/config.tar'>config</a>"
           "<a href='/data/logs.tar'>logs</a>"
+          "<a href='/data/viaje.tar'><b>viaje</b></a>"
         "</div>"
         "</body></html>";
     httpd_resp_sendstr(req, html);
@@ -2085,40 +2086,22 @@ static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t
     hdr[155] = ' ';
 }
 
-static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const char *attach_name)
+/* Vuelca el contenido de src_dir dentro de un .tar ya empezado. Si prefix no es
+ * NULL, las entradas salen como "<prefix>/<fichero>": eso es lo que hace que el
+ * paquete de viaje traiga ya las carpetas dentro. Devuelve false si el envio al
+ * cliente fallo (conexion cerrada), para que el llamante corte y no siga
+ * empaquetando carpetas en balde. */
+static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
+                           const char *prefix, char *buf,
+                           size_t *bytes_since_yield)
 {
-    httpd_resp_set_type(req, "application/x-tar");
-    char disp[160];
-    /* Construir manualmente para evitar warning de format-truncation */
-    strcpy(disp, "attachment; filename=");
-    strncat(disp, attach_name, sizeof(disp) - strlen(disp) - 1);
-    httpd_resp_set_hdr(req, "Content-Disposition", disp);
-
     bool dol = camera_sd_bus_lock(3000);   /* opendir lee sectores de dir: serializar con la camara */
     DIR *dp = opendir(src_dir);
     if (dol) camera_sd_bus_unlock();
-    if (!dp) {
-        /* Aun asi devolvemos un TAR vacio (dos bloques cero) */
-        uint8_t zeros[TAR_BLOCK * 2] = {0};
-        httpd_resp_send_chunk(req, (const char*)zeros, sizeof zeros);
-        httpd_resp_send_chunk(req, NULL, 0);
-        return ESP_OK;
-    }
+    if (!dp) return true;   /* carpeta ausente = aporta cero entradas, no es un error */
 
     uint8_t hdr[TAR_BLOCK];
-    char *buf = malloc(2048);
-    if (!buf) {
-        closedir(dp);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
-        return ESP_FAIL;
-    }
-
-    /* Ceder CPU cada ~32 KB enviados: httpd (prio 5) es mas prioritario que
-     * LVGL (prio 4); sin esto, un .tar grande ahoga la UI y el watchdog SW la da
-     * por colgada (3/3) -> esp_restart. Ademas deja respirar a la pila WiFi
-     * (evita el drop de conexion en descargas medianas). */
-    size_t bytes_since_yield = 0;
-
+    bool ok = true;
     struct dirent *de;
     while (1) {
         /* readdir lee sectores de dir: serializar con el GDMA de la camara */
@@ -2136,9 +2119,12 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         if (sr != 0) continue;
         if (st.st_size <= 0) continue;
 
-        /* Header */
-        tar_build_header(hdr, de->d_name, st.st_size, st.st_mtime);
-        if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) break;
+        /* Header. El campo name de ustar son 100 bytes: "bateria/AAAA-MM-DD.csv" cabe. */
+        char entry[100];
+        if (prefix) snprintf(entry, sizeof entry, "%s/%s", prefix, de->d_name);
+        else        snprintf(entry, sizeof entry, "%s", de->d_name);
+        tar_build_header(hdr, entry, st.st_size, st.st_mtime);
+        if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) { ok = false; break; }
 
         /* Contenido en chunks de 2KB */
         /* Cada op de SD bajo el cerrojo; se SUELTA en el envio de red para que la
@@ -2154,17 +2140,18 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
             size_t n = fread(buf, 1, to_read, f);
             if (sl) camera_sd_bus_unlock();
             if (n == 0) break;
-            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { remaining = 0; break; }
+            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { ok = false; remaining = 0; break; }
             remaining -= n;
-            bytes_since_yield += n;
-            if (bytes_since_yield >= 32768) {
-                bytes_since_yield = 0;
+            *bytes_since_yield += n;
+            if (*bytes_since_yield >= 32768) {
+                *bytes_since_yield = 0;
                 vTaskDelay(1);   /* ceder CPU a LVGL/WDT/WiFi (evita el reset por asfixia) */
             }
         }
         bool sl2 = camera_sd_bus_lock(3000);
         fclose(f);
         if (sl2) camera_sd_bus_unlock();
+        if (!ok) break;
 
         /* Padding hasta multiplo de 512 */
         size_t pad = (TAR_BLOCK - (st.st_size % TAR_BLOCK)) % TAR_BLOCK;
@@ -2174,6 +2161,39 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         }
     }
     closedir(dp);
+    return ok;
+}
+
+/* Empaqueta N carpetas en un solo .tar. prefixes puede ser NULL: entonces las
+ * entradas van sin carpeta, que es como se han servido siempre los paquetes por
+ * tema. */
+static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
+                               const char *const *dirs, const char *const *prefixes,
+                               int n)
+{
+    httpd_resp_set_type(req, "application/x-tar");
+    char disp[160];
+    /* Construir manualmente para evitar warning de format-truncation */
+    strcpy(disp, "attachment; filename=");
+    strncat(disp, attach_name, sizeof(disp) - strlen(disp) - 1);
+    httpd_resp_set_hdr(req, "Content-Disposition", disp);
+
+    char *buf = malloc(2048);
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
+
+    /* Ceder CPU cada ~32 KB enviados: httpd (prio 5) es mas prioritario que
+     * LVGL (prio 4); sin esto, un .tar grande ahoga la UI y el watchdog SW la da
+     * por colgada (3/3) -> esp_restart. Ademas deja respirar a la pila WiFi
+     * (evita el drop de conexion en descargas medianas). El contador es comun a
+     * todas las carpetas: lo que asfixia es el total enviado, no cada carpeta. */
+    size_t bytes_since_yield = 0;
+    for (int i = 0; i < n; i++) {
+        if (!tar_stream_dir(req, dirs[i], prefixes ? prefixes[i] : NULL,
+                            buf, &bytes_since_yield)) break;
+    }
     free(buf);
 
     /* Final TAR: dos bloques de zeros */
@@ -2181,6 +2201,12 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
     httpd_resp_send_chunk(req, (const char*)zeros, sizeof zeros);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
+}
+
+static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const char *attach_name)
+{
+    const char *const dirs[1] = { src_dir };
+    return tar_send_dirs(req, attach_name, dirs, NULL, 1);
 }
 
 static esp_err_t handle_data_frigo_tar(httpd_req_t *req)
@@ -2199,6 +2225,18 @@ static esp_err_t handle_data_solar_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
     return handle_tar_dir(req, "/sdcard/solar", "solar.tar");
+}
+
+/* Paquete para el analizador del PC: bateria + solar + frigo con las carpetas
+ * ya puestas dentro, para poder montar un viaje sin sacar la tarjeta.
+ * Las fotos de vigilancia NO van aqui a proposito: pesan mucho y tienen su
+ * propio paquete. */
+static esp_err_t handle_data_viaje_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    static const char *const dirs[]     = { "/sdcard/bateria", "/sdcard/solar", "/sdcard/frigo" };
+    static const char *const prefixes[] = { "bateria",         "solar",         "frigo"         };
+    return tar_send_dirs(req, "viaje.tar", dirs, prefixes, 3);
 }
 
 static esp_err_t handle_data_capturas_tar(httpd_req_t *req)
@@ -2328,6 +2366,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_cfg_tar);
     httpd_uri_t uri_data_logs_tar = { .uri = "/data/logs.tar", .method = HTTP_GET, .handler = handle_data_logs_tar };
     httpd_register_uri_handler(server, &uri_data_logs_tar);
+    httpd_uri_t uri_data_viaje_tar = { .uri = "/data/viaje.tar", .method = HTTP_GET, .handler = handle_data_viaje_tar };
+    httpd_register_uri_handler(server, &uri_data_viaje_tar);
     httpd_uri_t uri_vig = { .uri = "/vigilancia", .method = HTTP_GET, .handler = handle_vigilancia };
     httpd_register_uri_handler(server, &uri_vig);
     httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
