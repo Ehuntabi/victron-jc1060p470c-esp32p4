@@ -136,10 +136,15 @@ static esp_timer_handle_t s_ap_off_timer = NULL;
 
 static void ap_off_timer_kick(void);   /* fwd */
 
-static void ap_auto_off_cb(void *arg)
+/* Cuerpo real del auto-off. Corre en una tarea PROPIA, no en la tarea esp_timer:
+ * esp_wifi_ap_get_sta_list es un RPC al C6 por SDIO y httpd_stop se bloquea hasta
+ * que la tarea httpd sale (hasta send_wait_timeout = 30 s si hay una descarga en
+ * vuelo). En la tarea esp_timer eso paraliza TODOS los demas timers del firmware,
+ * incluido el feed de 1 s del modo excedente solar: pasados 3 s sin refresco,
+ * frigo_solar_tick marca la telemetria como no fresca y ABRE el rele del frigo. */
+static void ap_auto_off_task(void *arg)
 {
     (void)arg;
-    if (!s_httpd) return;   /* ya parado */
     /* El mini C6 esta SIEMPRE asociado al AP (recibe la telemetria UDP por
      * broadcast), asi que "hay algun cliente" contaria SIEMPRE al mini y el
      * portal no se apagaria nunca (testigo verde fijo, se pierde el ahorro).
@@ -154,12 +159,28 @@ static void ap_auto_off_cb(void *arg)
         /* err != ESP_OK: no pudimos consultar (glitch del RPC a la C6) -> por
          * seguridad asumimos que puede haber alguien y seguimos vivos. */
         ap_off_timer_kick();
+        vTaskDelete(NULL);
         return;
     }
-    ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
-    httpd_stop(s_httpd);
-    s_httpd = NULL;
-    /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
+    if (s_httpd) {
+        ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
+        httpd_handle_t h = s_httpd;
+        s_httpd = NULL;          /* publicar el cierre ANTES del stop bloqueante */
+        httpd_stop(h);
+        /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
+    }
+    vTaskDelete(NULL);
+}
+
+static void ap_auto_off_cb(void *arg)
+{
+    (void)arg;
+    if (!s_httpd) return;   /* ya parado */
+    /* Solo lanzar la tarea; nada bloqueante aqui (ver comentario de arriba). */
+    if (xTaskCreate(ap_auto_off_task, "ap_autooff", 3072, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGW(TAG, "Auto-off: no pude crear la tarea, reintento en la proxima ventana");
+        ap_off_timer_kick();
+    }
 }
 
 static void ap_off_timer_ensure(void)

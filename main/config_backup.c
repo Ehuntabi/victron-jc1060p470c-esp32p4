@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>   /* strcasecmp: casar MACs al recuperar la clave AES de NVS */
 #include <stdlib.h>
 #include <stdint.h>
 #include "esp_log.h"
@@ -12,15 +13,8 @@
 
 static const char *TAG = "CFG_BAK";
 
-static void hex_encode(const uint8_t *in, size_t n, char *out_hex)
-{
-    static const char *h = "0123456789abcdef";
-    for (size_t i = 0; i < n; i++) {
-        out_hex[i * 2 + 0] = h[(in[i] >> 4) & 0xF];
-        out_hex[i * 2 + 1] = h[in[i] & 0xF];
-    }
-    out_hex[n * 2] = 0;
-}
+/* hex_encode retirado: era solo para exportar las claves AES, que ya no salen
+ * del aparato. hex_decode se conserva para leer backups antiguos. */
 
 static int hex_decode(const char *hex, uint8_t *out, size_t n)
 {
@@ -97,17 +91,20 @@ esp_err_t config_backup_export(const char *path)
     cJSON_AddStringToObject(wf, "ssid", ssid);
     cJSON_AddBoolToObject(wf, "enabled", wifi_en != 0);
 
-    /* Victron devices */
+    /* Victron devices.
+     * Las claves AES NO se exportan, mismo criterio que el password del Wi-Fi:
+     * este JSON vive en la SD y se sirve entero por HTTP en /data/config.tar,
+     * asi que exportarlas en claro las sacaba del aparato por la red. Al
+     * importar se conserva la clave que ya hubiera en NVS para esa MAC (ver
+     * config_backup_import), asi que un ciclo exportar/importar en el mismo
+     * equipo no pierde nada. */
     cJSON *vict = cJSON_AddArrayToObject(root, "victron_devices");
     victron_device_config_t devs[VICTRON_MAX_DEVICES];
     uint8_t count = 0;
     load_victron_devices(devs, &count, VICTRON_MAX_DEVICES);
-    char hex_key[33];
     for (uint8_t i = 0; i < count; i++) {
-        hex_encode(devs[i].aes_key, 16, hex_key);
         cJSON *d = cJSON_CreateObject();
         cJSON_AddStringToObject(d, "mac", devs[i].mac_address);
-        cJSON_AddStringToObject(d, "aes_key_hex", hex_key);
         cJSON_AddStringToObject(d, "name", devs[i].device_name);
         cJSON_AddBoolToObject(d, "enabled", devs[i].enabled);
         cJSON_AddItemToArray(vict, d);
@@ -216,6 +213,12 @@ esp_err_t config_backup_import(const char *path)
         victron_device_config_t devs[VICTRON_MAX_DEVICES];
         memset(devs, 0, sizeof(devs));
         uint8_t count = 0;
+        /* Config actual: el backup ya no lleva las claves AES (ver export), asi
+         * que se recuperan de aqui casando por MAC. Los backups ANTIGUOS que si
+         * las llevan siguen funcionando (tienen prioridad). */
+        victron_device_config_t cur[VICTRON_MAX_DEVICES];
+        uint8_t cur_count = 0;
+        load_victron_devices(cur, &cur_count, VICTRON_MAX_DEVICES);
         cJSON *d;
         cJSON_ArrayForEach(d, vict) {
             if (count >= VICTRON_MAX_DEVICES) break;
@@ -224,10 +227,27 @@ esp_err_t config_backup_import(const char *path)
             cJSON *jname = cJSON_GetObjectItem(d, "name");
             const char *name = cJSON_IsString(jname) ? jname->valuestring : "";
             bool en = cJSON_IsTrue(cJSON_GetObjectItem(d, "enabled"));
-            if (!mac || !khex) continue;
+            if (!mac) continue;
             strncpy(devs[count].mac_address, mac, sizeof(devs[count].mac_address) - 1);
             strncpy(devs[count].device_name, name, sizeof(devs[count].device_name) - 1);
-            if (hex_decode(khex, devs[count].aes_key, 16) != 0) continue;
+
+            bool have_key = (khex && hex_decode(khex, devs[count].aes_key, 16) == 0);
+            if (!have_key) {
+                for (uint8_t k = 0; k < cur_count; k++) {
+                    if (strcasecmp(cur[k].mac_address, devs[count].mac_address) == 0) {
+                        memcpy(devs[count].aes_key, cur[k].aes_key, 16);
+                        have_key = true;
+                        break;
+                    }
+                }
+            }
+            /* Sin clave utilizable el dispositivo no sirve para nada: no lo
+             * guardamos (evita dejar una entrada con clave a ceros). */
+            if (!have_key) {
+                ESP_LOGW(TAG, "Import: %s sin clave AES (ni en el backup ni en NVS), omitido", mac);
+                memset(&devs[count], 0, sizeof(devs[count]));
+                continue;
+            }
             devs[count].enabled = en;
             count++;
         }

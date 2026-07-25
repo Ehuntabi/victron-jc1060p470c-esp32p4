@@ -224,8 +224,15 @@ static void frigo_solar_tick(void)
     bool relay;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-    /* Frescura efectiva: main debe refrescar; si deja de hacerlo, no fresco. */
-    bool fresh = s_sol_fresh && ((uint32_t)(now - s_sol_feed_ms) < 3000u);
+    /* Frescura efectiva: main debe refrescar; si deja de hacerlo, no fresco.
+     * Ventana de 10 s (antes 3 s): main alimenta cada 1 s desde la tarea
+     * esp_timer COMPARTIDA, donde tambien corren los flush a SD y el auto-off
+     * del portal. Un atasco puntual de esa tarea (fclose lento en la SD SPI)
+     * bastaba para abrir el rele del frigo y obligar a rehacer todo el ciclo
+     * SoC+PV+debounce. Esto NO relaja la comprobacion real de datos rancios:
+     * la frescura de bateria/solar ya la valida dashboard_state con su propia
+     * ventana de 30 s antes de llegar aqui (ver frigo_solar_feed_cb). */
+    bool fresh = s_sol_fresh && ((uint32_t)(now - s_sol_feed_ms) < 10000u);
     frigo_solar_in_t in = {
         .enabled = s_sol_en, .soc_deci = s_sol_soc_deci, .pv_w = s_sol_pv_w,
         .shore = s_sol_shore, .fresh = fresh, .soc_on_pct = s_sol_on_pct,

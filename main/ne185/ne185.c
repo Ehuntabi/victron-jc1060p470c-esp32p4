@@ -630,10 +630,15 @@ void ne185_init(void)
     ESP_ERROR_CHECK(uart_set_pin(NE185_UART_NUM, NE185_UART_TX, NE185_UART_RX,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
+    /* Self-test ANTES de arrancar rs485_task: inyecta tramas de prueba en
+     * s_data y termina con un memset a cero. Con la tarea ya corriendo podia
+     * pisar el estado con valores ficticios o borrar una lectura real recien
+     * llegada de la centralita. */
+    ne185_self_test();
+
     xTaskCreate(rs485_task, "ne185_rs485", 4096, NULL, 5, NULL);
     s_inited = true;
 
-    ne185_self_test();
     ESP_LOGI(TAG,
              "NE185 master listo (UART%d TX=%d RX=%d @ %d baud, poll %d ms)",
              NE185_UART_NUM, NE185_UART_TX, NE185_UART_RX, NE185_UART_BAUD,
