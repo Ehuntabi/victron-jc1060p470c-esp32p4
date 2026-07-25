@@ -88,25 +88,53 @@ static void get_day_filename(char *buf, size_t len)
     }
 }
 
-static esp_err_t mount_sd(void)
+/* Corte de corriente REAL a la microSD, sin tocar el aparato.
+ *
+ * La tarjeta la alimenta el regulador interno del chip (canal 4 = TF_VCC), y ese
+ * regulador NO se apaga en un reinicio por software: la tarjeta conserva su
+ * estado y, si se habia quedado colgada, sigue colgada tras el reinicio (da
+ * `sdmmc_send_cmd 0x108` en todas las lecturas). Hasta ahora la unica salida era
+ * desenchufar la pantalla.
+ *
+ * Soltar el canal lo apaga de verdad, asi que con soltar - esperar - volver a
+ * pedir se consigue el mismo efecto que desenchufar, pero por software. */
+static void sd_power_cycle(const char *motivo)
 {
-    /* Activar LDO interno ch4 para alimentar la microSD (TF_VCC) */
-    if (!s_sd_ldo) {
-        esp_ldo_channel_config_t ldo_cfg = {
-            .chan_id    = 4,
-            .voltage_mv = 3300,
-        };
-        esp_err_t ldo_err = esp_ldo_acquire_channel(&ldo_cfg, &s_sd_ldo);
-        if (ldo_err != ESP_OK) {
-            ESP_LOGW(TAG, "ldo_acquire ch4 failed: %s", esp_err_to_name(ldo_err));
-        } else {
-            ESP_LOGI(TAG, "TF_VCC LDO ch4 @ 3300 mV ON");
-            /* 100 ms para que el rail 3V3 de la SD estabilice ANTES de montar.
-             * 10 ms era muy poco: en arranques marginales la tarjeta aun no
-             * respondia -> timeout intermitente. (La camara dejo el rail justo.) */
-            vTaskDelay(pdMS_TO_TICKS(100));
+    if (s_sd_ldo) {
+        esp_ldo_release_channel(s_sd_ldo);
+        s_sd_ldo = NULL;
+    } else {
+        /* Arranque: el canal puede venir encendido de la sesion anterior (el
+         * reinicio no lo apaga). Se pide y se suelta para forzar el apagado. */
+        esp_ldo_channel_config_t tmp = { .chan_id = 4, .voltage_mv = 3300 };
+        esp_ldo_channel_handle_t h = NULL;
+        if (esp_ldo_acquire_channel(&tmp, &h) == ESP_OK) {
+            esp_ldo_release_channel(h);
         }
     }
+    /* 300 ms para que el condensador del rail se descargue de verdad: con menos
+     * la tarjeta no llega a perder su estado y no sirve de nada. */
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    esp_ldo_channel_config_t ldo_cfg = { .chan_id = 4, .voltage_mv = 3300 };
+    esp_err_t ldo_err = esp_ldo_acquire_channel(&ldo_cfg, &s_sd_ldo);
+    if (ldo_err != ESP_OK) {
+        ESP_LOGW(TAG, "ldo_acquire ch4 failed: %s", esp_err_to_name(ldo_err));
+        s_sd_ldo = NULL;
+        return;
+    }
+    ESP_LOGI(TAG, "TF_VCC: corte de corriente a la SD (%s) -> 3300 mV ON", motivo);
+    /* 100 ms para que el rail 3V3 estabilice ANTES de montar. 10 ms era muy poco:
+     * en arranques marginales la tarjeta aun no respondia. */
+    vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+static esp_err_t mount_sd(void)
+{
+    /* SIEMPRE se arranca dando un corte de corriente a la tarjeta: si venimos de
+     * un reinicio por software (o de un flasheo), es la unica forma de sacarla
+     * de un estado colgado. */
+    sd_power_cycle("arranque");
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
         /* 8: el datalogger/battery_history/logs ya tenian abiertos los 4 handles
@@ -148,7 +176,10 @@ static esp_err_t mount_sd(void)
         err = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &dev_cfg, &mount_config, &s_card);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "SD(SPI) mount intento %d/3: %s", i + 1, esp_err_to_name(err));
-            vTaskDelay(pdMS_TO_TICKS(150));
+            /* Entre intentos, otro corte de corriente: si la tarjeta esta
+             * colgada, esperar mas no sirve de nada; hay que apagarla. */
+            if (i < 2) sd_power_cycle("reintento");
+            else       vTaskDelay(pdMS_TO_TICKS(150));
         }
     }
     if (err != ESP_OK) {
