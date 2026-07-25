@@ -134,6 +134,50 @@ static void downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             d[2] = (uint8_t)(r >> 2);
         }
     }
+
+    /* Estirado de niveles, SOLO si la escena sale muy apagada. De noche, y sobre
+     * todo en vigilancia (con la pantalla apagada), no hay luz: el control
+     * automatico del ISP se queda al maximo y aun asi la foto sale casi negra.
+     * Esto la hace visible.
+     *
+     * Es barato: se hace sobre la miniatura ya reducida (0,5 Mpx) en vez de sobre
+     * el fotograma entero (2 Mpx), y con una sola ganancia comun a los tres
+     * canales, asi que NO deshace el balance de blancos que ha hecho el ISP.
+     * Si la escena ya tiene rango (dia, interior con luz) no toca nada. */
+    uint32_t hist[256] = {0};
+    const uint32_t npx = (uint32_t)THUMB_W * THUMB_H;
+    for (uint32_t i = 0; i < npx; i += 8) {
+        const uint8_t *q = &dst[i * 3];
+        hist[(q[2] + 2 * q[1] + q[0]) / 4]++;
+    }
+    const uint32_t muestras = (npx + 7) / 8;
+    uint32_t acc = 0;
+    int lo = 0, hi = 255;
+    for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= muestras / 50) { lo = i; break; } }
+    acc = 0;
+    for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= muestras / 100) { hi = i; break; } }
+
+    /* Margen: por debajo de 190 de recorrido util, la imagen esta apagada. */
+    if (hi - lo < 190 && hi > lo) {
+        /* Tabla de 256 entradas = estirado + realce de sombras, aplicada de una
+         * sola pasada. El estirado a secas no basta de noche: sube el maximo pero
+         * deja la cara en la parte baja de la escala. La curva de realce (gamma
+         * <1) levanta los medios y bajos, que es donde esta el sujeto.
+         * Cuanto mas apagada la escena, mas realce (0,55 a oscuras, 1,0 con luz).
+         * Ojo: sube tambien el ruido; por eso solo se aplica cuando hace falta. */
+        const int escala = (255 * 256) / (hi - lo);        /* 8.8 fijo */
+        const float realce = 0.55f + 0.45f * ((float)(hi - lo) / 190.0f);
+        uint8_t lut[256];
+        for (int i = 0; i < 256; i++) {
+            int v = (i - lo) * escala >> 8;
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            lut[i] = (uint8_t)(powf((float)v / 255.0f, realce) * 255.0f + 0.5f);
+        }
+        for (uint32_t i = 0; i < npx * 3; i++) {
+            dst[i] = lut[dst[i]];
+        }
+    }
 }
 
 /* Suelo de PSRAM libre a preservar para los buffers DMA del SDIO del C6: si se
@@ -476,6 +520,15 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
 #define MOT_MAX_PHOTOS    300    /* tope por SESION de vigilancia (anti-runaway) */
 
+/* Rafaga de calibracion: el control automatico de exposicion del ISP ajusta UN
+ * paso por fotograma, y aqui vamos a 1 fotograma cada 1,5-2 s (throttle para no
+ * bloquear la SD). Al arrancar o al cambiar de modo eso son minutos hasta que se
+ * asienta -> las fotos salian oscuras. Con esta rafaga corta a ritmo normal se
+ * calibra en ~1 s y luego se vuelve al ritmo lento. */
+#define CAM_WARMUP_FRAMES  40
+#define CAM_WARMUP_MS      25    /* ~30 fps durante la rafaga */
+static volatile int s_warmup = CAM_WARMUP_FRAMES;   /* tambien al arrancar */
+
 static volatile bool s_surveillance = false;
 static volatile bool s_mot_reset    = false;
 static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
@@ -604,6 +657,7 @@ void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
+    s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
     if (on) s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
                                  * no acumulado de por vida (si no, dejaba de capturar) */
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
@@ -856,9 +910,16 @@ static void camera_stream_task(void *arg)
             camera_sd_bus_unlock();
         }
 
-        /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s. */
-        int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
-        if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
+        /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s.
+         * Durante la rafaga de calibracion vamos a ritmo normal para que el
+         * control automatico del ISP se asiente. */
+        if (s_warmup > 0) {
+            s_warmup--;
+            vTaskDelay(pdMS_TO_TICKS(CAM_WARMUP_MS));
+        } else {
+            int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
+            if (idle > 0) vTaskDelay(pdMS_TO_TICKS(idle));
+        }
     }
 }
 
