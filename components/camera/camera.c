@@ -272,7 +272,7 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
     return true;
 }
 
-/* Codifica el ultimo thumbnail (BGR 964x546) a JPEG (recorte 960x544, RGB888).
+/* Codifica el ultimo thumbnail (BGR 960x540) a JPEG (recorte 960x528, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
  * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
@@ -284,7 +284,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         int act = s_thumb_act;
         if (act >= 0 && s_thumb[act] != NULL) {
             const uint8_t *src = s_thumb[act];   /* BGR, THUMB_W*3 por fila */
-            /* Copiar el recorte 960x544 a la entrada RGB888 (swap B<->R). */
+            /* Copiar el recorte 960x528 a la entrada RGB888 (swap B<->R). */
             for (int y = 0; y < JPEG_H; y++) {
                 const uint8_t *s = &src[(uint32_t)y * THUMB_W * 3];
                 uint8_t *d = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
