@@ -1961,6 +1961,7 @@ static esp_err_t handle_data_index(httpd_req_t *req)
         "<div class='dl'>"
           "<a href='/data/frigo.tar'>frigo</a>"
           "<a href='/data/bateria.tar'>bateria</a>"
+          "<a href='/data/solar.tar'>solar</a>"
           "<a href='/data/capturas.tar'>capturas</a>"
           "<a href='/data/vigilancia.tar'>vigilancia</a>"
           "<a href='/data/config.tar'>config</a>"
@@ -2194,6 +2195,12 @@ static esp_err_t handle_data_bateria_tar(httpd_req_t *req)
     return handle_tar_dir(req, "/sdcard/bateria", "bateria.tar");
 }
 
+static esp_err_t handle_data_solar_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    return handle_tar_dir(req, "/sdcard/solar", "solar.tar");
+}
+
 static esp_err_t handle_data_capturas_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
@@ -2243,7 +2250,9 @@ esp_err_t config_server_start(void) {
     cfg.send_wait_timeout = 30;
     cfg.recv_wait_timeout = 30;
     cfg.max_open_sockets = 4;
-    cfg.max_uri_handlers = 32;  /* handlers actuales + /capturas + /captura + margen */
+    cfg.max_uri_handlers = 40;  /* 31 actuales + solar.tar + viaje.tar + margen.
+                                 * Ojo: pasarse del tope hace que el registro
+                                 * falle en silencio (no se comprueba el retorno). */
     cfg.max_resp_headers = 16;
     esp_err_t herr = httpd_start(&server, &cfg);
     if (herr != ESP_OK) {
@@ -2309,7 +2318,9 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_frigo_tar);
     httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
     httpd_register_uri_handler(server, &uri_data_bat_tar);
-    httpd_uri_t uri_data_cap_tar = { .uri = "/data/capturas.tar", .method = HTTP_GET, .handler = handle_data_capturas_tar };
+    httpd_uri_t uri_data_solar_tar = { .uri = "/data/solar.tar", .method = HTTP_GET, .handler = handle_data_solar_tar };
+    httpd_register_uri_handler(server, &uri_data_solar_tar);
+    httpd_uri_t uri_data_cap_tar ={ .uri = "/data/capturas.tar", .method = HTTP_GET, .handler = handle_data_capturas_tar };
     httpd_register_uri_handler(server, &uri_data_cap_tar);
     httpd_uri_t uri_data_vig_tar = { .uri = "/data/vigilancia.tar", .method = HTTP_GET, .handler = handle_data_vigilancia_tar };
     httpd_register_uri_handler(server, &uri_data_vig_tar);
