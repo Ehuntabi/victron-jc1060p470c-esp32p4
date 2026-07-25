@@ -50,10 +50,16 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
     time_t cutoff_delete = now - (time_t)effective_max * 86400;
     time_t cutoff_warn   = now - (time_t)(effective_max - 1) * 86400;
 
-    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido de SD con el GDMA de la camara */
+    /* Timeout corto: los callbacks que llaman aqui (daily_cleanup_cb,
+     * initial_cleanup_cb) corren en la tarea esp_timer compartida; un lock
+     * largo retrasaria TODOS los demas timers del firmware. Si no se
+     * consigue, saltar este ciclo (se reintenta en el siguiente disparo). */
+    if (!camera_sd_bus_lock(200)) {
+        return 0;
+    }
     DIR *dp = opendir(dir);
     if (!dp) {
-        if (sdl) camera_sd_bus_unlock();
+        camera_sd_bus_unlock();
         ESP_LOGD(TAG, "%s no abre (probablemente no montado)", dir);
         return 0;
     }
@@ -87,7 +93,7 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
         }
     }
     closedir(dp);
-    if (sdl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     return hits;
 }
 

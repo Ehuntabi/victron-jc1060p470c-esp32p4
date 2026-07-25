@@ -187,14 +187,27 @@ esp_err_t config_backup_import(const char *path)
     cJSON *al = cJSON_GetObjectItem(root, "alerts");
     if (al) {
         cJSON *v;
-        if ((v = cJSON_GetObjectItem(al, "freezer_minutes")) && cJSON_IsNumber(v))
-            alerts_set_freezer_minutes(v->valueint);
+        /* clamp: backup corrupto no debe dejar umbrales absurdos/negativos */
+        if ((v = cJSON_GetObjectItem(al, "freezer_minutes")) && cJSON_IsNumber(v)) {
+            int m = v->valueint;
+            if (m < 0) m = 0;
+            if (m > 1440) m = 1440;
+            alerts_set_freezer_minutes(m);
+        }
         if ((v = cJSON_GetObjectItem(al, "freezer_temp_c")) && cJSON_IsNumber(v))
             alerts_set_freezer_temp_c((float)v->valuedouble);
-        if ((v = cJSON_GetObjectItem(al, "soc_critical")) && cJSON_IsNumber(v))
-            alerts_set_soc_critical(v->valueint);
-        if ((v = cJSON_GetObjectItem(al, "soc_warning")) && cJSON_IsNumber(v))
-            alerts_set_soc_warning(v->valueint);
+        if ((v = cJSON_GetObjectItem(al, "soc_critical")) && cJSON_IsNumber(v)) {
+            int p = v->valueint;
+            if (p < 0) p = 0;
+            if (p > 100) p = 100;
+            alerts_set_soc_critical(p);
+        }
+        if ((v = cJSON_GetObjectItem(al, "soc_warning")) && cJSON_IsNumber(v)) {
+            int p = v->valueint;
+            if (p < 0) p = 0;
+            if (p > 100) p = 100;
+            alerts_set_soc_warning(p);
+        }
     }
 
     /* Victron devices: sustitución completa */

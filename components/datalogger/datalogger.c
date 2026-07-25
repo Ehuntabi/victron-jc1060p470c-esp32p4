@@ -196,9 +196,11 @@ static void flush_pending_to_sd_impl(void)
     bool need_header = (stat(path, &st) != 0);
 
     /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
-     * activo (contencion SDMMC -> INT WDT -> reinicio). Si no se consigue el bus,
-     * omitir este flush; los datos quedan en el ring para el siguiente. */
-    if (!camera_sd_bus_lock(2500)) {
+     * activo (contencion SDMMC -> INT WDT -> reinicio). Timeout corto: este
+     * callback corre en la tarea esp_timer compartida, un lock largo aqui
+     * retrasaria TODOS los demas timers del firmware. Si no se consigue el
+     * bus, omitir este flush; los datos quedan en el ring para el siguiente. */
+    if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }

@@ -42,6 +42,11 @@ static frigo_state_t      s_state = {
     .assignment   = {0, 1, 2},
 };
 static SemaphoreHandle_t  s_mutex = NULL;
+/* Ultima copia consistente de s_state, actualizada bajo lock en cada lectura
+ * correcta; sirve de fallback si el lock esta ocupado (evita leer s_state
+ * a medio escribir). */
+static frigo_state_t      s_last_good;
+static bool                s_last_good_valid = false;
 static frigo_update_cb_t  s_cb    = NULL;
 static frigo_heartbeat_cb_t s_hb_cb = NULL;
 static onewire_bus_handle_t s_bus  = NULL;
@@ -415,9 +420,15 @@ void frigo_get_state_copy(frigo_state_t *out)
     if (!out) return;
     if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         *out = s_state;
+        s_last_good = s_state;
+        s_last_good_valid = true;
         xSemaphoreGive(s_mutex);
+    } else if (s_last_good_valid) {
+        /* mutex no disponible: devolver la ultima copia consistente en vez
+         * de leer s_state desprotegida (podria estar a medio escribir). */
+        *out = s_last_good;
     } else {
-        /* best-effort si el mutex no esta listo o esta ocupado >50 ms */
+        /* aun no hay ninguna copia consistente (arranque muy temprano) */
         *out = s_state;
     }
 }

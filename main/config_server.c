@@ -414,8 +414,10 @@ esp_err_t wifi_ap_init(void)
             .pmf_cfg        = { .required = false },
         }
     };
-    strncpy((char*)ap_cfg.ap.ssid, ssid, sizeof(ap_cfg.ap.ssid));
-    strncpy((char*)ap_cfg.ap.password, pass, sizeof(ap_cfg.ap.password));
+    strncpy((char*)ap_cfg.ap.ssid, ssid, sizeof(ap_cfg.ap.ssid) - 1);
+    ap_cfg.ap.ssid[sizeof(ap_cfg.ap.ssid) - 1] = '\0';
+    strncpy((char*)ap_cfg.ap.password, pass, sizeof(ap_cfg.ap.password) - 1);
+    ap_cfg.ap.password[sizeof(ap_cfg.ap.password) - 1] = '\0';
 
     /* pass en DEBUG para no persistir la credencial en los logs de SD/serie */
     ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA_WPA2_PSK",

@@ -584,7 +584,10 @@ static void ne185_self_test(void)
     }
     ESP_LOGI(TAG, "SELFTEST resumen: %d/%d casos OK", ok, n);
     /* Restaurar estado limpio tras el test */
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "self_test cleanup: mutex starvation, skip");
+        return;
+    }
     memset(&s_data, 0, sizeof(s_data));
     xSemaphoreGive(s_mutex);
 }
@@ -640,7 +643,11 @@ void ne185_init(void)
 void ne185_get(ne185_data_t *out)
 {
     if (!out || !s_inited) return;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "ne185_get: mutex starvation, devolviendo stale");
+        memset(out, 0, sizeof(*out));
+        return;
+    }
     *out = s_data;
     if (out->fresh && (now_ms() - out->last_update_ms) > FRESH_MS) {
         out->fresh = false;
@@ -695,7 +702,10 @@ void ne185_sim_inject(uint8_t s1, uint8_t r1,
                       bool pump, bool shore)
 {
     if (!s_inited) return;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "sim_inject: mutex starvation, skip");
+        return;
+    }
     s_data.s1 = s1;
     s_data.r1 = r1;
     s_data.light_in = light_in;

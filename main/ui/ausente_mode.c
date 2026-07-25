@@ -13,7 +13,7 @@ extern void settings_ausente_sync_switch(bool on);
 static const char *TAG = "ausente";
 
 typedef enum { AUS_OFF, AUS_PENDING, AUS_ACTIVE } aus_state_t;
-static aus_state_t s_state = AUS_OFF;
+static volatile aus_state_t s_state = AUS_OFF;
 
 static lv_timer_t *s_countdown_timer   = NULL;
 static lv_obj_t   *s_countdown_overlay = NULL;

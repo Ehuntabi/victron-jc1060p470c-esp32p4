@@ -332,9 +332,11 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     }
 
     /* === FASE 2: Escritura sin lock. === */
-    /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Si no se
+    /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Timeout
+     * corto: este callback corre en la tarea esp_timer compartida, un lock
+     * largo aqui retrasaria TODOS los demas timers del firmware. Si no se
      * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego. */
-    if (!camera_sd_bus_lock(2500)) {
+    if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return false;
     }

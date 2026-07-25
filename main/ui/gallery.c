@@ -232,6 +232,8 @@ static void gallery_load_task(void *arg)
             gallery_start_load();
         }
         lvgl_port_unlock();
+    } else {
+        s_loading = false;   /* no se pudo el lock: no dejar la galeria en "Cargando..." para siempre */
     }
     if (img) heap_caps_free(img);   /* cerrado/superado mientras cargaba */
     vTaskDelete(NULL);

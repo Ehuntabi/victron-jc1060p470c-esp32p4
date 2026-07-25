@@ -921,11 +921,25 @@ static void camera_stream_task(void *arg)
          * los escritores de SD (tarea esp_timer) esperan como mucho eso, no el encode.
          * El buffer b sigue retenido mientras esperamos -> GDMA parado, espera segura
          * (reseteando el WDT por si un escritor tarda). */
-        while (!camera_sd_bus_lock(1000)) { esp_task_wdt_reset(); }
-        if (ioctl(fd, VIDIOC_QBUF, &b) != 0)   /* M3: QBUF fallido = buffer perdido */
-            ESP_LOGW(TAG, "stream: QBUF fallo (buffer perdido, idx=%lu)", (unsigned long)b.index);
-        vTaskDelay(pdMS_TO_TICKS(50));   /* GDMA rellena el buffer y para */
-        camera_sd_bus_unlock();
+        /* Acotar reintentos (~5s): si el bus SD esta muerto de verdad, dejar de
+         * auto-alimentar el WDT aqui y saltar el QBUF de esta vuelta -> el TWDT
+         * (respaldo real) puede actuar en vez de quedar alimentado para siempre. */
+        int sd_lock_tries = 0;
+        bool got_sd_lock = false;
+        while (!(got_sd_lock = camera_sd_bus_lock(1000))) {
+            if (++sd_lock_tries >= 5) {
+                ESP_LOGW(TAG, "stream: bus SD no disponible tras %ds, salto QBUF esta vuelta (buffer perdido)",
+                         sd_lock_tries);
+                break;
+            }
+            esp_task_wdt_reset();
+        }
+        if (got_sd_lock) {
+            if (ioctl(fd, VIDIOC_QBUF, &b) != 0)   /* M3: QBUF fallido = buffer perdido */
+                ESP_LOGW(TAG, "stream: QBUF fallo (buffer perdido, idx=%lu)", (unsigned long)b.index);
+            vTaskDelay(pdMS_TO_TICKS(50));   /* GDMA rellena el buffer y para */
+            camera_sd_bus_unlock();
+        }
 
         /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s. */
         int idle = (surv ? CAM_SURV_IDLE_MS : CAM_IDLE_MS) - 50;
