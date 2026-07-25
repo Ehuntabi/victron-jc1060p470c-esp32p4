@@ -203,7 +203,7 @@ struct settings_page_ctx_s {
     char wifi_pass[68];
     uint8_t wifi_ap_enabled;
 };
-#define SETTINGS_PAGE_CTX_MAX 8
+#define SETTINGS_PAGE_CTX_MAX 12
 static settings_page_ctx_t s_page_ctxs[SETTINGS_PAGE_CTX_MAX];
 static size_t s_page_ctx_count = 0;
 
@@ -596,8 +596,11 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_width(card2_row1, lv_pct(100));
     lv_obj_set_height(card2_row1, LV_SIZE_CONTENT);
     lv_obj_set_layout(card2_row1, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card2_row1, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* COLUMN: el desplegable baja a la linea de debajo del titulo para que no
+     * se corte en la card estrecha (pct 49). */
+    lv_obj_set_flex_flow(card2_row1, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(card2_row1, 10, 0);
 
     lv_obj_t *card2_title = lv_label_create(card2_row1);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
@@ -606,7 +609,7 @@ static void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
     lv_obj_t *dd_portal = lv_dropdown_create(card2_row1);
-    lv_obj_set_width(dd_portal, 200);
+    lv_obj_set_width(dd_portal, lv_pct(100));
     lv_dropdown_set_options(dd_portal, "Keys\nLogs\nDashboard");
     {
         nvs_handle_t h;
@@ -867,51 +870,8 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
 
-    /* === Card Trip computer (contadores reseteables del viaje) === */
-    lv_obj_t *card_trip = lv_obj_create(cont);
-    lv_obj_set_width(card_trip, lv_pct(100));
-    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
-    lv_obj_set_style_border_width(card_trip, 1, 0);
-    lv_obj_set_style_radius(card_trip, 12, 0);
-    lv_obj_set_style_pad_all(card_trip, 16, 0);
-    lv_obj_set_style_pad_gap(card_trip, 10, 0);
-    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *trip_head = lv_obj_create(card_trip);
-    lv_obj_remove_style_all(trip_head);
-    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *trip_title = lv_label_create(trip_head);
-    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
-    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
-
-    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
-    lv_obj_set_size(btn_trip_rst, 140, 44);
-    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
-    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
-    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
-    lv_label_set_text(lbl_trip_rst, "Reset");
-    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_trip_rst);
-    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
-
-    s_trip_label = lv_label_create(card_trip);
-    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
-    lv_obj_set_width(s_trip_label, lv_pct(100));
-    /* LONG_DOT en vez de WRAP por riesgo WDT al construir
-     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
-    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
-    trip_label_refresh();
+    /* (La card "Trip computer" se movio al submenu Autocaravana:
+     *  ver create_trip_card / populate_autocaravana.) */
 
     /* === Card 4: Backup/Restore configuracion === */
     lv_obj_t *card_bak = lv_obj_create(cont);
@@ -930,19 +890,17 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *bak_title = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
-    lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Backup configuracion");
+    lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Copia de seguridad de la configuracion");
 
     lv_obj_t *bak_desc = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
     lv_obj_set_width(bak_desc, lv_pct(100));
-    /* \n manual + LONG_CLIP en vez de WRAP por riesgo WDT al construir
-     * (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
-    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_CLIP);
+    /* WRAP (ancho fijo pct 100, no flex_grow -> sin riesgo WDT): las lineas
+     * se reparten llenando todo el ancho de la card. */
+    lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_WRAP);
     lv_label_set_text(bak_desc,
-        "Exporta toda la configuracion (claves Victron, alertas, brillo,\n"
-        "modo nocturno, screensaver, TZ) a /sdcard/config_backup.json.\n"
-        "El password Wi-Fi no se exporta por seguridad.");
+        "Exporta toda la configuracion. El password WI-FI no se exporta por seguridad.");
 
     lv_obj_t *bak_row = lv_obj_create(card_bak);
     lv_obj_remove_style_all(bak_row);
@@ -981,8 +939,8 @@ static void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_add_event_cb(btn_exp, backup_export_cb, LV_EVENT_CLICKED, ui);
     lv_obj_add_event_cb(btn_imp, backup_import_cb, LV_EVENT_CLICKED, ui);
 
-    /* Trip computer + info SD: refresco en vivo mientras las cards esten visibles. */
-    lv_timer_create(sd_trip_timer_cb, 1000, ui);
+    /* El refresco en vivo (trip + espacio libre de la SD) lo lleva un timer
+     * creado en ui_settings_panel_init (sirve a ambas cards estén donde estén). */
 }
 
 static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
@@ -1444,34 +1402,8 @@ static void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* (El card "Carrusel captura pantalla" + visor se movio a su propia pagina
      *  de Settings "Tarjeta SD": create_sd_settings_page.) */
 
-    /* === Card Auto-encendido de cargas al arranque ===
-     * Reubicado desde la antigua pagina "Consola". Al arrancar el P4 enciende
-     * luz interior + bomba de agua via NE185. Estado persistido en NVS. */
-    lv_obj_t *card_auto = lv_obj_create(cont);
-    lv_obj_set_width(card_auto, lv_pct(100));
-    lv_obj_set_height(card_auto, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_auto, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
-    lv_obj_set_style_border_width(card_auto, 1, 0);
-    lv_obj_set_style_radius(card_auto, 12, 0);
-    lv_obj_set_style_pad_all(card_auto, 16, 0);
-    lv_obj_set_style_pad_gap(card_auto, 10, 0);
-    lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *auto_title = lv_label_create(card_auto);
-    lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
-    lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
-
-    lv_obj_t *auto_sw = lv_switch_create(card_auto);
-    lv_obj_set_style_bg_color(auto_sw, lv_color_hex(0xFFAA00),
-                              LV_STATE_CHECKED | LV_PART_INDICATOR);
-    if (ne185_get_autostart()) lv_obj_add_state(auto_sw, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(auto_sw, autostart_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    /* (La card "Auto-encendido (luz + bomba)" se movio al submenu Autocaravana:
+     *  ver create_autostart_card / populate_autocaravana.) */
 }
 
 
@@ -1994,6 +1926,102 @@ static void victron_config_persist(ui_state_t *ui)
     }
 }
 
+/* ── Cards del vehiculo, reubicadas al submenu Autocaravana ─────────────────
+ * (antes vivian en las paginas Pantalla / Tarjeta SD). Se crean de forma
+ * perezosa al abrir Autocaravana, bajo las entradas Frigo y Victron Keys. */
+static void create_autostart_card(lv_obj_t *cont)
+{
+    /* Auto-encendido de cargas al arranque: luz interior + bomba de agua via
+     * NE185. Estado persistido en NVS. */
+    lv_obj_t *card_auto = lv_obj_create(cont);
+    lv_obj_set_width(card_auto, lv_pct(100));
+    lv_obj_set_height(card_auto, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_auto, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
+    lv_obj_set_style_border_width(card_auto, 1, 0);
+    lv_obj_set_style_radius(card_auto, 12, 0);
+    lv_obj_set_style_pad_all(card_auto, 16, 0);
+    lv_obj_set_style_pad_gap(card_auto, 10, 0);
+    lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *auto_title = lv_label_create(card_auto);
+    lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
+
+    lv_obj_t *auto_sw = lv_switch_create(card_auto);
+    lv_obj_set_style_bg_color(auto_sw, lv_color_hex(0xFFAA00),
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ne185_get_autostart()) lv_obj_add_state(auto_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(auto_sw, autostart_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+static void create_trip_card(lv_obj_t *cont)
+{
+    /* Trip computer: contadores reseteables del viaje. */
+    lv_obj_t *card_trip = lv_obj_create(cont);
+    lv_obj_set_width(card_trip, lv_pct(100));
+    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
+    lv_obj_set_style_border_width(card_trip, 1, 0);
+    lv_obj_set_style_radius(card_trip, 12, 0);
+    lv_obj_set_style_pad_hor(card_trip, 16, 0);
+    lv_obj_set_style_pad_ver(card_trip, 8, 0);     /* menos alto: menos relleno arriba/abajo */
+    lv_obj_set_style_pad_gap(card_trip, 4, 0);
+    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *trip_head = lv_obj_create(card_trip);
+    lv_obj_remove_style_all(trip_head);
+    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *trip_title = lv_label_create(trip_head);
+    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
+    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
+
+    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
+    lv_obj_set_size(btn_trip_rst, 140, 44);
+    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
+    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
+    lv_label_set_text(lbl_trip_rst, "Reset");
+    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_trip_rst);
+    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    s_trip_label = lv_label_create(card_trip);
+    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
+    lv_obj_set_width(s_trip_label, lv_pct(100));
+    /* LONG_DOT en vez de WRAP por riesgo WDT al construir. */
+    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
+    trip_label_refresh();
+}
+
+static void create_ausente_card(lv_obj_t *cont);  /* def mas abajo (usa ausente_switch_cb) */
+
+static void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
+{
+    (void)ctx;
+    /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
+     * (anadidas en el init). Orden: Modo ausente, Trip computer, Auto-encendido.
+     * El timer que refresca el trip se crea en el init. */
+    create_ausente_card(page);
+    create_trip_card(page);
+    create_autostart_card(page);
+}
+
 void ui_settings_panel_init(ui_state_t *ui,
                             const char *default_ssid,
                             const char *default_pass,
@@ -2016,6 +2044,9 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *main_header = lv_menu_get_main_header(menu);
     lv_obj_set_style_text_font(main_header, &lv_font_montserrat_28_es, 0);
     lv_obj_set_flex_align(main_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Banda del header mas compacta (sin tocar boton Volver ni titulo): sube el
+     * contenido de todas las paginas un poco hacia arriba. */
+    lv_obj_set_style_pad_ver(main_header, 4, 0);
     s_settings_main_header = main_header;
 
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
@@ -2058,23 +2089,36 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_display = lv_menu_page_create(menu, "PANTALLA");
     lv_obj_t *page_sd = lv_menu_page_create(menu, "TARJETA SD");
     lv_obj_t *page_victron = lv_menu_page_create(menu, "VICTRON KEYS");
+    /* Submenu que agrupa las opciones de la autocaravana (Victron Keys y, mas
+     * adelante, mas opciones del vehiculo). */
+    lv_obj_t *page_autocaravana = lv_menu_page_create(menu, "AUTOCARAVANA");
     /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
      * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
     lv_obj_t *page_about = lv_menu_page_create(menu, "ACERCA DE Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
     lv_obj_set_style_pad_all(main_page, 16, 0);
+    lv_obj_set_style_pad_top(main_page, 4, 0);      /* menos hueco arriba: sube el contenido */
     lv_obj_set_style_pad_row(main_page, 12, 0);
     lv_obj_set_style_pad_column(main_page, 12, 0);
     lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+    /* Subpagina Autocaravana: mismo layout de 2 columnas que el menu principal. */
+    lv_obj_set_style_pad_all(page_autocaravana, 16, 0);
+    lv_obj_set_style_pad_top(page_autocaravana, 4, 0);
+    lv_obj_set_style_pad_row(page_autocaravana, 12, 0);
+    lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
+    lv_obj_set_layout(page_autocaravana, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(page_autocaravana, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(page_autocaravana, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
     /* Frigo: eager (es la pagina mas usada). populate=NULL para que el lazy
      * dispatch no haga nada; ui_frigo_panel_init mas abajo construye el
      * contenido. */
-    settings_menu_add_entry(ui, main_page, menu, page_frigo,
-        "Frigo",         "Sensores, ventilador y umbrales",
+    settings_menu_add_entry(ui, page_autocaravana, menu, page_frigo,
+        "Opciones Frigo", "Sensores, ventilador y umbrales",
         LV_SYMBOL_REFRESH,    0x00C851, NULL);
     settings_menu_add_entry(ui, main_page, menu, page_logs,
         "Historial en graficos", "Histórico SD: batería y nevera",
@@ -2101,15 +2145,28 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_sound,
         "Sonido y alertas","Volumen, jingles y alertas",
         LV_SYMBOL_VOLUME_MAX, 0xFF1744, populate_sound);
-    settings_menu_add_entry(ui, main_page, menu, page_victron,
+    /* Autocaravana: submenu que agrupa las opciones del vehiculo. Por ahora solo
+     * contiene "Victron Keys"; se iran anadiendo mas entradas dentro. */
+    settings_menu_add_entry(ui, main_page, menu, page_autocaravana,
+        "Autocaravana",  "Frigo, Victron, cargas y viaje",
+        LV_SYMBOL_HOME,       0xEC407A, populate_autocaravana);
+    /* Victron Keys ahora vive DENTRO de la subpagina Autocaravana */
+    settings_menu_add_entry(ui, page_autocaravana, menu, page_victron,
         "Victron Keys",  "Dispositivos BLE y claves",
         LV_SYMBOL_GPS,        0xEC407A, populate_keys);
-    /* Mostrar warning al entrar en Victron Keys */
+    /* Mostrar warning al entrar en Victron Keys (card ahora en la subpagina) */
     {
-        lv_obj_t *cont_vk = lv_obj_get_child(main_page, lv_obj_get_child_cnt(main_page) - 1);
+        lv_obj_t *cont_vk = lv_obj_get_child(page_autocaravana,
+                                             lv_obj_get_child_cnt(page_autocaravana) - 1);
         if (cont_vk) {
             lv_obj_add_event_cb(cont_vk, victron_keys_clicked_cb, LV_EVENT_CLICKED, ui);
         }
+    }
+    /* Cards de entrada de Autocaravana un poco menos negras que las del menu
+     * principal (estilo compartido = 0x1A1A1A), para distinguir el submenu. */
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(page_autocaravana); i++) {
+        lv_obj_set_style_bg_color(lv_obj_get_child(page_autocaravana, i),
+                                  lv_color_hex(0x2E2E38), 0);
     }
     settings_menu_add_entry(ui, main_page, menu, page_about,
         "Acerca de",     "Sistema, uptime, IP y reinicio",
@@ -2123,6 +2180,10 @@ void ui_settings_panel_init(ui_state_t *ui,
     /* Frigo eager (lazy dispatch skipped via populate=NULL). El resto se
      * construye al navegar por primera vez. */
     ui_frigo_panel_init(ui);
+
+    /* Timer 1 s: refresca el Trip computer y el espacio libre de la SD (cada
+     * card solo cuando esta visible). Antes se creaba al abrir la pagina SD. */
+    lv_timer_create(sd_trip_timer_cb, 1000, ui);
 
     lv_obj_t *tab = ui->tab_settings;
 
@@ -3774,6 +3835,51 @@ static void ausente_switch_cb(lv_event_t *e)
     ausente_request(lv_obj_has_state(sw, LV_STATE_CHECKED));
 }
 
+/* Card "Modo ausente / vigilancia", reubicada al submenu Autocaravana (antes
+ * estaba en la pagina "Sonido y alertas"). */
+static void create_ausente_card(lv_obj_t *cont)
+{
+    lv_obj_t *card_aus = lv_obj_create(cont);
+    lv_obj_set_width(card_aus, lv_pct(100));
+    lv_obj_set_height(card_aus, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_aus, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_aus, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card_aus, 1, 0);
+    lv_obj_set_style_radius(card_aus, 12, 0);
+    lv_obj_set_style_pad_all(card_aus, 16, 0);
+    lv_obj_set_style_pad_gap(card_aus, 8, 0);
+    lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *aus_row = lv_obj_create(card_aus);
+    lv_obj_remove_style_all(aus_row);
+    lv_obj_set_size(aus_row, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(aus_row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(aus_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(aus_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *aus_title = lv_label_create(aus_row);
+    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
+
+    lv_obj_t *aus_sw = lv_switch_create(aus_row);
+    lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
+
+    lv_obj_t *aus_hint = lv_label_create(card_aus);
+    lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(aus_hint, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_width(aus_hint, lv_pct(100));
+    lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(aus_hint,
+                      "Apaga la pantalla y vigila por movimiento. Se activa tras 10 s.\n"
+                      "Para salir: 4 toques en la esquina superior izquierda.");
+}
+
 static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
@@ -3865,46 +3971,8 @@ static void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     s_mute_switch = sw;
     if (!audio_is_muted()) s_vol_saved = audio_get_volume();
 
-    /* === Card: Modo ausente / vigilancia === */
-    lv_obj_t *card_aus = lv_obj_create(cont);
-    lv_obj_set_width(card_aus, lv_pct(100));
-    lv_obj_set_height(card_aus, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_aus, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(card_aus, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_style_border_width(card_aus, 1, 0);
-    lv_obj_set_style_radius(card_aus, 12, 0);
-    lv_obj_set_style_pad_all(card_aus, 16, 0);
-    lv_obj_set_style_pad_gap(card_aus, 8, 0);
-    lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
-
-    lv_obj_t *aus_row = lv_obj_create(card_aus);
-    lv_obj_remove_style_all(aus_row);
-    lv_obj_set_size(aus_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(aus_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(aus_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(aus_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *aus_title = lv_label_create(aus_row);
-    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
-    lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
-
-    lv_obj_t *aus_sw = lv_switch_create(aus_row);
-    lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
-    lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
-
-    lv_obj_t *aus_hint = lv_label_create(card_aus);
-    lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(aus_hint, lv_color_hex(0xAAAAAA), 0);
-    lv_obj_set_width(aus_hint, lv_pct(100));
-    lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(aus_hint,
-                      "Apaga la pantalla y vigila por movimiento. Se activa tras 10 s.\n"
-                      "Para salir: 4 toques en la esquina superior izquierda.");
+    /* (La card "Modo ausente / vigilancia" se movio al submenu Autocaravana:
+     *  ver create_ausente_card / populate_autocaravana.) */
 
     /* === Card 2: Bateria === */
     lv_obj_t *card2 = lv_obj_create(cont);
