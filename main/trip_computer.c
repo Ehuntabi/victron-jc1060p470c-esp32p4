@@ -176,6 +176,17 @@ void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi)
     xSemaphoreGive(s_mtx);
 }
 
+void trip_computer_flush(void)
+{
+    /* Fuerza el guardado en NVS ahora mismo. Normalmente se hace cada 5 min;
+     * al finalizar un viaje hay que asegurarlo antes de apagar o sacar la SD. */
+    if (!s_mtx) return;
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    const trip_snap_t snap = trip_snapshot_locked();
+    xSemaphoreGive(s_mtx);
+    write_nvs(&snap);
+}
+
 void trip_computer_reset(void)
 {
     if (!s_mtx) trip_computer_init();

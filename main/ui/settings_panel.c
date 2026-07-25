@@ -41,6 +41,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include "watchdog.h"
 #include "config_backup.h"
 #include "trip_computer.h"
+#include "solar_daily.h"
 #include <time.h>
 
 // Forward declaration for view update function
@@ -72,6 +73,7 @@ static void about_timer_cb(lv_timer_t *t);
 static lv_obj_t *s_trip_label = NULL;
 static void trip_label_refresh(void);
 static void trip_reset_btn_cb(lv_event_t *e);
+static void trip_finish_btn_cb(lv_event_t *e);
 static void backup_export_cb(lv_event_t *e);
 static void backup_import_cb(lv_event_t *e);
 static void sd_trip_timer_cb(lv_timer_t *t);
@@ -703,15 +705,34 @@ static void create_trip_card(lv_obj_t *cont)
     lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
 
-    lv_obj_t *btn_trip_rst = lv_btn_create(trip_head);
+    /* Dos botones: empezar viaje (pone a cero) y finalizarlo (guarda y suelta
+     * la tarjeta). Van juntos porque son las dos acciones del viaje. */
+    lv_obj_t *trip_btns = lv_obj_create(trip_head);
+    lv_obj_remove_style_all(trip_btns);
+    lv_obj_set_size(trip_btns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(trip_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(trip_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(trip_btns, 8, 0);
+
+    lv_obj_t *btn_trip_rst = lv_btn_create(trip_btns);
     lv_obj_set_size(btn_trip_rst, 140, 44);
-    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0x00897B), 0);
     lv_obj_set_style_radius(btn_trip_rst, 8, 0);
     lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
-    lv_label_set_text(lbl_trip_rst, "Reset");
+    lv_label_set_text(lbl_trip_rst, "Inicio");
     lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_trip_rst);
     lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_trip_fin = lv_btn_create(trip_btns);
+    lv_obj_set_size(btn_trip_fin, 150, 44);
+    lv_obj_set_style_bg_color(btn_trip_fin, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_radius(btn_trip_fin, 8, 0);
+    lv_obj_t *lbl_trip_fin = lv_label_create(btn_trip_fin);
+    lv_label_set_text(lbl_trip_fin, "Finalizar");
+    lv_obj_set_style_text_font(lbl_trip_fin, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_trip_fin);
+    lv_obj_add_event_cb(btn_trip_fin, trip_finish_btn_cb, LV_EVENT_CLICKED, NULL);
 
     s_trip_label = lv_label_create(card_trip);
     lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
@@ -1344,6 +1365,8 @@ static void trip_label_refresh(void)
  * quedan identicas en estilo y tamano. La accion (on_confirm) se ejecuta solo si
  * se pulsa el boton derecho; el modal se cierra siempre. */
 typedef void (*ui_confirm_action_t)(void);
+static void ui_show_confirm_dialog(const char *title, const char *msg,
+                                   const char *ok_txt, ui_confirm_action_t on_confirm);
 static lv_obj_t *s_confirm_modal = NULL;
 static ui_confirm_action_t s_confirm_action = NULL;
 
@@ -1357,6 +1380,13 @@ static void ui_confirm_btn_cb(lv_event_t *e)
     if (s_confirm_modal) { lv_obj_del(s_confirm_modal); s_confirm_modal = NULL; }
     s_confirm_action = NULL;
     if (ok && action) action();
+}
+
+/* Aviso de solo lectura: el mismo modal pero con un unico boton y sin accion.
+ * Se usa al finalizar viaje para decir que ya se puede sacar la tarjeta. */
+static void ui_show_info_dialog(const char *title, const char *msg)
+{
+    ui_show_confirm_dialog(title, msg, "Entendido", NULL);
 }
 
 static void ui_show_confirm_dialog(const char *title, const char *msg,
@@ -1440,8 +1470,40 @@ static void trip_reset_btn_cb(lv_event_t *e)
 {
     (void)e;
     ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Trip computer",
-        "Resetear contadores del viaje?\nEsta accion no se puede deshacer.",
-        "Resetear", do_trip_reset_action);
+        "Empezar un viaje nuevo?\nLos contadores vuelven a cero.",
+        "Empezar", do_trip_reset_action);
+}
+
+/* Cierre de viaje: se vuelca a la tarjeta TODO lo que hay pendiente en memoria y
+ * se desmonta, para poder sacarla sin corromper nada. Despues ya no se escribe
+ * mas hasta reiniciar; el aviso final lo deja claro. */
+static void do_trip_finish_action(void)
+{
+    ESP_LOGI(TAG_SETTINGS, "Finalizar viaje: volcando todo a la tarjeta");
+    battery_history_flush();     /* historico de corriente/tension/panel */
+    solar_daily_flush();         /* dia de produccion en curso */
+    trip_computer_flush();       /* contadores del viaje */
+
+    const esp_err_t err = datalogger_close_sd();   /* incluye su propio flush */
+    if (err == ESP_OK) {
+        ui_show_info_dialog(LV_SYMBOL_SD_CARD "  Viaje finalizado",
+            "Todo guardado.\n\nYa puedes sacar la tarjeta.\n\n"
+            "Para volver a registrar, reinicia la pantalla.");
+    } else {
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  Viaje finalizado",
+            "Se ha guardado todo lo pendiente, pero la tarjeta\n"
+            "no se ha podido soltar (puede estar ocupada).\n\n"
+            "Espera unos segundos y vuelve a intentarlo.");
+    }
+}
+
+static void trip_finish_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_show_confirm_dialog(LV_SYMBOL_SD_CARD "  Finalizar viaje",
+        "Se guarda todo y se suelta la tarjeta\npara poder sacarla.\n\n"
+        "Despues no se registra nada mas\nhasta reiniciar la pantalla.",
+        "Finalizar", do_trip_finish_action);
 }
 
 /* ── Aviso de arranque "Nuevo viaje?" ─────────────────────────────

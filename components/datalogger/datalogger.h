@@ -20,3 +20,10 @@ int datalogger_get_count(void);
 const datalogger_entry_t *datalogger_get_entry(int index);
 char *datalogger_get_csv(void);
 void datalogger_flush(void);
+
+/* Cierra los ficheros y DESMONTA la tarjeta para poder sacarla sin corromperla.
+ * Despues de esto no se escribe mas hasta reiniciar. */
+esp_err_t datalogger_close_sd(void);
+
+/* true si la tarjeta sigue montada. */
+bool datalogger_sd_montada(void);

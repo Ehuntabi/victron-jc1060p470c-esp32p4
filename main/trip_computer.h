@@ -30,6 +30,10 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi);
  * (no es un subconjunto exacto: parte puede ir directa al consumo). */
 void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
 
+/* Guarda los contadores en NVS ahora mismo (normalmente se hace cada 5 min).
+ * Al finalizar un viaje, antes de sacar la tarjeta o apagar. */
+void trip_computer_flush(void);
+
 /* Reset manual de todos los contadores. Guarda inmediatamente en NVS. */
 void trip_computer_reset(void);
 

@@ -203,6 +203,40 @@ static void format_temp(char *buf, size_t len, float t)
     else snprintf(buf, len, "%.1f", t);
 }
 
+/* Cierre limpio para poder SACAR la tarjeta sin corromperla.
+ *
+ * Desmontar de verdad importa: FAT deja metadatos en cache y, si se saca la
+ * tarjeta con ficheros a medio cerrar, se pierde lo ultimo escrito o se corrompe
+ * el directorio. Despues de esto NO se vuelve a escribir hasta reiniciar.
+ *
+ * El corte de corriente a la tarjeta (ver sd_power_cycle) tambien la deja en
+ * estado limpio para el siguiente arranque. */
+esp_err_t datalogger_close_sd(void)
+{
+    datalogger_flush();          /* lo que quede en RAM, al fichero */
+
+    if (!s_card) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    /* Tomar el cerrojo del bus: la camara puede estar escribiendo una foto de
+     * vigilancia justo ahora y desmontar por debajo la dejaria a medias. */
+    const bool con_cerrojo = camera_sd_bus_lock(3000);
+    esp_err_t err = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
+    if (err == ESP_OK) {
+        s_card = NULL;
+        ESP_LOGI(TAG, "tarjeta desmontada: ya se puede sacar");
+    } else {
+        ESP_LOGW(TAG, "no se pudo desmontar: %s", esp_err_to_name(err));
+    }
+    if (con_cerrojo) camera_sd_bus_unlock();
+    return err;
+}
+
+bool datalogger_sd_montada(void)
+{
+    return s_card != NULL;
+}
+
 void datalogger_flush(void)
 {
     flush_pending_to_sd_impl();
