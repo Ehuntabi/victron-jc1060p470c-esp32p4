@@ -34,6 +34,7 @@
 #include "log_capture/log_capture.h"
 #include "energy_today.h"
 #include "trip_computer.h"
+#include "solar_daily.h"
 #include "ui/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
 #include "ne185/ne185.h"
 #include "net/udp_tx.h"
@@ -465,6 +466,9 @@ void app_main(void)
     alerts_init();
     energy_today_init();
     trip_computer_init();
+    /* Produccion solar dia a dia (compara temporadas: placa de 125 W vs la de
+     * 250/300 W prevista). Despues del montaje de SD: lee su historico de ahi. */
+    solar_daily_init();
 
     /* NE185 (RS-485 directo via MAX485 onboard, UART1 GPIO 26/27).
      * Habla con el derivador Nordelettronica NE185 que sustituye al

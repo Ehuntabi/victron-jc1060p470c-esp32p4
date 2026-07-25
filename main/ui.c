@@ -33,6 +33,7 @@
 #include "datalogger.h"
 #include "dashboard_state.h"
 #include "trip_computer.h"
+#include "solar_daily.h"
 #include "log_browser.h"
 #include "screenshot.h"
 #include "frigo.h"
@@ -578,6 +579,7 @@ void ui_on_panel_data(const victron_data_t *d) {
     if (d->type == VICTRON_BLE_RECORD_BATTERY_MONITOR) {
         const victron_record_battery_monitor_t *b = &d->record.battery;
         trip_computer_on_battery(b->battery_current_milli, b->battery_voltage_centi);
+        solar_daily_on_battery(b->battery_current_milli, b->battery_voltage_centi);
     } else if (d->type == VICTRON_BLE_RECORD_LYNX_SMART_BMS) {
         const victron_record_lynx_smart_bms_t *b = &d->record.lynx;
         trip_computer_on_battery((int32_t)b->battery_current_deci * 100,
@@ -657,6 +659,10 @@ void ui_on_panel_data(const victron_data_t *d) {
         case VICTRON_BLE_RECORD_SOLAR_CHARGER:
             battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
                 (int32_t)d->record.solar.battery_current_deci * 100, 0);
+            /* Potencia del PANEL (produccion real): va aparte de la corriente
+             * que entra a la bateria, porque parte puede ir directa al consumo. */
+            battery_history_update_pv((int32_t)d->record.solar.pv_power_w);
+            solar_daily_on_pv((int32_t)d->record.solar.pv_power_w);
             break;
         case VICTRON_BLE_RECORD_ORION_XS:
             /* Output current = into battery side */

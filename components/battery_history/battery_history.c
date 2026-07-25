@@ -35,6 +35,11 @@ typedef struct {
     int64_t    acc_sum_cv;
     uint32_t   acc_count_cv;
     int32_t    last_centi_volts;
+    /* Acumulador de potencia del panel (W). Igual que la tension: cuenta aparte
+     * porque solo la aporta el cargador solar. */
+    int64_t    acc_sum_pv;
+    uint32_t   acc_count_pv;
+    int32_t    last_pv_watts;
     bool       has_latest;
 } bh_buffer_t;
 
@@ -95,16 +100,28 @@ static int32_t now_seconds(void)
 }
 
 static void buffer_push(bh_buffer_t *b, int32_t ts, int32_t avg, int32_t mx,
-                        int32_t mn, int32_t cv, bool valid)
+                        int32_t mn, int32_t cv, int32_t pv, bool valid)
 {
     b->points[b->write_idx].ts = ts;
     b->points[b->write_idx].milli_amps = avg;
     b->points[b->write_idx].milli_amps_max = mx;
     b->points[b->write_idx].milli_amps_min = mn;
     b->points[b->write_idx].centi_volts = cv;
+    b->points[b->write_idx].pv_watts = pv;
     b->points[b->write_idx].valid = valid;
     b->write_idx = (b->write_idx + 1) % BH_POINTS;
     if (b->write_idx == 0) b->wrapped = true;
+}
+
+void battery_history_update_pv(int32_t watts)
+{
+    if (!s_bufs || watts < 0) return;
+    BH_LOCK();
+    bh_buffer_t *b = &s_bufs[BH_SRC_SOLAR_CHARGER];
+    b->acc_sum_pv += watts;
+    b->acc_count_pv++;
+    b->last_pv_watts = watts;
+    BH_UNLOCK();
 }
 
 void battery_history_update_latest(bh_source_t src, int32_t milli_amps,
@@ -143,6 +160,7 @@ static void bh_reset_for_new_day(void)
         b->acc_sum_ma = 0; b->acc_count = 0;
         b->acc_max_ma = 0; b->acc_min_ma = 0;
         b->acc_sum_cv = 0; b->acc_count_cv = 0;
+        b->acc_sum_pv = 0; b->acc_count_pv = 0;
         /* Se conservan last_milli/last_centi_volts/has_latest para que la
          * grafica del nuevo dia arranque con continuidad desde el ultimo valor. */
     }
@@ -182,14 +200,19 @@ static void sample_timer_cb(void *arg)
         int32_t cv = (b->acc_count_cv > 0)
             ? (int32_t)(b->acc_sum_cv / (int64_t)b->acc_count_cv)
             : b->last_centi_volts;
+        /* Potencia media del panel en el intervalo. -1 = esta fuente no la
+         * aporta (todas menos el cargador solar). */
+        int32_t pv = (b->acc_count_pv > 0)
+            ? (int32_t)(b->acc_sum_pv / (int64_t)b->acc_count_pv)
+            : ((i == BH_SRC_SOLAR_CHARGER && b->has_latest) ? b->last_pv_watts : -1);
         if (b->acc_count > 0) {
             int32_t avg = (int32_t)(b->acc_sum_ma / (int64_t)b->acc_count);
-            buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, cv, true);
+            buffer_push(b, ts, avg, b->acc_max_ma, b->acc_min_ma, cv, pv, true);
         } else if (b->has_latest) {
             /* Sin nuevas muestras este intervalo: repite el último valor */
-            buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, cv, true);
+            buffer_push(b, ts, b->last_milli, b->last_milli, b->last_milli, cv, pv, true);
         } else {
-            buffer_push(b, ts, 0, 0, 0, 0, false);
+            buffer_push(b, ts, 0, 0, 0, 0, -1, false);
         }
         /* Reset acumulador del siguiente intervalo */
         b->acc_sum_ma = 0;
@@ -198,6 +221,8 @@ static void sample_timer_cb(void *arg)
         b->acc_min_ma = 0;
         b->acc_sum_cv = 0;
         b->acc_count_cv = 0;
+        b->acc_sum_pv = 0;
+        b->acc_count_pv = 0;
     }
     BH_UNLOCK();
 }
@@ -349,7 +374,7 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     }
     bool io_error = false;
     if (need_header) {
-        if (fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min,centi_volts\n") < 0) {
+        if (fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min,centi_volts,pv_watts\n") < 0) {
             io_error = true;
         }
     }
@@ -372,13 +397,14 @@ static bool bh_flush_to_sd_dated(time_t file_date)
             } else {
                 snprintf(ts_str, sizeof ts_str, "BOOT+%ld", (long)pt);
             }
-            int r = fprintf(f, "%s,%s,%ld,%ld,%ld,%ld\n",
+            int r = fprintf(f, "%s,%s,%ld,%ld,%ld,%ld,%ld\n",
                             ts_str,
                             battery_history_source_name((bh_source_t)s),
                             (long)p->milli_amps,
                             (long)p->milli_amps_max,
                             (long)p->milli_amps_min,
-                            (long)p->centi_volts);
+                            (long)p->centi_volts,
+                            (long)p->pv_watts);
             if (r < 0 || ferror(f)) { io_error = true; break; }
             total_written++;
         }

@@ -25,6 +25,9 @@ typedef struct {
     int32_t milli_amps_max;  /* máximo del intervalo */
     int32_t milli_amps_min;  /* mínimo del intervalo */
     int32_t centi_volts;     /* avg tension en el intervalo (centivoltios); 0 = sin dato */
+    int32_t pv_watts;        /* avg potencia del PANEL en el intervalo (W); -1 = sin dato.
+                                Solo lo aporta el cargador solar. Es la produccion real
+                                del panel, distinta de lo que entra a la bateria. */
     bool    valid;
 } bh_point_t;
 
@@ -35,6 +38,10 @@ esp_err_t battery_history_init(void);
  * aporta (solo el BatteryMonitor se grafica como tension). */
 void battery_history_update_latest(bh_source_t src, int32_t milli_amps,
                                    int32_t centi_volts);
+
+/* Potencia del panel (W) que informa el cargador solar. Va aparte de
+ * update_latest porque solo esa fuente la tiene. */
+void battery_history_update_pv(int32_t watts);
 
 /* Get full series (caller-allocated array of BH_POINTS).
  * Returns the number of valid points and out_oldest_ts/out_newest_ts. */
