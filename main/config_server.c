@@ -430,7 +430,12 @@ esp_err_t wifi_ap_init(void)
         .ap = {
             .ssid_len       = strlen(ssid),
             .max_connection = 4,
-            .channel        = 6,
+            /* Canal 1, no 6: en casa del usuario habia 7 redes vecinas con
+             * senal fuerte en el 6, y el AP tardaba en aceptar clientes, se
+             * caia a los 10-20 s o directamente no dejaba asociarse. El 1 y el
+             * 11 son los otros dos canales que no se solapan. Si el 1 tambien
+             * diera guerra, probar el 11. */
+            .channel        = 1,
             /* Solo WPA2 (sin WPA legacy, más resistente a downgrade). */
             .authmode       = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg        = { .required = false },
