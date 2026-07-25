@@ -668,13 +668,19 @@ void ui_on_panel_data(const victron_data_t *d) {
             solar_daily_on_pv((int32_t)d->record.solar.pv_power_w);
             break;
         case VICTRON_BLE_RECORD_ORION_XS:
-            /* Output current = into battery side */
+            /* Corriente Y tension de salida (lado bateria). Con la tension se
+             * puede saber cuantos kWh ha metido el DC-DC, no solo cuando estuvo
+             * cargando. */
             battery_history_update_latest(BH_SRC_ORION_XS,
-                (int32_t)d->record.orion.output_current_deci * 100, 0);
+                (int32_t)d->record.orion.output_current_deci * 100,
+                (int32_t)d->record.orion.output_voltage_centi);
             break;
         case VICTRON_BLE_RECORD_AC_CHARGER:
+            /* Idem para el cargador de 230 V: con su tension se puede repartir
+             * cuanto ha cargado cada fuente. */
             battery_history_update_latest(BH_SRC_AC_CHARGER,
-                (int32_t)d->record.ac_charger.battery_current_1_deci * 100, 0);
+                (int32_t)d->record.ac_charger.battery_current_1_deci * 100,
+                (int32_t)d->record.ac_charger.battery_voltage_1_centi);
             break;
         case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
             /* Orion Tr (0x04): no da corriente, solo estado. Pulso on/off en la
