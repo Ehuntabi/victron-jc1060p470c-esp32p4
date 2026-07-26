@@ -176,7 +176,10 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_font(lbl_pass, &lv_font_montserrat_24_es, 0);
     lv_label_set_text(lbl_pass, "Password:");
 
-    const char *ap_password = (default_pass && default_pass[0] != '\0') ? default_pass : DEFAULT_AP_PASSWORD;
+    /* Lo que haya guardado; en blanco si aun no se ha generado (wifi_ap_init la
+     * crea aleatoria al arrancar). Antes caia a DEFAULT_AP_PASSWORD y ensenaba
+     * "12345678" aunque el AP usara otra cosa. 2026-07-26. */
+    const char *ap_password = (default_pass && default_pass[0] != '\0') ? default_pass : "";
 
     /* Boton ojito a la IZQUIERDA del textarea */
     ui->wifi.password_toggle = lv_btn_create(pass_row);

@@ -220,7 +220,13 @@ esp_err_t datalogger_close_sd(void)
     }
     /* Tomar el cerrojo del bus: la camara puede estar escribiendo una foto de
      * vigilancia justo ahora y desmontar por debajo la dejaria a medias. */
-    const bool con_cerrojo = camera_sd_bus_lock(3000);
+    /* Si el cerrojo caduca NO se desmonta: hacerlo igual es justo lo que el
+     * comentario de arriba dice que hay que evitar (dejar a medias la foto que
+     * la camara esta escribiendo). Se avisa y que lo reintente. 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) {
+        ESP_LOGW(TAG, "la camara esta usando la tarjeta: no se desmonta, reintenta");
+        return ESP_ERR_TIMEOUT;
+    }
     esp_err_t err = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
     if (err == ESP_OK) {
         s_card = NULL;
@@ -228,7 +234,7 @@ esp_err_t datalogger_close_sd(void)
     } else {
         ESP_LOGW(TAG, "no se pudo desmontar: %s", esp_err_to_name(err));
     }
-    if (con_cerrojo) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     return err;
 }
 
