@@ -24,6 +24,7 @@ static const char *TAG = "FRIGO";
 #define NVS_KEY_SOL_EN   "sol_en"
 #define NVS_KEY_SOL_ON   "sol_on"
 #define NVS_KEY_SOL_OFF  "sol_off"
+#define NVS_KEY_ROLEADDR "roleaddr"
 
 #define READ_INTERVAL_MS   2000
 #define DS18B20_CONV_MS     800
@@ -51,6 +52,16 @@ static frigo_update_cb_t  s_cb    = NULL;
 static frigo_heartbeat_cb_t s_hb_cb = NULL;
 static onewire_bus_handle_t s_bus  = NULL;
 static ds18b20_device_handle_t s_devs[FRIGO_MAX_SENSORS] = {0};
+/* Config del bus guardada: hace falta para poder recrearlo en caliente. */
+static onewire_bus_config_t s_bus_cfg = { .bus_gpio_num = FRIGO_ONEWIRE_GPIO };
+static onewire_bus_rmt_config_t s_rmt_cfg = { .max_rx_bytes = 10 };
+/* Ultimo estado de banderas visto, para avisar solo cuando aparece el problema
+ * y no en cada escaneo mientras dura. */
+static uint8_t s_scan_flags = 0;
+/* La UI pide escaneo desde otro hilo; frigo_task lo atiende. */
+static volatile bool s_rescan_req = false;
+/* Definida mas abajo (junto al resto del escaneo), pero frigo_task la usa antes. */
+static void escanear_y_aplicar(bool recuperar);
 /* Cuando el sim inyecta datos (banco sin sondas), frigo_task deja de escribir
  * s_state para no pisar los valores simulados (evita el parpadeo de las temps). */
 static volatile bool s_sim_mode = false;
@@ -75,6 +86,12 @@ static void nvs_load(void)
     size_t  len = sizeof(buf);
     if (nvs_get_blob(h, NVS_KEY_ASSIGN, buf, &len) == ESP_OK)
         memcpy(s_state.assignment, buf, FRIGO_MAX_SENSORS);
+    /* Direccion de la sonda de cada rol. Si no esta (primer arranque con esta
+     * version), queda a cero y escanear_y_aplicar hace la migracion desde
+     * assignment[]. */
+    size_t rlen = sizeof(s_state.role_addr);
+    if (nvs_get_blob(h, NVS_KEY_ROLEADDR, s_state.role_addr, &rlen) != ESP_OK)
+        memset(s_state.role_addr, 0, sizeof(s_state.role_addr));
     uint8_t v;
     if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
     if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
@@ -93,6 +110,8 @@ static void nvs_save_task(void *arg)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             nvs_set_blob(h, NVS_KEY_ASSIGN, s_state.assignment, FRIGO_MAX_SENSORS);
+            nvs_set_blob(h, NVS_KEY_ROLEADDR, s_state.role_addr,
+                         sizeof(s_state.role_addr));
             nvs_set_u8(h, NVS_KEY_TMIN, s_state.T_min);
             nvs_set_u8(h, NVS_KEY_TMAX, s_state.T_max);
             nvs_set_u8(h, NVS_KEY_FANMIN, s_state.fan_min_pct);
@@ -259,6 +278,23 @@ static void frigo_task(void *arg)
          * s_state para no pisar sus valores. El watchdog ya se alimento arriba. */
         if (s_sim_mode) { vTaskDelay(pdMS_TO_TICKS(1000)); continue; }
 
+        /* Escaneo del bus: bajo peticion, o de fondo cada 5 min.
+         * Va AQUI, antes del corte por "no hay sondas": si no, cuando el bus se
+         * queda vacio nunca se volveria a mirar. El periodico usa el camino
+         * barato (sin recrear el bus) para no molestar a un sistema que va bien;
+         * el manual usa el de recuperacion, porque el usuario acaba de tocar el
+         * cableado y lo normal es que el bus este en mal estado. */
+        static uint32_t ultimo_scan_ms = 0;
+        uint32_t ahora_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        if (s_rescan_req) {
+            s_rescan_req = false;
+            escanear_y_aplicar(true);
+            ultimo_scan_ms = ahora_ms;
+        } else if (ahora_ms - ultimo_scan_ms >= 5 * 60 * 1000) {
+            escanear_y_aplicar(false);
+            ultimo_scan_ms = ahora_ms;
+        }
+
         /* Si no hay sensores DS18B20, igualmente atendemos los cambios de
          * modo OFF/50/100 (que no requieren temperatura) para que la UI
          * refleje correctamente el ventilador. Solo AUTO necesita sensor.
@@ -295,21 +331,29 @@ static void frigo_task(void *arg)
         float temps[FRIGO_MAX_SENSORS] = {-127.0f, -127.0f, -127.0f};
 
         /* Broadcast: disparar conversión en todos a la vez */
+        /* Los handles pueden ser NULL: el bus enumero la sonda pero crear el
+         * dispositivo DS18B20 fallo (ver escanear_y_aplicar). */
         for (int i = 0; i < s_state.n_sensors; i++)
-            ds18b20_trigger_temperature_conversion(s_devs[i]);
+            if (s_devs[i]) ds18b20_trigger_temperature_conversion(s_devs[i]);
         vTaskDelay(pdMS_TO_TICKS(DS18B20_CONV_MS));
 
         for (int i = 0; i < s_state.n_sensors; i++) {
             float t;
-            if (ds18b20_get_temperature(s_devs[i], &t) == ESP_OK)
+            if (s_devs[i] && ds18b20_get_temperature(s_devs[i], &t) == ESP_OK)
                 temps[i] = t;
         }
 
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             #define TEMP_INVALID(t) ((t) < -120.0f || (t) > 125.0f)
-            float ta = temps[s_state.assignment[FRIGO_SLOT_ALETAS]];
-            float tc = temps[s_state.assignment[FRIGO_SLOT_CONGELADOR]];
-            float te = temps[s_state.assignment[FRIGO_SLOT_EXTERIOR]];
+            /* Un rol sin sonda vale FRIGO_SONDA_AUSENTE (0xFF) y desbordaria
+             * temps[]. -127.0f es el "sin dato" que ya usa todo el componente. */
+            #define TEMP_DE(slot) \
+                (s_state.assignment[(slot)] < s_state.n_sensors \
+                     ? temps[s_state.assignment[(slot)]] : -127.0f)
+            float ta = TEMP_DE(FRIGO_SLOT_ALETAS);
+            float tc = TEMP_DE(FRIGO_SLOT_CONGELADOR);
+            float te = TEMP_DE(FRIGO_SLOT_EXTERIOR);
+            #undef TEMP_DE
             s_state.T_Aletas     = TEMP_INVALID(ta) ? -127.0f : ta;
             s_state.T_Congelador = TEMP_INVALID(tc) ? -127.0f : tc;
             s_state.T_Exterior   = TEMP_INVALID(te) ? -127.0f : te;
@@ -321,8 +365,13 @@ static void frigo_task(void *arg)
                 case FRIGO_MODE_100:  pct = 100; break;
                 case FRIGO_MODE_AUTO:
                 default:
-                    pct = compute_fan(s_state.T_Aletas, s_state.T_min,
-                                      s_state.T_max, s_state.fan_percent);
+                    /* Sin sonda de aletas no se inventa una temperatura: mismo
+                     * criterio que la rama "sin DS18B20" de mas arriba, el
+                     * ventilador se para. */
+                    pct = (s_state.T_Aletas <= -120.0f)
+                            ? 0
+                            : compute_fan(s_state.T_Aletas, s_state.T_min,
+                                          s_state.T_max, s_state.fan_percent);
                     break;
             }
             if (pct != s_state.fan_percent) {
@@ -338,6 +387,88 @@ static void frigo_task(void *arg)
         if (s_cb) s_cb(&s_state);
     }
     vTaskDelete(NULL);
+}
+
+/* ── Escaneo del bus 1-Wire ──────────────────────────────────── */
+
+/* Recorre el bus y deja en 'out' las direcciones encontradas. Devuelve cuantas.
+ *
+ * 'recuperar' controla el coste: en el escaneo periodico se intenta primero por
+ * las buenas (un reset sobre el bus que ya existe). Solo si eso falla se destruye
+ * y recrea el bus, porque tras un timeout el canal RX del RMT queda en
+ * INVALID_STATE y los resets siguientes sobre el mismo handle NO tocan el cable
+ * (son un no-op silencioso). */
+static int bus_enumerar(uint64_t out[FRIGO_MAX_SENSORS], bool recuperar)
+{
+    int n = 0;
+    const int intentos = recuperar ? 5 : 1;
+
+    for (int intento = 0; intento < intentos && n == 0; intento++) {
+        if (intento > 0) {
+            onewire_bus_del(s_bus);
+            vTaskDelay(pdMS_TO_TICKS(200));
+            if (onewire_new_bus_rmt(&s_bus_cfg, &s_rmt_cfg, &s_bus) != ESP_OK) {
+                ESP_LOGE(TAG, "intento %d: recrear bus fallo", intento);
+                s_bus = NULL;
+                continue;
+            }
+        }
+        if (!s_bus) continue;
+
+        esp_err_t rr = onewire_bus_reset(s_bus);
+        if (rr != ESP_OK) {
+            /* DEBUG y no INFO: esto corre cada 5 min y llenaria el log de la SD. */
+            ESP_LOGD(TAG, "intento %d: reset=%s", intento, esp_err_to_name(rr));
+            vTaskDelay(pdMS_TO_TICKS(150));
+            continue;
+        }
+        onewire_device_iter_handle_t iter;
+        if (onewire_new_device_iter(s_bus, &iter) != ESP_OK) continue;
+        onewire_device_t dev;
+        while (onewire_device_iter_get_next(iter, &dev) == ESP_OK
+               && n < FRIGO_MAX_SENSORS) {
+            out[n++] = dev.address;
+        }
+        onewire_del_device_iter(iter);
+    }
+    return n;
+}
+
+/* Escanea y deja el estado coherente. Llamar SOLO desde frigo_task, o desde
+ * frigo_init antes de arrancarla: toca s_devs y s_state. */
+static void escanear_y_aplicar(bool recuperar)
+{
+    uint64_t hay[FRIGO_MAX_SENSORS] = {0};
+    int n = bus_enumerar(hay, recuperar);
+
+    /* Handles DS18B20 nuevos: los viejos no valen si el bus se ha recreado. */
+    for (int i = 0; i < FRIGO_MAX_SENSORS; i++) s_devs[i] = NULL;
+    for (int i = 0; i < n; i++) {
+        onewire_device_t dev = { .bus = s_bus, .address = hay[i] };
+        ds18b20_config_t ds_cfg = {};
+        if (ds18b20_new_device_from_enumeration(&dev, &ds_cfg, &s_devs[i]) != ESP_OK)
+            s_devs[i] = NULL;
+    }
+
+    /* Primer arranque con esta version: anclar a las direcciones la asignacion
+     * por posicion que ya tuviera guardada el usuario. */
+    frigo_sondas_migrar(hay, n, s_state.assignment, s_state.role_addr);
+
+    frigo_scan_result_t r = frigo_sondas_resolver(hay, n, s_state.role_addr);
+
+    if (s_mutex) xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s_state.n_sensors = (uint8_t)n;
+    for (int i = 0; i < FRIGO_MAX_SENSORS; i++) {
+        s_state.sensors[i].address = (i < n) ? hay[i] : 0;
+        s_state.sensors[i].valid   = (i < n);
+        s_state.assignment[i]      = r.asignacion[i];
+    }
+    s_state.scan_event |= frigo_sondas_evento(s_scan_flags, r.flags);
+    s_scan_flags = r.flags;
+    if (s_mutex) xSemaphoreGive(s_mutex);
+
+    ESP_LOGI(TAG, "%d sonda(s) en bus GPIO%d (flags=0x%02x)",
+             n, FRIGO_ONEWIRE_GPIO, r.flags);
 }
 
 /* ── API pública ─────────────────────────────────────────────── */
@@ -364,56 +495,19 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
     gpio_config(&sol_cfg);
     gpio_set_level(FRIGO_SOLAR_RELAY_GPIO, 0);
 
-    onewire_bus_config_t bus_cfg = { .bus_gpio_num = FRIGO_ONEWIRE_GPIO };
-    onewire_bus_rmt_config_t rmt_cfg = { .max_rx_bytes = 10 };
     ESP_RETURN_ON_ERROR(
-        onewire_new_bus_rmt(&bus_cfg, &rmt_cfg, &s_bus),
+        onewire_new_bus_rmt(&s_bus_cfg, &s_rmt_cfg, &s_bus),
         TAG, "onewire_new_bus_rmt falló");
 
-    /* Enumeracion con reintento REAL. Un DS18B20 puede no dar pulso de presencia
-     * en el primer reset frio tras el power-on. El bucle antiguo solo repetia
-     * onewire_bus_reset() sobre el mismo handle, pero tras un timeout el canal RX
-     * del RMT queda en INVALID_STATE y los reintentos ya no tocan el cable (no-op).
-     * Por eso aqui cada intento DESTRUYE y RECREA el bus: solo asi el reset vuelve
-     * a ser real. */
-    s_state.n_sensors = 0;
-    for (int intento = 0; intento < 5 && s_state.n_sensors == 0; intento++) {
-        if (intento > 0) {
-            onewire_bus_del(s_bus);
-            vTaskDelay(pdMS_TO_TICKS(200));
-            if (onewire_new_bus_rmt(&bus_cfg, &rmt_cfg, &s_bus) != ESP_OK) {
-                ESP_LOGE(TAG, "intento %d: recrear bus fallo", intento);
-                continue;
-            }
-        }
+    /* Primer escaneo por el camino de recuperacion: un DS18B20 puede no dar pulso
+     * de presencia en el primer reset frio tras el power-on, y ahi hay que
+     * destruir y recrear el bus entre intentos (ver bus_enumerar). */
+    escanear_y_aplicar(true);
 
-        esp_err_t rr = onewire_bus_reset(s_bus);
-        ESP_LOGI(TAG, "intento %d: reset=%s", intento, esp_err_to_name(rr));
-        if (rr != ESP_OK) { vTaskDelay(pdMS_TO_TICKS(150)); continue; }
-
-        onewire_device_iter_handle_t iter;
-        onewire_new_device_iter(s_bus, &iter);
-        onewire_device_t dev;
-        while (onewire_device_iter_get_next(iter, &dev) == ESP_OK
-               && s_state.n_sensors < FRIGO_MAX_SENSORS) {
-            ds18b20_config_t ds_cfg = {};
-            if (ds18b20_new_device_from_enumeration(&dev, &ds_cfg,
-                    &s_devs[s_state.n_sensors]) == ESP_OK) {
-                s_state.sensors[s_state.n_sensors].address = dev.address;
-                s_state.sensors[s_state.n_sensors].valid   = true;
-                ESP_LOGI(TAG, "DS18B20 [%d] encontrado", s_state.n_sensors);
-                s_state.n_sensors++;
-            }
-        }
-        onewire_del_device_iter(iter);
-    }
-    ESP_LOGI(TAG, "%d sensor(es) DS18B20 en bus GPIO%d",
-             s_state.n_sensors, FRIGO_ONEWIRE_GPIO);
-
-    for (int i = 0; i < FRIGO_MAX_SENSORS; i++) {
-        if (s_state.assignment[i] >= s_state.n_sensors)
-            s_state.assignment[i] = 0;
-    }
+    /* NOTA: aqui habia un apaño que, ante un indice fuera de rango, reapuntaba el
+     * rol a la sonda 0 EN SILENCIO -> se regulaba con la sonda equivocada sin
+     * decir nada. Ya no hace falta: los roles van por direccion, y el que no tiene
+     * sonda presente se queda en FRIGO_SONDA_AUSENTE. */
 
     fan_pwm_init();
     fan_set_percent(0);
@@ -462,6 +556,16 @@ esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx)
         return ESP_ERR_INVALID_ARG;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         s_state.assignment[slot] = sensor_idx;
+        /* Anclar el rol a la sonda FISICA elegida: es role_addr lo que sobrevive
+         * a un reescaneo, assignment se recalcula a partir de el. */
+        s_state.role_addr[slot] = s_state.sensors[sensor_idx].address;
+        /* El usuario acaba de decidir, asi que la situacion ya no es "hay una
+         * sonda sin rol": recalcular las banderas para no volver a avisar. */
+        uint64_t hay[FRIGO_MAX_SENSORS] = {0};
+        for (int i = 0; i < s_state.n_sensors; i++)
+            hay[i] = s_state.sensors[i].address;
+        s_scan_flags = frigo_sondas_resolver(hay, s_state.n_sensors,
+                                             s_state.role_addr).flags;
         xSemaphoreGive(s_mutex);
     }
     nvs_save();
@@ -596,4 +700,21 @@ bool frigo_solar_get_active(void)
         xSemaphoreGive(s_mutex);
     }
     return v;
+}
+
+/* ── Escaneo bajo peticion ───────────────────────────────────── */
+
+void frigo_request_rescan(void)
+{
+    /* Solo una bandera: el escaneo real lo hace frigo_task. Tocar el bus 1-Wire
+     * desde el hilo de la UI se pisaria con la lectura de temperaturas. */
+    s_rescan_req = true;
+}
+
+void frigo_ack_scan_event(void)
+{
+    if (s_mutex && xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_state.scan_event = 0;
+        xSemaphoreGive(s_mutex);
+    }
 }
