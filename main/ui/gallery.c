@@ -315,6 +315,13 @@ static void gallery_close_cb(lv_event_t *e)
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
 }
 
+/* Cierre programatico, para el carrusel de capturas. Reusa el mismo camino que
+ * el boton de cerrar. 2026-07-26. */
+void ui_gallery_close(void)
+{
+    gallery_close_cb(NULL);
+}
+
 /* Boton translucido cuadrado con un simbolo centrado. */
 static lv_obj_t *make_nav_btn(lv_obj_t *parent, const char *sym,
                               lv_align_t align, int dx, lv_event_cb_t cb)

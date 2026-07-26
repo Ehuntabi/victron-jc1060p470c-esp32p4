@@ -82,6 +82,8 @@ void ui_refresh_victron_device_list(void);
 ui_state_t *ui_get_state(void);
 void ui_close_chart_screen(void);
 void ui_close_battery_history_screen(void);
+void ui_show_solar_history_screen(ui_state_t *ui);
+void ui_close_solar_history_screen(void);
 
 /* Capturas por WiFi: navega a la pantalla idx (0..count-1) y devuelve su nombre
  * corto, o NULL si idx esta fuera de rango. Ver ui.c / config_server.c. */

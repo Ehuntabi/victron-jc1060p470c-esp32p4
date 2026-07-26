@@ -19,6 +19,7 @@
 #include "alerts.h"
 #include "victron_products.h"
 #include "ui/frigo_panel.h"
+#include "ui/gallery.h"
 #include "ne185/ne185.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
@@ -2890,15 +2891,6 @@ static void tour_settle(void)
  * Ajustes. Un unico disparo a la vez (s_capture_running). */
 static volatile bool s_capture_running = false;
 
-static const struct { ui_view_mode_t mode; const char *name; } CAPTURE_SCREENS[] = {
-    { UI_VIEW_MODE_OVERVIEW,        "01_overview"        },
-    { UI_VIEW_MODE_DEFAULT_BATTERY, "02_bateria"         },
-    { UI_VIEW_MODE_SOLAR_CHARGER,   "03_solar"           },
-    { UI_VIEW_MODE_BATTERY_MONITOR, "04_monitor_bateria" },
-    { UI_VIEW_MODE_INVERTER,        "05_inversor"        },
-    { UI_VIEW_MODE_DCDC_CONVERTER,  "06_dcdc"            },
-};
-
 /* Guarda una pantalla contando aciertos y recordando el PRIMER error (para
  * diagnostico sin serie: distingue "sin PSRAM" de "SD ocupada/error"). */
 static void cap_save(const char *path, int *ok, esp_err_t *first_err)
@@ -2940,39 +2932,38 @@ static void capture_carousel_task(void *arg)
     esp_err_t first_err = ESP_OK;
     char path[96];
 
-    ESP_LOGI("CAPCAR", "Carrusel de captura: 8 pantallas -> %s", TOUR_DIR);
+    const int total = ui_tour_screen_count();
+    ESP_LOGI("CAPCAR", "Carrusel de captura: %d pantallas -> %s", total, TOUR_DIR);
 
-    /* 6 device-views con datos reales. screenshot_save_jpeg ya crea el directorio
-     * padre bajo camera_sd_bus_lock, no hace falta mkdir aqui. JPG ~10x mas
-     * pequeno que el BMP -> captura y posterior visor mucho mas rapidos. */
-    for (size_t i = 0; i < sizeof(CAPTURE_SCREENS) / sizeof(CAPTURE_SCREENS[0]); ++i) {
-        tour_set_view(ui, CAPTURE_SCREENS[i].mode);
-        tour_settle();
-        snprintf(path, sizeof(path), TOUR_DIR "/%s.jpg", CAPTURE_SCREENS[i].name);
+    /* UN SOLO bucle sobre ui_tour_goto_screen: es la MISMA lista que usa la
+     * pagina web /capturas, asi que una pantalla nueva en el tour entra aqui
+     * sola. Antes habia una lista propia de 8 que se habia quedado corta: se
+     * dejaba fuera el historico solar, la galeria, los 3 detalles de tarjeta y
+     * TODAS las paginas de ajustes. El numero delante del nombre mantiene el
+     * orden al listarlas. screenshot_save_jpeg ya crea el directorio padre bajo
+     * camera_sd_bus_lock, no hace falta mkdir. 2026-07-26. */
+    for (int i = 0; i < total; ++i) {
+        const char *name = ui_tour_goto_screen(i);   /* ya hace tour_settle() */
+        if (!name) continue;
+        snprintf(path, sizeof(path), TOUR_DIR "/%02d_%s.jpg", i, name);
         cap_save(path, &ok, &first_err);
     }
 
-    /* Grafico historico de bateria (overlay) */
-    if (lvgl_port_lock(1000)) { ui_show_battery_history_screen(ui); lvgl_port_unlock(); }
-    tour_settle();
-    cap_save(TOUR_DIR "/07_log_bateria.jpg", &ok, &first_err);
-    if (lvgl_port_lock(1000)) { ui_close_battery_history_screen(); lvgl_port_unlock(); }
-
-    /* Grafico de temperaturas del frigo (overlay) */
-    if (lvgl_port_lock(1000)) { ui_show_chart_screen(ui); lvgl_port_unlock(); }
-    tour_settle();
-    cap_save(TOUR_DIR "/08_log_frigo.jpg", &ok, &first_err);
-    if (lvgl_port_lock(1000)) { ui_close_chart_screen(); lvgl_port_unlock(); }
-
-    /* Restaurar: volver a Live + la vista previa. */
+    /* Restaurar: cerrar lo que quede abierto y volver a Live + la vista previa. */
     if (lvgl_port_lock(1000)) {
+        ui_close_chart_screen();
+        ui_close_battery_history_screen();
+        ui_close_solar_history_screen();
+        ui_gallery_close();
+        ui_close_card_detail();
         ui->view_selection.mode = saved_mode;
         lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
         ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
         lvgl_port_unlock();
     }
 
-    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/8 capturas (first_err=0x%x)", ok, (int)first_err);
+    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/%d capturas (first_err=0x%x)",
+             ok, total, (int)first_err);
     capture_carousel_finish(ui, ok, first_err);
     s_capture_running = false;
     vTaskDelete(NULL);
@@ -3011,14 +3002,25 @@ static const struct { ui_view_mode_t mode; const char *name; } TOUR_LIVE[] = {
     { UI_VIEW_MODE_INVERTER,        "inversor"        },
     { UI_VIEW_MODE_DCDC_CONVERTER,  "dcdc"            },
 };
+/* Detalle de tarjeta: solo estas 3 categorias pintan algo (ver el switch de
+ * ui_show_card_detail); el resto cae al default y saldria vacio. */
+static const struct { victron_record_type_t cat; const char *name; } TOUR_CARD[] = {
+    { VICTRON_BLE_RECORD_SOLAR_CHARGER,   "detalle_solar"   },
+    { VICTRON_BLE_RECORD_BATTERY_MONITOR, "detalle_bateria" },
+    { VICTRON_BLE_RECORD_DCDC_CONVERTER,  "detalle_dcdc"    },
+};
 static const char *TOUR_SET_NAMES[] = {
     "frigo", "logs", "wifi", "display", "sonido", "victron_keys", "about"
 };
 #define TOUR_N_LIVE   ((int)(sizeof(TOUR_LIVE) / sizeof(TOUR_LIVE[0])))
-#define TOUR_I_BATLOG  (TOUR_N_LIVE)       /* 6  */
-#define TOUR_I_FRIGLOG (TOUR_N_LIVE + 1)   /* 7  */
-#define TOUR_I_SETMAIN (TOUR_N_LIVE + 2)   /* 8  */
-#define TOUR_I_SETSUB0 (TOUR_N_LIVE + 3)   /* 9  */
+#define TOUR_N_CARD   ((int)(sizeof(TOUR_CARD) / sizeof(TOUR_CARD[0])))
+#define TOUR_I_BATLOG  (TOUR_N_LIVE)              /* 6  */
+#define TOUR_I_FRIGLOG (TOUR_N_LIVE + 1)          /* 7  */
+#define TOUR_I_SOLLOG  (TOUR_N_LIVE + 2)          /* 8  historico solar */
+#define TOUR_I_GALLERY (TOUR_N_LIVE + 3)          /* 9  galeria */
+#define TOUR_I_CARD0   (TOUR_N_LIVE + 4)          /* 10..12 detalles de tarjeta */
+#define TOUR_I_SETMAIN (TOUR_I_CARD0 + TOUR_N_CARD)  /* 13 */
+#define TOUR_I_SETSUB0 (TOUR_I_SETMAIN + 1)          /* 14 */
 
 int ui_tour_screen_count(void)
 {
@@ -3034,6 +3036,9 @@ const char *ui_tour_goto_screen(int idx)
     if (lvgl_port_lock(1000)) {
         ui_close_chart_screen();
         ui_close_battery_history_screen();
+        ui_close_solar_history_screen();
+        ui_gallery_close();
+        ui_close_card_detail();
         lvgl_port_unlock();
     }
 
@@ -3055,6 +3060,28 @@ const char *ui_tour_goto_screen(int idx)
             lvgl_port_unlock();
         }
         name = "log_frigo";
+    } else if (idx == TOUR_I_SOLLOG) {
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            ui_show_solar_history_screen(ui);
+            lvgl_port_unlock();
+        }
+        name = "log_solar";
+    } else if (idx == TOUR_I_GALLERY) {
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            ui_gallery_open();
+            lvgl_port_unlock();
+        }
+        name = "galeria";
+    } else if (idx >= TOUR_I_CARD0 && idx < TOUR_I_CARD0 + TOUR_N_CARD) {
+        int c = idx - TOUR_I_CARD0;
+        if (lvgl_port_lock(1000)) {
+            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
+            ui_show_card_detail(ui, TOUR_CARD[c].cat);
+            lvgl_port_unlock();
+        }
+        name = TOUR_CARD[c].name;
     } else if (idx == TOUR_I_SETMAIN) {
         if (lvgl_port_lock(1000)) {
             ui_settings_panel_go_to_main();
