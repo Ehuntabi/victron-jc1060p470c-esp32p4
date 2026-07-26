@@ -687,6 +687,17 @@ static void http_auth_init(void)
                           "(pass en NVS; verla/cambiarla en Settings)", user);
         }
     }
+    /* Si NVS no abrio, user y pass siguen VACIOS: antes se construia igual la
+     * cabecera y salia "Basic Og==" (usuario y clave en blanco), o sea que
+     * entraba cualquiera. Se deja s_auth_header vacio a proposito: check_basic_auth
+     * exige que no lo este, asi que el portal responde 401 a todo. Cerrado por
+     * defecto: sin credenciales, no se entra. 2026-07-26. */
+    if (user[0] == '\0' || pass[0] == '\0') {
+        s_auth_header[0] = '\0';
+        ESP_LOGE(TAG, "sin credenciales (NVS no disponible): el portal web queda cerrado");
+        return;
+    }
+
     /* Construir cabecera "Basic <base64(user:pass)>" una vez. */
     char up[68];
     int n = snprintf(up, sizeof(up), "%s:%s", user, pass);
@@ -2106,8 +2117,11 @@ static void tar_write_octal(char *dst, size_t len, uint64_t val)
 static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t mtime)
 {
     memset(hdr, 0, TAR_BLOCK);
-    /* name: 100 bytes */
-    strncpy((char*)&hdr[0], name, 99);
+    /* name: campo de 100 bytes. El llamante ya descarta los nombres que no caben
+     * (antes se copiaban cortados a 99 y el .tar salia con un nombre falso, o con
+     * dos entradas iguales si dos ficheros compartian los primeros 99). memcpy
+     * sobre el hdr ya puesto a cero: no hace falta terminador. 2026-07-26. */
+    memcpy(&hdr[0], name, strlen(name));
     /* mode 0644 */
     tar_write_octal((char*)&hdr[100], 8, 0644);
     /* uid/gid 0 */
@@ -2189,6 +2203,15 @@ static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const cha
         camera_sd_bus_unlock();
         if (de == NULL) break;
         if (de->d_type == DT_DIR) continue;
+        /* El campo "name" del ustar son 100 bytes. Lo que no quepa se OMITE en
+         * vez de servirlo con el nombre cortado a 99 (dos ficheros que compartan
+         * los primeros 99 caracteres saldrian con el mismo nombre). Los ficheros
+         * de la pantalla son "AAAA-MM-DD.csv": esto no salta nunca en la
+         * practica. 2026-07-26. */
+        if (strlen(de->d_name) > 99) {
+            ESP_LOGW(TAG, "nombre demasiado largo para el tar, se omite: %s", de->d_name);
+            continue;
+        }
         char full_path[400];
         snprintf(full_path, sizeof full_path, "%s/%s", src_dir, de->d_name);
 

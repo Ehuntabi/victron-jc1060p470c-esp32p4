@@ -93,16 +93,28 @@ esp_err_t ota_update_receive(httpd_req_t *req)
 
     int restante = req->content_len;
     bool fallo = false;
+    /* Tope de esperas seguidas. Antes se reintentaba SIN limite: si el movil se
+     * iba del Wi-Fi a mitad y el socket se quedaba a medias, esto no salia nunca
+     * del bucle y dejaba ocupada la unica tarea del servidor web (con la OTA
+     * abierta). Con recv_wait_timeout=30 s, 4 esperas son ~2 min de silencio
+     * antes de rendirse. 2026-07-26. */
+    const int MAX_ESPERAS = 4;
+    int esperas = 0;
     while (restante > 0) {
         const int pedir = (restante < OTA_CHUNK) ? restante : OTA_CHUNK;
         const int leido = httpd_req_recv(req, buf, pedir);
         if (leido <= 0) {
             /* HTTPD_SOCK_ERR_TIMEOUT: el movil va lento, se reintenta. */
-            if (leido == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            if (leido == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
+            if (leido == HTTPD_SOCK_ERR_TIMEOUT) {
+                ESP_LOGE(TAG, "la subida lleva %d esperas seguidas sin datos: se corta",
+                         esperas);
+            }
             ESP_LOGE(TAG, "se corto la subida con %d bytes por recibir", restante);
             fallo = true;
             break;
         }
+        esperas = 0;   /* han llegado datos: la cuenta de esperas SEGUIDAS se reinicia */
         if (esp_ota_write(ota, buf, leido) != ESP_OK) {
             ESP_LOGE(TAG, "esp_ota_write fallo");
             fallo = true;
