@@ -145,10 +145,13 @@ static void sim_task(void *arg) {
  * pantalla: los leen de CSV de la tarjeta. Sin datos salen en blanco, y una
  * captura en blanco no sirve para el README.
  *
- * Esto escribe un dia creible. Dos reglas:
- *  - UNA sola vez: si el fichero ya existe no se toca.
- *  - NO pisa nada: si la tarjeta trae registros de verdad de la autocaravana,
- *    se respetan tal cual.
+ * Esto escribe un dia creible. Las reglas:
+ *  - Frigo y bateria: el registrador YA ha escrito el csv de HOY, y con la
+ *    pantalla en la mesa ese fichero es todo -127. Se APARTA como ".real" y se
+ *    escribe el inventado. Reversible renombrando.
+ *  - Solar (produccion.csv) NO se toca: es historico acumulado de viajes de
+ *    verdad, y 10 dias reales lucen mejor que cualquier invento.
+ *  - Los csv de OTROS dias no se tocan nunca.
  *
  * Solo existe con SIM_OVERVIEW_ENABLE: no viaja en el firmware que se publica.
  * 2026-07-26. */
@@ -156,6 +159,31 @@ static void sim_task(void *arg) {
 #define SIM_PASO_MIN   5     /* una muestra cada 5 min -> 288 al dia */
 
 static bool sim_existe(const char *p) { struct stat st; return stat(p, &st) == 0; }
+
+/* Aparta el fichero del dia en curso antes de escribir el inventado.
+ *
+ * Hace falta porque el registrador YA ha escrito el csv de hoy: con la pantalla
+ * en la mesa, sin sondas ni BLE, ese fichero es todo -127 y la grafica sale
+ * inservible. Se guarda como ".real" en vez de borrarlo: si esto se ejecutara
+ * por error con datos buenos del dia, se recuperan renombrando.
+ * Devuelve false si habia copia previa (ya se aparto en un arranque anterior:
+ * no volver a hacerlo, machacaria la copia buena con la inventada). */
+static bool sim_apartar(const char *path)
+{
+    if (!sim_existe(path)) return true;          /* no hay nada que apartar */
+    char bak[80];
+    snprintf(bak, sizeof(bak), "%s.real", path);
+    if (sim_existe(bak)) {
+        ESP_LOGW(TAG, "ya habia copia de %s: no toco nada", path);
+        return false;
+    }
+    if (rename(path, bak) != 0) {
+        ESP_LOGW(TAG, "no puedo apartar %s", path);
+        return false;
+    }
+    ESP_LOGW(TAG, "apartado el registro real -> %s", bak);
+    return true;
+}
 
 /* Curva de sol: 0 fuera de 7:00-21:00, campana suave en medio. 0.0..1.0 */
 static float sim_sol(int minuto)
@@ -171,7 +199,7 @@ static void sim_escribir_frigo(const char *fecha)
 {
     char path[64];
     snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", fecha);
-    if (sim_existe(path)) return;
+    if (!sim_apartar(path)) return;
     mkdir("/sdcard/frigo", 0777);
     FILE *f = fopen(path, "w");
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
@@ -196,7 +224,7 @@ static void sim_escribir_bateria(const char *fecha)
 {
     char path[64];
     snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", fecha);
-    if (sim_existe(path)) return;
+    if (!sim_apartar(path)) return;
     mkdir("/sdcard/bateria", 0777);
     FILE *f = fopen(path, "w");
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
@@ -225,7 +253,7 @@ static void sim_escribir_bateria(const char *fecha)
 static void sim_escribir_solar(void)
 {
     const char *path = "/sdcard/solar/produccion.csv";
-    if (sim_existe(path)) return;
+    if (sim_existe(path)) { ESP_LOGW(TAG, "YA EXISTE, no lo toco: %s", path); return; }
     mkdir("/sdcard/solar", 0777);
     FILE *f = fopen(path, "w");
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
