@@ -7,6 +7,11 @@
 
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
+#include <time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include "camera.h"   /* camera_sd_bus_lock: serializar la SD con el GDMA */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -134,7 +139,142 @@ static void sim_task(void *arg) {
     }
 }
 
+/* ── Historicos inventados para las capturas ──────────────────────────────────
+ *
+ * Los tres graficos (bateria, frigo y solar) NO se dibujan de lo que hay en
+ * pantalla: los leen de CSV de la tarjeta. Sin datos salen en blanco, y una
+ * captura en blanco no sirve para el README.
+ *
+ * Esto escribe un dia creible. Dos reglas:
+ *  - UNA sola vez: si el fichero ya existe no se toca.
+ *  - NO pisa nada: si la tarjeta trae registros de verdad de la autocaravana,
+ *    se respetan tal cual.
+ *
+ * Solo existe con SIM_OVERVIEW_ENABLE: no viaja en el firmware que se publica.
+ * 2026-07-26. */
+
+#define SIM_PASO_MIN   5     /* una muestra cada 5 min -> 288 al dia */
+
+static bool sim_existe(const char *p) { struct stat st; return stat(p, &st) == 0; }
+
+/* Curva de sol: 0 fuera de 7:00-21:00, campana suave en medio. 0.0..1.0 */
+static float sim_sol(int minuto)
+{
+    const int amanecer = 7 * 60, ocaso = 21 * 60;
+    if (minuto < amanecer || minuto > ocaso) return 0.0f;
+    float k = (float)(minuto - amanecer) / (float)(ocaso - amanecer);   /* 0..1 */
+    float s = sinf(k * 3.14159265f);
+    return s * s;   /* mas estrecha: mediodia marcado */
+}
+
+static void sim_escribir_frigo(const char *fecha)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", fecha);
+    if (sim_existe(path)) return;
+    mkdir("/sdcard/frigo", 0777);
+    FILE *f = fopen(path, "w");
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
+    fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n");
+    for (int m = 0; m < 24 * 60; m += SIM_PASO_MIN) {
+        float sol = sim_sol(m);
+        float t_ext    = 14.0f + 18.0f * sol;                 /* 14..32 */
+        float t_aletas = 30.0f + 18.0f * sol;                 /* 30..48 */
+        float t_cong   = -17.5f + 2.0f * sol;                 /* -17,5..-15,5 */
+        int   fan      = (t_aletas <= 35.0f) ? 0
+                       : (int)((t_aletas - 35.0f) / 13.0f * 100.0f);
+        if (fan > 100) fan = 100;
+        fprintf(f, "%s %02d:%02d:00,%.1f,%.1f,%.1f,%d,%d\n",
+                fecha, m / 60, m % 60, t_aletas, t_cong, t_ext,
+                fan, (sol > 0.55f) ? 1 : 0);
+    }
+    fclose(f);
+    ESP_LOGI(TAG, "historico frigo inventado -> %s", path);
+}
+
+static void sim_escribir_bateria(const char *fecha)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", fecha);
+    if (sim_existe(path)) return;
+    mkdir("/sdcard/bateria", 0777);
+    FILE *f = fopen(path, "w");
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
+    fprintf(f, "timestamp,source,milli_amps,milli_amps_max,milli_amps_min,"
+               "centi_volts,pv_watts\n");
+    for (int m = 0; m < 24 * 60; m += SIM_PASO_MIN) {
+        float sol = sim_sol(m);
+        int pv_w  = (int)(340.0f * sol);
+        /* De noche consume (negativo), de dia la placa carga (positivo). */
+        int ma    = (int)(pv_w * 1000.0f / 13.2f) - 4200;
+        int cv    = (int)(1250.0f + 130.0f * sol);            /* 12,50..13,80 V */
+        /* La grafica SOLO pinta las filas de BatteryMonitor (ver log_browser). */
+        fprintf(f, "%s %02d:%02d:00,BatteryMonitor,%d,%d,%d,%d,-1\n",
+                fecha, m / 60, m % 60, ma, ma + 150, ma - 150, cv);
+        if (pv_w > 0) {
+            fprintf(f, "%s %02d:%02d:00,SolarCharger,%d,%d,%d,%d,%d\n",
+                    fecha, m / 60, m % 60,
+                    (int)(pv_w * 1000.0f / 13.2f), 0, 0, cv, pv_w);
+        }
+    }
+    fclose(f);
+    ESP_LOGI(TAG, "historico bateria inventado -> %s", path);
+}
+
+/* Produccion dia a dia: una linea por dia, los 10 anteriores a hoy. */
+static void sim_escribir_solar(void)
+{
+    const char *path = "/sdcard/solar/produccion.csv";
+    if (sim_existe(path)) return;
+    mkdir("/sdcard/solar", 0777);
+    FILE *f = fopen(path, "w");
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
+    fprintf(f, "fecha,kwh,horas,pico_w,kwh_consumo\n");
+    time_t now = time(NULL);
+    for (int d = 10; d >= 1; --d) {
+        time_t t = now - (time_t)d * 86400;
+        struct tm tm_l; localtime_r(&t, &tm_l);
+        /* Dias variados: alguno nublado, para que la grafica no sea plana. */
+        static const float KWH[10]  = {1.42f, 1.83f, 0.61f, 1.95f, 1.71f,
+                                       0.94f, 1.88f, 2.05f, 1.33f, 1.79f};
+        static const float HRS[10]  = {7.5f, 9.1f, 3.2f, 9.6f, 8.8f,
+                                       5.0f, 9.3f, 9.9f, 6.8f, 9.0f};
+        static const int   PICO[10] = {268, 331, 142, 352, 318,
+                                       201, 340, 366, 249, 327};
+        int i = 10 - d;
+        fprintf(f, "%04d-%02d-%02d,%.3f,%.2f,%d,%.3f\n",
+                tm_l.tm_year + 1900, tm_l.tm_mon + 1, tm_l.tm_mday,
+                KWH[i], HRS[i], PICO[i], KWH[i] * 0.78f);
+    }
+    fclose(f);
+    ESP_LOGI(TAG, "historico solar inventado -> %s", path);
+}
+
+static void sim_generar_historicos(void)
+{
+    time_t now = time(NULL);
+    struct tm tm_l;
+    localtime_r(&now, &tm_l);
+    if (tm_l.tm_year + 1900 < 2020) {
+        ESP_LOGW(TAG, "sin hora valida: no genero historicos (saldrian con fecha absurda)");
+        return;
+    }
+    char fecha[11];
+    strftime(fecha, sizeof(fecha), "%Y-%m-%d", &tm_l);
+
+    /* Serializar con la camara, como el resto de accesos a la tarjeta. */
+    if (!camera_sd_bus_lock(5000)) {
+        ESP_LOGW(TAG, "tarjeta ocupada: no genero historicos");
+        return;
+    }
+    sim_escribir_frigo(fecha);
+    sim_escribir_bateria(fecha);
+    sim_escribir_solar();
+    camera_sd_bus_unlock();
+}
+
 void sim_overview_start(void) {
+    sim_generar_historicos();
     xTaskCreate(sim_task, "sim_overview", 4096, NULL, 4, NULL);
 }
 
