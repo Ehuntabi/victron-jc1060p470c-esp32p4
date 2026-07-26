@@ -96,9 +96,11 @@ static void gallery_scan(void)
         camera_sd_bus_unlock();
     }
 
-    bool cl = camera_sd_bus_lock(1000);
+    /* El closedir SI tiene que ocurrir (si no, fuga del DIR), asi que se espera
+     * al cerrojo en vez de saltarselo, como ya se hace mas abajo. 2026-07-26. */
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     closedir(d);
-    if (cl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
 }
 

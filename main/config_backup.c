@@ -119,13 +119,19 @@ esp_err_t config_backup_export(const char *path)
     cJSON_Delete(root);
     if (!json) return ESP_FAIL;
 
-    bool sdl = camera_sd_bus_lock(3000);
+    /* Sin cerrojo no se toca la SD: escribir pisando el GDMA de la camara es lo
+     * que acaba en "DMA timeout" y tarjeta pillada. 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) {
+        free(json);
+        ESP_LOGW(TAG, "tarjeta ocupada por la camara: no se exporta");
+        return ESP_ERR_TIMEOUT;
+    }
     FILE *fp = fopen(path, "w");
-    if (!fp) { if (sdl) camera_sd_bus_unlock(); free(json); ESP_LOGE(TAG, "fopen %s", path); return ESP_FAIL; }
+    if (!fp) { camera_sd_bus_unlock(); free(json); ESP_LOGE(TAG, "fopen %s", path); return ESP_FAIL; }
     size_t len = strlen(json);
     size_t wrote = fwrite(json, 1, len, fp);
     fclose(fp);
-    if (sdl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     free(json);
     ESP_LOGI(TAG, "Exportado: %s (%u bytes)", path, (unsigned)wrote);
     return wrote == len ? ESP_OK : ESP_FAIL;
@@ -133,19 +139,23 @@ esp_err_t config_backup_export(const char *path)
 
 esp_err_t config_backup_import(const char *path)
 {
-    bool sdl = camera_sd_bus_lock(3000);
+    /* Sin cerrojo no se toca la SD (ver config_backup_export). 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) {
+        ESP_LOGW(TAG, "tarjeta ocupada por la camara: no se importa");
+        return ESP_ERR_TIMEOUT;
+    }
     FILE *fp = fopen(path, "r");
-    if (!fp) { if (sdl) camera_sd_bus_unlock(); ESP_LOGE(TAG, "No se puede abrir %s", path); return ESP_FAIL; }
+    if (!fp) { camera_sd_bus_unlock(); ESP_LOGE(TAG, "No se puede abrir %s", path); return ESP_FAIL; }
     fseek(fp, 0, SEEK_END);
     long sz = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    if (sz <= 0 || sz > 32 * 1024) { fclose(fp); if (sdl) camera_sd_bus_unlock(); return ESP_FAIL; }
+    if (sz <= 0 || sz > 32 * 1024) { fclose(fp); camera_sd_bus_unlock(); return ESP_FAIL; }
     char *buf = malloc((size_t)sz + 1);
-    if (!buf) { fclose(fp); if (sdl) camera_sd_bus_unlock(); return ESP_ERR_NO_MEM; }
+    if (!buf) { fclose(fp); camera_sd_bus_unlock(); return ESP_ERR_NO_MEM; }
     fread(buf, 1, (size_t)sz, fp);
     buf[sz] = 0;
     fclose(fp);
-    if (sdl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
 
     cJSON *root = cJSON_Parse(buf);
     free(buf);
