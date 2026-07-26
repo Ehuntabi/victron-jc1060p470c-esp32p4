@@ -972,8 +972,10 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
         for (int i = 0; i < 3; ++i) {
             if (!dds[i].dd) continue;
             lv_dropdown_set_options(dds[i].dd, opts);
+            /* Sin el n_sensors>0, un rol ausente (FRIGO_SONDA_AUSENTE = 0xFF)
+             * llegaba tal cual al dropdown cuando NO queda ninguna sonda. */
             uint8_t sel = state->assignment[dds[i].slot];
-            if (state->n_sensors > 0 && sel >= state->n_sensors) sel = 0;
+            if (sel >= state->n_sensors) sel = 0;
             lv_dropdown_set_selected(dds[i].dd, sel);
         }
         s_last_n = state->n_sensors;

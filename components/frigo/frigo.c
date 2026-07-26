@@ -404,8 +404,16 @@ static int bus_enumerar(uint64_t out[FRIGO_MAX_SENSORS], bool recuperar)
     const int intentos = recuperar ? 5 : 1;
 
     for (int intento = 0; intento < intentos && n == 0; intento++) {
+        /* Latido: un escaneo con el bus muerto tarda ~6 s (5 intentos x ~1,2 s
+         * medidos). El vigilante reinicia la pantalla a los 10 s sin latido, y
+         * el resto del ciclo se come otros ~2,8 s: sin esto quedaba ~1 s de
+         * margen. En frigo_init aun no hay latido (s_hb_cb es NULL) y no hace
+         * falta, porque la tarea vigilada todavia no existe. */
+        if (s_hb_cb) s_hb_cb();
+
         if (intento > 0) {
-            onewire_bus_del(s_bus);
+            if (s_bus) onewire_bus_del(s_bus);   /* puede venir NULL de un fallo previo */
+            s_bus = NULL;
             vTaskDelay(pdMS_TO_TICKS(200));
             if (onewire_new_bus_rmt(&s_bus_cfg, &s_rmt_cfg, &s_bus) != ESP_OK) {
                 ESP_LOGE(TAG, "intento %d: recrear bus fallo", intento);
@@ -438,11 +446,22 @@ static int bus_enumerar(uint64_t out[FRIGO_MAX_SENSORS], bool recuperar)
  * frigo_init antes de arrancarla: toca s_devs y s_state. */
 static void escanear_y_aplicar(bool recuperar)
 {
+    /* Soltar los dispositivos ANTES de tocar el bus. Dos motivos:
+     *  - ds18b20_new_device_from_enumeration reserva memoria: si solo se
+     *    sobreescribian los punteros, cada escaneo (uno cada 5 min) fugaba lo
+     *    reservado en el anterior.
+     *  - bus_enumerar puede destruir y recrear el bus, y entonces estos handles
+     *    quedarian colgando; hay que soltarlos mientras el bus sigue vivo. */
+    for (int i = 0; i < FRIGO_MAX_SENSORS; i++) {
+        if (s_devs[i]) {
+            ds18b20_del_device(s_devs[i]);
+            s_devs[i] = NULL;
+        }
+    }
+
     uint64_t hay[FRIGO_MAX_SENSORS] = {0};
     int n = bus_enumerar(hay, recuperar);
 
-    /* Handles DS18B20 nuevos: los viejos no valen si el bus se ha recreado. */
-    for (int i = 0; i < FRIGO_MAX_SENSORS; i++) s_devs[i] = NULL;
     for (int i = 0; i < n; i++) {
         onewire_device_t dev = { .bus = s_bus, .address = hay[i] };
         ds18b20_config_t ds_cfg = {};
