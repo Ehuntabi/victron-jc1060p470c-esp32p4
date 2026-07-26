@@ -3009,8 +3009,22 @@ static const struct { victron_record_type_t cat; const char *name; } TOUR_CARD[]
     { VICTRON_BLE_RECORD_BATTERY_MONITOR, "detalle_bateria" },
     { VICTRON_BLE_RECORD_DCDC_CONVERTER,  "detalle_dcdc"    },
 };
+/* MISMO ORDEN que las llamadas a settings_menu_add_entry() en settings_panel.c:
+ * el indice del tour es el orden de registro en s_page_ctxs, no el visual.
+ * Faltaban "Tarjeta SD" y "Autocaravana", y eso no dejaba dos capturas sin
+ * nombre: DESPLAZABA todas las de detras, asi que la pagina de Tarjeta SD se
+ * guardaba como "sonido", la de Sonido como "victron_keys", etc. Si se anade una
+ * entrada al menu, hay que anadirla AQUI en su sitio. 2026-07-26. */
 static const char *TOUR_SET_NAMES[] = {
-    "frigo", "logs", "wifi", "display", "sonido", "victron_keys", "about"
+    "frigo",         /* Opciones Frigo        */
+    "logs",          /* Historial en graficos */
+    "wifi",          /* Wi-Fi                 */
+    "display",       /* Pantalla              */
+    "tarjeta_sd",    /* Tarjeta SD            */
+    "sonido",        /* Sonido y alertas      */
+    "autocaravana",  /* Autocaravana          */
+    "victron_keys",  /* Victron Keys          */
+    "about",         /* Acerca de             */
 };
 #define TOUR_N_LIVE   ((int)(sizeof(TOUR_LIVE) / sizeof(TOUR_LIVE[0])))
 #define TOUR_N_CARD   ((int)(sizeof(TOUR_CARD) / sizeof(TOUR_CARD[0])))
