@@ -281,17 +281,15 @@ void ui_init(void) {
     char default_pass[65]; size_t pass_len = sizeof(default_pass);
     uint8_t ap_enabled;
     esp_err_t wifi_err = load_wifi_config(default_ssid, &ssid_len, default_pass, &pass_len, &ap_enabled);
+    /* La clave del AP la genera y guarda wifi_ap_init (aleatoria por pantalla).
+     * Aqui solo se MUESTRA lo que haya: sembrarla desde la UI es justo lo que
+     * dejaba "12345678" de fabrica en todas las pantallas. El SSID por defecto
+     * tambien lo persiste wifi_ap_init. 2026-07-26. */
     if (wifi_err != ESP_OK) {
         strncpy(default_ssid, "VictronConfig", sizeof(default_ssid));
         default_ssid[sizeof(default_ssid) - 1] = '\0';
-        strncpy(default_pass, DEFAULT_AP_PASSWORD, sizeof(default_pass));
-        default_pass[sizeof(default_pass) - 1] = '\0';
+        default_pass[0] = '\0';
         ap_enabled = 1;
-        save_wifi_config(default_ssid, default_pass, ap_enabled);
-    } else if (default_pass[0] == '\0') {
-        strncpy(default_pass, DEFAULT_AP_PASSWORD, sizeof(default_pass));
-        default_pass[sizeof(default_pass) - 1] = '\0';
-        save_wifi_config(default_ssid, default_pass, ap_enabled);
     }
 
 

@@ -130,3 +130,13 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
 # bateria y en la nevera. LVGL trae su propio sprintf y por defecto va sin
 # soporte de coma flotante.
 CONFIG_LV_SPRINTF_USE_FLOAT=y
+
+# ── Vuelta atras automatica tras actualizar por Wi-Fi ─────────────────────────
+# Un firmware recien instalado por OTA arranca "a prueba": si no llega a
+# ejecutar esp_ota_mark_app_valid_cancel_rollback() (final de app_main), el
+# bootloader vuelve SOLO a la version anterior en el siguiente arranque. Sin
+# esto, una version que compile y valide pero se cuelgue al arrancar dejaba la
+# pantalla inservible hasta reflashear por cable.
+# OJO: cambia el BOOTLOADER -> hay que grabar UNA vez por USB para activarlo;
+# una actualizacion por Wi-Fi no instala bootloader. 2026-07-26.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

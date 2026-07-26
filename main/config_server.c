@@ -289,6 +289,53 @@ static void dhcp_set_captiveportal_url(void)
  */
 
 
+/* Clave aleatoria para el Wi-Fi de la pantalla. Mismo criterio que la de la web
+ * (ver http_auth_init): alfabeto sin caracteres que se confundan al leerlos en
+ * la pantalla (sin l, o, 1, 0). 10 chars sobre 32 simbolos = 50 bits. */
+static void ap_pass_random(char *out, size_t len)
+{
+    static const char cs[] = "abcdefghijkmnpqrstuvwxyz23456789";
+    size_t n = (len > 11) ? 10 : (len - 1);
+    for (size_t i = 0; i < n; i++) out[i] = cs[esp_random() % (sizeof(cs) - 1)];
+    out[n] = '\0';
+}
+
+/* Deja en NVS una clave de AP valida y no adivinable, migrando las de fabrica.
+ *
+ * Antes salia de fabrica con "12345678" (la sembraba ui.c) o "victron123": las
+ * dos publicas, y este repo es abierto. Cualquiera a tiro de Wi-Fi entraba, y
+ * desde dentro se ve TODO el trafico en claro (la clave de la web viaja en cada
+ * peticion) y se llega hasta la actualizacion de firmware.
+ *
+ * Va SEPARADA de wifi_ap_init y se llama ANTES de ui_init a proposito: Ajustes
+ * lee la clave UNA sola vez al arrancar, asi que si se generara mas tarde (ya
+ * dentro de wifi_ap_init) la pantalla enseniaria la vieja mientras el AP usa la
+ * nueva -> te quedas fuera sin poder leerla. 2026-07-26. */
+void config_server_ensure_ap_password(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "NVS no disponible: no se puede asegurar la clave del AP");
+        return;
+    }
+    static const char *const debiles[] = { "12345678", "victron123" };
+    char pass[65] = {0};
+    size_t pl = sizeof(pass);
+    bool regenerar = (nvs_get_str(h, "password", pass, &pl) != ESP_OK) ||
+                     strlen(pass) < 8;
+    for (size_t i = 0; !regenerar && i < sizeof(debiles) / sizeof(debiles[0]); i++) {
+        if (strcmp(pass, debiles[i]) == 0) regenerar = true;
+    }
+    if (regenerar) {
+        /* No imprimir la clave: log_capture la persistiria en la SD. */
+        ap_pass_random(pass, sizeof(pass));
+        nvs_set_str(h, "password", pass);
+        nvs_commit(h);
+        ESP_LOGW(TAG, "clave del AP regenerada (aleatoria): verla en Ajustes -> Wi-Fi");
+    }
+    nvs_close(h);
+}
+
 esp_err_t wifi_ap_init(void)
 {
     static bool subsystems_inited = false;
@@ -341,15 +388,9 @@ esp_err_t wifi_ap_init(void)
             strcpy(ssid, "VictronConfig");
             nvs_set_str(h, "ssid", ssid);
         }
-        if (nvs_get_str(h, "password", pass, &pl) != ESP_OK) {
-            /* NVS sin pass → forzamos fallback "victron123" YA (la regla
-             * de "< 8 chars => victron123" se aplica más abajo, pero ahí
-             * NVS ya estaría escrita con "" y la web mostraría password
-             * vacía aunque el AP usase "victron123" → confusión UX).
-             * Persistimos el default directamente. */
-            strcpy(pass, "victron123");
-            nvs_set_str(h, "password", pass);
-        }
+        /* La clave la deja lista config_server_ensure_ap_password(), que corre
+         * antes de la UI (ver alli el porque). Aqui solo se lee. */
+        nvs_get_str(h, "password", pass, &pl);
         if (nvs_get_u8(h, "enabled", &enabled) != ESP_OK) {
             enabled = 1;
             nvs_set_u8(h, "enabled", enabled);
@@ -421,9 +462,12 @@ esp_err_t wifi_ap_init(void)
         return wm;
     }
 
-    /* Forzar password minima 8 chars (requisito WPA2) y por defecto. */
+    /* Red de seguridad: WPA2 exige 8 chars. Solo se llega aqui si NVS no abrio
+     * (arriba siempre queda una clave valida guardada). Aleatoria en RAM: el AP
+     * sigue siendo seguro, aunque esta vez no se pueda mostrar en Ajustes. */
     if (strlen(pass) < 8) {
-        strcpy(pass, "victron123");
+        ap_pass_random(pass, sizeof(pass));
+        ESP_LOGW(TAG, "NVS no disponible: clave del AP aleatoria y SIN guardar");
     }
 
     wifi_config_t ap_cfg = {

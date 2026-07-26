@@ -7,7 +7,9 @@
 #include <stdbool.h>
 #include "nvs.h"
 
-#define DEFAULT_AP_PASSWORD "12345678"
+/* DEFAULT_AP_PASSWORD ("12345678") eliminado 2026-07-26: la clave del AP la
+ * genera aleatoria wifi_ap_init() y se lee en Ajustes -> Wi-Fi. Ya no hay
+ * ninguna clave de fabrica en el codigo. */
 
 // brightness settings
 esp_err_t load_brightness(uint8_t *brightness_out);
