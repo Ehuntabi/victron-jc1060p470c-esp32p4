@@ -5,3 +5,5 @@
  * Paso 1: capturas del carrusel (BMP en /sdcard/screenshots).
  * Paso 2 (pendiente): vigilancia (JPG en /sdcard/vigilancia) via decoder HW. */
 void ui_gallery_open(void);
+/* Cierre programatico (lo usa el carrusel de capturas). */
+void ui_gallery_close(void);

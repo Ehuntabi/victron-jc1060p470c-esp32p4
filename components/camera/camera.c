@@ -399,11 +399,23 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
         uint8_t *ob = jpeg_alloc_encoder_mem((size_t)w * h * 3 / 2, &out_cfg, &out_sz);
         if (in && ob) {
             const int n = w * h;
-            for (int i = 0; i < n; ++i) {      /* RGB565 -> RGB888 (R,G,B) */
+            /* OJO con el orden: el bufer de LVGL de ESTA pantalla viene con rojo
+             * y azul intercambiados respecto al color real (el panel DSI va en
+             * BGR y lo compensa al pintar, por eso en pantalla se ve bien). Al
+             * volcarlo tal cual salia todo tenido: el fondo UI_COLOR_BG 0x06080C
+             * (azulado) se guardaba como 0x21180F (marron) y las tarjetas azules
+             * salian amarillentas.
+             *
+             * El codificador NO tiene la culpa: la camara le pasa RGB888 sin
+             * tocar nada y sale bien (ver camera_snapshot_jpeg). Por eso el
+             * cambio va aqui, en el unico camino que lee el bufer de LVGL, y no
+             * en el encoder. Verificado contra dos colores conocidos:
+             *   0x06080C -> (6,8,12)   y  0x37474F -> (55,71,79). 2026-07-26. */
+            for (int i = 0; i < n; ++i) {      /* 565 del framebuffer -> RGB888 real */
                 uint16_t p = rgb[i];
-                in[i*3+0] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* R */
+                in[i*3+0] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* R real */
                 in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
-                in[i*3+2] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* B */
+                in[i*3+2] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* B real */
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
