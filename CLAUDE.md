@@ -56,3 +56,14 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Release estable: **v1.0
    necesita resets de warm-up ANTES de enumerar; sin ellos frigo_init daba 0
    sensores al arrancar aunque el HW fuera correcto (commit a60d93e).
 3. Ventilador GPIO21 (cuando esté cableado)
+4. **PWM del ventilador a 25 kHz — HACER cuando se toque la electrónica** (27-jul-2026).
+   Ahora está a 18 kHz (`FRIGO_FAN_FREQ_HZ` en `components/frigo/frigo.h`), que es
+   inaudible para adultos pero **NO para oídos jóvenes** (el límite ronda los 19-20 kHz).
+   A partir de 20 kHz no lo oye nadie. Es cambiar **una línea**: el límite de 20 kHz lo
+   ponía el módulo D4184 antiguo, ya sustituido por un **IRLR7843 discreto** (R serie en
+   puerta + R pull-down + diodo 1N4148 de rueda libre), que aguanta de sobra.
+   Verificado que LEDC lo admite: 10 bits de resolución permiten hasta ~39 kHz, así que
+   **no se pierde finura de control**.
+   Al hacerlo, comprobar en el frigo real: (a) que el ventilador **sigue arrancando desde
+   parado** (ya hay kickstart 700 ms al 100 % y suelo de duty 30 %), y (b) que el MOSFET
+   no calienta más de la cuenta. Si arranca peor, volver a 18 kHz y listo.
