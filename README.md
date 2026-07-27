@@ -8,9 +8,19 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/img/01_overview.png" width="320"><br><sub>Vista general / Overview</sub></td>
-    <td align="center"><img src="docs/img/09_ajustes.png" width="320"><br><sub>Ajustes / Settings</sub></td>
-    <td align="center"><img src="docs/img/10_ajustes_frigo.png" width="320"><br><sub>Frigo / Fridge</sub></td>
+    <td align="center"><img src="docs/screenshots/00_overview.jpg" width="320"><br><sub>Vista general / Overview</sub></td>
+    <td align="center"><img src="docs/screenshots/01_bateria.jpg" width="320"><br><sub>Batería / Battery</sub></td>
+    <td align="center"><img src="docs/screenshots/02_solar.jpg" width="320"><br><sub>Solar</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/05_dcdc.jpg" width="320"><br><sub>DC/DC</sub></td>
+    <td align="center"><img src="docs/screenshots/04_inversor.jpg" width="320"><br><sub>Inversor / Inverter</sub></td>
+    <td align="center"><img src="docs/screenshots/03_monitor_bateria.jpg" width="320"><br><sub>Monitor de batería / Battery monitor</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/14_frigo.jpg" width="320"><br><sub>Frigo / Fridge</sub></td>
+    <td align="center"><img src="docs/screenshots/20_autocaravana.jpg" width="320"><br><sub>Autocaravana / Motorhome</sub></td>
+    <td align="center"><img src="docs/screenshots/13_ajustes.jpg" width="320"><br><sub>Ajustes / Settings</sub></td>
   </tr>
 </table>
 
