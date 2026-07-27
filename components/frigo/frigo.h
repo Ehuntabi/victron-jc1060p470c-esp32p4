@@ -9,9 +9,15 @@
  * conector — sólo eran selecciones sobre el papel. */
 #define FRIGO_ONEWIRE_GPIO    4    /* JP1 pin 13 — DS18B20 1-Wire (pullup 4.7 kΩ a 3.3 V) */
 #define FRIGO_FAN_GPIO        5    /* JP1 pin 15 — PWM ventilador (LEDC) */
-/* Ataque del ventilador: MOSFET IRLR7843 discreto, con resistencia en serie en
- * puerta, resistencia de pull-down y diodo 1N4148 de rueda libre. 18 kHz sigue
- * siendo inaudible. (Antes era un modulo D4184, limitado a <=20 kHz.) */
+/* Ataque del ventilador: P4 -> optoacoplador PC817 -> MOSFET IRLR7843, con
+ * resistencia en serie en puerta, resistencia de pull-down y diodo 1N4148 de
+ * rueda libre.
+ * 18 kHz queda fuera del oido de la mayoria de adultos, pero los oidos jovenes
+ * (limite ~19-20 kHz) SI pueden oirlo.
+ * NO subir la frecuencia sin tocar el hardware: el limite lo pone el PC817, que
+ * conmuta en microsegundos (el apagado es el peor). A 25 kHz el ciclo baja a
+ * 40 us y el control se degrada a duty bajo. Ver "Pendientes activos" 4 en
+ * CLAUDE.md. */
 #define FRIGO_FAN_FREQ_HZ  18000
 #define FRIGO_FAN_MIN_DUTY_PCT 30  /* suelo: con PWM sobre alimentacion (MOSFET), por debajo el fan no gira. 0=apagado */
 #define FRIGO_FAN_KICKSTART_MS 700 /* pulso 100% al arrancar de parado para romper la inercia */
