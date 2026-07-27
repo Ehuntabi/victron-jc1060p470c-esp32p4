@@ -42,7 +42,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **RTC** | RX8025T (I²C 0x32, SDA=7 / SCL=8 compartido con GT911 y ES8311) + pila CR1220 |
 | **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), LDO interno ch 4 (3.3 V) |
 | **Sensores temperatura** | DS18B20 1-Wire en **GPIO 4** (JP1 pin 13, pullup 4.7 kΩ) |
-| **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 18 kHz |
+| **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 18 kHz. El pin 15 ataca un MOSFET **IRLR7843**, que es quien conmuta el ventilador |
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Cámara** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, JPEG por HW). Comparte el I²C (SDA=7 / SCL=8); sin pines reset/pwdn dedicados |
 | **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J4 (DE/RE automático) |
@@ -200,7 +200,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **RTC** | RX8025T (I²C 0x32, SDA=7 / SCL=8 shared with GT911 and ES8311) + CR1220 cell |
 | **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), internal LDO ch 4 (3.3 V) |
 | **Temp sensors** | DS18B20 1-Wire on **GPIO 4** (JP1 pin 13, 4.7 kΩ pull-up) |
-| **Fridge fan** | LEDC PWM on **GPIO 5** (JP1 pin 15), 18 kHz |
+| **Fridge fan** | LEDC PWM on **GPIO 5** (JP1 pin 15), 18 kHz. Pin 15 drives an **IRLR7843** MOSFET, which does the actual fan switching |
 | **Audio** | ES8311 codec + NS4150 amp (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Camera** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, HW JPEG). Shares I²C (SDA=7 / SCL=8); no dedicated reset/pwdn pins |
 | **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J4 connector (automatic DE/RE) |
