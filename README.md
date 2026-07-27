@@ -174,7 +174,7 @@ idf.py -p /dev/ttyACM0 flash monitor
 - **Cámara OV02C10** ✅ — MIPI-CSI con ISP por hardware. Comparte GDMA con la SD: captura a demanda, nunca streaming continuo.
 - **NE185 (RS-485)** ✅ — MAX485 en UART1, en uso como maestro del cuadro.
 - **DS18B20** ✅ — bus 1-Wire en GPIO 4 (JP1 pin 13). Pullup 4.7 kΩ a 3.3 V externo. El bus necesita resets de warm-up antes de enumerar.
-- **Ventilador** — PWM 18 kHz en GPIO 5 (JP1 pin 15). Requiere **masa común** con el ventilador: sin ella no varía y se para al tocar GND.
+- **Ventilador** — PWM 18 kHz en GPIO 5 (JP1 pin 15).
 
 ### Créditos
 
@@ -332,7 +332,7 @@ idf.py -p /dev/ttyACM0 flash monitor
 - **OV02C10 camera** ✅ — MIPI-CSI with hardware ISP. Shares GDMA with the SD card: capture on demand, never continuous streaming.
 - **NE185 (RS-485)** ✅ — MAX485 on UART1, in use as master of the distribution panel.
 - **DS18B20** ✅ — 1-Wire bus on GPIO 4 (JP1 pin 13). External 4.7 kΩ pull-up to 3.3 V. The bus needs warm-up resets before enumerating.
-- **Fan** — 18 kHz PWM on GPIO 5 (JP1 pin 15). Needs a **common ground** with the fan: without it the speed won't change and it stops when you touch GND.
+- **Fan** — 18 kHz PWM on GPIO 5 (JP1 pin 15).
 
 ### Credits
 
