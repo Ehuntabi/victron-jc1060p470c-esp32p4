@@ -38,6 +38,7 @@
 #include "solar_daily.h"
 #include "ui/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
 #include "ne185/ne185.h"
+#include "ne185_vlog.h"
 #include "net/udp_tx.h"
 #include "sim_overview.h"
 #include "splash.h"
@@ -62,6 +63,7 @@ static void reboot_timer_cb(void *arg)
     /* Flush de datalogger y battery_history a SD para no perder muestras */
     datalogger_flush();
     battery_history_flush();
+    ne185_vlog_flush();
     esp_restart();
 }
 
@@ -480,6 +482,11 @@ void app_main(void)
      * Habla con el derivador Nordelettronica NE185 que sustituye al
      * panel NE187 retirado. Conector J5 expone el bus en MX 1.25 4P. */
     ne185_init();
+
+    /* Log de comparacion voltaje NE185 (crudo) vs SmartShunt. Solo escribe CSV
+     * en la SD, no pinta nada. Sirve para deducir la formula real del NE185,
+     * que hoy esta sin verificar (ver ne185_vlog.h). */
+    ne185_vlog_init();
 
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {

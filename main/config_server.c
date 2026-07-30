@@ -1700,6 +1700,29 @@ static esp_err_t handle_data_frigo_csv(httpd_req_t *req)
 }
 
 
+/* CSV de comparacion NE185 (bytes crudos) vs SmartShunt. Solo descarga: no hay
+ * pagina ni grafica, es un log de diagnostico (ver ne185_vlog.h). */
+static esp_err_t handle_data_ne185v_csv(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    char path[64];
+    get_today_csv_path("ne185v", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=ne185v.csv");
+    if (csv) {
+        httpd_resp_sendstr(req, csv);
+        free(csv);
+    } else {
+        /* Aun sin muestras volcadas hoy: devolver solo la cabecera. */
+        httpd_resp_sendstr(req, "timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,"
+                                "shunt_centivolts,shunt_fresh\n");
+    }
+    return ESP_OK;
+}
+
+
 /* Construir HTML+SVG bateria.
    CSV bateria: timestamp,source,milli_amps */
 static void build_bateria_html(const char *csv,
@@ -2402,6 +2425,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_frigo);
     httpd_uri_t uri_data_frigo_csv = { .uri = "/data/frigo.csv", .method = HTTP_GET, .handler = handle_data_frigo_csv };
     httpd_register_uri_handler(server, &uri_data_frigo_csv);
+    httpd_uri_t uri_data_ne185v_csv = { .uri = "/data/ne185v.csv", .method = HTTP_GET, .handler = handle_data_ne185v_csv };
+    httpd_register_uri_handler(server, &uri_data_ne185v_csv);
     httpd_uri_t uri_data_bat = { .uri = "/data/bateria", .method = HTTP_GET, .handler = handle_data_bateria };
     httpd_register_uri_handler(server, &uri_data_bat);
     httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };

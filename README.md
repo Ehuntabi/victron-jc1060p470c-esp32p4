@@ -138,6 +138,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - `http://192.168.4.1/dashboard` (default): grid responsive con SoC, V/A/W, PV, DC/DC y energía de hoy. Auto-refresh 2 s via `GET /api/state` (JSON).
 - `/data/frigo` y `/data/bateria`: gráficos SVG con auto-escala Y y downsample > 1500 puntos; polígono semitransparente max-min + línea avg.
 - **Descargas sin sacar la SD**: `/data/frigo.csv` y `/data/bateria.csv` (día en curso), y los `.tar` completos de `/data/frigo.tar`, `/data/bateria.tar`, `/data/logs.tar`, `/data/config.tar`, `/data/capturas.tar` y `/data/vigilancia.tar`.
+- **`/data/ne185v.csv` — log de diagnóstico NE185 vs SmartShunt** (día en curso, sin página ni gráfica). Una muestra por minuto en `/sdcard/ne185v/` con los **bytes 12/13 de la trama NE185 sin convertir** junto al voltaje que da el SmartShunt por BLE. Sirve para deducir por regresión la fórmula real del NE185: la documentada, `V = (raw − 30)/10`, viene del NE334 y **nunca se ha medido** aquí, porque el voltaje se lee del shunt y no de este bus. Columnas: `timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,shunt_centivolts,shunt_fresh` (usar solo las filas con ambos `fresh = 1`).
 - **Actualización por Wi-Fi (OTA)** en `/ota`: se sube el `.bin` desde el navegador, sin cable ni PC.
 - `/snapshot`: última foto de la cámara en JPEG. `/capturas` y `/captura?n=<0..22>`: capturas de las pantallas del propio display.
 - `/keys`: configuración de claves Victron.
@@ -296,6 +297,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - `http://192.168.4.1/dashboard` (default): responsive grid with SoC, V/A/W, PV, DC/DC and today's energy. Auto-refresh every 2 s via `GET /api/state` (JSON).
 - `/data/frigo` and `/data/bateria`: SVG charts with Y-axis autoscale and downsample over 1500 points; semitransparent max-min envelope + average line.
 - **Downloads without pulling the SD card**: `/data/frigo.csv` and `/data/bateria.csv` (current day), plus full archives at `/data/frigo.tar`, `/data/bateria.tar`, `/data/logs.tar`, `/data/config.tar`, `/data/capturas.tar` and `/data/vigilancia.tar`.
+- **`/data/ne185v.csv` — NE185 vs SmartShunt diagnostic log** (current day; no page, no chart). One sample per minute under `/sdcard/ne185v/` holding the **raw, unconverted bytes 12/13 of the NE185 frame** next to the battery voltage reported by the SmartShunt over BLE. Its purpose is to derive the NE185's real formula by regression: the documented one, `V = (raw − 30)/10`, is inherited from the NE334 and **has never been measured** here, because voltage is read from the shunt rather than from this bus. Columns: `timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,shunt_centivolts,shunt_fresh` (use only rows where both `fresh = 1`).
 - **Wi-Fi firmware update (OTA)** at `/ota`: upload the `.bin` from the browser — no cable, no PC.
 - `/snapshot`: latest camera frame as JPEG. `/capturas` and `/captura?n=<0..22>`: screenshots of the display's own screens.
 - `/keys`: Victron key configuration page.
