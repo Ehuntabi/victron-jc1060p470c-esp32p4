@@ -43,6 +43,17 @@ echo "[termino] -------- comprobacion final --------"
 echo "  commits sin subir : $ahead"
 echo "  cambios sin commit: $ndirty"
 echo "  stashes guardados : $stashes"
+# -------- Ramas que solo existen en ESTE equipo --------
+# Este script solo sube la rama ACTUAL. Si hay otras ramas locales sin subir, al
+# cambiar de PC no estarian: avisar en vez de perderlas en silencio.
+solo_local=$(git for-each-ref --format='%(refname:short) %(upstream)' refs/heads \
+             | awk 'NF==1 {print $1}')
+if [ -n "$solo_local" ]; then
+  echo "  !! ramas SOLO en este PC (no subidas):"
+  printf '       %s\n' $solo_local
+  echo "     subelas con: git push -u origin <rama>"
+fi
+
 if [ "$ahead" = 0 ] && [ "$ndirty" = 0 ] && [ "$stashes" = 0 ]; then
   echo "[termino] TODO SUBIDO Y LIMPIO. Cambia de PC y haz ./empiezo."
 else
