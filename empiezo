@@ -47,6 +47,23 @@ elif [ "$before" != "$after" ] && [ -d build ] && \
        -exec touch {} + 2>/dev/null || true
 fi
 
+# -------- Aviso: no estas en la rama principal --------
+# empiezo actualiza SOLO la rama activa. Si vienes de otro equipo donde estabas
+# en otra rama, aqui no la verias y pareceria que falta trabajo.
+_rama=$(git branch --show-current)
+_princ=main; git show-ref --verify --quiet refs/heads/main || _princ=master
+if [ -n "$_rama" ] && [ "$_rama" != "$_princ" ]; then
+  _pend=$(git rev-list --count "$_princ..$_rama" 2>/dev/null || echo '?')
+  echo ""
+  echo "  ############################################################"
+  echo "  #  OJO: NO estas en la rama principal ($_princ)"
+  echo "  #  Estas en: $_rama   ($_pend commits sin pasar a $_princ)"
+  echo "  #  Es aposta si sigues con ese trabajo. Para volver:"
+  echo "  #     git checkout $_princ"
+  echo "  ############################################################"
+  echo ""
+fi
+
 echo "[empiezo] al dia con GitHub: $(git status -sb | head -1)"
 
 # Abrir Claude Code (salvo --no-claude). Asi te sientas, ./empiezo, y sigues trabajando conmigo.
