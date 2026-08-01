@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "frigo.c" "frigo_solar.c"
+    SRCS "frigo.c" "frigo_solar.c" "frigo_sondas.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         espressif__onewire_bus

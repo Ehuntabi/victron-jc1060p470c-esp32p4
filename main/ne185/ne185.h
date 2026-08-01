@@ -53,6 +53,13 @@ typedef struct {
     bool     shore;       /* conectado a red 230 V */
     float    battery1_v;  /* bateria servicio (V), 0 si no disponible */
     float    battery2_v;  /* bateria motor (V), 0 si no disponible */
+    /* Bytes 12/13 TAL CUAL llegan en la trama, sin convertir. La formula
+     * (byte-30)/10 viene del NE334 y NO esta verificada en el NE185: aqui el
+     * voltaje real se lee del SmartShunt por BLE, no de este bus. Se exponen
+     * en crudo para poder deducir la formula buena comparando con el shunt
+     * (ver ne185_vlog.c). 0 = todavia sin trama. */
+    uint8_t  battery1_raw;
+    uint8_t  battery2_raw;
     bool     fresh;       /* hubo trama valida en los ultimos 30 s */
     uint32_t last_update_ms;
 } ne185_data_t;

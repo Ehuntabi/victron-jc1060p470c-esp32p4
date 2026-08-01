@@ -2,16 +2,31 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "frigo_sondas.h"
 
 /* GPIOs físicamente accesibles vía el header JP1 (2x13 / 2.54 mm) del módulo
  * Guition JC1060P470C_I. Antes estaban en 26 y 21, que NO están enrutados al
  * conector — sólo eran selecciones sobre el papel. */
 #define FRIGO_ONEWIRE_GPIO    4    /* JP1 pin 13 — DS18B20 1-Wire (pullup 4.7 kΩ a 3.3 V) */
 #define FRIGO_FAN_GPIO        5    /* JP1 pin 15 — PWM ventilador (LEDC) */
-#define FRIGO_FAN_FREQ_HZ  18000   /* modulo MOSFET (D4184) soporta PWM <=20 kHz; 18 kHz sigue inaudible */
+/* Ataque del ventilador: P4 -> optoacoplador PC817 -> MOSFET IRLR7843, con
+ * resistencia en serie en puerta, resistencia de pull-down y diodo 1N4148 de
+ * rueda libre.
+ * 18 kHz queda fuera del oido de la mayoria de adultos, pero los oidos jovenes
+ * (limite ~19-20 kHz) SI pueden oirlo.
+ * NO subir la frecuencia sin tocar el hardware: el limite lo pone el PC817, que
+ * conmuta en microsegundos (el apagado es el peor). A 25 kHz el ciclo baja a
+ * 40 us y el control se degrada a duty bajo. Ver "Pendientes activos" 4 en
+ * CLAUDE.md. */
+#define FRIGO_FAN_FREQ_HZ  18000
 #define FRIGO_FAN_MIN_DUTY_PCT 30  /* suelo: con PWM sobre alimentacion (MOSFET), por debajo el fan no gira. 0=apagado */
 #define FRIGO_FAN_KICKSTART_MS 700 /* pulso 100% al arrancar de parado para romper la inercia */
 #define FRIGO_MAX_SENSORS     3
+
+/* Dos cabeceras declaran el mismo tope por separado (frigo_sondas.h no puede
+ * incluir frigo.h: tiene que compilar en el PC sin ESP-IDF). Que no se separen. */
+_Static_assert(FRIGO_SONDAS_MAX == FRIGO_MAX_SENSORS,
+               "FRIGO_SONDAS_MAX y FRIGO_MAX_SENSORS deben coincidir");
 
 /* ── Modo "aprovechar excedente solar" (rele 12V del frigo) ──────
  * GPIO1 (JP1, liberado del PZEM). Rele piloto que inyecta 13V a la bobina del
@@ -50,7 +65,16 @@ typedef struct {
     uint8_t fan_min_pct;   /* suelo PWM ajustable: % minimo al que el fan gira. 0=sin suelo */
     uint8_t n_sensors;
     frigo_sensor_addr_t sensors[FRIGO_MAX_SENSORS];
+    /* Rol -> indice en sensors[], o FRIGO_SONDA_AUSENTE si esa sonda no responde
+     * ahora mismo. Campo DERIVADO: se recalcula en cada escaneo a partir de
+     * role_addr. Los lectores deben comprobar `< n_sensors` antes de indexar. */
     uint8_t assignment[FRIGO_MAX_SENSORS];
+    /* Direccion ROM de la sonda de cada rol (0 = rol sin asignar). Es lo que
+     * ancla cada rol a una sonda fisica concreta. Persiste en NVS. */
+    uint64_t role_addr[FRIGO_MAX_SENSORS];
+    /* Banderas FRIGO_SCAN_* que acaban de activarse y que el usuario aun no ha
+     * visto. La UI las lee, ensenia el aviso y llama a frigo_ack_scan_event(). */
+    uint8_t scan_event;
     frigo_mode_t mode;
 } frigo_state_t;
 
@@ -79,6 +103,14 @@ esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max);
  * Rango util 0..60 en pasos de 5; 0 = sin suelo (aplica el % calculado tal cual). */
 esp_err_t frigo_set_fan_min(uint8_t pct);
 void frigo_set_mode(frigo_mode_t m);
+
+/* Pide un escaneo del bus 1-Wire. Solo levanta una bandera: el escaneo real lo
+ * hace frigo_task, que es la unica que puede tocar el bus sin pisar la lectura
+ * de temperaturas. Se puede llamar desde la UI sin riesgo. */
+void frigo_request_rescan(void);
+
+/* La UI confirma que ya ha enseniado el aviso: baja scan_event. */
+void frigo_ack_scan_event(void);
 void frigo_addr_to_str(const frigo_sensor_addr_t *addr, char *buf, size_t len);
 
 /* main empuja telemetria Victron + NE185 (~1 Hz). shore = hay 230V.

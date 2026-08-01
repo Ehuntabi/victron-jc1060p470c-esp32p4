@@ -181,9 +181,12 @@ static void parse_frame(const uint8_t *b)
     tmp.pump      = (f & 0x04) != 0;
     tmp.shore     = (b[16] & 0x01) != 0;
 
-    /* Baterias: voltaje = (byte - 30) / 10 */
+    /* Baterias: voltaje = (byte - 30) / 10  (formula NE334, SIN verificar aqui) */
     tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
     tmp.battery2_v = ((float)b[13] - 30.0f) / 10.0f;
+    /* Crudo sin convertir, para el log de comparacion contra el SmartShunt. */
+    tmp.battery1_raw = b[12];
+    tmp.battery2_raw = b[13];
 
     if (is_native_ne185) {
         /* Frame nativo NE185 (sin NE187): no contiene tanks - dejar

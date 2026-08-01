@@ -56,3 +56,25 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Release estable: **v1.0
    necesita resets de warm-up ANTES de enumerar; sin ellos frigo_init daba 0
    sensores al arrancar aunque el HW fuera correcto (commit a60d93e).
 3. Ventilador GPIO21 (cuando esté cableado)
+4. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
+   Ahora está a 18 kHz (`FRIGO_FAN_FREQ_HZ` en `components/frigo/frigo.h`): inaudible
+   para adultos, pero **NO para oídos jóvenes** (su límite ronda los 19-20 kHz). Por
+   encima de 20 kHz no lo oye nadie.
+   **⚠️ EL CUELLO DE BOTELLA ES EL PC817, NO EL MOSFET.** El ataque actual es
+   P4 → **optoacoplador PC817** → **IRLR7843** (R serie en puerta + R pull-down + diodo
+   1N4148 de rueda libre). El IRLR7843 conmuta en ns y LEDC llega a ~39 kHz con los
+   10 bits actuales (sin perder finura), pero el **PC817 tarda microsegundos**, y el
+   apagado bastante más que el encendido. A 18 kHz el ciclo son 55 µs y a 25 kHz solo
+   40 µs, así que las transiciones del opto se comen una fracción cada vez mayor.
+   **Se degrada sobre todo a duty bajo**: al 30 % el pulso dura ~12 µs y el opto casi no
+   llega a conmutar → control no lineal por abajo.
+   Por tanto, para subir a 25 kHz hay que **tocar el hardware primero**, eligiendo una:
+   (a) sustituir el PC817 por un opto rápido (6N137, o driver aislado tipo TLP250);
+   (b) quitar el opto si no hace falta aislamiento — el IRLR7843 es de puerta lógica y
+       el P4 puede atacarlo directo con la R serie (la opción más simple);
+   (c) quedarse en 18 kHz.
+   Al cambiarlo, comprobar en el frigo real: (1) que **sigue arrancando desde parado**
+   (hay kickstart 700 ms al 100 % y suelo de duty 30 %) y (2) que el MOSFET no calienta.
+   Si arranca peor, volver a 18 kHz.
+   (Histórico: antes del IRLR7843 había un módulo D4184, limitado a ≤20 kHz. Ese límite
+   ya no aplica, pero apareció el del opto.)

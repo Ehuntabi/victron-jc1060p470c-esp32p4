@@ -29,6 +29,7 @@
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
+#include "esp_ota_ops.h"
 #include "watchdog.h"
 #include "config_storage.h"
 #include "log_capture/log_capture.h"
@@ -37,6 +38,7 @@
 #include "solar_daily.h"
 #include "ui/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
 #include "ne185/ne185.h"
+#include "ne185_vlog.h"
 #include "net/udp_tx.h"
 #include "sim_overview.h"
 #include "splash.h"
@@ -61,6 +63,7 @@ static void reboot_timer_cb(void *arg)
     /* Flush de datalogger y battery_history a SD para no perder muestras */
     datalogger_flush();
     battery_history_flush();
+    ne185_vlog_flush();
     esp_restart();
 }
 
@@ -345,6 +348,11 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(nvs_err);
 
+    /* Clave del Wi-Fi de la pantalla: aleatoria por equipo, y migra las de
+     * fabrica antiguas. AQUI, antes de la UI: Ajustes lee la clave una sola vez
+     * al arrancar y si no enseniaria la vieja mientras el AP ya usa la nueva. */
+    config_server_ensure_ap_password();
+
     /* --- Watchdog: registra causa del ultimo reset y arranca task monitor LVGL --- */
     watchdog_init();
 
@@ -475,6 +483,11 @@ void app_main(void)
      * panel NE187 retirado. Conector J5 expone el bus en MX 1.25 4P. */
     ne185_init();
 
+    /* Log de comparacion voltaje NE185 (crudo) vs SmartShunt. Solo escribe CSV
+     * en la SD, no pinta nada. Sirve para deducir la formula real del NE185,
+     * que hoy esta sin verificar (ver ne185_vlog.h). */
+    ne185_vlog_init();
+
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
@@ -560,4 +573,19 @@ void app_main(void)
         esp_timer_start_periodic(sol_feed_timer, 1000000);  /* 1 s */
 
     logSection("Setup complete");
+
+    /* Damos por buena esta version: hemos llegado al final del arranque.
+     *
+     * Si viene de una actualizacion por Wi-Fi, hasta aqui estaba "a prueba"; si
+     * se hubiera colgado antes (pantalla DSI, camara, SD, C6...) el bootloader
+     * habria vuelto SOLO a la version anterior en el siguiente arranque. En un
+     * arranque normal (grabado por cable) no hace nada.
+     *
+     * Requiere CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE y un bootloader grabado por
+     * USB: ver el comentario en sdkconfig.defaults. */
+    esp_err_t ota_ok = esp_ota_mark_app_valid_cancel_rollback();
+    if (ota_ok != ESP_OK) {
+        ESP_LOGW("main", "no se pudo marcar la version como buena: %s",
+                 esp_err_to_name(ota_ok));
+    }
 }

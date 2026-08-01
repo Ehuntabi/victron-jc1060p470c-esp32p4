@@ -43,6 +43,33 @@ echo "[termino] -------- comprobacion final --------"
 echo "  commits sin subir : $ahead"
 echo "  cambios sin commit: $ndirty"
 echo "  stashes guardados : $stashes"
+# -------- Ramas que solo existen en ESTE equipo --------
+# Este script solo sube la rama ACTUAL. Si hay otras ramas locales sin subir, al
+# cambiar de PC no estarian: avisar en vez de perderlas en silencio.
+solo_local=$(git for-each-ref --format='%(refname:short) %(upstream)' refs/heads \
+             | awk 'NF==1 {print $1}')
+if [ -n "$solo_local" ]; then
+  echo "  !! ramas SOLO en este PC (no subidas):"
+  printf '       %s\n' $solo_local
+  echo "     subelas con: git push -u origin <rama>"
+fi
+
+# -------- Repaso de ramas (que no se acumule basura) --------
+# Avisa de ramas ya fusionadas (se pueden borrar) y de las que llevan trabajo
+# sin pasar a la principal. Solo informa: no borra nada por su cuenta.
+_princ=main; git show-ref --verify --quiet refs/heads/main || _princ=master
+_muertas=""; _vivas=""
+for _b in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+  [ "$_b" = "$_princ" ] && continue
+  _n=$(git rev-list --count "$_princ..$_b" 2>/dev/null || echo 0)
+  if [ "$_n" = "0" ]; then _muertas="$_muertas $_b"; else _vivas="$_vivas $_b($_n)"; fi
+done
+if [ -n "$_muertas" ]; then
+  echo "  ramas ya fusionadas (sobran):$_muertas"
+  echo "     borrar con: git branch -d <rama> && git push origin --delete <rama>"
+fi
+[ -n "$_vivas" ] && echo "  ramas con trabajo sin pasar a $_princ:$_vivas"
+
 if [ "$ahead" = 0 ] && [ "$ndirty" = 0 ] && [ "$stashes" = 0 ]; then
   echo "[termino] TODO SUBIDO Y LIMPIO. Cambia de PC y haz ./empiezo."
 else

@@ -34,6 +34,34 @@ fi
 if [ "$before" != "$after" ] && git diff --name-only "$before" "$after" | grep -qE '^(dependencies\.lock|sdkconfig)$'; then
   echo "[empiezo] cambiaron dependencies.lock/sdkconfig -> borro managed_components + build (se regeneran en el build)"
   rm -rf managed_components build
+# Si el pull ANADIO o BORRO ficheros fuente, hay que reconfigurar CMake: los
+# CMakeLists usan file(GLOB ...), que solo se evalua al configurar. Sin esto el
+# build reutiliza la lista vieja y falla al enlazar con "undefined reference"
+# a las funciones del fichero nuevo (pasado real el 30-jul-2026).
+# Tocar los CMakeLists basta: CMake se reconfigura solo si son mas nuevos que la
+# cache, y el build sigue siendo incremental (no se recompila todo).
+elif [ "$before" != "$after" ] && [ -d build ] && \
+     git diff --name-status "$before" "$after" | grep -qE '^[AD].*\.(c|cpp|h)$'; then
+  echo "[empiezo] el pull anadio/borro ficheros fuente -> fuerzo reconfigure de CMake"
+  find . -name CMakeLists.txt -not -path './build/*' -not -path './managed_components/*' \
+       -exec touch {} + 2>/dev/null || true
+fi
+
+# -------- Aviso: no estas en la rama principal --------
+# empiezo actualiza SOLO la rama activa. Si vienes de otro equipo donde estabas
+# en otra rama, aqui no la verias y pareceria que falta trabajo.
+_rama=$(git branch --show-current)
+_princ=main; git show-ref --verify --quiet refs/heads/main || _princ=master
+if [ -n "$_rama" ] && [ "$_rama" != "$_princ" ]; then
+  _pend=$(git rev-list --count "$_princ..$_rama" 2>/dev/null || echo '?')
+  echo ""
+  echo "  ############################################################"
+  echo "  #  OJO: NO estas en la rama principal ($_princ)"
+  echo "  #  Estas en: $_rama   ($_pend commits sin pasar a $_princ)"
+  echo "  #  Es aposta si sigues con ese trabajo. Para volver:"
+  echo "  #     git checkout $_princ"
+  echo "  ############################################################"
+  echo ""
 fi
 
 echo "[empiezo] al dia con GitHub: $(git status -sb | head -1)"

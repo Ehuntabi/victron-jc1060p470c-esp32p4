@@ -102,9 +102,16 @@ static void refresh_dd_selections(void)
     frigo_get_state_copy(&st_copy);
     const frigo_state_t *st = &st_copy;
     s_suppress_dd_cb = true;
-    if (s_dd_aletas)     lv_dropdown_set_selected(s_dd_aletas,     st->assignment[FRIGO_SLOT_ALETAS]);
-    if (s_dd_congelador) lv_dropdown_set_selected(s_dd_congelador, st->assignment[FRIGO_SLOT_CONGELADOR]);
-    if (s_dd_exterior)   lv_dropdown_set_selected(s_dd_exterior,   st->assignment[FRIGO_SLOT_EXTERIOR]);
+    /* Un rol sin sonda presente vale FRIGO_SONDA_AUSENTE (0xFF): no se le puede
+     * pasar tal cual al dropdown. Se ensenia la primera opcion; que ese rol no
+     * tiene dato ya se ve en su temperatura ("-- C") y en el aviso emergente. */
+    #define SEL(dd, slot) \
+        if (dd) lv_dropdown_set_selected((dd), \
+            st->assignment[(slot)] < st->n_sensors ? st->assignment[(slot)] : 0)
+    SEL(s_dd_aletas,     FRIGO_SLOT_ALETAS);
+    SEL(s_dd_congelador, FRIGO_SLOT_CONGELADOR);
+    SEL(s_dd_exterior,   FRIGO_SLOT_EXTERIOR);
+    #undef SEL
     s_suppress_dd_cb = false;
 }
 
@@ -301,6 +308,94 @@ static void build_sensor_options(char *buf, size_t len, const frigo_state_t *st)
     if (st->n_sensors == 0) strncpy(buf, "Sin sensores", len);
 }
 
+/* ── Buscar sondas y aviso de cambios ────────────────────────── */
+
+static void buscar_sondas_cb(lv_event_t *e)
+{
+    (void)e;
+    /* Solo levanta la bandera: el escaneo real lo hace la tarea del frigo. */
+    frigo_request_rescan();
+}
+
+/* Aviso de que el conjunto de sondas ha cambiado. Se crea desde el hilo de LVGL
+ * (lo llama ui_frigo_panel_update, que corre bajo lvgl_port_lock). Mismo aspecto
+ * que ui_show_new_trip_dialog: no se usa lv_msgbox en ningun sitio del repo. */
+static lv_obj_t *s_aviso_sondas_modal = NULL;
+
+static void aviso_sondas_cerrar_cb(lv_event_t *e)
+{
+    (void)e;
+    frigo_ack_scan_event();
+    if (s_aviso_sondas_modal) {
+        lv_obj_del(s_aviso_sondas_modal);
+        s_aviso_sondas_modal = NULL;
+    }
+}
+
+static void mostrar_aviso_sondas(uint8_t flags)
+{
+    if (s_aviso_sondas_modal) return;   /* guard anti doble-apertura */
+
+    const char *txt;
+    if ((flags & FRIGO_SCAN_HAY_NUEVA) && (flags & FRIGO_SCAN_FALTA_UNA))
+        txt = "Se ha cambiado una sonda del frigo.\n"
+              "Comprueba cual es cual antes de fiarte de las temperaturas.";
+    else if (flags & FRIGO_SCAN_HAY_NUEVA)
+        txt = "Hay una sonda nueva sin asignar.\n"
+              "Dile si es aletas, congelador o exterior.";
+    else
+        txt = "Una sonda del frigo ha dejado de responder.\n"
+              "Revisa el cable o sustituyela.";
+
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_aviso_sondas_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xFFBB33), 0);  /* ambar: atencion */
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFBB33), 0);
+    lv_label_set_text(title, LV_SYMBOL_WARNING "  Sondas del frigo");
+
+    lv_obj_t *msg = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, lv_pct(100));
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg, txt);
+
+    lv_obj_t *btn = lv_btn_create(dlg);
+    lv_obj_set_size(btn, 240, 60);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0xFFBB33), 0);
+    lv_obj_set_style_radius(btn, 12, 0);
+    lv_obj_t *lb = lv_label_create(btn);
+    lv_label_set_text(lb, "Entendido");
+    lv_obj_set_style_text_font(lb, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(lb, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_center(lb);
+    lv_obj_add_event_cb(btn, aviso_sondas_cerrar_cb, LV_EVENT_CLICKED, NULL);
+}
+
 /* ── Helper: crear fila de sensor ────────────────────────────── */
 static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
                                   const char *nombre,
@@ -410,6 +505,19 @@ void ui_frigo_panel_init(ui_state_t *ui)
     make_sensor_row(card_sensors, ui, "Exterior:",
                     &s_lbl_exterior, &s_dd_exterior,
                     opts, st->assignment[FRIGO_SLOT_EXTERIOR], dd_exterior_cb);
+
+    /* Buscar sondas: para cuando se arregla un cable o se cambia una sonda con
+     * la pantalla encendida, sin tener que reiniciar. */
+    lv_obj_t *btn_buscar = lv_btn_create(card_sensors);
+    lv_obj_set_height(btn_buscar, 48);
+    lv_obj_set_style_bg_color(btn_buscar, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_radius(btn_buscar, 10, 0);
+    lv_obj_add_event_cb(btn_buscar, buscar_sondas_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *lbl_buscar = lv_label_create(btn_buscar);
+    lv_label_set_text(lbl_buscar, LV_SYMBOL_REFRESH "  Buscar sondas");
+    lv_obj_set_style_text_font(lbl_buscar, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_buscar, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_center(lbl_buscar);
 
     /* === Card 2: Ventilador y temperaturas (verde) === */
     lv_obj_t *card_fan = lv_obj_create(tab);
@@ -864,8 +972,10 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
         for (int i = 0; i < 3; ++i) {
             if (!dds[i].dd) continue;
             lv_dropdown_set_options(dds[i].dd, opts);
+            /* Sin el n_sensors>0, un rol ausente (FRIGO_SONDA_AUSENTE = 0xFF)
+             * llegaba tal cual al dropdown cuando NO queda ninguna sonda. */
             uint8_t sel = state->assignment[dds[i].slot];
-            if (state->n_sensors > 0 && sel >= state->n_sensors) sel = 0;
+            if (sel >= state->n_sensors) sel = 0;
             lv_dropdown_set_selected(dds[i].dd, sel);
         }
         s_last_n = state->n_sensors;
@@ -927,4 +1037,9 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
             snprintf(buf, sizeof(buf), "%+5.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior_overlay, buf);
     }
+
+    /* Ha cambiado el conjunto de sondas y el usuario aun no lo ha visto. La
+     * bandera NO se limpia aqui sino en el boton del aviso: este update puede
+     * saltarse si lvgl_port_lock caduca, y un disparo unico se perderia. */
+    if (state->scan_event != 0) mostrar_aviso_sondas(state->scan_event);
 }

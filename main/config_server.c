@@ -289,6 +289,53 @@ static void dhcp_set_captiveportal_url(void)
  */
 
 
+/* Clave aleatoria para el Wi-Fi de la pantalla. Mismo criterio que la de la web
+ * (ver http_auth_init): alfabeto sin caracteres que se confundan al leerlos en
+ * la pantalla (sin l, o, 1, 0). 10 chars sobre 32 simbolos = 50 bits. */
+static void ap_pass_random(char *out, size_t len)
+{
+    static const char cs[] = "abcdefghijkmnpqrstuvwxyz23456789";
+    size_t n = (len > 11) ? 10 : (len - 1);
+    for (size_t i = 0; i < n; i++) out[i] = cs[esp_random() % (sizeof(cs) - 1)];
+    out[n] = '\0';
+}
+
+/* Deja en NVS una clave de AP valida y no adivinable, migrando las de fabrica.
+ *
+ * Antes salia de fabrica con "12345678" (la sembraba ui.c) o "victron123": las
+ * dos publicas, y este repo es abierto. Cualquiera a tiro de Wi-Fi entraba, y
+ * desde dentro se ve TODO el trafico en claro (la clave de la web viaja en cada
+ * peticion) y se llega hasta la actualizacion de firmware.
+ *
+ * Va SEPARADA de wifi_ap_init y se llama ANTES de ui_init a proposito: Ajustes
+ * lee la clave UNA sola vez al arrancar, asi que si se generara mas tarde (ya
+ * dentro de wifi_ap_init) la pantalla enseniaria la vieja mientras el AP usa la
+ * nueva -> te quedas fuera sin poder leerla. 2026-07-26. */
+void config_server_ensure_ap_password(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "NVS no disponible: no se puede asegurar la clave del AP");
+        return;
+    }
+    static const char *const debiles[] = { "12345678", "victron123" };
+    char pass[65] = {0};
+    size_t pl = sizeof(pass);
+    bool regenerar = (nvs_get_str(h, "password", pass, &pl) != ESP_OK) ||
+                     strlen(pass) < 8;
+    for (size_t i = 0; !regenerar && i < sizeof(debiles) / sizeof(debiles[0]); i++) {
+        if (strcmp(pass, debiles[i]) == 0) regenerar = true;
+    }
+    if (regenerar) {
+        /* No imprimir la clave: log_capture la persistiria en la SD. */
+        ap_pass_random(pass, sizeof(pass));
+        nvs_set_str(h, "password", pass);
+        nvs_commit(h);
+        ESP_LOGW(TAG, "clave del AP regenerada (aleatoria): verla en Ajustes -> Wi-Fi");
+    }
+    nvs_close(h);
+}
+
 esp_err_t wifi_ap_init(void)
 {
     static bool subsystems_inited = false;
@@ -341,15 +388,9 @@ esp_err_t wifi_ap_init(void)
             strcpy(ssid, "VictronConfig");
             nvs_set_str(h, "ssid", ssid);
         }
-        if (nvs_get_str(h, "password", pass, &pl) != ESP_OK) {
-            /* NVS sin pass → forzamos fallback "victron123" YA (la regla
-             * de "< 8 chars => victron123" se aplica más abajo, pero ahí
-             * NVS ya estaría escrita con "" y la web mostraría password
-             * vacía aunque el AP usase "victron123" → confusión UX).
-             * Persistimos el default directamente. */
-            strcpy(pass, "victron123");
-            nvs_set_str(h, "password", pass);
-        }
+        /* La clave la deja lista config_server_ensure_ap_password(), que corre
+         * antes de la UI (ver alli el porque). Aqui solo se lee. */
+        nvs_get_str(h, "password", pass, &pl);
         if (nvs_get_u8(h, "enabled", &enabled) != ESP_OK) {
             enabled = 1;
             nvs_set_u8(h, "enabled", enabled);
@@ -421,9 +462,12 @@ esp_err_t wifi_ap_init(void)
         return wm;
     }
 
-    /* Forzar password minima 8 chars (requisito WPA2) y por defecto. */
+    /* Red de seguridad: WPA2 exige 8 chars. Solo se llega aqui si NVS no abrio
+     * (arriba siempre queda una clave valida guardada). Aleatoria en RAM: el AP
+     * sigue siendo seguro, aunque esta vez no se pueda mostrar en Ajustes. */
     if (strlen(pass) < 8) {
-        strcpy(pass, "victron123");
+        ap_pass_random(pass, sizeof(pass));
+        ESP_LOGW(TAG, "NVS no disponible: clave del AP aleatoria y SIN guardar");
     }
 
     wifi_config_t ap_cfg = {
@@ -643,6 +687,17 @@ static void http_auth_init(void)
                           "(pass en NVS; verla/cambiarla en Settings)", user);
         }
     }
+    /* Si NVS no abrio, user y pass siguen VACIOS: antes se construia igual la
+     * cabecera y salia "Basic Og==" (usuario y clave en blanco), o sea que
+     * entraba cualquiera. Se deja s_auth_header vacio a proposito: check_basic_auth
+     * exige que no lo este, asi que el portal responde 401 a todo. Cerrado por
+     * defecto: sin credenciales, no se entra. 2026-07-26. */
+    if (user[0] == '\0' || pass[0] == '\0') {
+        s_auth_header[0] = '\0';
+        ESP_LOGE(TAG, "sin credenciales (NVS no disponible): el portal web queda cerrado");
+        return;
+    }
+
     /* Construir cabecera "Basic <base64(user:pass)>" una vez. */
     char up[68];
     int n = snprintf(up, sizeof(up), "%s:%s", user, pass);
@@ -1263,9 +1318,11 @@ static void get_latest_csv_path(const char *subdir, char *out, size_t out_len)
 {
     char dirpath[64];
     snprintf(dirpath, sizeof(dirpath), "/sdcard/%s", subdir);
-    bool sdl = camera_sd_bus_lock(3000);   /* serializar el barrido de dir con el GDMA de la camara */
+    /* Sin cerrojo no se toca la SD (pisar el GDMA de la camara = DMA timeout y
+     * tarjeta pillada). Se comporta como "no hay CSV". 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) { out[0] = 0; return; }
     DIR *d = opendir(dirpath);
-    if (!d) { if (sdl) camera_sd_bus_unlock(); out[0] = 0; return; }
+    if (!d) { camera_sd_bus_unlock(); out[0] = 0; return; }
     char latest[24] = {0};
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
@@ -1277,7 +1334,7 @@ static void get_latest_csv_path(const char *subdir, char *out, size_t out_len)
         }
     }
     closedir(d);
-    if (sdl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     if (latest[0]) snprintf(out, out_len, "%s/%s", dirpath, latest);
     else out[0] = 0;
 }
@@ -1288,16 +1345,18 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
     struct stat st;
     /* Serializar el I/O de SD con el GDMA de la camara (no-op si no hay camara).
      * Solo unlock si el lock se consiguio: dar un mutex ajeno = assert de FreeRTOS. */
-    bool sdl = camera_sd_bus_lock(3000);
-    if (stat(path, &st) != 0) { if (sdl) camera_sd_bus_unlock(); return NULL; }
-    if (st.st_size <= 0 || st.st_size > 512 * 1024) { if (sdl) camera_sd_bus_unlock(); return NULL; } /* limite 512KB */
+    /* Sin cerrojo no se toca la SD: se falla la lectura en vez de pisar el GDMA
+     * de la camara. 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) return NULL;
+    if (stat(path, &st) != 0) { camera_sd_bus_unlock(); return NULL; }
+    if (st.st_size <= 0 || st.st_size > 512 * 1024) { camera_sd_bus_unlock(); return NULL; } /* limite 512KB */
     FILE *f = fopen(path, "rb");
-    if (!f) { if (sdl) camera_sd_bus_unlock(); return NULL; }
+    if (!f) { camera_sd_bus_unlock(); return NULL; }
     char *buf = malloc(st.st_size + 1);
-    if (!buf) { fclose(f); if (sdl) camera_sd_bus_unlock(); return NULL; }
+    if (!buf) { fclose(f); camera_sd_bus_unlock(); return NULL; }
     size_t n = fread(buf, 1, st.st_size, f);
     fclose(f);
-    if (sdl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     buf[n] = 0;
     if (out_len) *out_len = n;
     return buf;
@@ -1636,6 +1695,29 @@ static esp_err_t handle_data_frigo_csv(httpd_req_t *req)
         free(csv);
     } else {
         httpd_resp_sendstr(req, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct\n");
+    }
+    return ESP_OK;
+}
+
+
+/* CSV de comparacion NE185 (bytes crudos) vs SmartShunt. Solo descarga: no hay
+ * pagina ni grafica, es un log de diagnostico (ver ne185_vlog.h). */
+static esp_err_t handle_data_ne185v_csv(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    char path[64];
+    get_today_csv_path("ne185v", path, sizeof path);
+    size_t csv_len = 0;
+    char *csv = read_file_to_buf(path, &csv_len);
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=ne185v.csv");
+    if (csv) {
+        httpd_resp_sendstr(req, csv);
+        free(csv);
+    } else {
+        /* Aun sin muestras volcadas hoy: devolver solo la cabecera. */
+        httpd_resp_sendstr(req, "timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,"
+                                "shunt_centivolts,shunt_fresh\n");
     }
     return ESP_OK;
 }
@@ -2060,8 +2142,11 @@ static void tar_write_octal(char *dst, size_t len, uint64_t val)
 static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t mtime)
 {
     memset(hdr, 0, TAR_BLOCK);
-    /* name: 100 bytes */
-    strncpy((char*)&hdr[0], name, 99);
+    /* name: campo de 100 bytes. El llamante ya descarta los nombres que no caben
+     * (antes se copiaban cortados a 99 y el .tar salia con un nombre falso, o con
+     * dos entradas iguales si dos ficheros compartian los primeros 99). memcpy
+     * sobre el hdr ya puesto a cero: no hace falta terminador. 2026-07-26. */
+    memcpy(&hdr[0], name, strlen(name));
     /* mode 0644 */
     tar_write_octal((char*)&hdr[100], 8, 0644);
     /* uid/gid 0 */
@@ -2088,16 +2173,23 @@ static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t
 
 /* Vuelca el contenido de src_dir dentro de un .tar ya empezado. Si prefix no es
  * NULL, las entradas salen como "<prefix>/<fichero>": eso es lo que hace que el
- * paquete de viaje traiga ya las carpetas dentro. Devuelve false si el envio al
- * cliente fallo (conexion cerrada), para que el llamante corte y no siga
- * empaquetando carpetas en balde. */
+ * paquete de viaje traiga ya las carpetas dentro.
+ *
+ * Devuelve false si hubo que CORTAR el paquete a medias (envio fallido, lectura
+ * corta o tarjeta ocupada). El llamante no debe mandar entonces el bloque final:
+ * un .tar al que le falta contenido SIGUE pareciendo valido si lleva su cierre, y
+ * el analizador del PC se traga un viaje incompleto creyendo que esta entero.
+ * Una carpeta ausente NO es un corte: aporta cero entradas y se sigue. */
 static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
                            const char *prefix, char *buf,
                            size_t *bytes_since_yield)
 {
-    bool dol = camera_sd_bus_lock(3000);   /* opendir lee sectores de dir: serializar con la camara */
+    /* Sin cerrojo NO se toca la tarjeta. Antes se hacia la operacion igual
+     * cuando caducaba, y eso pisa el GDMA de la camara: es la receta del
+     * "DMA timeout 0x107" y la SD pillada. 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) return false;
     DIR *dp = opendir(src_dir);
-    if (dol) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     if (!dp) return true;   /* carpeta ausente = aporta cero entradas, no es un error */
 
     uint8_t hdr[TAR_BLOCK];
@@ -2105,42 +2197,53 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
     struct dirent *de;
     while (1) {
         /* readdir lee sectores de dir: serializar con el GDMA de la camara */
-        bool rdl = camera_sd_bus_lock(3000);
+        if (!camera_sd_bus_lock(3000)) { ok = false; break; }
         de = readdir(dp);
-        if (rdl) camera_sd_bus_unlock();
+        camera_sd_bus_unlock();
         if (de == NULL) break;
         if (de->d_type == DT_DIR) continue;
+
+        /* El campo "name" del ustar son 100 bytes, y con prefijo la entrada es
+         * "<prefix>/<fichero>". Lo que no quepa se OMITE en vez de servirlo con
+         * el nombre cortado (dos ficheros que compartan el principio saldrian
+         * con el mismo nombre). Los ficheros de la pantalla son
+         * "AAAA-MM-DD.csv": esto no salta nunca en la practica. 2026-07-26. */
+        char entry[100];
+        int elen = prefix ? snprintf(entry, sizeof entry, "%s/%s", prefix, de->d_name)
+                          : snprintf(entry, sizeof entry, "%s", de->d_name);
+        if (elen < 0 || elen >= (int)sizeof entry) {
+            ESP_LOGW(TAG, "nombre demasiado largo para el tar, se omite: %s", de->d_name);
+            continue;
+        }
+
         char full_path[400];
         snprintf(full_path, sizeof full_path, "%s/%s", src_dir, de->d_name);
+
+        /* Abrir ANTES de anunciar la cabecera: si se anunciaban N bytes y luego
+         * fallaba el fopen, esos N bytes no llegaban nunca y todo lo que venia
+         * detras quedaba desalineado -> paquete corrupto con aspecto de bueno. */
         struct stat st;
-        bool stl = camera_sd_bus_lock(3000);
+        if (!camera_sd_bus_lock(3000)) { ok = false; break; }
         int sr = stat(full_path, &st);
-        if (stl) camera_sd_bus_unlock();
-        if (sr != 0) continue;
-        if (st.st_size <= 0) continue;
-
-        /* Header. El campo name de ustar son 100 bytes: "bateria/AAAA-MM-DD.csv" cabe. */
-        char entry[100];
-        if (prefix) snprintf(entry, sizeof entry, "%s/%s", prefix, de->d_name);
-        else        snprintf(entry, sizeof entry, "%s", de->d_name);
-        tar_build_header(hdr, entry, st.st_size, st.st_mtime);
-        if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) { ok = false; break; }
-
-        /* Contenido en chunks de 2KB */
-        /* Cada op de SD bajo el cerrojo; se SUELTA en el envio de red para que la
-         * camara interleave. Solo unlock si se consiguio el lock (mutex ajeno = assert). */
-        bool sdl = camera_sd_bus_lock(3000);
-        FILE *f = fopen(full_path, "rb");
-        if (sdl) camera_sd_bus_unlock();
+        FILE *f = (sr == 0 && st.st_size > 0) ? fopen(full_path, "rb") : NULL;
+        camera_sd_bus_unlock();
         if (!f) continue;
-        size_t remaining = st.st_size;
+
+        tar_build_header(hdr, entry, st.st_size, st.st_mtime);
+        if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) ok = false;
+
+        /* Contenido en chunks de 2KB. Cada op de SD bajo el cerrojo; se SUELTA
+         * en el envio de red para que la camara interleave. */
+        size_t remaining = ok ? (size_t)st.st_size : 0;
         while (remaining > 0) {
             size_t to_read = remaining > 2048 ? 2048 : remaining;
-            bool sl = camera_sd_bus_lock(3000);
+            if (!camera_sd_bus_lock(3000)) { ok = false; break; }
             size_t n = fread(buf, 1, to_read, f);
-            if (sl) camera_sd_bus_unlock();
-            if (n == 0) break;
-            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { ok = false; remaining = 0; break; }
+            camera_sd_bus_unlock();
+            /* Lectura corta: la cabecera ya anuncio st.st_size y no hay forma de
+             * cuadrarlo. Cortar es lo unico honesto. */
+            if (n == 0) { ok = false; break; }
+            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { ok = false; break; }
             remaining -= n;
             *bytes_since_yield += n;
             if (*bytes_since_yield >= 32768) {
@@ -2148,16 +2251,21 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
                 vTaskDelay(1);   /* ceder CPU a LVGL/WDT/WiFi (evita el reset por asfixia) */
             }
         }
-        bool sl2 = camera_sd_bus_lock(3000);
+        /* El fclose SI tiene que ocurrir (dejarlo abierto seria una fuga), asi
+         * que aqui se espera al cerrojo en vez de saltarselo. */
+        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
         fclose(f);
-        if (sl2) camera_sd_bus_unlock();
+        camera_sd_bus_unlock();
         if (!ok) break;
 
         /* Padding hasta multiplo de 512 */
         size_t pad = (TAR_BLOCK - (st.st_size % TAR_BLOCK)) % TAR_BLOCK;
         if (pad > 0) {
             uint8_t zero[TAR_BLOCK] = {0};
-            httpd_resp_send_chunk(req, (const char*)zero, pad);
+            if (httpd_resp_send_chunk(req, (const char*)zero, pad) != ESP_OK) {
+                ok = false;
+                break;
+            }
         }
     }
     closedir(dp);
@@ -2171,6 +2279,17 @@ static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
                                const char *const *dirs, const char *const *prefixes,
                                int n)
 {
+    /* Se tantea el cerrojo ANTES de anunciar nada para poder contestar un 503
+     * legible. Una vez empezado el .tar ya no hay forma de decirlo: lo unico que
+     * queda es cortar la conexion. 2026-07-26. */
+    if (!camera_sd_bus_lock(3000)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        httpd_resp_sendstr(req, "La tarjeta esta ocupada. Prueba otra vez en unos segundos.");
+        return ESP_OK;
+    }
+    camera_sd_bus_unlock();
+
     httpd_resp_set_type(req, "application/x-tar");
     char disp[160];
     /* Construir manualmente para evitar warning de format-truncation */
@@ -2190,11 +2309,16 @@ static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
      * (evita el drop de conexion en descargas medianas). El contador es comun a
      * todas las carpetas: lo que asfixia es el total enviado, no cada carpeta. */
     size_t bytes_since_yield = 0;
-    for (int i = 0; i < n; i++) {
-        if (!tar_stream_dir(req, dirs[i], prefixes ? prefixes[i] : NULL,
-                            buf, &bytes_since_yield)) break;
+    bool ok = true;
+    for (int i = 0; i < n && ok; i++) {
+        ok = tar_stream_dir(req, dirs[i], prefixes ? prefixes[i] : NULL,
+                            buf, &bytes_since_yield);
     }
     free(buf);
+
+    /* Si se corto NO se manda el bloque final: sin el, el cliente ve la descarga
+     * cortada y no la da por buena. Devolver ESP_FAIL cierra la conexion. */
+    if (!ok) return ESP_FAIL;
 
     /* Final TAR: dos bloques de zeros */
     uint8_t zeros[TAR_BLOCK * 2] = {0};
@@ -2288,9 +2412,11 @@ esp_err_t config_server_start(void) {
     cfg.send_wait_timeout = 30;
     cfg.recv_wait_timeout = 30;
     cfg.max_open_sockets = 4;
-    cfg.max_uri_handlers = 40;  /* 31 actuales + solar.tar + viaje.tar + margen.
-                                 * Ojo: pasarse del tope hace que el registro
-                                 * falle en silencio (no se comprueba el retorno). */
+    cfg.max_uri_handlers = 40;  /* 34 actuales (32 + solar.tar + viaje.tar) mas
+                                 * margen. Estaba a 32: uno de margen. Ojo:
+                                 * pasarse del tope hace que el registro falle EN
+                                 * SILENCIO (no se comprueba el retorno), y la
+                                 * pagina simplemente no responde. 2026-07-26. */
     cfg.max_resp_headers = 16;
     esp_err_t herr = httpd_start(&server, &cfg);
     if (herr != ESP_OK) {
@@ -2348,6 +2474,8 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_data_frigo);
     httpd_uri_t uri_data_frigo_csv = { .uri = "/data/frigo.csv", .method = HTTP_GET, .handler = handle_data_frigo_csv };
     httpd_register_uri_handler(server, &uri_data_frigo_csv);
+    httpd_uri_t uri_data_ne185v_csv = { .uri = "/data/ne185v.csv", .method = HTTP_GET, .handler = handle_data_ne185v_csv };
+    httpd_register_uri_handler(server, &uri_data_ne185v_csv);
     httpd_uri_t uri_data_bat = { .uri = "/data/bateria", .method = HTTP_GET, .handler = handle_data_bateria };
     httpd_register_uri_handler(server, &uri_data_bat);
     httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };

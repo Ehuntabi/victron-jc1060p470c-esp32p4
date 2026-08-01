@@ -1,6 +1,6 @@
 # Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**v1.0.0** · **[Español](#español) | [English](#english)**
+**v1.4.0** · **[Español](#español) | [English](#english)**
 
 ---
 
@@ -8,9 +8,19 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/img/01_overview.png" width="320"><br><sub>Vista general / Overview</sub></td>
-    <td align="center"><img src="docs/img/09_ajustes.png" width="320"><br><sub>Ajustes / Settings</sub></td>
-    <td align="center"><img src="docs/img/10_ajustes_frigo.png" width="320"><br><sub>Frigo / Fridge</sub></td>
+    <td align="center"><img src="docs/screenshots/00_overview.jpg" width="320"><br><sub>Vista general / Overview</sub></td>
+    <td align="center"><img src="docs/screenshots/01_bateria.jpg" width="320"><br><sub>Batería / Battery</sub></td>
+    <td align="center"><img src="docs/screenshots/02_solar.jpg" width="320"><br><sub>Solar</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/05_dcdc.jpg" width="320"><br><sub>DC/DC</sub></td>
+    <td align="center"><img src="docs/screenshots/04_inversor.jpg" width="320"><br><sub>Inversor / Inverter</sub></td>
+    <td align="center"><img src="docs/screenshots/03_monitor_bateria.jpg" width="320"><br><sub>Monitor de batería / Battery monitor</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/14_frigo.jpg" width="320"><br><sub>Frigo / Fridge</sub></td>
+    <td align="center"><img src="docs/screenshots/20_autocaravana.jpg" width="320"><br><sub>Autocaravana / Motorhome</sub></td>
+    <td align="center"><img src="docs/screenshots/13_ajustes.jpg" width="320"><br><sub>Ajustes / Settings</sub></td>
   </tr>
 </table>
 
@@ -32,9 +42,8 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **RTC** | RX8025T (I²C 0x32, SDA=7 / SCL=8 compartido con GT911 y ES8311) + pila CR1220 |
 | **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), LDO interno ch 4 (3.3 V) |
 | **Sensores temperatura** | DS18B20 1-Wire en **GPIO 4** (JP1 pin 13, pullup 4.7 kΩ) |
-| **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 25 kHz |
+| **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 18 kHz. El pin 15 ataca, a través de un optoacoplador **PC817**, un MOSFET **IRLR7843** con resistencia en serie en puerta, resistencia de pull-down y diodo **1N4148** de rueda libre |
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
-| **Medidor AC 220 V** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 del JP1, Modbus 9600 8N1) |
 | **Cámara** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, JPEG por HW). Comparte el I²C (SDA=7 / SCL=8); sin pines reset/pwdn dedicados |
 | **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J4 (DE/RE automático) |
 
@@ -65,37 +74,32 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 
 #### Settings
 Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, separadores entre sub-bloques:
-- **Frigo** (verde): control PWM del ventilador según T_Aletas.
-- **Logs** (naranja): chart 24 h de batería y de temperaturas frigo. Swipe izquierda/derecha **navega por fecha** en los logs guardados en SD (header muestra la fecha seleccionada).
-- **Wi-Fi** (azul): SSID, contraseña, switch on/off, modal “requiere reiniciar”.
-- **Display** (cyan/púrpura/verde/naranja): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
-- **Sonido y avisos** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
-- **Victron Keys** (rosa): MAC + clave AES por dispositivo (hasta 8), confirmación al modificar. Selector “Página inicial portal”: **Dashboard** (default), Logs o Keys.
-- **About** (gris): uptime, RAM libre, IP del AP, chip, versión IDF, **Trip computer** con kWh/Ah cargados/consumidos y horas desde el último reset, **Backup configuración** (exportar/importar a `/sdcard/config_backup.json`), **Último reset** + contador de resets por watchdog/panic, botón Reboot con confirmación.
+- **Historial en gráficos** (púrpura): chart 24 h de batería y de temperaturas frigo. Swipe izquierda/derecha **navega por fecha** en los logs guardados en SD (header muestra la fecha seleccionada).
+- **Wi-Fi** (naranja): SSID, contraseña, switch on/off, modal “requiere reiniciar”.
+- **Pantalla** (cyan): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
+- **Tarjeta SD** (azul): carrusel de capturas y visor de imágenes de la SD.
+- **Sonido y alertas** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
+- **Autocaravana** (rosa): agrupa lo propio del vehículo — **Opciones Frigo** (sensores DS18B20, control PWM del ventilador según T_Aletas, umbrales y aprovechamiento de excedente solar), **Victron Keys** (MAC + clave AES por dispositivo, hasta 8), **Modo ausente**, **Trip computer** (kWh/Ah cargados/consumidos y horas, reseteable) y **Auto-encendido** de luz interior + bomba al arrancar.
+- **Acerca de** (gris): uptime, RAM libre, IP del AP, chip, versión IDF, **Backup configuración** (exportar/importar a `/sdcard/config_backup.json`), **Último reset** + contador de resets por watchdog/panic, botón Reboot con confirmación.
 
 #### Barra inferior
 - Reloj + fecha (RTC), iconos interactivos:
   - 🔵 BLE — gris si no hay datos en 5 s.
   - 🔊 / 🔇 Volumen — tap = mute/unmute.
   - 📶 Wi-Fi — tap = toggle AP on/off con modal.
-  - **AC 142 W** — aparece solo si el PZEM-004T está conectado y mide tensión AC (verde en activo, gris en reposo, rojo en alarma).
   - ⚙ / 🏠 — navega entre Live y Settings.
+  - 🌡 **Exterior: +26.0 °C** — temperatura del DS18B20 exterior, siempre visible a la derecha.
 
 #### BLE Victron
 - Hasta 8 dispositivos por MAC + clave AES (NVS).
 - Records soportados: 0x01 Solar Charger, 0x02 Battery Monitor, 0x03 Inverter, 0x04 DC/DC Converter, 0x05 Smart Lithium, 0x09 SBP, 0x0A Lynx Smart BMS, 0x0B Multi RS, 0x0C VE.Bus, 0x0D DC Energy Meter, 0x0F Orion XS.
 - Detección automática del tipo y vista correspondiente.
 
-#### PZEM-004T v3 (AC 220 V, opcional)
-- Driver Modbus-RTU sobre UART2 (TX=GPIO 32, RX=GPIO 33 del JP1).
-- Polling cada 2 s. Si el módulo no está conectado, el firmware sigue funcionando y muestra "no conectado" en el dashboard.
-- Datos en `/api/state` JSON y card propia en el dashboard web.
-
 #### Cámara y modo vigilancia (autocaravana)
-- Sensor **OmniVision OV02C10** por MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), driver propio portado del kernel Linux; ISP en bypass y **JPEG por hardware** (ESP32-P4). Comparte el bus I²C (SDA=7/SCL=8) con touch/RTC; sin pines dedicados.
+- Sensor **OmniVision OV02C10** por MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), driver propio portado del kernel Linux; **ISP por hardware** del ESP32-P4 (revelado del RAW con perfil IPA, no bypass) y **JPEG por hardware**. Comparte el bus I²C (SDA=7/SCL=8) con touch/RTC; sin pines dedicados.
 - Captura **a demanda** (1 frame cada ~2 s), no streaming continuo — así el DMA de la cámara no bloquea la SD. En uso normal sirve para **auto-brillo** (mide la luz ambiente).
-- `GET /snapshot`: última imagen en JPEG (recortada 960x544, calidad 85, ~80-150 KB).
-- **Modo ausente / vigilancia**: se activa desde *Settings → Sonido y avisos* o con `GET /ausente?on` (cuenta atrás de 10 s y apaga la pantalla). Detección de movimiento por rejilla de luminancia 32x18; al detectar guarda una foto JPEG en un **anillo de 8 en PSRAM** (no en SD, se pierde al reiniciar). Galería en `GET /vigilancia` (y `/vigilancia/<id>` para cada foto). Se sale con **4 toques en una esquina** o `GET /ausente?off`. *(Vídeo H.264: pendiente.)*
+- `GET /snapshot`: última imagen en JPEG (recortada 960x528, calidad 78, ~80-150 KB).
+- **Modo ausente / vigilancia**: se activa desde *Ajustes → Autocaravana* o con `GET /ausente?on` (cuenta atrás de 10 s y apaga la pantalla). Detección de movimiento por rejilla de luminancia 32x18; al detectar guarda una foto JPEG en **`/sdcard/vigilancia`**, así que **las fotos se conservan al reiniciar** (tope de 300 por sesión, anti-runaway). Galería en `GET /vigilancia` (y `/vigilancia/<id>` para cada foto); descarga completa en `GET /data/vigilancia.tar`. Se sale con **4 toques en cualquier esquina** (dentro de 3 s) o `GET /ausente?off`. *(Vídeo H.264: pendiente.)*
 - **Cerrojo cámara↔SD** (`camera_sd_bus_lock`): cámara y SDMMC comparten GDMA; los escritores de SD (datalogger) serializan su E/S con este mutex para no provocar reinicios por INT_WDT.
 
 #### NE185 — control de la autocaravana (RS-485)
@@ -130,10 +134,13 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 #### Portal web
 - AP `VictronConfig` automático al arrancar.
-- Nav consistente en todas las páginas: **Dashboard · Logs · Keys · Mirror**.
-- `http://192.168.4.1/dashboard` (default): grid responsive con SoC, V/A/W, PV, DC/DC, energía hoy, trip computer y AC PZEM. Auto-refresh 2 s via `GET /api/state` (JSON).
-- `http://192.168.4.1/mirror`: snapshot del display real cada 1.5 s (BMP 24-bit downsampleado 2x).
+- Nav consistente en todas las páginas: **Dashboard · Logs · Keys**.
+- `http://192.168.4.1/dashboard` (default): grid responsive con SoC, V/A/W, PV, DC/DC y energía de hoy. Auto-refresh 2 s via `GET /api/state` (JSON).
 - `/data/frigo` y `/data/bateria`: gráficos SVG con auto-escala Y y downsample > 1500 puntos; polígono semitransparente max-min + línea avg.
+- **Descargas sin sacar la SD**: `/data/frigo.csv` y `/data/bateria.csv` (día en curso), y los `.tar` completos de `/data/frigo.tar`, `/data/bateria.tar`, `/data/logs.tar`, `/data/config.tar`, `/data/capturas.tar` y `/data/vigilancia.tar`.
+- **`/data/ne185v.csv` — log de diagnóstico NE185 vs SmartShunt** (día en curso, sin página ni gráfica). Una muestra por minuto en `/sdcard/ne185v/` con los **bytes 12/13 de la trama NE185 sin convertir** junto al voltaje que da el SmartShunt por BLE. Sirve para deducir por regresión la fórmula real del NE185: la documentada, `V = (raw − 30)/10`, viene del NE334 y **nunca se ha medido** aquí, porque el voltaje se lee del shunt y no de este bus. Columnas: `timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,shunt_centivolts,shunt_fresh` (usar solo las filas con ambos `fresh = 1`).
+- **Actualización por Wi-Fi (OTA)** en `/ota`: se sube el `.bin` desde el navegador, sin cable ni PC.
+- `/snapshot`: última foto de la cámara en JPEG. `/capturas` y `/captura?n=<0..22>`: capturas de las pantallas del propio display.
 - `/keys`: configuración de claves Victron.
 - Sincronización automática de hora (`<img>` GET → `/settime`, compatible captive portal).
 
@@ -144,7 +151,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 ### Compilación
 
-Requisitos: ESP-IDF v5.4 o superior, target esp32p4.
+Requisitos: **ESP-IDF v5.4.4 exactamente**, target esp32p4. Otras versiones rompen el panel DSI.
 
 ```bash
 git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
@@ -165,9 +172,10 @@ idf.py -p /dev/ttyACM0 flash monitor
 
 - **SD Card** ✅ — slot 0 IOMUX dedicado.
 - **RTC RX8025T** ✅ — soporta pérdida de pila con backup en NVS.
-- **DS18B20** — bus 1-Wire en GPIO 4 (JP1 pin 13). Pullup 4.7 kΩ a 3.3 V externo.
-- **Ventilador** — PWM en GPIO 5 (JP1 pin 15).
-- **PZEM-004T** — opcional, UART2 en GPIO 32/33 (JP1 pin 19/21). Si no está conectado, el firmware sigue funcionando sin él.
+- **Cámara OV02C10** ✅ — MIPI-CSI con ISP por hardware. Comparte GDMA con la SD: captura a demanda, nunca streaming continuo.
+- **NE185 (RS-485)** ✅ — MAX485 en UART1, en uso como maestro del cuadro.
+- **DS18B20** ✅ — bus 1-Wire en GPIO 4 (JP1 pin 13). Pullup 4.7 kΩ a 3.3 V externo. El bus necesita resets de warm-up antes de enumerar.
+- **Ventilador** — PWM 18 kHz en GPIO 5 (JP1 pin 15).
 
 ### Créditos
 
@@ -193,9 +201,8 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **RTC** | RX8025T (I²C 0x32, SDA=7 / SCL=8 shared with GT911 and ES8311) + CR1220 cell |
 | **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), internal LDO ch 4 (3.3 V) |
 | **Temp sensors** | DS18B20 1-Wire on **GPIO 4** (JP1 pin 13, 4.7 kΩ pull-up) |
-| **Fridge fan** | LEDC PWM on **GPIO 5** (JP1 pin 15), 25 kHz |
+| **Fridge fan** | LEDC PWM on **GPIO 5** (JP1 pin 15), 18 kHz. Pin 15 drives, through a **PC817** optocoupler, an **IRLR7843** MOSFET with a series gate resistor, a pull-down resistor and a **1N4148** flyback diode |
 | **Audio** | ES8311 codec + NS4150 amp (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
-| **AC 220 V meter** | PZEM-004T v3 (UART2, TX=GPIO 32 / RX=GPIO 33 of JP1, Modbus 9600 8N1) |
 | **Camera** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, HW JPEG). Shares I²C (SDA=7 / SCL=8); no dedicated reset/pwdn pins |
 | **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J4 connector (automatic DE/RE) |
 
@@ -226,37 +233,32 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 
 #### Settings
 Pages with role-coloured cards, scrollbar visible on overflow, separators between sub-blocks:
-- **Frigo** (green): PWM fan based on T_Fins.
-- **Logs** (orange): 24 h battery + frigo temperature charts. Swipe left/right **navigates by date** across SD logs (header shows the active day).
-- **Wi-Fi** (blue): SSID, password, on/off switch, restart modal.
-- **Display** (cyan/purple/green/orange): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
+- **Chart history** (purple): 24 h battery + frigo temperature charts. Swipe left/right **navigates by date** across SD logs (header shows the active day).
+- **Wi-Fi** (orange): SSID, password, on/off switch, restart modal.
+- **Display** (cyan): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
+- **SD card** (blue): screenshot carousel and SD image viewer.
 - **Sound & alerts** (red): volume, mute switch, SoC and freezer temperature thresholds.
-- **Victron Keys** (pink): MAC + AES key per device (up to 8), confirmation modal on edit. “Web portal start page” selector: **Dashboard** (default), Logs or Keys.
-- **About** (gray): uptime, free RAM, AP IP, chip, IDF version, **Trip computer** with kWh/Ah charged/discharged and active hours since last reset, **Configuration backup** (export/import to `/sdcard/config_backup.json`), **Last reset** + WDT/panic reset counter, Reboot button.
+- **Motorhome** (pink): groups everything vehicle-specific — **Fridge options** (DS18B20 sensors, PWM fan based on T_Fins, thresholds and solar-surplus usage), **Victron Keys** (MAC + AES key per device, up to 8), **Away mode**, **Trip computer** (user-resettable kWh/Ah charged/discharged and active hours) and **Auto switch-on** of the interior light + pump at wake.
+- **About** (gray): uptime, free RAM, AP IP, chip, IDF version, **Configuration backup** (export/import to `/sdcard/config_backup.json`), **Last reset** + WDT/panic reset counter, Reboot button.
 
 #### Bottom bar
 - Clock + date (RTC), interactive icons:
   - 🔵 BLE — grey if no data for 5 s.
   - 🔊 / 🔇 Volume — tap to mute/unmute.
   - 📶 Wi-Fi — tap to toggle AP with restart modal.
-  - **AC 142 W** — appears only if the PZEM-004T is connected and measuring AC voltage (green active, grey idle, red alarm).
   - ⚙ / 🏠 — navigate between Live and Settings.
+  - 🌡 **Exterior: +26.0 °C** — outdoor DS18B20 reading, always visible on the right.
 
 #### Victron BLE
 - Up to 8 devices by MAC + AES key (NVS).
 - Records: 0x01 Solar Charger, 0x02 Battery Monitor, 0x03 Inverter, 0x04 DC/DC Converter, 0x05 Smart Lithium, 0x09 SBP, 0x0A Lynx Smart BMS, 0x0B Multi RS, 0x0C VE.Bus, 0x0D DC Energy Meter, 0x0F Orion XS.
 - Automatic device-type detection and matching view.
 
-#### PZEM-004T v3 (AC 220 V, optional)
-- Modbus-RTU driver over UART2 (TX=GPIO 32, RX=GPIO 33 of JP1).
-- 2 s polling. If the module is not connected, the firmware keeps running and shows "not connected" in the dashboard.
-- Data exposed in `/api/state` JSON and a dedicated card in the web dashboard.
-
 #### Camera & surveillance mode (camper)
-- **OmniVision OV02C10** sensor over MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), custom driver ported from the Linux kernel; ISP bypassed and **hardware JPEG** (ESP32-P4). Shares the I²C bus (SDA=7/SCL=8) with touch/RTC; no dedicated pins.
+- **OmniVision OV02C10** sensor over MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), custom driver ported from the Linux kernel; **hardware ISP** on the ESP32-P4 (RAW development with an IPA profile, not bypassed) and **hardware JPEG**. Shares the I²C bus (SDA=7/SCL=8) with touch/RTC; no dedicated pins.
 - **On-demand** capture (1 frame every ~2 s), not continuous streaming — so the camera DMA doesn't block the SD. In normal use it drives **auto-brightness** (measures ambient light).
-- `GET /snapshot`: latest image as JPEG (cropped 960x544, quality 85, ~80-150 KB).
-- **Away / surveillance mode**: enabled from *Settings → Sound & alerts* or via `GET /ausente?on` (10 s countdown, then the screen turns off). Motion detection via a 32x18 luminance grid; on a hit it stores a JPEG in an **8-slot ring in PSRAM** (not on SD, lost on reboot). Gallery at `GET /vigilancia` (and `/vigilancia/<id>` per photo). Exit with **4 taps in one corner** or `GET /ausente?off`. *(H.264 video: pending.)*
+- `GET /snapshot`: latest image as JPEG (cropped 960x528, quality 78, ~80-150 KB).
+- **Away / surveillance mode**: enabled from *Settings → Motorhome* or via `GET /ausente?on` (10 s countdown, then the screen turns off). Motion detection via a 32x18 luminance grid; on a hit it stores a JPEG under **`/sdcard/vigilancia`**, so **photos survive a reboot** (capped at 300 per session as a runaway guard). Gallery at `GET /vigilancia` (and `/vigilancia/<id>` per photo); full download at `GET /data/vigilancia.tar`. Exit with **4 taps in any corner** (within 3 s) or `GET /ausente?off`. *(H.264 video: pending.)*
 - **Camera↔SD lock** (`camera_sd_bus_lock`): camera and SDMMC share GDMA; SD writers (datalogger) serialize their I/O with this mutex to avoid INT_WDT resets.
 
 #### NE185 — camper control (RS-485)
@@ -291,10 +293,13 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 #### Web portal
 - `VictronConfig` AP starts automatically on boot.
-- Consistent navigation across pages: **Dashboard · Logs · Keys · Mirror**.
-- `http://192.168.4.1/dashboard` (default): responsive grid with SoC, V/A/W, PV, DC/DC, today's energy, trip computer and AC PZEM. Auto-refresh every 2 s via `GET /api/state` (JSON).
-- `http://192.168.4.1/mirror`: live display snapshot every 1.5 s (BMP 24-bit, 2× downsampled).
+- Consistent navigation across pages: **Dashboard · Logs · Keys**.
+- `http://192.168.4.1/dashboard` (default): responsive grid with SoC, V/A/W, PV, DC/DC and today's energy. Auto-refresh every 2 s via `GET /api/state` (JSON).
 - `/data/frigo` and `/data/bateria`: SVG charts with Y-axis autoscale and downsample over 1500 points; semitransparent max-min envelope + average line.
+- **Downloads without pulling the SD card**: `/data/frigo.csv` and `/data/bateria.csv` (current day), plus full archives at `/data/frigo.tar`, `/data/bateria.tar`, `/data/logs.tar`, `/data/config.tar`, `/data/capturas.tar` and `/data/vigilancia.tar`.
+- **`/data/ne185v.csv` — NE185 vs SmartShunt diagnostic log** (current day; no page, no chart). One sample per minute under `/sdcard/ne185v/` holding the **raw, unconverted bytes 12/13 of the NE185 frame** next to the battery voltage reported by the SmartShunt over BLE. Its purpose is to derive the NE185's real formula by regression: the documented one, `V = (raw − 30)/10`, is inherited from the NE334 and **has never been measured** here, because voltage is read from the shunt rather than from this bus. Columns: `timestamp,ne_raw_serv,ne_raw_mot,ne_fresh,shunt_centivolts,shunt_fresh` (use only rows where both `fresh = 1`).
+- **Wi-Fi firmware update (OTA)** at `/ota`: upload the `.bin` from the browser — no cable, no PC.
+- `/snapshot`: latest camera frame as JPEG. `/capturas` and `/captura?n=<0..22>`: screenshots of the display's own screens.
 - `/keys`: Victron key configuration page.
 - Automatic time sync via `<img>` GET → `/settime` (captive-portal compatible).
 
@@ -305,7 +310,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 ### Build
 
-Requirements: ESP-IDF v5.4 or later, target esp32p4.
+Requirements: **ESP-IDF v5.4.4 exactly**, target esp32p4. Other versions break the DSI panel.
 
 ```bash
 git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
@@ -326,9 +331,10 @@ idf.py -p /dev/ttyACM0 flash monitor
 
 - **SD card** ✅ — dedicated IOMUX slot 0.
 - **RTC RX8025T** ✅ — survives battery loss with NVS backup.
-- **DS18B20** — 1-Wire bus on GPIO 4 (JP1 pin 13). External 4.7 kΩ pull-up to 3.3 V.
-- **Fan** — PWM on GPIO 5 (JP1 pin 15).
-- **PZEM-004T** — optional, UART2 on GPIO 32/33 (JP1 pin 19/21). If not connected the firmware keeps running without it.
+- **OV02C10 camera** ✅ — MIPI-CSI with hardware ISP. Shares GDMA with the SD card: capture on demand, never continuous streaming.
+- **NE185 (RS-485)** ✅ — MAX485 on UART1, in use as master of the distribution panel.
+- **DS18B20** ✅ — 1-Wire bus on GPIO 4 (JP1 pin 13). External 4.7 kΩ pull-up to 3.3 V. The bus needs warm-up resets before enumerating.
+- **Fan** — 18 kHz PWM on GPIO 5 (JP1 pin 15).
 
 ### Credits
 

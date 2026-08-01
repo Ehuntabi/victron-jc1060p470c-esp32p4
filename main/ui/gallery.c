@@ -96,9 +96,11 @@ static void gallery_scan(void)
         camera_sd_bus_unlock();
     }
 
-    bool cl = camera_sd_bus_lock(1000);
+    /* El closedir SI tiene que ocurrir (si no, fuga del DIR), asi que se espera
+     * al cerrojo en vez de saltarselo, como ya se hace mas abajo. 2026-07-26. */
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     closedir(d);
-    if (cl) camera_sd_bus_unlock();
+    camera_sd_bus_unlock();
     if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
 }
 
@@ -311,6 +313,13 @@ static void gallery_close_cb(lv_event_t *e)
         s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
+}
+
+/* Cierre programatico, para el carrusel de capturas. Reusa el mismo camino que
+ * el boton de cerrar. 2026-07-26. */
+void ui_gallery_close(void)
+{
+    gallery_close_cb(NULL);
 }
 
 /* Boton translucido cuadrado con un simbolo centrado. */

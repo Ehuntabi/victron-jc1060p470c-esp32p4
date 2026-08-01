@@ -72,6 +72,19 @@ static void sol_close_cb(lv_event_t *e)
     if (scr) lv_obj_del(scr);
 }
 
+/* Cierre programatico, para el carrusel de capturas: hace lo mismo que el boton
+ * de cerrar pero sin evento. Sin esto, el tour dejaba esta pantalla abierta
+ * encima de la siguiente. 2026-07-26. */
+void ui_close_solar_history_screen(void)
+{
+    lv_obj_t *scr = s_scr;
+    lv_obj_t *prev = s_prev;
+    s_scr = NULL; s_prev = NULL; s_chart = NULL;
+    s_ser_a = NULL; s_ser_b = NULL;
+    if (prev) lv_scr_load(prev);
+    if (scr) lv_obj_del(scr);
+}
+
 /* Etiquetas del eje X: 5 huecos repartidos bajo el chart. */
 static void sol_set_xlabels(const char *t0, const char *t1, const char *t2,
                             const char *t3, const char *t4)

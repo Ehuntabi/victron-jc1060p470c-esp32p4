@@ -5,6 +5,11 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
+// Deja en NVS una clave de AP valida y aleatoria (y migra las antiguas de
+// fabrica). Llamar ANTES de ui_init(): Ajustes lee la clave una sola vez al
+// arrancar y si no la mostraria desfasada. Necesita NVS ya inicializada.
+void config_server_ensure_ap_password(void);
+
 // Initialize & start Wi-Fi Soft-AP for configuration portal
 esp_err_t wifi_ap_init(void);
 
