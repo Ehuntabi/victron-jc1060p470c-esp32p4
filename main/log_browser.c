@@ -26,15 +26,32 @@ int log_browser_list_dates(const char *dir,
         return 0;
     }
     int n = 0;
+    /* Diagnostico: la placa listaba UN solo dia donde el mismo codigo, corrido
+     * contra la misma tarjeta en un PC, encuentra todos. Trazamos lo que ve
+     * readdir de verdad (cuantas entradas y como se llaman las descartadas)
+     * porque la sospecha es que devuelva nombres cortos 8.3 (2026-0~1.CSV, 12
+     * chars) en vez de los largos, y entonces no casa ninguno. */
+    int total = 0, descartadas = 0;
+    char muestra[3][32];
+    int n_muestra = 0;
     struct dirent *ent;
     while ((ent = readdir(d)) != NULL) {
         const char *name = ent->d_name;
+        total++;
         /* Solo "YYYY-MM-DD.csv": 14 chars */
-        if (strlen(name) != 14) continue;
-        if (name[4] != '-' || name[7] != '-' || strcmp(name + 10, ".csv") != 0) continue;
-        for (int i = 0; i < 10; i++) {
+        bool valido = (strlen(name) == 14) && name[4] == '-' && name[7] == '-' &&
+                      strcmp(name + 10, ".csv") == 0;
+        for (int i = 0; valido && i < 10; i++) {
             if (i == 4 || i == 7) continue;
-            if (!isdigit((unsigned char)name[i])) goto skip;
+            if (!isdigit((unsigned char)name[i])) valido = false;
+        }
+        if (!valido) {
+            descartadas++;
+            if (n_muestra < 3) {
+                snprintf(muestra[n_muestra], sizeof muestra[0], "%s", name);
+                n_muestra++;
+            }
+            continue;
         }
         /* Insercion ordenada quedandose con las `max` fechas MAS RECIENTES.
          * Antes se cogian las `max` primeras que devolviera readdir y se
@@ -58,10 +75,14 @@ int log_browser_list_dates(const char *dir,
         }
         memcpy(dates_out[pos], day, LOG_BROWSER_DATE_LEN);
         n++;
-        skip: ;
     }
     closedir(d);
     if (sdl) camera_sd_bus_unlock();
+    ESP_LOGI(TAG, "%s: readdir dio %d entradas -> %d fechas, %d descartadas%s%s%s%s%s%s",
+             dir, total, n, descartadas,
+             n_muestra > 0 ? " (ej: " : "", n_muestra > 0 ? muestra[0] : "",
+             n_muestra > 1 ? ", " : "",   n_muestra > 1 ? muestra[1] : "",
+             n_muestra > 2 ? ", " : "",   n_muestra > 2 ? muestra[2] : "");
     return n;   /* ya ordenado ascendente por la insercion */
 }
 
