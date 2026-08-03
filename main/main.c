@@ -51,20 +51,25 @@
 static const char *TAG = "VICTRON_LVGL_APP";
 #define logSection(section) ESP_LOGI(TAG, "\n\n***** %s *****\n", section)
 #define LVGL_PORT_ROTATION_DEGREE 90
-#define REBOOT_INTERVAL_US (24ULL * 60 * 60 * 1000000) /* 24 horas */
+#define HEAP_LOG_INTERVAL_US (10ULL * 60 * 1000000)    /* 10 minutos */
 #define LOG_INTERVAL_MS    (5 * 60 * 1000)             /* 5 minutos */
 #define ALARM_RISE_MINUTES  30      /* minutos subiendo para alarma */
 #define ALARM_TEMP_THRESHOLD -2.0f  /* °C — si supera esto y lleva subiendo 30min */
 
-/* ── Reboot timer ────────────────────────────────────────────── */
-static void reboot_timer_cb(void *arg)
+/* ── Traza de memoria ─────────────────────────────────────────
+ * Se quito el reinicio automatico de 24 h (venia del port inicial, sin ninguna
+ * fuga diagnosticada detras). Esta traza es lo que permite comprobar si de
+ * verdad no hacia falta: si el heap libre baja con los dias de uptime hay fuga
+ * y habra que buscarla (o volver a poner el reinicio). */
+static void heap_log_cb(void *arg)
 {
-    ESP_LOGI(TAG, "Rebooting after 24h uptime...");
-    /* Flush de datalogger y battery_history a SD para no perder muestras */
-    datalogger_flush();
-    battery_history_flush();
-    ne185_vlog_flush();
-    esp_restart();
+    ESP_LOGI(TAG,
+        "uptime %llus | heap libre %" PRIu32 " min %" PRIu32 " | PSRAM libre %u",
+        esp_timer_get_time() / 1000000ULL,
+        esp_get_free_heap_size(),
+        esp_get_minimum_free_heap_size(),
+        heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
+    );
 }
 
 /* Empuja telemetria (Victron SoC/PV + NE185 shore/fresh) al modo excedente
@@ -511,16 +516,16 @@ void app_main(void)
      * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
     /* sim_overview_start(); */
 
-    /* --- Timer reboot 24h --- */
-    static esp_timer_handle_t reboot_timer;
-    const esp_timer_create_args_t reboot_timer_args = {
-        .callback        = &reboot_timer_cb,
+    /* --- Traza de memoria cada 10 min (vigilar fugas con uptime largo) --- */
+    static esp_timer_handle_t heap_log_timer;
+    const esp_timer_create_args_t heap_log_timer_args = {
+        .callback        = &heap_log_cb,
         .arg             = NULL,
         .dispatch_method = ESP_TIMER_TASK,
-        .name            = "24h_reboot",
+        .name            = "heap_log",
     };
-    esp_timer_create(&reboot_timer_args, &reboot_timer);
-    esp_timer_start_periodic(reboot_timer, REBOOT_INTERVAL_US);
+    esp_timer_create(&heap_log_timer_args, &heap_log_timer);
+    esp_timer_start_periodic(heap_log_timer, HEAP_LOG_INTERVAL_US);
 
     /* Backup horario de la hora del sistema en NVS */
     static esp_timer_handle_t rtc_backup_timer;

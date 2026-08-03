@@ -76,19 +76,25 @@ static void get_timestamp(char *buf, size_t len)
     }
 }
 
-static void get_day_filename(char *buf, size_t len)
+/* Igual que en el datalogger: el fichero sale del timestamp de la muestra, no
+ * de la hora del volcado, para que un volcado pasada la medianoche no meta las
+ * muestras de ayer en el fichero de hoy. */
+static bool ts_con_fecha(const char *ts)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    struct tm t;
-    localtime_r(&tv.tv_sec, &t);
-    if (t.tm_year > 100) {
-        snprintf(buf, len, LOG_DIR "/%04d-%02d-%02d.csv",
-                 (t.tm_year + 1900) & 0xFFFF, (t.tm_mon + 1) & 0xFF,
-                 t.tm_mday & 0xFF);
-    } else {
-        snprintf(buf, len, LOG_DIR "/boot.csv");
-    }
+    return ts[0] >= '0' && ts[0] <= '9' && ts[4] == '-';
+}
+
+static void get_day_filename(const char *ts, char *buf, size_t len)
+{
+    if (ts_con_fecha(ts)) snprintf(buf, len, LOG_DIR "/%.10s.csv", ts);
+    else                  snprintf(buf, len, LOG_DIR "/boot.csv");   /* reloj sin hora */
+}
+
+/* true si las dos muestras van al mismo fichero diario. */
+static bool mismo_dia(const char *a, const char *b)
+{
+    if (ts_con_fecha(a) != ts_con_fecha(b)) return false;
+    return !ts_con_fecha(a) || strncmp(a, b, 10) == 0;
 }
 
 /* Vuelca a la SD. Devuelve sin escribir (conservando las muestras) si la SD no
@@ -99,13 +105,18 @@ static void flush_to_sd(void)
     if (!datalogger_sd_montada()) return;
 
     int pending;
+    char first_ts[sizeof s_buf[0].timestamp];
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     pending = s_count;
+    if (pending > 0) snprintf(first_ts, sizeof first_ts, "%s", s_buf[0].timestamp);
     xSemaphoreGive(s_mutex);
     if (pending <= 0) return;
 
+    /* Dia destino = el de la muestra mas antigua pendiente. Si el bloque cruza
+     * medianoche se escribe solo hasta el corte; el resto sale en el proximo
+     * volcado, ya al fichero del dia nuevo. */
     char path[80];
-    get_day_filename(path, sizeof path);
+    get_day_filename(first_ts, path, sizeof path);
     struct stat st;
     bool need_header = (stat(path, &st) != 0);
 
@@ -136,6 +147,7 @@ static void flush_to_sd(void)
     int written = 0;
     for (int i = 0; i < s_count && !io_error; ++i) {
         const vlog_entry_t *e = &s_buf[i];
+        if (!mismo_dia(first_ts, e->timestamp)) break;   /* corte de dia */
         int r = fprintf(f, "%s,%u,%u,%d,%u,%d\n",
                         e->timestamp,
                         (unsigned)e->ne_raw_serv, (unsigned)e->ne_raw_mot,

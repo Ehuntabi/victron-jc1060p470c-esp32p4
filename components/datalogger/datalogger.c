@@ -74,18 +74,25 @@ static void get_timestamp(char *buf, size_t len)
     }
 }
 
-static void get_day_filename(char *buf, size_t len)
+/* El fichero destino sale del timestamp YA guardado en la muestra, no de la
+ * hora del volcado: si el volcado cae justo despues de medianoche, las muestras
+ * de ayer tienen que acabar en el fichero de ayer. */
+static bool ts_con_fecha(const char *ts)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    struct tm t;
-    localtime_r(&tv.tv_sec, &t);
-    if (t.tm_year > 100) {
-        snprintf(buf, len, LOG_DIR "/%04d-%02d-%02d.csv",
-                 t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
-    } else {
-        snprintf(buf, len, LOG_DIR "/boot.csv");
-    }
+    return ts[0] >= '0' && ts[0] <= '9' && ts[4] == '-';
+}
+
+static void get_day_filename(const char *ts, char *buf, size_t len)
+{
+    if (ts_con_fecha(ts)) snprintf(buf, len, LOG_DIR "/%.10s.csv", ts);
+    else                  snprintf(buf, len, LOG_DIR "/boot.csv");   /* reloj sin hora */
+}
+
+/* true si las dos muestras van al mismo fichero diario. */
+static bool mismo_dia(const char *a, const char *b)
+{
+    if (ts_con_fecha(a) != ts_con_fecha(b)) return false;
+    return !ts_con_fecha(a) || strncmp(a, b, 10) == 0;
 }
 
 /* Corte de corriente REAL a la microSD, sin tocar el aparato.
@@ -258,8 +265,21 @@ static void flush_pending_to_sd_impl(void)
         return;
     }
 
+    /* Dia destino = el de la PRIMERA muestra pendiente. Un volcado escribe solo
+     * las muestras de ese dia; si el bloque cruza medianoche, las del dia nuevo
+     * quedan pendientes y salen en el volcado de 60 s despues, ya a su fichero.
+     * Se copia bajo mutex porque datalogger_log puede mover s_pending_first al
+     * saturarse el ring. */
+    char first_ts[sizeof s_buf[0].timestamp];
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+        if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
+        return;
+    }
+    snprintf(first_ts, sizeof first_ts, "%s", s_buf[s_pending_first].timestamp);
+    xSemaphoreGive(s_mutex);
+
     char path[64];
-    get_day_filename(path, sizeof path);
+    get_day_filename(first_ts, path, sizeof path);
 
     /* fopen ANTES de tocar el estado pendiente: si falla preservamos las
      * entradas para el proximo intento. */
@@ -307,6 +327,9 @@ static void flush_pending_to_sd_impl(void)
     for (int i = 0; i < snapshot_count && !io_error; ++i) {
         int idx = (s_pending_first + i) % DATALOGGER_MAX_ENTRIES;
         const datalogger_entry_t *e = &s_buf[idx];
+        /* Cambio de dia dentro del bloque pendiente: parar aqui. Lo escrito se
+         * consolida y el resto lo recoge el proximo volcado en su fichero. */
+        if (!mismo_dia(first_ts, e->timestamp)) break;
         char ta[10], tc[10], te[10];
         format_temp(ta, sizeof ta, e->T_Aletas);
         format_temp(tc, sizeof tc, e->T_Congelador);
