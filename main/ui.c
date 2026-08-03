@@ -1534,6 +1534,7 @@ static int s_frigo_loaded_n   = 0;
 
 static void frigo_chart_load_day(void);
 static void frigo_chart_gesture_cb(lv_event_t *e);
+static void frigo_arrow_cb(lv_event_t *e);
 static void frigo_chart_touch_cb(lv_event_t *e);
 static void frigo_legend_toggle_cb(lv_event_t *e);
 static void frigo_apply_window(void);
@@ -1587,17 +1588,24 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_label_set_text(s_frigo_lbl_date, "HOY");
     lv_obj_align(s_frigo_lbl_date, LV_ALIGN_TOP_MID, 0, 12);
 
-    /* Flechas a izq/dcha del label de fecha para indicar swipe */
+    /* Flechas PULSABLES a izq/dcha de la fecha. Antes eran solo decorativas
+     * ("para indicar swipe"): parecian controles y no hacian nada al tocarlas. */
     lv_obj_t *lbl_arr_l = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_arr_l, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(lbl_arr_l, lv_color_hex(0x8A93A6), 0);
     lv_label_set_text(lbl_arr_l, LV_SYMBOL_LEFT);
     lv_obj_align(lbl_arr_l, LV_ALIGN_TOP_MID, -120, 14);
+    lv_obj_add_flag(lbl_arr_l, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(lbl_arr_l, 30);
+    lv_obj_add_event_cb(lbl_arr_l, frigo_arrow_cb, LV_EVENT_CLICKED, (void *)1);
     lv_obj_t *lbl_arr_r = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_arr_r, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(lbl_arr_r, lv_color_hex(0x8A93A6), 0);
     lv_label_set_text(lbl_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(lbl_arr_r, LV_ALIGN_TOP_MID, 120, 14);
+    lv_obj_add_flag(lbl_arr_r, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(lbl_arr_r, 30);
+    lv_obj_add_event_cb(lbl_arr_r, frigo_arrow_cb, LV_EVENT_CLICKED, NULL);
 
     /* Boton cerrar */
     lv_obj_t *btn_close = lv_btn_create(scr);
@@ -1680,6 +1688,10 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_align(s_chart, LV_ALIGN_BOTTOM_MID, 0, -76);
     lv_obj_clear_flag(s_chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_chart, frigo_chart_touch_cb, LV_EVENT_ALL, NULL);
+    /* Sin esto el gesto de deslizar MUERE en la grafica: LVGL lo entrega al
+     * objeto tocado y solo sube al padre con EVENT_BUBBLE. Como la grafica ocupa
+     * casi toda la pantalla, deslizar donde es natural no cambiaba de dia. */
+    lv_obj_add_flag(s_chart, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(s_chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(s_chart, LV_OPA_COVER, 0);
@@ -1841,7 +1853,11 @@ static int frigo_today_base(int count)
              lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
     for (int i = 0; i < count; ++i) {
         const datalogger_entry_t *e = datalogger_get_entry(i);
-        if (!e) continue;
+        /* NULL = no se consiguio el mutex del datalogger (hay un volcado a la SD
+         * en curso), NO "esta muestra no es de hoy". Tratarlo como descarte
+         * vaciaba la grafica entera si el volcado pillaba el barrido. Ante la
+         * duda, mostrar todo el buffer: es el comportamiento de siempre. */
+        if (!e) return 0;
         if (strncmp(e->timestamp, today, 10) == 0) return i;
     }
     return count;
@@ -2052,15 +2068,11 @@ static void frigo_chart_touch_cb(lv_event_t *e)
     }
 }
 
-static void frigo_chart_gesture_cb(lv_event_t *e)
+/* Un dia adelante o atras. `atras` = hacia el pasado. Lo comparten el gesto y
+ * los botones de flecha para que no puedan divergir. */
+static void frigo_step_day(bool atras)
 {
-    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
-    /* Zoomeado: el pan se hace arrastrando (frigo_chart_touch_cb); ignoramos
-     * el swipe para no cambiar de dia sin querer. */
-    bool zoomed = (s_frigo_win_a > 0.0001f) || (s_frigo_win_b < 0.9999f);
-    if (zoomed) return;
-    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (dir == LV_DIR_RIGHT) {
+    if (atras) {
         if (s_frigo_day_idx == -1) {
             if (s_frigo_n_dates > 0) s_frigo_day_idx = s_frigo_n_dates - 1;
             else return;
@@ -2069,17 +2081,31 @@ static void frigo_chart_gesture_cb(lv_event_t *e)
         } else {
             return;
         }
-        s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
-        frigo_update_zoom_label();
-        frigo_chart_load_day();
-    } else if (dir == LV_DIR_LEFT) {
+    } else {
         if (s_frigo_day_idx < 0) return;
         if (s_frigo_day_idx < s_frigo_n_dates - 1) s_frigo_day_idx++;
         else                                       s_frigo_day_idx = -1;
-        s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
-        frigo_update_zoom_label();
-        frigo_chart_load_day();
     }
+    s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
+    frigo_update_zoom_label();
+    frigo_chart_load_day();
+}
+
+static void frigo_arrow_cb(lv_event_t *e)
+{
+    frigo_step_day(lv_event_get_user_data(e) != NULL);
+}
+
+static void frigo_chart_gesture_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    /* Zoomeado: el pan se hace arrastrando (frigo_chart_touch_cb); ignoramos
+     * el swipe para no cambiar de dia sin querer. */
+    bool zoomed = (s_frigo_win_a > 0.0001f) || (s_frigo_win_b < 0.9999f);
+    if (zoomed) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (dir == LV_DIR_RIGHT)     frigo_step_day(true);
+    else if (dir == LV_DIR_LEFT) frigo_step_day(false);
 }
 
 /* --- Pantalla historico bateria --- */
@@ -2128,6 +2154,7 @@ static int s_bh_loaded_n   = 0;
 
 static void bh_chart_load_day(void);
 static void bh_chart_gesture_cb(lv_event_t *e);
+static void bh_arrow_cb(lv_event_t *e);
 static void bh_chart_touch_cb(lv_event_t *e);
 static void bh_apply_window(void);
 static void bh_update_zoom_label(void);
@@ -2287,16 +2314,25 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_label_set_text(s_bh_lbl_date, "HOY (24H)");
     lv_obj_align(s_bh_lbl_date, LV_ALIGN_TOP_MID, 0, 16);
 
+    /* Flechas PULSABLES. Antes eran etiquetas decorativas "para indicar swipe":
+     * parecian controles y no hacian nada al tocarlas. Area de toque ampliada
+     * porque el glifo solo es diminuto para un dedo. */
     lv_obj_t *bh_arr_l = lv_label_create(scr);
     lv_obj_set_style_text_font(bh_arr_l, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(bh_arr_l, lv_color_hex(0x8A93A6), 0);
     lv_label_set_text(bh_arr_l, LV_SYMBOL_LEFT);
     lv_obj_align(bh_arr_l, LV_ALIGN_TOP_MID, -150, 18);
+    lv_obj_add_flag(bh_arr_l, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(bh_arr_l, 30);
+    lv_obj_add_event_cb(bh_arr_l, bh_arrow_cb, LV_EVENT_CLICKED, (void *)1);  /* atras */
     lv_obj_t *bh_arr_r = lv_label_create(scr);
     lv_obj_set_style_text_font(bh_arr_r, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(bh_arr_r, lv_color_hex(0x8A93A6), 0);
     lv_label_set_text(bh_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(bh_arr_r, LV_ALIGN_TOP_MID, 150, 18);
+    lv_obj_add_flag(bh_arr_r, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(bh_arr_r, 30);
+    lv_obj_add_event_cb(bh_arr_r, bh_arrow_cb, LV_EVENT_CLICKED, NULL);       /* adelante */
 
     /* Totales: una sola fila con las 4 fuentes (nombres cortos para que
      * quepan en horizontal sin envolver). */
@@ -2375,6 +2411,10 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_align(chart, LV_ALIGN_BOTTOM_MID, 0, -76);
     lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(chart, bh_chart_touch_cb, LV_EVENT_ALL, NULL);
+    /* Sin esto el gesto de deslizar MUERE en la grafica: LVGL lo entrega al
+     * objeto tocado y solo sube al padre con EVENT_BUBBLE. Como la grafica ocupa
+     * casi toda la pantalla, deslizar donde es natural no cambiaba de dia. */
+    lv_obj_add_flag(chart, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(chart, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
@@ -2731,15 +2771,11 @@ static void bh_chart_load_day(void)
     lv_chart_refresh(s_bh_chart);
 }
 
-static void bh_chart_gesture_cb(lv_event_t *e)
+/* Un dia adelante o atras. `atras` = hacia el pasado. Lo comparten el gesto y
+ * los botones de flecha para que no puedan divergir. */
+static void bh_step_day(bool atras)
 {
-    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
-    /* Zoomeado: el pan se hace arrastrando (bh_chart_touch_cb); ignoramos el
-     * swipe para no cambiar de dia sin querer. */
-    bool zoomed = (s_bh_win_a > 0.0001f) || (s_bh_win_b < 0.9999f);
-    if (zoomed) return;
-    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-    if (dir == LV_DIR_RIGHT) {
+    if (atras) {
         if (s_bh_day_idx == -1) {
             if (s_bh_n_dates > 0) s_bh_day_idx = s_bh_n_dates - 1;
             else return;
@@ -2748,17 +2784,31 @@ static void bh_chart_gesture_cb(lv_event_t *e)
         } else {
             return;
         }
-        s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
-        bh_update_zoom_label();
-        bh_chart_load_day();
-    } else if (dir == LV_DIR_LEFT) {
+    } else {
         if (s_bh_day_idx < 0) return;
         if (s_bh_day_idx < s_bh_n_dates - 1) s_bh_day_idx++;
         else                                 s_bh_day_idx = -1;
-        s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
-        bh_update_zoom_label();
-        bh_chart_load_day();
     }
+    s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
+    bh_update_zoom_label();
+    bh_chart_load_day();
+}
+
+static void bh_arrow_cb(lv_event_t *e)
+{
+    bh_step_day(lv_event_get_user_data(e) != NULL);
+}
+
+static void bh_chart_gesture_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_GESTURE) return;
+    /* Zoomeado: el pan se hace arrastrando (bh_chart_touch_cb); ignoramos el
+     * swipe para no cambiar de dia sin querer. */
+    bool zoomed = (s_bh_win_a > 0.0001f) || (s_bh_win_b < 0.9999f);
+    if (zoomed) return;
+    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (dir == LV_DIR_RIGHT)     bh_step_day(true);
+    else if (dir == LV_DIR_LEFT) bh_step_day(false);
 }
 
 static void bh_update_zoom_label(void)
