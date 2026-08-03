@@ -1549,23 +1549,11 @@ static void chart_screen_close_cb(lv_event_t *e)
 
 
 
-/* Quita de la lista el fichero de HOY. Ese dia ya se ve en la vista "HOY", asi
- * que dejarlo tambien como dia de SD daba un paso duplicado al navegar: el
- * primer swipe mostraba otra vez hoy en vez de ayer. Sin hora en el reloj no se
- * filtra nada. Devuelve el nuevo numero de fechas. */
-static int hist_drop_today(char dates[][LOG_BROWSER_DATE_LEN], int n)
-{
-    if (n <= 0) return n;
-    time_t now = time(NULL);
-    struct tm lt;
-    localtime_r(&now, &lt);
-    if (lt.tm_year <= 100) return n;
-    char today[LOG_BROWSER_DATE_LEN];
-    snprintf(today, sizeof today, "%04d-%02d-%02d",
-             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
-    if (strcmp(dates[n - 1], today) == 0) n--;   /* la lista viene ascendente */
-    return n;
-}
+/* OJO: el CSV de hoy TIENE que seguir en la lista de dias navegables. Parece
+ * redundante con la vista "HOY", pero no lo es: "HOY" sale del buffer de RAM,
+ * que arranca VACIO en cada reinicio y solo guarda ~16 h. El fichero de la SD es
+ * la unica copia del dia que sobrevive a un arranque. Filtrarlo (v1.4.1) dejo
+ * los dos historicos vacios tras instalar una actualizacion. */
 
 void ui_show_chart_screen(ui_state_t *ui)
 {
@@ -1734,7 +1722,6 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Inicializar navegacion: listar fechas SD y mostrar HOY */
     s_frigo_n_dates = log_browser_list_dates("/sdcard/frigo",
                                              s_frigo_dates, LOG_BROWSER_MAX_DATES);
-    s_frigo_n_dates = hist_drop_today(s_frigo_dates, s_frigo_n_dates);
     s_frigo_day_idx = -1;
     s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
     frigo_chart_load_day();
@@ -2450,7 +2437,6 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* Listar fechas SD y arrancar en HOY */
     s_bh_n_dates = log_browser_list_dates("/sdcard/bateria",
                                           s_bh_dates, LOG_BROWSER_MAX_DATES);
-    s_bh_n_dates = hist_drop_today(s_bh_dates, s_bh_n_dates);
     s_bh_day_idx = -1;
     bh_chart_load_day();
 
