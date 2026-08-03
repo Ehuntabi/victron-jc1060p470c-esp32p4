@@ -1549,6 +1549,24 @@ static void chart_screen_close_cb(lv_event_t *e)
 
 
 
+/* Quita de la lista el fichero de HOY. Ese dia ya se ve en la vista "HOY", asi
+ * que dejarlo tambien como dia de SD daba un paso duplicado al navegar: el
+ * primer swipe mostraba otra vez hoy en vez de ayer. Sin hora en el reloj no se
+ * filtra nada. Devuelve el nuevo numero de fechas. */
+static int hist_drop_today(char dates[][LOG_BROWSER_DATE_LEN], int n)
+{
+    if (n <= 0) return n;
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    if (lt.tm_year <= 100) return n;
+    char today[LOG_BROWSER_DATE_LEN];
+    snprintf(today, sizeof today, "%04d-%02d-%02d",
+             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+    if (strcmp(dates[n - 1], today) == 0) n--;   /* la lista viene ascendente */
+    return n;
+}
+
 void ui_show_chart_screen(ui_state_t *ui)
 {
     if (!ui) return;
@@ -1716,6 +1734,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Inicializar navegacion: listar fechas SD y mostrar HOY */
     s_frigo_n_dates = log_browser_list_dates("/sdcard/frigo",
                                              s_frigo_dates, LOG_BROWSER_MAX_DATES);
+    s_frigo_n_dates = hist_drop_today(s_frigo_dates, s_frigo_n_dates);
     s_frigo_day_idx = -1;
     s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
     frigo_chart_load_day();
@@ -1745,7 +1764,9 @@ static void frigo_legend_toggle_cb(lv_event_t *e)
             hide ? LV_OPA_30 : LV_OPA_COVER, 0);
 }
 
-static void update_frigo_xlabels_today(int n)
+/* `base` = indice global de la primera muestra de HOY, `n` = cuantas hay. Los
+ * indices que se pasan a datalogger_get_entry siguen siendo globales. */
+static void update_frigo_xlabels_today(int base, int n)
 {
     if (!s_frigo_xlabels) return;
     if (n <= 0) {
@@ -1763,9 +1784,9 @@ static void update_frigo_xlabels_today(int n)
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_obj_get_child(s_frigo_xlabels, i);
         if (!l) continue;
-        int idx = a + (wn - 1) * i / 4;
-        if (idx < 0) idx = 0;
-        if (idx >= n) idx = n - 1;
+        int idx = base + a + (wn - 1) * i / 4;
+        if (idx < base) idx = base;
+        if (idx >= base + n) idx = base + n - 1;
         const datalogger_entry_t *e = datalogger_get_entry(idx);
         if (!e) { lv_label_set_text(l, "--:--"); continue; }
         const char *ts = e->timestamp;
@@ -1818,6 +1839,27 @@ static void frigo_apply_temp_range(float t_min, float t_max)
     lv_chart_set_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, y_min, y_max);
 }
 
+/* Indice global de la primera muestra de HOY en el buffer del datalogger. Las
+ * muestras estan en orden cronologico, asi que las de hoy son el tramo final.
+ * Devuelve `count` si no hay ninguna de hoy, y 0 si el reloj aun no tiene hora
+ * (entonces se muestra todo, que es lo unico util sin fecha). */
+static int frigo_today_base(int count)
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    if (lt.tm_year <= 100) return 0;
+    char today[11];
+    snprintf(today, sizeof today, "%04d-%02d-%02d",
+             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+    for (int i = 0; i < count; ++i) {
+        const datalogger_entry_t *e = datalogger_get_entry(i);
+        if (!e) continue;
+        if (strncmp(e->timestamp, today, 10) == 0) return i;
+    }
+    return count;
+}
+
 static void frigo_chart_load_day(void)
 {
     if (!s_chart) return;
@@ -1829,12 +1871,17 @@ static void frigo_chart_load_day(void)
     lv_chart_set_all_value(s_chart, s_ser_solar,      LV_CHART_POINT_NONE);
 
     if (s_frigo_day_idx < 0) {
+        /* Solo las muestras de HOY: el ring del datalogger son 200 muestras
+         * (~16 h a una cada 5 min) y no se reinicia a medianoche, asi que sin
+         * acotar por fecha la vista "HOY" arrastraba muestras de ayer. */
         int count = datalogger_get_count();
-        if (count < 2) count = 2;
-        int wa = (int)(s_frigo_win_a * count);
-        int wb = (int)(s_frigo_win_b * count);
+        int base  = frigo_today_base(count);
+        int n     = count - base;
+        if (n < 2) { n = 2; base = count - 2; if (base < 0) base = 0; }
+        int wa = base + (int)(s_frigo_win_a * n);
+        int wb = base + (int)(s_frigo_win_b * n);
         if (wb <= wa) wb = wa + 1;
-        if (wb > count) wb = count;
+        if (wb > base + n) wb = base + n;
         int wn = wb - wa;
         if (wn < 2) wn = 2;
         lv_chart_set_point_count(s_chart, wn);
@@ -1859,13 +1906,13 @@ static void frigo_chart_load_day(void)
                 e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
         }
         frigo_apply_temp_range(t_min, t_max);
-        /* Pasamos `count` (el raw del datalogger), no `valid`: las
+        /* Pasamos el rango raw del datalogger (base + n), no `valid`: las
          * funciones de xlabels indexan en datalogger_get_entry(idx) que
          * usa el espacio global de indices; pasar `valid` desincroniza
          * los timestamps del rango visible (zoom al 50-100% mostraba
          * etiquetas del 0-50%). El "--:--" ocasional con datalogger
          * vacio es un bug menor que las etiquetas con la hora incorrecta. */
-        update_frigo_xlabels_today(count);
+        update_frigo_xlabels_today(base, n);
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
         (void)valid;
     } else {
@@ -2403,6 +2450,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* Listar fechas SD y arrancar en HOY */
     s_bh_n_dates = log_browser_list_dates("/sdcard/bateria",
                                           s_bh_dates, LOG_BROWSER_MAX_DATES);
+    s_bh_n_dates = hist_drop_today(s_bh_dates, s_bh_n_dates);
     s_bh_day_idx = -1;
     bh_chart_load_day();
 

@@ -12,11 +12,6 @@
 
 static const char *TAG = "LOG_BROWSER";
 
-static int cmp_str(const void *a, const void *b)
-{
-    return strcmp((const char *)a, (const char *)b);
-}
-
 int log_browser_list_dates(const char *dir,
                            char dates_out[][LOG_BROWSER_DATE_LEN],
                            int max)
@@ -32,7 +27,7 @@ int log_browser_list_dates(const char *dir,
     }
     int n = 0;
     struct dirent *ent;
-    while ((ent = readdir(d)) != NULL && n < max) {
+    while ((ent = readdir(d)) != NULL) {
         const char *name = ent->d_name;
         /* Solo "YYYY-MM-DD.csv": 14 chars */
         if (strlen(name) != 14) continue;
@@ -41,15 +36,33 @@ int log_browser_list_dates(const char *dir,
             if (i == 4 || i == 7) continue;
             if (!isdigit((unsigned char)name[i])) goto skip;
         }
-        memcpy(dates_out[n], name, 10);
-        dates_out[n][10] = 0;
+        /* Insercion ordenada quedandose con las `max` fechas MAS RECIENTES.
+         * Antes se cogian las `max` primeras que devolviera readdir y se
+         * ordenaban despues: ese orden no es cronologico (en FAT los huecos de
+         * los ficheros borrados se reutilizan), asi que al pasar de `max` dias
+         * en el directorio podia caerse de la lista un dia reciente en vez del
+         * mas viejo. Con retencion de 60 dias y max=60 el caso se da. */
+        char day[LOG_BROWSER_DATE_LEN];
+        memcpy(day, name, 10);
+        day[10] = 0;
+        if (n == max) {
+            if (strcmp(day, dates_out[0]) <= 0) continue;   /* mas vieja que todas */
+            memmove(dates_out[0], dates_out[1],
+                    (size_t)(max - 1) * LOG_BROWSER_DATE_LEN);
+            n--;
+        }
+        int pos = n;
+        while (pos > 0 && strcmp(dates_out[pos - 1], day) > 0) {
+            memcpy(dates_out[pos], dates_out[pos - 1], LOG_BROWSER_DATE_LEN);
+            pos--;
+        }
+        memcpy(dates_out[pos], day, LOG_BROWSER_DATE_LEN);
         n++;
         skip: ;
     }
     closedir(d);
     if (sdl) camera_sd_bus_unlock();
-    qsort(dates_out, n, LOG_BROWSER_DATE_LEN, cmp_str);
-    return n;
+    return n;   /* ya ordenado ascendente por la insercion */
 }
 
 /* Extrae "HH:MM" de un timestamp con offset 11..15 ("YYYY-MM-DD HH:MM:..") */
