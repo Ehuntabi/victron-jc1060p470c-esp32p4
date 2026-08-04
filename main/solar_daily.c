@@ -10,6 +10,7 @@
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "camera.h"   /* camera_sd_bus_lock: serializar la SD con el GDMA de la camara */
 
 static const char *TAG = "solar_daily";
 
@@ -26,6 +27,8 @@ static const char *TAG = "solar_daily";
 static solar_day_t s_dias[SOLAR_DAILY_MAX_DAYS];   /* anillo de dias cerrados */
 static int         s_n_dias = 0;                   /* cuantos hay (0..MAX) */
 static solar_day_t s_hoy;
+static solar_day_t s_pend;                         /* dia cerrado que aun no cabe en el CSV */
+static bool        s_pend_valid = false;
 static int64_t     s_last_us = 0;                  /* ultima muestra de panel integrada */
 static int64_t     s_last_bat_us = 0;              /* ultima muestra de shunt integrada */
 static int64_t     s_last_save_us = 0;
@@ -55,14 +58,25 @@ static void guardar_hoy_nvs(void)
 }
 
 /* Anade el dia cerrado al CSV. Una linea por dia, se abre y cierra en el acto
- * (escritura corta, como el datalogger, para no chocar con la camara en el bus). */
-static void anadir_csv(const solar_day_t *d)
+ * (escritura corta, como el datalogger, para no chocar con la camara en el bus).
+ *
+ * Cerrojo de bus camara<->SD: escribir con el GDMA de la camara activo atasca el
+ * SDMMC con las interrupciones bloqueadas -> INT WDT -> reinicio. Timeout corto
+ * porque esto corre en la task de NimBLE con el lock de LVGL cogido; si el bus
+ * esta ocupado se devuelve false y el llamante lo deja pendiente para la
+ * siguiente muestra (misma politica que el datalogger). */
+static bool anadir_csv(const solar_day_t *d)
 {
-    if (!s_sd_ok) return;
+    if (!s_sd_ok) return false;
+    if (!camera_sd_bus_lock(200)) return false;
     struct stat st;
     bool cabecera = (stat(CSV_SD, &st) != 0);
     FILE *f = fopen(CSV_SD, "a");
-    if (!f) { ESP_LOGW(TAG, "no se puede escribir %s", CSV_SD); return; }
+    if (!f) {
+        camera_sd_bus_unlock();
+        ESP_LOGW(TAG, "no se puede escribir %s", CSV_SD);
+        return false;
+    }
     if (cabecera) fprintf(f, "fecha,kwh,horas,pico_w,kwh_consumo\n");
     time_t t = (time_t)d->day_id * 86400;
     struct tm tm_l;
@@ -71,6 +85,8 @@ static void anadir_csv(const solar_day_t *d)
             tm_l.tm_year + 1900, tm_l.tm_mon + 1, tm_l.tm_mday,
             d->kwh, d->horas, (long)d->pico_w, d->kwh_consumo);
     fclose(f);
+    camera_sd_bus_unlock();
+    return true;
 }
 
 static void cargar_csv(void)
@@ -109,19 +125,24 @@ void solar_daily_init(void)
 {
     if (!s_mtx) s_mtx = xSemaphoreCreateMutex();
 
-    struct stat st;
-    if (stat(DIR_SD, &st) != 0) {
-        s_sd_ok = (mkdir(DIR_SD, 0777) == 0);
-    } else {
-        s_sd_ok = true;
-    }
-    if (!s_sd_ok) ESP_LOGW(TAG, "sin SD: solo se guarda el dia en curso (NVS)");
-
     memset(&s_hoy, 0, sizeof(s_hoy));
     s_hoy.day_id = hoy_id();
 
     LOCK();
-    cargar_csv();
+    /* Crear el directorio y leer el historico tambien con el cerrojo del bus, como
+     * el resto de accesos a la tarjeta. Aqui la camara aun no ha arrancado, asi que
+     * el cerrojo concede sin esperar; se toma igual por si cambia el orden de init. */
+    if (camera_sd_bus_lock(3000)) {
+        struct stat st;
+        if (stat(DIR_SD, &st) != 0) {
+            s_sd_ok = (mkdir(DIR_SD, 0777) == 0);
+        } else {
+            s_sd_ok = true;
+        }
+        cargar_csv();
+        camera_sd_bus_unlock();
+    }
+    if (!s_sd_ok) ESP_LOGW(TAG, "sin SD: solo se guarda el dia en curso (NVS)");
     /* Dia en curso desde NVS (sobrevive a un reinicio a media tarde). */
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
@@ -144,6 +165,11 @@ void solar_daily_on_pv(int32_t watts)
     const int64_t ahora = esp_timer_get_time();
 
     LOCK();
+    /* Dia cerrado que no se pudo escribir en su momento (bus SD ocupado): el MPPT
+     * sigue emitiendo tambien de noche, asi que el reintento entra a los pocos
+     * segundos. */
+    if (s_pend_valid && anadir_csv(&s_pend)) s_pend_valid = false;
+
     /* Cambio de dia: cierra el que acaba y arranca el nuevo. */
     const int32_t id = hoy_id();
     if (id != s_hoy.day_id) {
@@ -154,7 +180,11 @@ void solar_daily_on_pv(int32_t watts)
                 memmove(&s_dias[0], &s_dias[1], sizeof(s_dias[0]) * (SOLAR_DAILY_MAX_DAYS - 1));
                 s_dias[SOLAR_DAILY_MAX_DAYS - 1] = s_hoy;
             }
-            anadir_csv(&s_hoy);
+            if (!anadir_csv(&s_hoy)) {
+                s_pend = s_hoy;
+                s_pend_valid = true;
+                ESP_LOGW(TAG, "tarjeta ocupada: el dia queda pendiente de escribir");
+            }
             ESP_LOGI(TAG, "dia cerrado: %.2f kWh producidos en %.1f h (pico %ld W), "
                      "%.2f kWh consumidos",
                      s_hoy.kwh, s_hoy.horas, (long)s_hoy.pico_w, s_hoy.kwh_consumo);

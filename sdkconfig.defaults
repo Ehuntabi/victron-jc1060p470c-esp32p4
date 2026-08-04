@@ -140,3 +140,15 @@ CONFIG_LV_SPRINTF_USE_FLOAT=y
 # OJO: cambia el BOOTLOADER -> hay que grabar UNA vez por USB para activarlo;
 # una actualizacion por Wi-Fi no instala bootloader. 2026-07-26.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# ── Volcado de cache troceado (INT WDT) ──────────────────────────────────────
+# esp_cache_msync en direccion C2M (escribir la cache a memoria) se hace dentro
+# de una seccion critica: mientras dura, las interrupciones estan apagadas. Con
+# buffers grandes eso se pasa del limite del INT WDT (300 ms) y la placa se
+# reinicia. Aqui hay dos de esos: el PPA reduce el frame de la camara y vuelca
+# 1920x1080 RGB565 = 4,1 MB de una tacada cada 1,5-2 s (ppa_srm.c), y el flush
+# de LVGL vuelca hasta 1024x600 RGB565 = 1,2 MB por refresco (esp_lcd_panel_dpi.c).
+# Con esto el volcado se parte en trozos de 128 KB (el default de IDF para el P4)
+# y las interrupciones respiran entre uno y otro. 2026-08-04.
+CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS=y
+CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS_MAX_LEN=0x20000
