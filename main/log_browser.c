@@ -11,21 +11,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"   /* vTaskDelay: ceder CPU al trocear la lectura */
 #include "camera.h"   /* camera_sd_bus_lock: serializar SD con el GDMA de la camara */
+#include "battery_history.h"  /* BH_SRC_COUNT + battery_history_source_name */
 
 static const char *TAG = "LOG_BROWSER";
 
 /* Lineas que se leen entre dos cesiones de CPU en log_browser_load_battery.
  *
- * El CSV de un dia de bateria son ~8640 muestras del BatteryMonitor (una cada
- * 10 s, ver BH_POINTS) MAS las del cargador solar: del orden de 17000 lineas.
- * Parsearlas del tiron (csv_split + sscanf + strtol por linea) monopolizaba
- * taskLVGL varios segundos CON EL CERROJO DE LA SD TOMADO, porque la navegacion
- * por dias se hace desde un callback de LVGL -> Task WDT (5 s, PANIC) ->
- * reinicio de la placa al cambiar de dia.
+ * El CSV de un dia de bateria son ~8640 muestras por fuente (una cada 10 s, ver
+ * BH_POINTS): decenas de miles de lineas, cada una con csv_split + strtol. La
+ * lectura corre en bh_loader_task (main/ui.c), fuera del hilo de LVGL, asi que
+ * el troceado ya no esta para salvar a la UI: esta para no acaparar la SD.
+ * Entre trozos se suelta camera_sd_bus_lock y se cede, y asi la camara recupera
+ * su ventana de GDMA durante los segundos que dura el parseo.
  *
- * A ~100 us por linea, 512 lineas son ~50 ms de CPU: se cede muy por debajo del
- * limite del watchdog, y el coste total de los yields en un dia entero es
- * ~330 ms (33 trozos x 1 tick de 10 ms).
+ * A ~100 us por linea, 512 lineas son ~50 ms; el coste total de los yields en
+ * un dia entero es ~330 ms (33 trozos x 1 tick de 10 ms).
  *
  * El log del frigo no lleva troceado a proposito: son ~288 lineas por dia (una
  * cada 5 min), 60 veces menos, y nunca se acerco al limite. Si algun dia sube
@@ -175,9 +175,11 @@ int log_browser_load_frigo(const char *path,
 }
 
 int log_browser_load_battery(const char *path,
-                             battery_log_entry_t *out, int max)
+                             battery_log_entry_t *const *out, int max,
+                             int *n_out)
 {
-    if (!path || !out || max <= 0) return 0;
+    if (!path || !out || !n_out || max <= 0) return 0;
+    for (int s = 0; s < BH_SRC_COUNT; ++s) n_out[s] = 0;
     bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     if (!sdl) return 0;   /* bus ocupado por la camara: no tocar la SD */
     FILE *f = fopen(path, "r");
@@ -191,7 +193,7 @@ int log_browser_load_battery(const char *path,
     int n = 0;
     int since_yield = 0;
     bool have_lock = true;
-    while (n < max && fgets(line, sizeof(line), f)) {
+    while (fgets(line, sizeof(line), f)) {
         if (++since_yield >= BATT_CHUNK_LINES) {
             since_yield = 0;
             /* Soltar el bus y ceder: la camara recupera su ventana de GDMA y
@@ -213,15 +215,26 @@ int log_browser_load_battery(const char *path,
         char *fields[8] = {0};
         int nf = csv_split(line, fields, 8);
         if (nf < 3) continue;
-        /* Solo BM (Battery Monitor) — los otros sources se ignoran en el grafico.
-         * El CSV escribe el nombre completo "BatteryMonitor" (no "BM"). */
-        if (strcmp(fields[1], "BatteryMonitor") != 0) continue;
-        battery_log_entry_t *e = &out[n];
+        /* La columna `source` lleva el nombre completo que escribio
+         * battery_history ("BatteryMonitor", "SolarCharger", "OrionTR",
+         * "ACCharger"): se compara contra la misma tabla para que no puedan
+         * divergir. Una fuente desconocida (CSV de una version futura) se
+         * ignora en vez de descartar la linea entera. */
+        int src = -1;
+        for (int s = 0; s < BH_SRC_COUNT; ++s) {
+            if (strcmp(fields[1], battery_history_source_name((bh_source_t)s)) == 0) {
+                src = s;
+                break;
+            }
+        }
+        if (src < 0 || !out[src] || n_out[src] >= max) continue;
+        battery_log_entry_t *e = &out[src][n_out[src]];
         if (!parse_hhmm(fields[0], &e->hh, &e->mm)) continue;
         e->milli_amps = fields[2][0] ? (int32_t)strtol(fields[2], NULL, 10) : 0;
         /* Columna de tension (centivoltios) opcional: ausente en CSV antiguos */
         e->centi_volts = (nf >= 6 && fields[5][0])
             ? (int32_t)strtol(fields[5], NULL, 10) : 0;
+        n_out[src]++;
         n++;
     }
     /* El fclose toca la SD: recuperar el cerrojo si se salio del bucle sin el.

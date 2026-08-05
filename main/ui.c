@@ -2144,15 +2144,38 @@ static int64_t s_bh_last_apply_us = 0;
 static int64_t s_bh_last_click_us = 0;
 
 #define BH_LOG_MAX_ENTRIES   8800   /* 24h completas @10s (8640) + margen */
-/* En PSRAM: 8800 x 16 B ~= 140 KB, demasiado para RAM interna estatica.
- * Se aloja una vez (lazy) al consultar un dia historico. */
-static battery_log_entry_t *s_bh_buf = NULL;
-/* Cache: dia (idx) ya parseado en s_bh_buf y su n (mismo motivo que el frigo:
- * no re-leer el CSV de la SD en cada tick de pan/zoom). -2 = cache vacia. */
+/* Un buffer por fuente, en PSRAM: 4 x 8800 x 16 B ~= 563 KB, imposible en RAM
+ * interna estatica. Se alojan una vez (lazy) al consultar un dia historico. */
+static battery_log_entry_t *s_bh_buf[BH_SRC_COUNT] = {NULL};
+/* Cache: dia (idx) ya parseado en s_bh_buf y cuantas entradas tiene cada fuente
+ * (mismo motivo que el frigo: no re-leer el CSV de la SD en cada tick de
+ * pan/zoom). -2 = cache vacia O carga en curso; ver bh_loader_task. */
 static int s_bh_loaded_idx = -2;
-static int s_bh_loaded_n   = 0;
+static int s_bh_loaded_n[BH_SRC_COUNT] = {0};
+/* Totales del dia completo (no de la ventana visible), calculados una vez al
+ * cargar: Ah cargados / descargados por fuente. */
+static float s_bh_tot_ch[BH_SRC_COUNT]  = {0};
+static float s_bh_tot_dis[BH_SRC_COUNT] = {0};
+
+/* Carga de un dia historico: la hace una tarea aparte, NO el callback de LVGL.
+ *
+ * Leer y parsear el CSV de un dia tarda segundos, y bh_chart_load_day corre
+ * dentro de un callback de LVGL, o sea con el cerrojo de LVGL tomado. Si ese
+ * cerrojo se retiene mas de ~9 s, el watchdog SW (main/watchdog.c: 3 fallos
+ * consecutivos x 3 s) da la UI por congelada y REINICIA LA PLACA. Eso es lo que
+ * pasaba al navegar por dias, y trocear la lectura no lo arreglaba: el
+ * watchdog mira tiempo de reloj, no CPU, y los yields lo alargaban.
+ *
+ * Reparto: la tarea lee de la SD sin ningun cerrojo de LVGL y solo lo toma al
+ * final, unos ms, para pintar. Los buffers los escribe unicamente la tarea, y
+ * solo mientras s_bh_loaded_idx == -2; como todo el que los lee lo hace con el
+ * cerrojo de LVGL tomado y comprobando ese indice, no hay carrera. */
+static TaskHandle_t   s_bh_loader_task = NULL;
+static volatile int   s_bh_req_idx     = -2;   /* dia pedido a la tarea */
 
 static void bh_chart_load_day(void);
+static void bh_paint_hist_day(void);
+static void bh_loader_task(void *arg);
 static void bh_chart_gesture_cb(lv_event_t *e);
 static void bh_arrow_cb(lv_event_t *e);
 static void bh_chart_touch_cb(lv_event_t *e);
@@ -2192,9 +2215,13 @@ void ui_close_battery_history_screen(void)
         s_bh_chart = NULL;
         s_bh_prev_screen = NULL;
     }
-    /* Liberar el buffer de carga del historico (~140KB PSRAM): se reservaba lazy
-     * al abrir y nunca se liberaba. Se re-reserva al volver a abrir. */
-    if (s_bh_buf) { free(s_bh_buf); s_bh_buf = NULL; s_bh_loaded_idx = -2; }
+    /* Los buffers de carga (~800 KB de PSRAM entre las 4 fuentes y el volcado
+     * del anillo) NO se liberan aqui a proposito: bh_loader_task puede estar
+     * escribiendo en ellos justo ahora, y esta funcion corre en el hilo de
+     * LVGL, que no la espera -> liberarlos seria un use-after-free. Se
+     * reservan una sola vez y se reutilizan en cada visita; sobra PSRAM (32 MB)
+     * y asi tampoco se refragmenta. Lo que si se invalida es la cache. */
+    s_bh_loaded_idx = -2;
 }
 
 static void bh_screen_close_cb(lv_event_t *e)
@@ -2478,6 +2505,17 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     s_bh_n_dates = log_browser_list_dates("/sdcard/bateria",
                                           s_bh_dates, LOG_BROWSER_MAX_DATES);
     s_bh_day_idx = -1;
+    s_bh_loaded_idx = -2;   /* al abrir la pantalla, releer (ver bh_step_day) */
+    /* Lector de dias historicos: se crea una vez y vive lo que la aplicacion
+     * (los buffers en PSRAM tambien se reutilizan entre visitas). Prioridad 3,
+     * por debajo de la de LVGL, para no robarle tiempo a la UI. */
+    if (!s_bh_loader_task) {
+        if (xTaskCreate(bh_loader_task, "bh_loader", 5120, NULL, 3,
+                        &s_bh_loader_task) != pdPASS) {
+            s_bh_loader_task = NULL;
+            ESP_LOGE(TAG_UI, "no se pudo crear bh_loader: los dias historicos no cargaran");
+        }
+    }
     bh_chart_load_day();
 
     /* Gestures: swipe izq/dcha */
@@ -2497,36 +2535,13 @@ static void bh_clear_chart_series(void)
     }
 }
 
-static void bh_update_xlabels_today(int32_t old_ts, int32_t new_ts)
+/* Etiquetas horarias de un dia historico. `src` es la fuente de la que se sacan
+ * las horas (la que mas muestras tenga: todas comparten el mismo eje temporal,
+ * pero una puede estar vacia ese dia). */
+static void bh_update_xlabels_from_buf(int src, int n)
 {
     if (!s_bh_xlabels) return;
-    int32_t full_span = new_ts - old_ts;
-    if (full_span < 0) full_span = 0;
-    int32_t t_a = old_ts + (int32_t)((int64_t)full_span * (int64_t)(s_bh_win_a * 1000.0f) / 1000);
-    int32_t t_b = old_ts + (int32_t)((int64_t)full_span * (int64_t)(s_bh_win_b * 1000.0f) / 1000);
-    int32_t span = t_b - t_a;
-    bool have_real_time = (new_ts > 1704067200);
-    for (int i = 0; i < 5; ++i) {
-        lv_obj_t *l = lv_obj_get_child(s_bh_xlabels, i);
-        if (!l) continue;
-        if (span <= 0) { lv_label_set_text(l, "--:--"); continue; }
-        int32_t ts_at = t_a + (int32_t)((int64_t)span * i / 4);
-        if (have_real_time) {
-            time_t t = ts_at;
-            struct tm tm_local;
-            localtime_r(&t, &tm_local);
-            lv_label_set_text_fmt(l, "%02d:%02d", tm_local.tm_hour, tm_local.tm_min);
-        } else {
-            int32_t age_min = (new_ts - ts_at) / 60;
-            lv_label_set_text_fmt(l, "-%dm", (int)age_min);
-        }
-    }
-}
-
-static void bh_update_xlabels_from_buf(int n)
-{
-    if (!s_bh_xlabels) return;
-    if (n <= 0) {
+    if (n <= 0 || src < 0 || !s_bh_buf[src]) {
         for (int i = 0; i < 5; ++i) {
             lv_obj_t *l = lv_obj_get_child(s_bh_xlabels, i);
             if (l) lv_label_set_text(l, "--:--");
@@ -2545,230 +2560,261 @@ static void bh_update_xlabels_from_buf(int n)
         if (idx < 0) idx = 0;
         if (idx >= n) idx = n - 1;
         lv_label_set_text_fmt(l, "%02d:%02d",
-                              s_bh_buf[idx].hh, s_bh_buf[idx].mm);
+                              s_bh_buf[src][idx].hh, s_bh_buf[src][idx].mm);
     }
 }
 
+/* Punto de entrada unico para pintar el dia en curso (s_bh_day_idx): -1 = HOY,
+ * >=0 = indice en s_bh_dates. Si ese dia ya esta en los buffers se repinta y
+ * ya; si no, se le pide a bh_loader_task y se deja el aviso puesto. Nunca toca
+ * la SD: corre dentro de callbacks de LVGL. */
 static void bh_chart_load_day(void)
+{
+    if (!s_bh_chart) return;
+
+    if (s_bh_day_idx == s_bh_loaded_idx) {
+        bh_paint_hist_day();      /* el dia ya esta en RAM: solo repintar */
+    } else {
+        /* Dia todavia sin leer: se lo pide a bh_loader_task y deja la grafica
+         * vacia con un aviso. Aqui NO se toca la SD: estamos dentro de un
+         * callback de LVGL y leer el CSV congelaria la UI hasta el reinicio
+         * (ver el comentario de s_bh_loader_task). */
+        bh_clear_chart_series();
+        if (s_bh_lbl_date)
+            lv_label_set_text_fmt(s_bh_lbl_date, "%s ...",
+                                  s_bh_day_idx < 0 ? "HOY (24H)"
+                                                   : s_bh_dates[s_bh_day_idx]);
+        for (int s = 0; s < BH_SRC_COUNT; ++s) {
+            if (s_bh_totals[s])
+                lv_label_set_text_fmt(s_bh_totals[s], "%s ...", s_bh_short_names[s]);
+        }
+        s_bh_req_idx = s_bh_day_idx;
+        if (s_bh_loader_task) xTaskNotifyGive(s_bh_loader_task);
+    }
+    lv_chart_refresh(s_bh_chart);
+}
+
+/* Pinta el dia historico que ya esta en s_bh_buf. Solo lectura de los buffers:
+ * hay que llamarla con el cerrojo de LVGL tomado (desde un callback, o desde
+ * bh_loader_task tras cogerlo) y con s_bh_loaded_idx == s_bh_day_idx. */
+static void bh_paint_hist_day(void)
 {
     if (!s_bh_chart) return;
     bh_clear_chart_series();
 
-    if (s_bh_day_idx < 0) {
-        /* HOY: usa el ring buffer en RAM (4 fuentes). Aplica ventana [a, b). */
-        const int CHART_MAX_PTS = 300;  /* ver nota en show_battery_history_screen */
+    /* Fuente con mas muestras: manda en el eje X y en el numero de puntos. */
+    int ref = 0, n_ref = 0;
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (s_bh_loaded_n[s] > n_ref) { n_ref = s_bh_loaded_n[s]; ref = s; }
+    }
 
-        /* Buffer estatico en PSRAM para no fragmentar al cambiar de dia. */
-        static bh_point_t *pts = NULL;
-        if (pts == NULL) {
-            pts = heap_caps_malloc(sizeof(bh_point_t) * BH_POINTS,
-                                   MALLOC_CAP_SPIRAM);
-        }
+    const int CHART_MAX_PTS = 300;  /* mismo limite seguro que la rama HOY (WDT) */
+    int wa_ref = (int)(s_bh_win_a * n_ref);
+    int wb_ref = (int)(s_bh_win_b * n_ref);
+    if (wb_ref <= wa_ref) wb_ref = wa_ref + 1;
+    if (wb_ref > n_ref) wb_ref = n_ref;
+    int wn = wb_ref - wa_ref;
+    int pts_cnt = wn > 0 ? wn : 2;
+    if (pts_cnt > CHART_MAX_PTS) pts_cnt = CHART_MAX_PTS;
+    if (pts_cnt < 2) pts_cnt = 2;
+    lv_chart_set_point_count(s_bh_chart, pts_cnt);
 
-        /* Numero REAL de muestras en el ring (no la capacidad BH_POINTS).
-         * Todas las fuentes avanzan a la vez en sample_timer_cb, asi que el
-         * conteo del BatteryMonitor sirve para las cuatro. El ancho/paso del
-         * chart DEBE calcularse sobre estas muestras reales: si se usa
-         * BH_POINTS (24h) cuando el equipo lleva pocas horas encendido, la
-         * serie se comprime a la izquierda y la franja reciente queda vacia. */
-        int n_avail = 0;
-        if (pts) {
-            int32_t t0 = 0, t1 = 0;
-            n_avail = (int)battery_history_get_series(BH_SRC_BATTERY_MONITOR,
-                                                      pts, &t0, &t1);
-        }
-        int win_a_i = (int)(s_bh_win_a * n_avail);
-        int win_b_i = (int)(s_bh_win_b * n_avail);
-        if (win_b_i <= win_a_i) win_b_i = win_a_i + 1;
-        if (win_b_i > n_avail) win_b_i = n_avail;
-        int win_count = win_b_i - win_a_i;
-        /* Guardia defensiva para no dividir por 0 en chart_step (ring vacio). */
-        if (win_count < 2) win_count = 2;
-        int chart_pts = (win_count > CHART_MAX_PTS) ? CHART_MAX_PTS : win_count;
-        int chart_step = (win_count + chart_pts - 1) / chart_pts;
-        if (chart_step < 1) chart_step = 1;
-        chart_pts = (win_count + chart_step - 1) / chart_step;
-        if (chart_pts < 2) chart_pts = 2;
-        lv_chart_set_point_count(s_bh_chart, chart_pts);
-
-        int32_t bmin = INT32_MAX, bmax = INT32_MIN;
-        int32_t old_ts_g = INT32_MAX, new_ts_g = INT32_MIN;
-        if (pts) {
-            for (int s = 0; s < BH_SRC_COUNT; ++s) {
-                int32_t ots = 0, nts = 0;
-                size_t n = battery_history_get_series((bh_source_t)s, pts, &ots, &nts);
-                if (ots > 0 && ots < old_ts_g) old_ts_g = ots;
-                if (nts > new_ts_g) new_ts_g = nts;
-                /* Ventana per-source: fraccion sobre los puntos realmente
-                 * disponibles, no sobre BH_POINTS. Si usaramos win_*_i
-                 * (que escalan con la capacidad) y el ring esta solo medio
-                 * lleno, zooms cerca del extremo se colapsan a 1-2 puntos.
-                 * Reescalamos con el n real de la fuente. */
-                int wa, wb;
-                if (n == 0) {
-                    wa = 0; wb = 0;
-                } else {
-                    wa = (int)(s_bh_win_a * (float)n);
-                    wb = (int)(s_bh_win_b * (float)n);
-                    if (wb <= wa) wb = wa + 1;
-                    if (wb > (int)n) wb = (int)n;
-                    if (wa >= (int)n) wa = (int)n - 1;
-                }
-                /* En modo tension solo se grafica el BatteryMonitor; las
-                 * demas series quedan vacias (ya limpiadas). */
-                if (!s_bh_show_voltage || s == BH_SRC_BATTERY_MONITOR) {
-                    int idx = 0;
-                    for (int k = wa; k < wb && idx < chart_pts; k += chart_step) {
-                        int64_t sum = 0; int cnt = 0;
-                        int end = (k + chart_step < wb) ? k + chart_step : wb;
-                        for (int j = k; j < end; j++) {
-                            if (!pts[j].valid) continue;
-                            if (s_bh_show_voltage) {
-                                if (pts[j].centi_volts > 0) { sum += pts[j].centi_volts; cnt++; }
-                            } else {
-                                sum += pts[j].milli_amps; cnt++;
-                            }
-                        }
-                        if (cnt > 0) {
-                            /* deci-V (centi/10) en tension, deci-A (milli/100) en corriente */
-                            int32_t a = s_bh_show_voltage
-                                ? (int32_t)((sum / cnt) / 10)
-                                : (int32_t)((sum / cnt) / 100);
-                            if (a < bmin) bmin = a;
-                            if (a > bmax) bmax = a;
-                            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, (lv_coord_t)a);
-                        } else {
-                            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, LV_CHART_POINT_NONE);
-                        }
-                        idx++;
-                    }
-                }
-                /* Totales: siempre del dia completo (no de la ventana visible) */
-                float ch = 0, dis = 0;
-                battery_history_get_totals((bh_source_t)s, &ch, &dis);
-                if (s_bh_totals[s]) {
-                    if (s == BH_SRC_ORION_XS) {
-                        /* OrionTR es un pulso on/off de altura fija: el "Ah" no
-                         * es real. Lo mostramos como horas de carga
-                         * (carga_Ah / altura_en_A). */
-                        float hours = ch / (ORION_TR_ON_MILLIAMPS / 1000.0f);
-                        lv_label_set_text_fmt(s_bh_totals[s], "%s %.1f h",
-                                              s_bh_short_names[s], hours);
-                    } else {
-                        lv_label_set_text_fmt(s_bh_totals[s],
-                            "%s +%.1f/-%.1f Ah",
-                            s_bh_short_names[s], ch, dis);
-                    }
-                }
-                /* Yield al scheduler tras cada serie para que IDLE0 corra y
-                 * el task_wdt no salte. Con 4 series x ~1500 puntos y un
-                 * chart ancho, sin esto monopolizamos taskLVGL > 5 s. */
-                vTaskDelay(1);
-            }
-            /* pts es estatico: no liberar */
-        }
-        if (bmin == INT32_MAX) {
-            if (s_bh_show_voltage) { bmin = 120; bmax = 140; }  /* 12.0-14.0 V */
-            else                   { bmin = -40; bmax = 40; }
-        }
-        int32_t span = bmax - bmin; if (span < 1) span = 1;
-        s_bh_y_min = bmin - span / 20 - 1;
-        s_bh_y_max = bmax + span / 20 + 1;
-        lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           s_bh_y_min, s_bh_y_max);
-        if (old_ts_g == INT32_MAX) old_ts_g = 0;
-        if (new_ts_g == INT32_MIN) new_ts_g = 0;
-        bh_update_xlabels_today(old_ts_g, new_ts_g);
-        if (s_bh_lbl_date) lv_label_set_text(s_bh_lbl_date, "HOY (24H)");
-    } else {
-        /* Día histórico desde SD: solo se carga BM */
-        const char *date = s_bh_dates[s_bh_day_idx];
-        if (s_bh_buf == NULL) {
-            s_bh_buf = heap_caps_malloc(sizeof(battery_log_entry_t) * BH_LOG_MAX_ENTRIES,
-                                        MALLOC_CAP_SPIRAM);
-            s_bh_loaded_idx = -2;   /* buffer nuevo: cache invalida */
-        }
-        int n;
-        if (s_bh_buf && s_bh_day_idx == s_bh_loaded_idx) {
-            n = s_bh_loaded_n;      /* mismo dia ya en s_bh_buf: no re-leer la SD */
-        } else {
-            char path[64];
-            snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
-            n = s_bh_buf ? log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES) : 0;
-            s_bh_loaded_idx = s_bh_buf ? s_bh_day_idx : -2;
-            s_bh_loaded_n   = n;
-        }
-
-        /* Totales calculados sobre el dia completo (no afectados por la ventana). */
-        int64_t total_ch_ma_s = 0, total_dis_ma_s = 0;
-        for (int i = 0; i < n; i++) {
-            int32_t ma = s_bh_buf[i].milli_amps;
-            if (ma > 0) total_ch_ma_s += ma;
-            else        total_dis_ma_s += -ma;
-        }
-
-        /* Ventana */
+    int32_t bmin = INT32_MAX, bmax = INT32_MIN;
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        /* En modo tension solo se grafica el BatteryMonitor, igual que en HOY. */
+        if (s_bh_show_voltage && s != BH_SRC_BATTERY_MONITOR) continue;
+        int n = s_bh_loaded_n[s];
+        if (n <= 0 || !s_bh_buf[s]) continue;
+        /* Ventana per-source sobre SUS muestras: una fuente que arranco tarde
+         * tiene menos puntos y con los indices de `ref` se saldria de rango. */
         int wa = (int)(s_bh_win_a * n);
         int wb = (int)(s_bh_win_b * n);
         if (wb <= wa) wb = wa + 1;
         if (wb > n) wb = n;
-        int wn = wb - wa;
-        const int CHART_MAX_PTS = 300;  /* mismo limite seguro que la rama HOY (WDT) */
-        int pts_cnt = wn > 0 ? wn : 2;
-        if (pts_cnt > CHART_MAX_PTS) pts_cnt = CHART_MAX_PTS;
-        if (pts_cnt < 2) pts_cnt = 2;
-        lv_chart_set_point_count(s_bh_chart, pts_cnt);
-        int step = (wn > CHART_MAX_PTS) ? (wn + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
-        int32_t bmin = INT32_MAX, bmax = INT32_MIN;
+        int step = ((wb - wa) > CHART_MAX_PTS)
+                 ? ((wb - wa) + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
         int idx = 0;
-        for (int i = wa; i < wb; i += step) {
+        for (int i = wa; i < wb && idx < pts_cnt; i += step) {
             int32_t a;
             if (s_bh_show_voltage) {
-                int32_t cv = s_bh_buf[i].centi_volts;
+                int32_t cv = s_bh_buf[s][i].centi_volts;
                 if (cv <= 0) {   /* CSV viejo sin columna de tension */
-                    lv_chart_set_value_by_id(s_bh_chart, s_bh_series[0], idx,
+                    lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx,
                                              LV_CHART_POINT_NONE);
                     idx++;
                     continue;
                 }
-                a = cv / 10;                     /* centi-V -> deci-V */
+                a = cv / 10;                        /* centi-V -> deci-V */
             } else {
-                a = s_bh_buf[i].milli_amps / 100; /* milli-A -> deci-A */
+                a = s_bh_buf[s][i].milli_amps / 100; /* milli-A -> deci-A */
             }
             if (a < bmin) bmin = a;
             if (a > bmax) bmax = a;
-            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[0], idx, (lv_coord_t)a);
+            lv_chart_set_value_by_id(s_bh_chart, s_bh_series[s], idx, (lv_coord_t)a);
             idx++;
         }
-        /* Las otras 3 series quedan en LV_CHART_POINT_NONE */
-        if (bmin == INT32_MAX) {
-            if (s_bh_show_voltage) { bmin = 120; bmax = 140; }  /* 12.0-14.0 V */
-            else                   { bmin = -40; bmax = 40; }
+    }
+    if (bmin == INT32_MAX) {
+        if (s_bh_show_voltage) { bmin = 120; bmax = 140; }  /* 12.0-14.0 V */
+        else                   { bmin = -40; bmax = 40; }
+    }
+    int32_t span = bmax - bmin; if (span < 1) span = 1;
+    s_bh_y_min = bmin - span / 20 - 1;
+    s_bh_y_max = bmax + span / 20 + 1;
+    lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
+                       s_bh_y_min, s_bh_y_max);
+    bh_update_xlabels_from_buf(ref, n_ref);
+
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (!s_bh_totals[s]) continue;
+        if (s_bh_loaded_n[s] == 0) {
+            lv_label_set_text_fmt(s_bh_totals[s], "%s (s/d)", s_bh_short_names[s]);
+        } else if (s == BH_SRC_ORION_XS) {
+            /* Igual que en HOY: el OrionTR es un pulso on/off de altura fija,
+             * su "Ah" no es real; se ensena como horas de carga. */
+            float hours = s_bh_tot_ch[s] / (ORION_TR_ON_MILLIAMPS / 1000.0f);
+            lv_label_set_text_fmt(s_bh_totals[s], "%s %.1f h",
+                                  s_bh_short_names[s], hours);
+        } else {
+            lv_label_set_text_fmt(s_bh_totals[s], "%s +%.1f/-%.1f Ah",
+                                  s_bh_short_names[s],
+                                  s_bh_tot_ch[s], s_bh_tot_dis[s]);
         }
-        int32_t span = bmax - bmin; if (span < 1) span = 1;
-        s_bh_y_min = bmin - span / 20 - 1;
-        s_bh_y_max = bmax + span / 20 + 1;
-        lv_chart_set_range(s_bh_chart, LV_CHART_AXIS_PRIMARY_Y,
-                           s_bh_y_min, s_bh_y_max);
-        bh_update_xlabels_from_buf(n);
-        /* Totales: solo BM tiene datos. Asumimos sample medio de 10 s. */
-        float ch = (float)(total_ch_ma_s  * 10) / (1000.0f * 3600.0f);
-        float ds = (float)(total_dis_ma_s * 10) / (1000.0f * 3600.0f);
-        for (int s = 0; s < BH_SRC_COUNT; ++s) {
-            if (!s_bh_totals[s]) continue;
-            if (s == BH_SRC_BATTERY_MONITOR) {
-                lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s +%.1f/-%.1f Ah",
-                    s_bh_short_names[s], ch, ds);
-            } else {
-                lv_label_set_text_fmt(s_bh_totals[s],
-                    "%s (s/d)",
-                    s_bh_short_names[s]);
-            }
-        }
-        if (s_bh_lbl_date) lv_label_set_text(s_bh_lbl_date, date);
+    }
+    if (s_bh_lbl_date) {
+        lv_label_set_text(s_bh_lbl_date,
+                          s_bh_loaded_idx < 0 ? "HOY (24H)"
+                                              : s_bh_dates[s_bh_loaded_idx]);
     }
     lv_chart_refresh(s_bh_chart);
+}
+
+/* Pega al final de s_bh_buf las muestras del anillo en PSRAM posteriores a la
+ * ultima que ya venia del CSV, y actualiza n[]. Solo para HOY.
+ *
+ * Las dos mitades son necesarias: el CSV llega hasta el ultimo volcado (cada
+ * 60 s) pero SOBREVIVE a los reinicios, y el anillo tiene el minuto en curso
+ * pero arranca vacio en cada arranque. Juntos dan el dia entero.
+ *
+ * Corre en bh_loader_task: sin cerrojo de LVGL y con la cache ya invalidada. */
+static void bh_append_ring_tail(int *n)
+{
+    /* Sin RTC en hora, battery_history guarda uptime en `ts` (y el CSV escribe
+     * "BOOT+n", que no parsea): mismo umbral que usa el componente. */
+    const int32_t TS_EPOCH_MIN = 1704067200;   /* 2024-01-01 */
+
+    static bh_point_t *ring = NULL;   /* 8640 x 28 B ~= 242 KB; se reutiliza */
+    if (!ring) {
+        ring = heap_caps_malloc(sizeof(bh_point_t) * BH_POINTS, MALLOC_CAP_SPIRAM);
+        if (!ring) { ESP_LOGE(TAG_UI, "sin PSRAM para leer el anillo"); return; }
+    }
+
+    for (int s = 0; s < BH_SRC_COUNT; ++s) {
+        if (!s_bh_buf[s]) continue;
+        int32_t ots = 0, nts = 0;
+        int cnt = (int)battery_history_get_series((bh_source_t)s, ring, &ots, &nts);
+        /* Minuto de la ultima muestra que ya trae el CSV: se anade solo lo
+         * posterior para no duplicar el solape. -1 = el CSV no tenia nada. */
+        int last_min = (n[s] > 0)
+            ? s_bh_buf[s][n[s] - 1].hh * 60 + s_bh_buf[s][n[s] - 1].mm
+            : -1;
+        for (int i = 0; i < cnt && n[s] < BH_LOG_MAX_ENTRIES; ++i) {
+            if (!ring[i].valid) continue;
+            int hh = 0, mm = 0, minute = -1;
+            if (ring[i].ts > TS_EPOCH_MIN) {
+                time_t t = ring[i].ts;
+                struct tm tm_p;
+                localtime_r(&t, &tm_p);
+                hh = tm_p.tm_hour;
+                mm = tm_p.tm_min;
+                minute = hh * 60 + mm;
+                if (minute <= last_min) continue;   /* ya venia en el CSV */
+            }
+            battery_log_entry_t *e = &s_bh_buf[s][n[s]];
+            e->hh = hh;
+            e->mm = mm;
+            e->milli_amps  = ring[i].milli_amps;
+            e->centi_volts = ring[i].centi_volts;
+            n[s]++;
+        }
+    }
+}
+
+/* Lee de la SD el dia que pida s_bh_req_idx y lo pinta. Ver el comentario de
+ * s_bh_loader_task para el reparto de cerrojos. */
+static void bh_loader_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        int idx = s_bh_req_idx;
+        while (idx >= -1 && idx < s_bh_n_dates && idx != s_bh_loaded_idx) {
+            for (int s = 0; s < BH_SRC_COUNT; ++s) {
+                if (s_bh_buf[s]) continue;
+                s_bh_buf[s] = heap_caps_malloc(
+                    sizeof(battery_log_entry_t) * BH_LOG_MAX_ENTRIES,
+                    MALLOC_CAP_SPIRAM);
+                if (!s_bh_buf[s]) ESP_LOGE(TAG_UI, "sin PSRAM para la fuente %d", s);
+            }
+            /* Invalidar la cache ANTES de escribir los buffers, y hacerlo con el
+             * cerrojo tomado: asi nadie puede estar pintando de ellos mientras
+             * se sobrescriben. */
+            if (lvgl_port_lock(1000)) {
+                s_bh_loaded_idx = -2;
+                lvgl_port_unlock();
+            }
+
+            /* HOY tambien sale de la tarjeta: su CSV es lo UNICO que sobrevive a
+             * un reinicio (el anillo en PSRAM arranca vacio). Lo del anillo se
+             * le pega despues, en bh_append_ring_tail. */
+            char date[LOG_BROWSER_DATE_LEN];
+            if (idx < 0) {
+                time_t now = time(NULL);
+                struct tm tm_now;
+                localtime_r(&now, &tm_now);
+                strftime(date, sizeof(date), "%Y-%m-%d", &tm_now);
+            } else {
+                snprintf(date, sizeof(date), "%s", s_bh_dates[idx]);
+            }
+            char path[64];
+            snprintf(path, sizeof(path), "/sdcard/bateria/%s.csv", date);
+            int n[BH_SRC_COUNT] = {0};
+            int64_t t0 = esp_timer_get_time();
+            log_browser_load_battery(path, s_bh_buf, BH_LOG_MAX_ENTRIES, n);
+            int from_sd = n[0] + n[1] + n[2] + n[3];
+            if (idx < 0) bh_append_ring_tail(n);
+            ESP_LOGI(TAG_UI, "%s cargado en %lld ms: %d de la SD + %d del anillo "
+                     "(BM=%d solar=%d orion=%d ac=%d)",
+                     idx < 0 ? "HOY" : date, (esp_timer_get_time() - t0) / 1000,
+                     from_sd, n[0] + n[1] + n[2] + n[3] - from_sd,
+                     n[0], n[1], n[2], n[3]);
+
+            if (s_bh_req_idx != idx) { idx = s_bh_req_idx; continue; }  /* cambio de dia a mitad */
+
+            /* Totales del dia completo. Se calculan aqui, fuera del cerrojo:
+             * son hasta 4 x 8640 sumas. Sample medio de 10 s (BH_POINTS). */
+            for (int s = 0; s < BH_SRC_COUNT; ++s) {
+                int64_t ch = 0, dis = 0;
+                for (int i = 0; i < n[s]; i++) {
+                    int32_t ma = s_bh_buf[s][i].milli_amps;
+                    if (ma > 0) ch += ma; else dis += -ma;
+                }
+                s_bh_tot_ch[s]  = (float)(ch  * 10) / (1000.0f * 3600.0f);
+                s_bh_tot_dis[s] = (float)(dis * 10) / (1000.0f * 3600.0f);
+            }
+
+            if (lvgl_port_lock(1000)) {
+                for (int s = 0; s < BH_SRC_COUNT; ++s) s_bh_loaded_n[s] = n[s];
+                s_bh_loaded_idx = idx;
+                /* Puede haberse cerrado la pantalla o cambiado de dia mientras
+                 * se leia: solo pintamos si sigue siendo el dia en curso. */
+                if (s_bh_chart && s_bh_day_idx == idx) bh_paint_hist_day();
+                lvgl_port_unlock();
+            }
+            idx = s_bh_req_idx;
+        }
+    }
 }
 
 /* Un dia adelante o atras. `atras` = hacia el pasado. Lo comparten el gesto y
@@ -2790,6 +2836,10 @@ static void bh_step_day(bool atras)
         else                                 s_bh_day_idx = -1;
     }
     s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
+    /* Volver a HOY relee: su mitad viva (el anillo) y su CSV han seguido
+     * creciendo mientras se miraban otros dias. Los dias pasados no cambian,
+     * asi que esos si valen tal cual desde los buffers. */
+    if (s_bh_day_idx < 0) s_bh_loaded_idx = -2;
     bh_update_zoom_label();
     bh_chart_load_day();
 }

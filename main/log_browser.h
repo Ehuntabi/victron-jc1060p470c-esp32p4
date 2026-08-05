@@ -30,7 +30,7 @@ typedef struct {
 int  log_browser_load_frigo(const char *path,
                             frigo_log_entry_t *out, int max);
 
-/* Bateria: solo se carga BM (source == "BatteryMonitor"). Devuelve nº de entradas. */
+/* Bateria: entrada CSV "timestamp,source,mA,mA_max,mA_min,cV,pv_W". */
 typedef struct {
     int     hh;
     int     mm;
@@ -38,8 +38,17 @@ typedef struct {
     int32_t centi_volts;   /* 0 si el CSV no tiene columna de tension (formato viejo) */
 } battery_log_entry_t;
 
+/* Carga las BH_SRC_COUNT fuentes del CSV, cada una en su buffer: out[s] recibe
+ * hasta `max` entradas de la fuente s y n_out[s] cuantas se leyeron. Un buffer
+ * a NULL se salta (esa fuente no se parsea). Devuelve el total de entradas.
+ *
+ * OJO: tarda segundos (un dia son decenas de miles de lineas) y toma el cerrojo
+ * de la SD. NO llamarla desde un callback de LVGL: con el cerrojo de LVGL
+ * retenido >9 s el watchdog SW da la UI por congelada y reinicia la placa.
+ * En la UI la llama bh_loader_task (main/ui.c). */
 int  log_browser_load_battery(const char *path,
-                              battery_log_entry_t *out, int max);
+                              battery_log_entry_t *const *out, int max,
+                              int *n_out);
 
 #ifdef __cplusplus
 }
