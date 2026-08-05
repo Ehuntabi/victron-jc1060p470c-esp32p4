@@ -37,8 +37,8 @@ static frigo_state_t      s_state = {
     .T_Aletas     = -127.0f,
     .T_Congelador = -127.0f,
     .T_Exterior   = -127.0f,
-    .T_min        = 35,
-    .T_max        = 45,
+    .T_min        = 40,
+    .T_max        = 50,
     .fan_min_pct  = FRIGO_FAN_MIN_DUTY_PCT,
     .assignment   = {0, 1, 2},
 };
@@ -602,7 +602,7 @@ void frigo_set_mode(frigo_mode_t m)
 
 esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max)
 {
-    if (t_min < 30 || t_max > 50 || t_min >= t_max) return ESP_ERR_INVALID_ARG;
+    if (t_min < 30 || t_max > 60 || t_min >= t_max) return ESP_ERR_INVALID_ARG;
     if (t_min % 5 != 0 || t_max % 5 != 0)           return ESP_ERR_INVALID_ARG;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         s_state.T_min = t_min;

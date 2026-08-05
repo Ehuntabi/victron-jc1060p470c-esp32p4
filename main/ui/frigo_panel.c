@@ -211,7 +211,7 @@ static void btn_tmax_plus_cb(lv_event_t *e)
     frigo_state_t st;
     frigo_get_state_copy(&st);
     uint8_t t = st.T_max;
-    if (t < 50) t += 5;
+    if (t < 60) t += 5;   /* tope 60: lo valida igual frigo_set_thresholds */
     frigo_set_thresholds(st.T_min, t);
     refresh_threshold_labels();
 }

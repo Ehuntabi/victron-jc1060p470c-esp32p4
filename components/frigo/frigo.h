@@ -98,6 +98,9 @@ void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb);
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent);
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx);
+/* Umbrales de T_Aletas para el ventilador en AUTO. Rango 30..60 en pasos de 5,
+ * con t_min < t_max. Por debajo de t_min el ventilador esta parado, por encima
+ * de t_max va al 100 %, y entre medias interpola. */
 esp_err_t frigo_set_thresholds(uint8_t t_min, uint8_t t_max);
 /* Ajusta el suelo PWM (% minimo al que el ventilador gira). Se persiste en NVS.
  * Rango util 0..60 en pasos de 5; 0 = sin suelo (aplica el % calculado tal cual). */
