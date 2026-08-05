@@ -43,6 +43,27 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include "trip_computer.h"
 #include "solar_daily.h"
 #include "ne185_vlog.h"   /* ne185_vlog_flush: tambien se vuelca al finalizar viaje */
+
+/* Vuelca a la tarjeta/NVS todo lo que vive en RAM, antes de un esp_restart.
+ *
+ * Lo comparten los DOS caminos de reinicio (el switch de Wi-Fi y el boton
+ * Reiniciar) para que no puedan divergir: hasta ahora los dos volcaban solo el
+ * datalogger y el historico de bateria, asi que cada reinicio se llevaba por
+ * delante hasta ~5 min de contadores de viaje (van a NVS cada 5 min), el dia de
+ * produccion solar en curso y hasta ~10 min del log de voltaje NE185.
+ *
+ * OJO: esto NO salva las vistas "HOY" de las graficas. Salen de anillos en RAM
+ * (battery_history y datalogger) y arrancan vacias tras cualquier reinicio; lo
+ * que sobrevive son los CSV de la tarjeta, que es justo lo que se vuelca aqui. */
+static void flush_all_before_restart(void)
+{
+    ESP_LOGI("UI", "Flushing data before restart...");
+    datalogger_flush();
+    battery_history_flush();
+    solar_daily_flush();
+    trip_computer_flush();
+    ne185_vlog_flush();
+}
 #include <time.h>
 
 // Forward declaration for view update function
@@ -257,9 +278,7 @@ static void ap_msgbox_btn_cb(lv_event_t *e)
         lv_obj_center(spl_lbl);
         lv_refr_now(NULL);
 
-        ESP_LOGI("UI", "Flushing data before restart...");
-        datalogger_flush();
-        battery_history_flush();
+        flush_all_before_restart();
         /* Apagar backlight para que la pantalla quede negra entre el reset
          * y la reinicialización del panel DSI (evita el flash azul del
          * buffer DSI sin inicializar). */
@@ -2042,9 +2061,7 @@ static void about_timer_cb(lv_timer_t *t)
 static void do_reboot_action(void)
 {
     ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
-    ESP_LOGI("UI", "Flushing data before restart...");
-    datalogger_flush();
-    battery_history_flush();
+    flush_all_before_restart();
     vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
 }
