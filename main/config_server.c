@@ -724,8 +724,31 @@ void config_server_get_web_credentials(char *user, size_t ulen,
     nvs_close(h);
 }
 
+/* Basic auth del portal: DESACTIVADA (2026-08-05, decision del usuario).
+ *
+ * El P4 solo levanta Soft-AP (WIFI_MODE_AP, no hay modo estacion), asi que
+ * TODO cliente HTTP ha tenido que pasar antes por la clave WPA2 del AP, que es
+ * aleatoria de 8+ caracteres y se regenera sola si alguna vez es debil
+ * (config_server_ensure_ap_password). Exigir ademas usuario y clave HTTP era
+ * una segunda puerta con la misma llave efectiva, y en la practica dejaba a la
+ * app fuera: pedia /api/state una vez por segundo y se llevaba 401 tras 401.
+ *
+ * OJO CON LO QUE ESTO ABRE: quien tenga la clave del Wi-Fi entra a todo, /ota
+ * incluido. Es el precio aceptado a cambio de que la app conecte sin
+ * configurar nada. Para dar marcha atras basta poner este flag a 1: la
+ * maquinaria de credenciales (NVS, generacion aleatoria, la tarjeta de Ajustes
+ * -> Wi-Fi) se ha dejado intacta a proposito. */
+#define PORTAL_REQUIRE_BASIC_AUTH 0
+
 static esp_err_t check_basic_auth(httpd_req_t *req)
 {
+#if !PORTAL_REQUIRE_BASIC_AUTH
+    /* El kick es obligatorio tambien por aqui: es el UNICO que hay por
+     * peticion, y sin el el AP se auto-apagaria a los 15 min con la app
+     * usandolo. */
+    ap_off_timer_kick();
+    return ESP_OK;
+#else
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
@@ -754,6 +777,7 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "Auth required");
     return ESP_FAIL;
+#endif
 }
 
 /* Helper macro: pone al inicio de los handlers que exigen auth. Si falla

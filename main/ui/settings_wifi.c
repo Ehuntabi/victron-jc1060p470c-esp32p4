@@ -326,8 +326,15 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *c4_hint = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
+    /* Desde 2026-08-05 la web NO las pide (PORTAL_REQUIRE_BASIC_AUTH = 0 en
+     * config_server.c): basta con estar en el Wi-Fi del display. Se siguen
+     * ensenando porque quedan guardadas y volverian a valer si se reactiva la
+     * auth, pero hay que decir que ahora no hacen falta: anunciarlas como
+     * necesarias fue justo lo que hizo perder el tiempo buscando por que la
+     * app no conectaba. */
     lv_label_set_text(c4_hint,
-                      "Para entrar a la web del display. Solo se ve aqui.");
+                      "No hacen falta: entrando por el Wi-Fi del display ya\n"
+                      "tienes acceso. Guardadas por si se reactiva.");
 
     /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */
