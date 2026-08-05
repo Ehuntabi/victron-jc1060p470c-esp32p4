@@ -2412,6 +2412,12 @@ esp_err_t config_server_start(void) {
     cfg.send_wait_timeout = 30;
     cfg.recv_wait_timeout = 30;
     cfg.max_open_sockets = 4;
+    /* Con solo 4 sockets y recv_wait_timeout=30, los keep-alive del cliente (la
+     * app sondea /api/state a 1 Hz, y basta abrir la web en el navegador para
+     * sumar mas) se quedan ocupados hasta medio minuto. Sin purga LRU el httpd
+     * RECHAZA la 5a conexion en vez de reciclar la mas vieja -> la app da
+     * "sin conexion" a rachas aunque el P4 este perfectamente vivo. */
+    cfg.lru_purge_enable = true;
     cfg.max_uri_handlers = 40;  /* 34 actuales (32 + solar.tar + viaje.tar) mas
                                  * margen. Estaba a 32: uno de margen. Ojo:
                                  * pasarse del tope hace que el registro falle EN

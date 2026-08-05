@@ -8,9 +8,29 @@
 #include <math.h>
 #include <errno.h>
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"   /* vTaskDelay: ceder CPU al trocear la lectura */
 #include "camera.h"   /* camera_sd_bus_lock: serializar SD con el GDMA de la camara */
 
 static const char *TAG = "LOG_BROWSER";
+
+/* Lineas que se leen entre dos cesiones de CPU en log_browser_load_battery.
+ *
+ * El CSV de un dia de bateria son ~8640 muestras del BatteryMonitor (una cada
+ * 10 s, ver BH_POINTS) MAS las del cargador solar: del orden de 17000 lineas.
+ * Parsearlas del tiron (csv_split + sscanf + strtol por linea) monopolizaba
+ * taskLVGL varios segundos CON EL CERROJO DE LA SD TOMADO, porque la navegacion
+ * por dias se hace desde un callback de LVGL -> Task WDT (5 s, PANIC) ->
+ * reinicio de la placa al cambiar de dia.
+ *
+ * A ~100 us por linea, 512 lineas son ~50 ms de CPU: se cede muy por debajo del
+ * limite del watchdog, y el coste total de los yields en un dia entero es
+ * ~330 ms (33 trozos x 1 tick de 10 ms).
+ *
+ * El log del frigo no lleva troceado a proposito: son ~288 lineas por dia (una
+ * cada 5 min), 60 veces menos, y nunca se acerco al limite. Si algun dia sube
+ * su cadencia, hay que traerse este mismo patron. */
+#define BATT_CHUNK_LINES  512
 
 int log_browser_list_dates(const char *dir,
                            char dates_out[][LOG_BROWSER_DATE_LEN],
@@ -169,7 +189,27 @@ int log_browser_load_battery(const char *path,
     char line[160];
     if (!fgets(line, sizeof(line), f)) { fclose(f); camera_sd_bus_unlock(); return 0; }
     int n = 0;
-    while (fgets(line, sizeof(line), f) && n < max) {
+    int since_yield = 0;
+    bool have_lock = true;
+    while (n < max && fgets(line, sizeof(line), f)) {
+        if (++since_yield >= BATT_CHUNK_LINES) {
+            since_yield = 0;
+            /* Soltar el bus y ceder: la camara recupera su ventana de GDMA y
+             * las tareas de menor prioridad (IDLE incluida, que es a quien
+             * vigila el Task WDT) vuelven a correr. El FILE sigue abierto entre
+             * trozos: nadie mas escribe este fichero mientras se lee. Mismo
+             * patron que el drenador de vigilancia, que suelta el bus entre
+             * trozos de 8 KB. */
+            camera_sd_bus_unlock();
+            have_lock = false;
+            vTaskDelay(1);
+            if (!camera_sd_bus_lock(3000)) {
+                ESP_LOGW(TAG, "%s: bus SD ocupado a mitad; devuelvo %d entradas",
+                         path, n);
+                break;   /* un dia parcial se ve mejor que una grafica vacia */
+            }
+            have_lock = true;
+        }
         char *fields[8] = {0};
         int nf = csv_split(line, fields, 8);
         if (nf < 3) continue;
@@ -184,7 +224,11 @@ int log_browser_load_battery(const char *path,
             ? (int32_t)strtol(fields[5], NULL, 10) : 0;
         n++;
     }
+    /* El fclose toca la SD: recuperar el cerrojo si se salio del bucle sin el.
+     * Si tampoco se consigue, se cierra igual (dejar el FILE abierto seria
+     * peor: fuga de descriptor y del buffer de stdio). */
+    if (!have_lock) have_lock = camera_sd_bus_lock(3000);
     fclose(f);
-    if (sdl) camera_sd_bus_unlock();
+    if (have_lock) camera_sd_bus_unlock();
     return n;
 }
