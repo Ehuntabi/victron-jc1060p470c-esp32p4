@@ -1357,8 +1357,19 @@ static void trip_label_refresh(void)
         time_t now = time(NULL);
         if (now >= (time_t)t.reset_epoch) elapsed = (int64_t)now - t.reset_epoch;
     }
-    int hours = (int)(elapsed / 3600);
+    /* Los viajes duran dias: "130h 18m" no se lee de un vistazo. Los dias solo
+     * aparecen cuando los hay, para que un viaje recien empezado no ensene
+     * un "0d" que no aporta nada. */
+    int e_days  = (int)(elapsed / 86400);
+    int hours   = (int)((elapsed % 86400) / 3600);
     int minutes = (int)((elapsed % 3600) / 60);
+    char elapsed_str[24];
+    if (e_days > 0) {
+        snprintf(elapsed_str, sizeof(elapsed_str), "%dd %dh %02dm",
+                 e_days, hours, minutes);
+    } else {
+        snprintf(elapsed_str, sizeof(elapsed_str), "%dh %02dm", hours, minutes);
+    }
 
     /* Medias solares por dia (proyeccion: divide por los dias exactos
      * transcurridos, aunque sean horas). Guardamos contra division por cero. */
@@ -1368,11 +1379,11 @@ static void trip_label_refresh(void)
 
     char buf[288];
     snprintf(buf, sizeof(buf),
-        "Iniciado %s   |   %dh %02dm\n"
+        "Iniciado %s   |   %s\n"
         "Total cargado: %.2f kWh %.1f Ah  "
         "(Solar: %.2f kWh %.1f Ah, %.1f h/dia, %.0f Ah/dia)\n"
         "Consumido: %.2f kWh  %.1f Ah",
-        start_str, hours, minutes,
+        start_str, elapsed_str,
         t.wh_charged / 1000.0, t.ah_charged,
         t.wh_solar / 1000.0, t.ah_solar, solar_h_day, solar_ah_day,
         t.wh_discharged / 1000.0, t.ah_discharged);
