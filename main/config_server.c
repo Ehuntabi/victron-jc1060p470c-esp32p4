@@ -734,6 +734,20 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
         ap_off_timer_kick();   /* peticion valida -> mantener el HTTP server vivo */
         return ESP_OK;
     }
+    /* Dejar rastro del 401: sin esto un cliente que no manda credenciales (la
+     * app con usuario/clave sin configurar, p.ej.) es INVISIBLE en el log —
+     * pasa lo mismo que si no hubiera pedido nada, y se diagnostica a ciegas.
+     * NUNCA imprimir la cabecera recibida: log_capture la persistiria en la SD.
+     * Throttle de 1 s porque la app repregunta en bucle y esto llenaria el log. */
+    static int64_t last_warn_us = 0;
+    int64_t now_us = esp_timer_get_time();
+    if (now_us - last_warn_us > 1000000) {
+        last_warn_us = now_us;
+        ESP_LOGW(TAG, "401 en %s: %s", req->uri,
+                 s_auth_header[0] == '\0' ? "portal cerrado (sin credenciales en NVS)"
+                 : err != ESP_OK          ? "el cliente no manda cabecera Authorization"
+                                          : "usuario o clave incorrectos");
+    }
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_set_hdr(req, "WWW-Authenticate",
                        "Basic realm=\"Victron Display\"");
