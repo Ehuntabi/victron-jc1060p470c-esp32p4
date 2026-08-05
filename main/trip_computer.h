@@ -17,6 +17,7 @@ typedef struct {
     double ah_solar;          /* carga aportada por la placa solar (A*h) */
     int64_t solar_seconds;    /* tiempo con la placa cargando (corriente > 0) */
     int64_t seconds_running;  /* tiempo "activo" (con sample en intervalo) */
+    bool    active;           /* hay un viaje en curso (ver trip_computer_is_active) */
 } trip_computer_t;
 
 /* Carga el estado persistido en NVS (o ceros si no hay). Llamar al boot. */
@@ -34,8 +35,21 @@ void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
  * Al finalizar un viaje, antes de sacar la tarjeta o apagar. */
 void trip_computer_flush(void);
 
-/* Reset manual de todos los contadores. Guarda inmediatamente en NVS. */
+/* Reset manual de todos los contadores: EMPIEZA un viaje nuevo (queda activo).
+ * Guarda inmediatamente en NVS. */
 void trip_computer_reset(void);
+
+/* Marca el viaje como TERMINADO (y guarda los contadores). A partir de aqui el
+ * aviso de arranque vuelve a ofrecer empezar uno nuevo. Es la contraparte de
+ * trip_computer_reset: el viaje lo abre y lo cierra el usuario a mano. */
+void trip_computer_end(void);
+
+/* Marca el viaje como en curso sin tocar los contadores ("Seguir viaje"). */
+void trip_computer_mark_active(void);
+
+/* true si hay un viaje abierto. Lo consulta el arranque para NO sacar el aviso
+ * de "Nuevo viaje?" en cada reinicio: un reset de la placa no termina un viaje. */
+bool trip_computer_is_active(void);
 
 /* Copia el snapshot actual a out. Thread-safe (mutex interno). */
 void trip_computer_get(trip_computer_t *out);

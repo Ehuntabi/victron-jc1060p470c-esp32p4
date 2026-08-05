@@ -23,6 +23,7 @@ typedef struct {
     int32_t whc, whd, ahc_m, ahd_m;
     int32_t whs, ahs_m;   /* aporte solar: Wh y mAh */
     int64_t sol_secs;     /* tiempo con la placa cargando */
+    uint8_t active;       /* 1 = viaje en curso (ver trip_computer_is_active) */
 } trip_snap_t;
 
 /* Copia el estado a un snapshot. El caller debe tener s_mtx tomado. */
@@ -38,6 +39,7 @@ static trip_snap_t trip_snapshot_locked(void)
         .whs   = (int32_t)s.wh_solar,
         .ahs_m = (int32_t)(s.ah_solar      * 1000.0),
         .sol_secs = s.solar_seconds,
+        .active   = s.active ? 1 : 0,
     };
     return snap;
 }
@@ -55,6 +57,7 @@ static void write_nvs(const trip_snap_t *snap)
     nvs_set_i32(h, "wh_s", snap->whs);
     nvs_set_i32(h, "ah_s", snap->ahs_m);
     nvs_set_i64(h, "sol_t", snap->sol_secs);
+    nvs_set_u8(h, "active", snap->active);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -75,7 +78,15 @@ static void load_nvs(void)
     nvs_get_i32(h, "wh_s", &whs);
     nvs_get_i32(h, "ah_s", &ahs_m);
     nvs_get_i64(h, "sol_t", &sol_s);
+    /* Migracion: en una placa que venia de antes de existir el flag no hay clave
+     * "active". Se asume viaje EN CURSO, que es el caso real de cualquiera que ya
+     * estuviera usando el trip computer: asi el aviso de arranque deja de salir
+     * desde la primera actualizacion, sin pedir nada. Quien lo tuviera terminado
+     * empieza el nuevo desde Ajustes -> Empezar viaje. */
+    uint8_t act = 1;
+    nvs_get_u8(h, "active", &act);
     nvs_close(h);
+    s.active = (act != 0);
     s.reset_epoch     = r;
     s.seconds_running = secs;
     s.wh_charged      = (double)whc;
@@ -203,10 +214,35 @@ void trip_computer_reset(void)
     s.seconds_running = 0;
     s_last_sample = 0;
     s_last_solar_sample = 0;
+    s.active = true;            /* empezar un viaje lo deja abierto */
     trip_snap_t snap = trip_snapshot_locked();
     xSemaphoreGive(s_mtx);
     write_nvs(&snap);
-    ESP_LOGI(TAG, "Trip reset");
+    ESP_LOGI(TAG, "Trip reset (viaje nuevo, activo)");
+}
+
+/* Cambia el flag de viaje abierto/cerrado y persiste, sin tocar los contadores. */
+static void trip_set_active(bool on)
+{
+    if (!s_mtx) trip_computer_init();
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    s.active = on;
+    trip_snap_t snap = trip_snapshot_locked();
+    xSemaphoreGive(s_mtx);
+    write_nvs(&snap);
+    ESP_LOGI(TAG, "Viaje %s", on ? "en curso" : "terminado");
+}
+
+void trip_computer_end(void)         { trip_set_active(false); }
+void trip_computer_mark_active(void) { trip_set_active(true); }
+
+bool trip_computer_is_active(void)
+{
+    if (!s_mtx) trip_computer_init();
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    const bool a = s.active;
+    xSemaphoreGive(s_mtx);
+    return a;
 }
 
 void trip_computer_get(trip_computer_t *out)

@@ -780,11 +780,98 @@ static esp_err_t handle_snapshot(httpd_req_t *req) {
     return r;
 }
 
-// GET /vigilancia -> lista las capturas de movimiento; /vigilancia/<archivo> -> sirve el BMP.
-/* Galeria de vigilancia servida desde el anillo en RAM (PSRAM) de camera.c.
- * No se usa la SD: el bus SDMMC se satura con la camara + el C6 durante la
- * vigilancia. Las capturas se pierden al reiniciar (encaja con "modo ausente"). */
-#define VIG_MAX 16
+// GET /vigilancia -> lista las capturas de movimiento; /vigilancia/<id|fichero> -> sirve el JPEG.
+/* Galeria de vigilancia.
+ *
+ * OJO al historial de esto: la galeria nacio leyendo SOLO el anillo en RAM
+ * (PSRAM) de camera.c, cuando las capturas no llegaban a la tarjeta. Despues se
+ * anadio vig_sd_drain_task, que las vuelca a /sdcard/vigilancia Y LIBERA EL SLOT
+ * DEL ANILLO al conseguirlo (camera.c). Nadie actualizo la galeria: cada captura
+ * desaparecia de la lista ~300 ms despues de hacerse, asi que la pagina salia
+ * casi siempre vacia ("Aun no hay capturas") aunque los JPEG estuvieran
+ * perfectamente guardados en la tarjeta. Parecia que la vigilancia no grababa.
+ *
+ * Ahora se listan las DOS: los ficheros de la tarjeta (el historial de verdad) y
+ * lo que siga pendiente de volcar en el anillo. */
+#define VIG_MAX     16        /* capturas del anillo en RAM (pendientes de volcar) */
+#define VIG_SD_MAX  24        /* ficheros de la tarjeta que se muestran (los mas nuevos) */
+#define VIG_SD_DIR_PATH "/sdcard/vigilancia"
+#define VIG_NAME_LEN 32       /* "AAAAMMDD_HHMMSS_nnn.jpg" = 24 con el NUL */
+
+/* Nombres de las capturas de la tarjeta, ascendente (el mas nuevo al final).
+ * El nombre es AAAAMMDD_HHMMSS_nnn.jpg, asi que ordenar por texto ES ordenar por
+ * fecha. Devuelve cuantos hay en la lista; *total_out son los que hay en la
+ * carpeta, para poder decir cuantos quedan fuera en vez de truncar en silencio. */
+static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
+{
+    if (total_out) *total_out = 0;
+    if (!camera_sd_bus_lock(2000)) return 0;
+    DIR *d = opendir(VIG_SD_DIR_PATH);
+    if (!d) { camera_sd_bus_unlock(); return 0; }
+    int n = 0, total = 0;
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        const char *nm = ent->d_name;
+        const size_t l = strlen(nm);
+        if (l < 5 || l >= VIG_NAME_LEN) continue;
+        if (strcmp(nm + l - 4, ".jpg") != 0) continue;
+        total++;
+        if (n == max) {
+            if (strcmp(nm, names[0]) <= 0) continue;   /* mas viejo que todos */
+            memmove(names[0], names[1], (size_t)(max - 1) * VIG_NAME_LEN);
+            n--;
+        }
+        int pos = n;
+        while (pos > 0 && strcmp(names[pos - 1], nm) > 0) {
+            memcpy(names[pos], names[pos - 1], VIG_NAME_LEN);
+            pos--;
+        }
+        snprintf(names[pos], VIG_NAME_LEN, "%s", nm);
+        n++;
+    }
+    closedir(d);
+    camera_sd_bus_unlock();
+    if (total_out) *total_out = total;
+    return n;
+}
+
+/* Sirve un JPEG de la tarjeta en trozos, SOLTANDO el cerrojo del bus entre cada
+ * uno: si el httpd retiene la SD durante todo el fichero, el GDMA de la camara
+ * se queda parado y se acaba en INT WDT. Mismo patron que vig_write_jpeg_sd. */
+static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
+{
+    char path[128];
+    snprintf(path, sizeof(path), VIG_SD_DIR_PATH "/%s", name);
+    if (!camera_sd_bus_lock(2000)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "tarjeta ocupada, reintenta");
+        return ESP_FAIL;
+    }
+    FILE *f = fopen(path, "rb");
+    camera_sd_bus_unlock();
+    if (!f) { httpd_resp_send_404(req); return ESP_FAIL; }
+
+    httpd_resp_set_type(req, "image/jpeg");
+    static char buf[4096];   /* estatico: la pila del httpd la comparten mas handlers */
+    for (;;) {
+        if (!camera_sd_bus_lock(2000)) break;
+        const size_t r = fread(buf, 1, sizeof(buf), f);
+        camera_sd_bus_unlock();
+        if (r == 0) break;
+        if (httpd_resp_send_chunk(req, buf, r) != ESP_OK) {
+            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            fclose(f);
+            camera_sd_bus_unlock();
+            return ESP_FAIL;
+        }
+        vTaskDelay(1);   /* ceder al GDMA de la camara entre trozos */
+    }
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+    fclose(f);
+    camera_sd_bus_unlock();
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
 static esp_err_t handle_vigilancia(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     const char *uri = req->uri;
@@ -792,7 +879,16 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
     if (strncmp(uri, "/vigilancia/", 12) == 0 && uri[12] != '\0') idstr = uri + 12;
 
     if (idstr) {
-        /* Servir una captura concreta por id (entero). */
+        /* Un nombre acabado en .jpg es un fichero de la tarjeta; un numero, una
+         * captura del anillo en RAM aun sin volcar. */
+        const size_t il = strlen(idstr);
+        if (il >= 5 && il < VIG_NAME_LEN && strcmp(idstr + il - 4, ".jpg") == 0) {
+            if (strchr(idstr, '/') || strstr(idstr, "..")) {
+                httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
+                return ESP_FAIL;
+            }
+            return vig_sd_send(req, idstr);
+        }
         uint32_t id = (uint32_t)strtoul(idstr, NULL, 10);
         uint8_t *jpg = NULL; size_t jlen = 0;
         if (id == 0 || !camera_vig_fetch(id, &jpg, &jlen)) { httpd_resp_send_404(req); return ESP_FAIL; }
@@ -802,9 +898,13 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
         return r;
     }
 
-    /* Listado HTML con miniaturas en linea. */
+    /* Listado HTML con miniaturas en linea: primero lo pendiente en RAM (lo mas
+     * reciente, aun sin volcar) y luego el historial de la tarjeta. */
     uint32_t ids[VIG_MAX]; time_t ts[VIG_MAX]; size_t lens[VIG_MAX];
     int n = camera_vig_list(ids, ts, lens, VIG_MAX);
+    static char sd_names[VIG_SD_MAX][VIG_NAME_LEN];
+    int sd_total = 0;
+    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_total);
 
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr_chunk(req,
@@ -814,7 +914,7 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
         "img{max-width:100%;display:block;margin:6px 0;border:1px solid #333}"
         ".cap{padding:8px 0;border-bottom:1px solid #333}.t{color:#9e9e9e;font-size:13px}"
         "</style></head><body><h2>Capturas de vigilancia</h2>");
-    if (n == 0) {
+    if (n == 0 && sd_n == 0) {
         httpd_resp_sendstr_chunk(req, "<p>Aun no hay capturas. Activa el modo ausente y muevete "
                                       "delante de la camara.</p>");
     } else {
@@ -834,9 +934,21 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
                      when, (unsigned)(lens[i] / 1024), (unsigned)ids[i], (unsigned)ids[i]);
             httpd_resp_sendstr_chunk(req, line);
         }
-        char foot[160];
-        snprintf(foot, sizeof(foot), "<p class=t>%d capturas en RAM (las mas recientes; "
-                                     "se pierden al reiniciar).</p>", n);
+        /* Historial de la tarjeta, del mas nuevo al mas viejo. El nombre lleva la
+         * fecha (AAAAMMDD_HHMMSS), asi que se muestra tal cual formateada. */
+        for (int i = sd_n - 1; i >= 0; i--) {
+            const char *nm = sd_names[i];
+            snprintf(line, sizeof(line),
+                     "<div class=cap><div class=t>%.4s-%.2s-%.2s %.2s:%.2s:%.2s &middot; tarjeta</div>"
+                     "<a href='/vigilancia/%s'><img src='/vigilancia/%s' loading=lazy></a></div>",
+                     nm, nm + 4, nm + 6, nm + 9, nm + 11, nm + 13, nm, nm);
+            httpd_resp_sendstr_chunk(req, line);
+        }
+        char foot[240];
+        snprintf(foot, sizeof(foot),
+                 "<p class=t>%d en la tarjeta (se muestran las %d mas recientes)"
+                 " &middot; %d pendientes de volcar en RAM.</p>",
+                 sd_total, sd_n, n);
         httpd_resp_sendstr_chunk(req, foot);
     }
     httpd_resp_sendstr_chunk(req, "</body></html>");

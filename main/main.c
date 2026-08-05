@@ -557,9 +557,13 @@ void app_main(void)
     /* Splash visible al menos 1.5 s desde su creacion, luego ocultar. */
     if (lvgl_port_lock(0)) {
         splash_hide();
-        /* Aviso emergente de arranque: ofrecer empezar un viaje nuevo
-         * (reset del trip computer). Sale en cada arranque. */
-        ui_show_new_trip_dialog();
+        /* Aviso emergente de arranque: ofrecer empezar un viaje nuevo (reset del
+         * trip computer). SOLO si no hay un viaje ya abierto: un reinicio de la
+         * placa (OTA, corte de tension, watchdog) no termina un viaje, y salir en
+         * cada arranque obligaba a contestarlo a ciegas con el riesgo de poner los
+         * contadores a cero sin querer. El viaje lo abre y lo cierra el usuario
+         * (Ajustes -> Empezar viaje / Finalizar viaje). */
+        if (!trip_computer_is_active()) ui_show_new_trip_dialog();
         lvgl_port_unlock();
     }
 

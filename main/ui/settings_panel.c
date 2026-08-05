@@ -42,6 +42,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include "config_backup.h"
 #include "trip_computer.h"
 #include "solar_daily.h"
+#include "ne185_vlog.h"   /* ne185_vlog_flush: tambien se vuelca al finalizar viaje */
 #include <time.h>
 
 // Forward declaration for view update function
@@ -1482,7 +1483,8 @@ static void do_trip_finish_action(void)
     ESP_LOGI(TAG_SETTINGS, "Finalizar viaje: volcando todo a la tarjeta");
     battery_history_flush();     /* historico de corriente/tension/panel */
     solar_daily_flush();         /* dia de produccion en curso */
-    trip_computer_flush();       /* contadores del viaje */
+    ne185_vlog_flush();          /* comparativa de voltaje NE185 (hasta 10 min en RAM) */
+    trip_computer_end();         /* guarda los contadores Y cierra el viaje */
 
     const esp_err_t err = datalogger_close_sd();   /* incluye su propio flush */
     if (err == ESP_OK) {
@@ -1521,6 +1523,9 @@ static void newtrip_close(void)
 static void newtrip_keep_cb(lv_event_t *e)
 {
     (void)e;
+    /* "Seguir viaje" tambien abre el viaje: si no, el aviso volveria a salir en
+     * el siguiente arranque preguntando lo mismo. */
+    trip_computer_mark_active();
     newtrip_close();
 }
 
