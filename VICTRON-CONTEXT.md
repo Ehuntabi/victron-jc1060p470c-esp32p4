@@ -294,7 +294,7 @@ Productos conocidos con payload grande:
 ├── sdkconfig                          # cuidado, verificar diff vs known-good antes de tocar
 ├── docs/ne185_bias_board.pdf          # placa de bias RS-485
 ├── AUTOCARAVANA-SETUP.md              # guía operativa autocaravana
-├── SESION-2026-06-16-resumen.md       # resumen ejecutivo sesión post-vacaciones
+├── docs/manual/manual-pantalla.md     # manual de uso (lenguaje llano)
 └── VICTRON-CONTEXT.md                 # este archivo
 ```
 

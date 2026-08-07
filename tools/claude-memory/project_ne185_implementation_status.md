@@ -245,8 +245,10 @@ de datos defectuoso, NO brownout ni codigo. Sintoma usuario: "a veces marca y
 otras no". Alimentacion era solo-USB-portatil. Fix: cable USB-C de datos bueno.
 
 **Sniffer NE185 NO probado aun** (se acabo la sesion). Pendiente #1 sigue: sniff
-del boton CHECK del NE187 (tanques agua) + luces ON/OFF. Plan paso a paso en
-`~/joint/victron/SNIFFER-PLAN.md`. Firmware HEAD de main ya flasheado al P4.
+del boton CHECK del NE187 (tanques agua) + luces ON/OFF. Firmware HEAD de main ya
+flasheado al P4. *(El plan paso a paso vivia en `SNIFFER-PLAN.md`, borrado el
+2026-08-07 al quedar resuelto todo lo que planteaba — sigue en el historial de
+git. El resultado esta en la entrada del 2026-06-22, justo debajo.)*
 
 ## 2026-06-22 (autocaravana) — sniffer + master OK, casi todo operativo
 
