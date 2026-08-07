@@ -81,6 +81,7 @@ static void ap_switch_cb(lv_event_t *e)
         nvs_close(h);
     }
 
+    ui_wifi_set_enabled_cache(checked);   /* el icono de la barra cachea el flag */
     config_server_request_wifi_apply();
 }
 

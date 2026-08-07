@@ -34,6 +34,11 @@ void ui_notify_user_activity(void);
  * click/gesto al widget de debajo. */
 bool ui_screensaver_is_active(void);
 
+// Avisa al icono Wi-Fi de la barra del nuevo estado de 'wifi/enabled'. Hay que
+// llamarla SIEMPRE que se cambie ese flag: el icono cachea el valor en RAM a
+// proposito (leer NVS en cada tick provocaba INT WDT) y no se entera solo.
+void ui_wifi_set_enabled_cache(bool enabled);
+
 /* Forzar un refresco inmediato del label de la hora.
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);

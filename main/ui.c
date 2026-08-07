@@ -49,6 +49,16 @@
 static int64_t s_last_ble_data_us = 0;
 static void ble_indicator_timer_cb(lv_timer_t *t);
 
+/* Estado de 'wifi/enabled' cacheado en RAM para el icono de la barra. -1 = aun
+ * sin leer. Ver el porque de la cache (y de por que hay que avisarla a mano) en
+ * el refresco del icono, mas abajo. */
+static int s_wifi_enabled_cache = -1;
+
+void ui_wifi_set_enabled_cache(bool enabled)
+{
+    s_wifi_enabled_cache = enabled ? 1 : 0;
+}
+
 
 // Font Awesome symbols (declared in main.c)
 LV_FONT_DECLARE(font_awesome_solar_panel_40);
@@ -143,23 +153,27 @@ static void volume_icon_timer_cb(lv_timer_t *t)
      * tick (cada 500ms) provocaba INT WDT -> nvs_get_u8 -> esp_partition_read ->
      * spi_flash_disable_interrupts_caches_and_other_cpu apaga la cache de flash y
      * para el otro core; a ~2/seg, tarde o temprano la ventana coincidia con CPU1
-     * ocupado (GDMA camara/esp_hosted) y pasaba de 300ms. Es SEGURO cachear:
-     * cualquier cambio del flag 'wifi/enabled' reinicia la placa (siempre pasa por
-     * dialogo de reinicio -> esp_restart), asi que el valor del arranque es valido
-     * toda la sesion. */
+     * ocupado (GDMA camara/esp_hosted) y pasaba de 300ms.
+     *
+     * La cache NO se puede refrescar sola: quien cambia 'wifi/enabled' avisa por
+     * ui_wifi_set_enabled_cache(). Antes bastaba con leerlo una vez al arrancar,
+     * porque cualquier cambio del flag reiniciaba la placa (pasaba siempre por el
+     * dialogo de reinicio -> esp_restart). Desde que el toggle se aplica EN
+     * CALIENTE eso ya no es cierto y sin el aviso el icono se quedaria con el
+     * color del arranque hasta el siguiente reinicio. */
     if (ui->lbl_wifi) {
         static int last_en = -1;
         static int last_portal = -1;
-        static int cached_en = -1;
-        if (cached_en < 0) {
+        if (s_wifi_enabled_cache < 0) {
             nvs_handle_t h;
             uint8_t en = 1;
             if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
                 nvs_get_u8(h, "enabled", &en);
                 nvs_close(h);
             }
-            cached_en = en;
+            s_wifi_enabled_cache = en;
         }
+        const int cached_en = s_wifi_enabled_cache;
         /* config_server_is_running() solo mira un puntero (no toca flash), asi que
          * es seguro sondearlo cada tick. El portal puede apagarse solo (auto-off),
          * por eso el color se refresca segun su estado real, no solo al arrancar. */
@@ -1045,6 +1059,8 @@ static void wifi_btn_event_cb(lv_event_t *e)
     nvs_set_u8(h, "enabled", en);
     nvs_commit(h);
     nvs_close(h);
+
+    ui_wifi_set_enabled_cache(en);   /* el icono de la barra cachea el flag */
 
     /* Sincronizar el switch del Settings con el nuevo estado. */
     if (ui->wifi.ap_enable) {
