@@ -18,7 +18,7 @@ Guía **desde cero** para grabar el firmware en el display **Guition JC1060P470C
 - Un ordenador con **Windows, macOS o Linux**.
 - Conexión a internet (solo para instalar los programas la primera vez).
 
-> No hace falta pulsar ningún botón de la placa: entra en modo grabación por sí sola.
+> Normalmente **no hace falta pulsar ningún botón** de la placa: entra en modo grabación por sí sola. Si alguna vez no lo hace, en *Si algo falla* (al final) está la secuencia de botones para forzarlo.
 
 ---
 
@@ -26,11 +26,11 @@ Guía **desde cero** para grabar el firmware en el display **Guition JC1060P470C
 
 En la página de [Releases](https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4/releases), abre la última versión y baja hasta la sección **Assets** (una lista plegable; si está cerrada, haz clic en **Assets** para abrirla). Descarga el fichero:
 
-**`joint-spl-145-control-v1.0.0-esp32p4-full.bin`**
+**`joint-spl-145-control-vX.Y.Z-esp32p4-full.bin`**
 
-Se guardará en tu carpeta de **Descargas**. Es un único fichero que ya contiene todo lo necesario.
+...donde `vX.Y.Z` es el número de la versión que estés bajando (la más reciente es la de arriba del todo). Se guardará en tu carpeta de **Descargas**. Es un único fichero que ya contiene todo lo necesario.
 
-> Si descargas una versión distinta de la v1.0.0, el nombre del fichero llevará **otro número** — en los comandos de abajo, cambia `v1.0.0` por el que ponga tu fichero.
+> En los comandos de los pasos siguientes aparece `vX.Y.Z`: **sustitúyelo por el número que lleve tu fichero**. Lo más cómodo es copiar el nombre exacto desde la carpeta de Descargas.
 
 ---
 
@@ -132,12 +132,12 @@ Copia y pega **esta única línea** (es larga: cópiala entera con el icono 📋
 
 **🪟 Windows** (PowerShell o CMD)
 ```
-python -m esptool --chip esp32p4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-v1.0.0-esp32p4-full.bin
+python -m esptool --chip esp32p4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-vX.Y.Z-esp32p4-full.bin
 ```
 
 **🍎 macOS / 🐧 Linux**
 ```
-python -m esptool --chip esp32p4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-v1.0.0-esp32p4-full.bin
+python -m esptool --chip esp32p4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-vX.Y.Z-esp32p4-full.bin
 ```
 
 Verás una barra de progreso (`Writing at 0x...`). Cuando aparezca **`Hash of data verified.`** y **`Done`**, ya está grabado. La placa se reinicia sola y aparece la **pantalla de bienvenida** con **"Joint SPL 145 Control"**.
@@ -148,7 +148,9 @@ Verás una barra de progreso (`Writing at 0x...`). Cuando aparezca **`Hash of da
 
 En la pantalla táctil de la placa: entra en **Ajustes → Acerca de**. Debe mostrar la versión que has instalado, por ejemplo:
 
-`Version: v1.0.0    Compilado: Jul 9 2026  11:30:09`
+`Version: vX.Y.Z    Compilado: Jul 9 2026  11:30:09`
+
+...con el mismo número de versión que el fichero que acabas de grabar.
 
 ¡Listo! 🎉
 
@@ -157,6 +159,10 @@ En la pantalla táctil de la placa: entra en **Ajustes → Acerca de**. Debe mos
 ## Si algo falla
 
 - **No encuentra la placa / "no serial port found":** usa **otro cable USB-C de datos** (no de solo carga) u otro puerto USB del ordenador. En **Windows**, si aún no aparece, mira el apartado *"El driver USB en Windows"* aquí abajo.
+- **"The chip stopped responding" / "Serial data stream stopped":** la placa no ha entrado sola en modo grabación. Fuérzalo a mano con los botones: **mantén pulsado BOOT**, pulsa y suelta **RESET**, suelta **BOOT**, y vuelve a lanzar el comando del Paso 6. No merece la pena reintentar sin más: si ha fallado una vez, suele fallar siempre hasta que se hace esto.
+
+  > Tras un intento fallido la placa puede quedarse **en negro y sin responder**, como si estuviera estropeada. **No lo está**: se ha quedado retenida en reset. Se recupera con la misma secuencia BOOT+RESET, o simplemente desenchufando y volviendo a enchufar el USB.
+
 - **Linux, error de permisos (`Permission denied` sobre el puerto):** añade tu usuario al grupo `dialout` una sola vez:
   ```bash
   sudo usermod -aG dialout $USER
@@ -169,7 +175,7 @@ En la pantalla táctil de la placa: entra en **Ajustes → Acerca de**. Debe mos
 
   Ejemplo con puerto manual en Windows (este comando usa **`COM3`** — es la parte **`-p COM3`**):
   ```
-  python -m esptool --chip esp32p4 -p COM3 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-v1.0.0-esp32p4-full.bin
+  python -m esptool --chip esp32p4 -p COM3 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 joint-spl-145-control-vX.Y.Z-esp32p4-full.bin
   ```
   👉 Si tu placa usa **otro** puerto (por ejemplo `COM5`), cambia solo el número: sustituye **`-p COM3`** por **`-p COM5`**. En macOS/Linux es igual pero con su nombre de puerto (`-p /dev/cu.usbmodem1101`, `-p /dev/ttyACM0`).
 

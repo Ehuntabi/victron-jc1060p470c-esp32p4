@@ -23,7 +23,7 @@ Está siempre, en todas las pantallas. De izquierda a derecha:
 | **Hora y fecha** | Si aparecen en blanco, la pantalla tiene la hora bien puesta |
 | **Bluetooth** | En verde: está escuchando a los aparatos Victron |
 | **Altavoz** | Toca aquí para el sonido y los avisos |
-| **Wi-Fi** | En verde: su propia red está encendida |
+| **Wi-Fi** | Verde: la página web está lista. Azul: la red está encendida pero la web se ha dormido (se despierta sola al conectarte). Gris: el Wi-Fi está apagado. Toca aquí para encenderlo o apagarlo |
 | **Casa / engranaje** | Vuelve al inicio o entra en los ajustes |
 | **Exterior** | La temperatura de fuera |
 
@@ -116,11 +116,17 @@ el móvil para bajarte datos o actualizarla.
 > del ojo para leerla. Cada pantalla tiene la suya, distinta, generada por ella
 > misma — no hay una contraseña "de fábrica" que valga para todas.
 
-Debajo aparecen también el usuario y la contraseña **de la página web**, que son
-distintos de los del Wi-Fi. Son dos cosas separadas:
+Esa contraseña es la **única** que hace falta. Una vez tu móvil está en su red,
+las páginas se abren directamente, sin pedir nada más. (Debajo verás guardados un
+usuario y una contraseña de la web: ya no se usan, se conservan por si algún día
+se vuelven a activar.)
 
-1. La contraseña **del Wi-Fi**: para que tu móvil entre en la red.
-2. El usuario y contraseña **de la web**: para abrir sus páginas una vez dentro.
+El **interruptor** de arriba enciende y apaga la red, y el cambio es inmediato:
+no hay que reiniciar nada.
+
+> **Ojo:** con el Wi-Fi apagado, el **display pequeño se queda sin datos** — los
+> recibe justamente por esa red. Si el mini se queda en blanco, lo primero que
+> hay que mirar es si el Wi-Fi está encendido.
 
 ### Pantalla
 
@@ -225,8 +231,11 @@ sin pantalla.
 
 ### Cambiar la contraseña del Wi-Fi
 
-En **Ajustes → Wi-Fi**, escribe la que quieras y guarda. Ojo: al cambiarla, el
-móvil y el ordenador tendrán que volver a conectarse con la nueva.
+En **Ajustes → Wi-Fi**, escribe la que quieras y sal del recuadro para que se
+guarde. La nueva clave **no entra hasta que se reinicia la red**: apaga y vuelve
+a encender el interruptor de esa misma página y ya está.
+
+Después, el móvil y el ordenador tendrán que volver a conectarse con la nueva.
 
 ### Empezar un viaje nuevo
 
@@ -241,10 +250,11 @@ quieras en **Ajustes → Autocaravana → Trip computer → Inicio**.
 |---|---|
 | Temperaturas con guiones `--` | La sonda no responde. Mira el cable y usa **Buscar sondas** |
 | Un aparato Victron no aparece | Su clave no está dada de alta, o está fuera de alcance |
-| No encuentro su red Wi-Fi | Se apaga sola a los 15 minutos sin nadie conectado. Reiníciala |
-| Entré en el Wi-Fi pero no abre la página | Comprueba que escribes `http://192.168.4.1` (no `https`) |
+| No encuentro su red Wi-Fi | Mira el icono Wi-Fi de la barra: si está gris, está apagada — tócalo para encenderla. La red **no** se apaga sola |
+| Entré en el Wi-Fi pero no abre la página | Es normal si llevaba rato sin nadie: la web se duerme a los 15 minutos y **se despierta sola** al conectarte. Espera unos segundos y recarga. Comprueba también que escribes `http://192.168.4.1` (no `https`) |
+| El display pequeño se quedó sin datos | Comprueba que el Wi-Fi de la pantalla grande está encendido: el mini recibe los datos por esa red |
 | La pantalla está negra y no responde | Puede estar en **modo ausente**: cuatro toques en la esquina superior izquierda |
-| Se reinició sola de madrugada | Es normal: se reinicia una vez al día para mantenerse fina |
+| Se reinició sola | **No es normal, no se reinicia sola a propósito.** Mira en **Ajustes → Acerca de**: ahí pone el motivo del último reinicio y cuántos lleva |
 
 ---
 

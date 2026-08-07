@@ -75,7 +75,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 #### Settings
 Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, separadores entre sub-bloques:
 - **Historial en gráficos** (púrpura): chart 24 h de batería y de temperaturas frigo. Swipe izquierda/derecha **navega por fecha** en los logs guardados en SD (header muestra la fecha seleccionada).
-- **Wi-Fi** (naranja): SSID, contraseña, switch on/off, modal “requiere reiniciar”.
+- **Wi-Fi** (naranja): SSID, contraseña y switch on/off que se aplica **en caliente**, sin reiniciar la placa. (Cambiar SSID o contraseña sí necesita apagar y encender el switch para que entre.) Ojo: con el AP apagado el display satélite "mini" se queda sin telemetría.
 - **Pantalla** (cyan): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
 - **Tarjeta SD** (azul): carrusel de capturas y visor de imágenes de la SD.
 - **Sonido y alertas** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
@@ -86,7 +86,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Reloj + fecha (RTC), iconos interactivos:
   - 🔵 BLE — gris si no hay datos en 5 s.
   - 🔊 / 🔇 Volumen — tap = mute/unmute.
-  - 📶 Wi-Fi — tap = toggle AP on/off con modal.
+  - 📶 Wi-Fi — tap = toggle AP on/off en caliente. Verde: portal web accesible. Azul: AP encendido pero portal dormido por el auto-off. Gris: Wi-Fi deshabilitado.
   - ⚙ / 🏠 — navega entre Live y Settings.
   - 🌡 **Exterior: +26.0 °C** — temperatura del DS18B20 exterior, siempre visible a la derecha.
 
@@ -129,11 +129,14 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 #### Watchdog + auto-recovery
 - Hardware (IDF): TWDT 5 s + INT_WDT 300 ms, ambos con panic + reset al disparar.
-- Software (`/main/watchdog.c`): task monitor adicional que comprueba salud de LVGL cada 3 s; si el lock falla 3 veces consecutivas hace flush a SD y reset controlado. Grace period de 30 s al boot.
-- Contador de resets por TWDT/INT_WDT/panic en NVS, visible en Settings → About.
+- Software (`/main/watchdog.c`): task monitor adicional que comprueba salud de LVGL cada 3 s; si el lock falla 3 veces consecutivas fuerza un reset controlado. También vigila por heartbeat las tareas de app (>10 s sin latido → reset). Grace period de 30 s al boot.
+- **A propósito NO hace flush a SD antes de ese reset**: si el cuelgue lo causa el propio subsistema SD/FAT (mutex retenido por una tarea muerta), el flush haría deadlock y el reset nunca ocurriría. Se prefiere perder el último bloque de muestras a no reiniciar.
+- Contador de resets por TWDT/INT_WDT/panic **y por watchdog SW** en NVS, visible en Settings → About junto al motivo del último reinicio. Un reset forzado por el monitor SW aparece como `Watchdog SW (UI congelada)` o `Watchdog SW (tarea muda)`, no como un genérico "Software".
 
 #### Portal web
 - AP `VictronConfig` automático al arrancar.
+- **Auto-off del servidor HTTP a los 15 min** sin clientes nuevos (ahorro). El **AP sigue emitiendo siempre**, porque el display "mini" recibe su telemetría por UDP sobre esa red. El portal se reactiva solo en cuanto un cliente se asocia, así que no hay que reiniciar nada; si el móvil ya estaba asociado, hay un botón *Reactivar portal web* en Ajustes → Wi-Fi.
+- **Seguridad:** el WPA2 del AP es la **única** puerta. La Basic Auth del portal está desactivada desde 2026-08-05 (`PORTAL_REQUIRE_BASIC_AUTH` en `config_server.c`, con toda la maquinaria de credenciales intacta para poder revertirlo). Como el P4 solo levanta Soft-AP, cualquier cliente HTTP ha pasado antes por la clave WPA2, que es aleatoria y se regenera sola si es débil. **Contrapartida asumida: quien tenga la clave del Wi-Fi llega a todo, `/ota` incluido** — o sea, puede reescribir el firmware. Tenlo en cuenta antes de dar la clave a un invitado.
 - Nav consistente en todas las páginas: **Dashboard · Logs · Keys**.
 - `http://192.168.4.1/dashboard` (default): grid responsive con SoC, V/A/W, PV, DC/DC y energía de hoy. Auto-refresh 2 s via `GET /api/state` (JSON).
 - `/data/frigo` y `/data/bateria`: gráficos SVG con auto-escala Y y downsample > 1500 puntos; polígono semitransparente max-min + línea avg.
@@ -234,7 +237,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 #### Settings
 Pages with role-coloured cards, scrollbar visible on overflow, separators between sub-blocks:
 - **Chart history** (purple): 24 h battery + frigo temperature charts. Swipe left/right **navigates by date** across SD logs (header shows the active day).
-- **Wi-Fi** (orange): SSID, password, on/off switch, restart modal.
+- **Wi-Fi** (orange): SSID, password and an on/off switch applied **live**, with no board restart. (Changing SSID or password does need the switch toggled off and on to take effect.) Note: with the AP off, the "mini" satellite display gets no telemetry.
 - **Display** (cyan): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
 - **SD card** (blue): screenshot carousel and SD image viewer.
 - **Sound & alerts** (red): volume, mute switch, SoC and freezer temperature thresholds.
@@ -245,7 +248,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Clock + date (RTC), interactive icons:
   - 🔵 BLE — grey if no data for 5 s.
   - 🔊 / 🔇 Volume — tap to mute/unmute.
-  - 📶 Wi-Fi — tap to toggle AP with restart modal.
+  - 📶 Wi-Fi — tap to toggle the AP live. Green: web portal reachable. Blue: AP up but portal asleep after auto-off. Grey: Wi-Fi disabled.
   - ⚙ / 🏠 — navigate between Live and Settings.
   - 🌡 **Exterior: +26.0 °C** — outdoor DS18B20 reading, always visible on the right.
 
@@ -288,11 +291,14 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 #### Watchdog + auto-recovery
 - Hardware (IDF): TWDT 5 s + INT_WDT 300 ms, both panic + reset.
-- Software (`main/watchdog.c`): monitor task that checks LVGL health every 3 s; if the lock fails 3 times in a row it flushes to SD and triggers a controlled reset. 30 s grace period at boot.
-- TWDT/INT_WDT/panic reset counter in NVS, visible in Settings → About.
+- Software (`main/watchdog.c`): monitor task that checks LVGL health every 3 s; if the lock fails 3 times in a row it forces a controlled reset. It also watches app tasks by heartbeat (>10 s silent → reset). 30 s grace period at boot.
+- **It deliberately does NOT flush to SD before that reset**: if the hang is caused by the SD/FAT subsystem itself (mutex held by a dead task), the flush would deadlock and the reset would never happen. Losing the last block of samples beats not rebooting.
+- Reset counter for TWDT/INT_WDT/panic **and SW watchdog** in NVS, shown in Settings → About next to the last reset reason. A reset forced by the SW monitor reads as `Watchdog SW (UI congelada)` or `Watchdog SW (tarea muda)` rather than a generic "Software".
 
 #### Web portal
 - `VictronConfig` AP starts automatically on boot.
+- **HTTP server auto-off after 15 min** with no new clients (power saving). The **AP itself never stops**, because the "mini" display receives its telemetry over UDP on that network. The portal comes back on its own as soon as a client associates, so nothing needs restarting; if the phone was already associated there is a *Reactivar portal web* button in Settings → Wi-Fi.
+- **Security:** the AP's WPA2 key is the **only** gate. The portal's Basic Auth has been disabled since 2026-08-05 (`PORTAL_REQUIRE_BASIC_AUTH` in `config_server.c`; the whole credential machinery is left intact so it can be reverted). Since the P4 only ever brings up a Soft-AP, every HTTP client has already passed the WPA2 key, which is random and regenerated automatically if weak. **Accepted trade-off: whoever has the Wi-Fi key reaches everything, `/ota` included** — i.e. they can rewrite the firmware. Keep that in mind before handing the key to a guest.
 - Consistent navigation across pages: **Dashboard · Logs · Keys**.
 - `http://192.168.4.1/dashboard` (default): responsive grid with SoC, V/A/W, PV, DC/DC and today's energy. Auto-refresh every 2 s via `GET /api/state` (JSON).
 - `/data/frigo` and `/data/bateria`: SVG charts with Y-axis autoscale and downsample over 1500 points; semitransparent max-min envelope + average line.

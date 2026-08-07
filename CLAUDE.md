@@ -1,6 +1,6 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Release estable: **v1.0.0**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.3**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
