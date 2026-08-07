@@ -318,7 +318,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *c4_title = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(c4_title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(c4_title, LV_SYMBOL_SETTINGS "  Acceso a la web");
+    lv_label_set_text(c4_title, LV_SYMBOL_SETTINGS "  Acceso a Actualizar y Claves");
 
     lv_obj_t *c4_user = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_user, &lv_font_montserrat_20_es, 0);
@@ -333,15 +333,15 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *c4_hint = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
-    /* Desde 2026-08-05 la web NO las pide (PORTAL_REQUIRE_BASIC_AUTH = 0 en
-     * config_server.c): basta con estar en el Wi-Fi del display. Se siguen
-     * ensenando porque quedan guardadas y volverian a valer si se reactiva la
-     * auth, pero hay que decir que ahora no hacen falta: anunciarlas como
-     * necesarias fue justo lo que hizo perder el tiempo buscando por que la
-     * app no conectaba. */
+    /* Desde 2026-08-07 hay DOS niveles (ver config_server.c): la web normal no
+     * pide nada — basta con estar en el Wi-Fi del display — pero /ota, /keys y
+     * /save SI, porque reescriben el firmware o entregan las claves AES. Hay
+     * que decir exactamente donde hacen falta: anunciarlas como necesarias para
+     * todo fue lo que hizo perder el tiempo buscando por que la app no
+     * conectaba, y decir que no hacen falta para nada seria mentir ahora. */
     lv_label_set_text(c4_hint,
-                      "No hacen falta: entrando por el Wi-Fi del display ya\n"
-                      "tienes acceso. Guardadas por si se reactiva.");
+                      "Solo para Actualizar (/ota) y Claves Victron. El resto\n"
+                      "de la web y la app no piden nada: basta con el Wi-Fi.");
 
     /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */

@@ -116,10 +116,18 @@ el móvil para bajarte datos o actualizarla.
 > del ojo para leerla. Cada pantalla tiene la suya, distinta, generada por ella
 > misma — no hay una contraseña "de fábrica" que valga para todas.
 
-Esa contraseña es la **única** que hace falta. Una vez tu móvil está en su red,
-las páginas se abren directamente, sin pedir nada más. (Debajo verás guardados un
-usuario y una contraseña de la web: ya no se usan, se conservan por si algún día
-se vuelven a activar.)
+Con esa contraseña ya tienes acceso: una vez tu móvil está en su red, las páginas
+se abren directamente y la app funciona sin configurar nada.
+
+Hay **dos excepciones**, que piden además el usuario y la contraseña que verás
+debajo, en la tarjeta *Acceso a Actualizar y Claves*:
+
+- **Actualizar la pantalla** (`/ota`), porque reescribe su programa interno.
+- **Claves Victron** (`/keys`), porque enseña las claves de tus aparatos.
+
+Son las dos cosas con las que alguien podría hacer daño de verdad. Así, si alguna
+vez le das el Wi-Fi a un invitado, puede mirar los datos pero no tocar eso. El
+navegador te las pedirá una sola vez y las recordará.
 
 El **interruptor** de arriba enciende y apaga la red, y el cambio es inmediato:
 no hay que reiniciar nada.
@@ -223,7 +231,10 @@ vigilancia, sin tener que sacar la tarjeta.
 
 1. Conéctate a su Wi-Fi.
 2. Abre `http://192.168.4.1/ota`.
-3. Sube el fichero de la versión nueva y espera. Se reinicia sola en unos 20
+3. Te pedirá un **usuario y una contraseña**: son los de la tarjeta *Acceso a
+   Actualizar y Claves*, en **Ajustes → Wi-Fi**. Solo la primera vez; el
+   navegador las recuerda.
+4. Sube el fichero de la versión nueva y espera. Se reinicia sola en unos 20
    segundos.
 
 Si algo saliera mal a medias, **vuelve sola a la versión anterior**. No te quedas
@@ -253,6 +264,7 @@ quieras en **Ajustes → Autocaravana → Trip computer → Inicio**.
 | No encuentro su red Wi-Fi | Mira el icono Wi-Fi de la barra: si está gris, está apagada — tócalo para encenderla. La red **no** se apaga sola |
 | Entré en el Wi-Fi pero no abre la página | Es normal si llevaba rato sin nadie: la web se duerme a los 15 minutos y **se despierta sola** al conectarte. Espera unos segundos y recarga. Comprueba también que escribes `http://192.168.4.1` (no `https`) |
 | El display pequeño se quedó sin datos | Comprueba que el Wi-Fi de la pantalla grande está encendido: el mini recibe los datos por esa red |
+| Me pide usuario y contraseña al actualizar o al abrir Claves | Es a propósito: son las dos páginas protegidas. Los datos están en **Ajustes → Wi-Fi**, tarjeta *Acceso a Actualizar y Claves* |
 | La pantalla está negra y no responde | Puede estar en **modo ausente**: cuatro toques en la esquina superior izquierda |
 | Se reinició sola | **No es normal, no se reinicia sola a propósito.** Mira en **Ajustes → Acerca de**: ahí pone el motivo del último reinicio y cuántos lleva |
 

@@ -841,31 +841,31 @@ void config_server_get_web_credentials(char *user, size_t ulen,
     nvs_close(h);
 }
 
-/* Basic auth del portal: DESACTIVADA (2026-08-05, decision del usuario).
+/* Basic auth del portal: DOS NIVELES (2026-08-07).
  *
- * El P4 solo levanta Soft-AP (WIFI_MODE_AP, no hay modo estacion), asi que
- * TODO cliente HTTP ha tenido que pasar antes por la clave WPA2 del AP, que es
- * aleatoria de 8+ caracteres y se regenera sola si alguna vez es debil
- * (config_server_ensure_ap_password). Exigir ademas usuario y clave HTTP era
- * una segunda puerta con la misma llave efectiva, y en la practica dejaba a la
- * app fuera: pedia /api/state una vez por segundo y se llevaba 401 tras 401.
+ * Nivel abierto (la mayoria de endpoints). El P4 solo levanta Soft-AP
+ * (WIFI_MODE_AP, no hay modo estacion), asi que TODO cliente HTTP ha tenido que
+ * pasar antes por la clave WPA2 del AP, que es aleatoria de 8+ caracteres y se
+ * regenera sola si alguna vez es debil (config_server_ensure_ap_password).
+ * Exigir ademas usuario y clave HTTP era una segunda puerta con la misma llave
+ * efectiva, y en la practica dejaba a la app fuera: pedia /api/state una vez por
+ * segundo y se llevaba 401 tras 401. Por eso este nivel esta abierto.
  *
- * OJO CON LO QUE ESTO ABRE: quien tenga la clave del Wi-Fi entra a todo, /ota
- * incluido. Es el precio aceptado a cambio de que la app conecte sin
- * configurar nada. Para dar marcha atras basta poner este flag a 1: la
- * maquinaria de credenciales (NVS, generacion aleatoria, la tarjeta de Ajustes
- * -> Wi-Fi) se ha dejado intacta a proposito. */
+ * Nivel estricto: /ota, /save y /keys. Sin esto, quien tuviera la clave del
+ * Wi-Fi podia REESCRIBIR EL FIRMWARE (/ota) o llevarse y cambiar las claves AES
+ * de los Victron (/save, /keys) — o sea que prestar el Wi-Fi a un invitado
+ * equivalia a darle control total. La app NO usa ninguno de los tres (solo
+ * /api/state, /control, /ausente, /snapshot, /vigilancia y las descargas de
+ * /data), asi que cerrarlos no le afecta en absoluto; al navegador se le piden
+ * las credenciales una vez y las recuerda. Se ven en Ajustes -> Wi-Fi.
+ *
+ * Poniendo PORTAL_REQUIRE_BASIC_AUTH a 1 se exige tambien en el nivel abierto
+ * (y entonces la app necesitaria credenciales otra vez). */
 #define PORTAL_REQUIRE_BASIC_AUTH 0
 
-static esp_err_t check_basic_auth(httpd_req_t *req)
+/* Comprobacion REAL de credenciales. La usan siempre los endpoints peligrosos. */
+static esp_err_t check_basic_auth_strict(httpd_req_t *req)
 {
-#if !PORTAL_REQUIRE_BASIC_AUTH
-    /* El kick es obligatorio tambien por aqui: es el UNICO que hay por
-     * peticion, y sin el el AP se auto-apagaria a los 15 min con la app
-     * usandolo. */
-    ap_off_timer_kick();
-    return ESP_OK;
-#else
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
@@ -894,6 +894,19 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "Auth required");
     return ESP_FAIL;
+}
+
+/* Nivel abierto: basta con estar dentro del Wi-Fi (ver el bloque de arriba). */
+static esp_err_t check_basic_auth(httpd_req_t *req)
+{
+#if !PORTAL_REQUIRE_BASIC_AUTH
+    /* El kick es obligatorio tambien por aqui: es el UNICO que hay por
+     * peticion, y sin el el AP se auto-apagaria a los 15 min con la app
+     * usandolo. */
+    ap_off_timer_kick();
+    return ESP_OK;
+#else
+    return check_basic_auth_strict(req);
 #endif
 }
 
@@ -905,14 +918,20 @@ static esp_err_t check_basic_auth(httpd_req_t *req)
     if (check_basic_auth(req) != ESP_OK) return ESP_OK; \
 } while (0)
 
+/* Igual, pero exigiendo credenciales SIEMPRE. Solo para lo que puede dejar la
+ * pantalla inservible o entregar las claves AES de los Victron. */
+#define REQUIRE_AUTH_STRICT(req) do { \
+    if (check_basic_auth_strict(req) != ESP_OK) return ESP_OK; \
+} while (0)
+
 /* Envoltorios de la actualizacion por Wi-Fi: exigen contrasena y delegan en
- * ota_update.c. */
+ * ota_update.c. Nivel ESTRICTO: escribe el firmware entero. */
 static esp_err_t handle_ota_page(httpd_req_t *req) {
-    REQUIRE_AUTH(req);
+    REQUIRE_AUTH_STRICT(req);
     return ota_update_page(req);
 }
 static esp_err_t handle_ota_post(httpd_req_t *req) {
-    REQUIRE_AUTH(req);
+    REQUIRE_AUTH_STRICT(req);
     return ota_update_receive(req);
 }
 
@@ -1215,7 +1234,7 @@ static esp_err_t handle_root(httpd_req_t *req) {
 /* /keys -> sirve el index.html de configuracion Victron desde SPIFFS */
 static esp_err_t handle_keys(httpd_req_t *req)
 {
-    REQUIRE_AUTH(req);
+    REQUIRE_AUTH_STRICT(req);   /* muestra las claves AES de los Victron */
     httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
     return serve_from_spiffs(req, "/index.html");
 }
@@ -1239,7 +1258,7 @@ static bool str_is_hex(const char *s, int n) {
 
 // Handler for POST /save (MAC address and AES key)
 static esp_err_t post_save(httpd_req_t *req) {
-    REQUIRE_AUTH(req);
+    REQUIRE_AUTH_STRICT(req);   /* escribe las claves AES de los Victron */
     ESP_LOGV(TAG, "HTTP POST /save");
     size_t len = req->content_len;
     if (!len || len > 512) {
