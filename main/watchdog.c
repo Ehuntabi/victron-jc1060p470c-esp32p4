@@ -213,6 +213,13 @@ esp_err_t watchdog_init(void)
     if (forced) {
         ESP_LOGW(TAG, "Reset FORZADO por watchdog SW: %s",
                  forced == 1 ? "UI/LVGL congelada" : "tarea sin latido");
+        /* Y que se vea tambien en Ajustes -> Acerca de. Sin esto el motivo se
+         * quedaba SOLO en el log: esp_reset_reason() devuelve ESP_RST_SW para un
+         * esp_restart forzado por el monitor, o sea "Software", indistinguible de
+         * un reinicio pedido a proposito. Diagnosticar por que se reiniciaba la
+         * placa obligaba a rescatar el log de la SD. */
+        s_reason_str = (forced == 1) ? "Watchdog SW (UI congelada)"
+                                     : "Watchdog SW (tarea muda)";
     }
     ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic/forzados: %lu",
              s_reason_str, (unsigned long)s_reset_count);
