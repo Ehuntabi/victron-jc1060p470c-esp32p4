@@ -22,6 +22,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include "esp_timer.h"
 #include "mbedtls/base64.h"
 #include <stdio.h>
@@ -117,6 +118,13 @@ static void cfg_srv_ap_stop_idempotent(void *arg, esp_event_base_t base,
     s_ap_started = false;
     /* Sin esto el lwip netif queda colgado y el siguiente AP_START crashea. */
     esp_netif_action_stop(arg, base, id, data);
+    /* Limpiar el testigo de "AP ya levantado". Mientras wifi_ap_init corria una
+     * sola vez por arranque daba igual, pero ahora el toggle de Ajustes la
+     * reinvoca en caliente: si el bit se quedara puesto del ciclo anterior, la
+     * espera de wifi_ap_init volveria al instante y dhcp_set_captiveportal_url
+     * correria otra vez ANTES de que el netif estuviera listo — justo el fallo
+     * silencioso que este EventGroup existe para evitar. */
+    if (s_ap_evt) xEventGroupClearBits(s_ap_evt, AP_EVT_STARTED);
 }
 
 /* Auto-off del HTTP server tras 15 min sin NUEVAS asociaciones de cliente.
@@ -137,51 +145,152 @@ static esp_timer_handle_t s_ap_off_timer = NULL;
 
 static void ap_off_timer_kick(void);   /* fwd */
 
-/* Cuerpo real del auto-off. Corre en una tarea PROPIA, no en la tarea esp_timer:
- * esp_wifi_ap_get_sta_list es un RPC al C6 por SDIO y httpd_stop se bloquea hasta
- * que la tarea httpd sale (hasta send_wait_timeout = 30 s si hay una descarga en
- * vuelo). En la tarea esp_timer eso paraliza TODOS los demas timers del firmware,
- * incluido el feed de 1 s del modo excedente solar: pasados 3 s sin refresco,
- * frigo_solar_tick marca la telemetria como no fresca y ABRE el rele del frigo. */
-static void ap_auto_off_task(void *arg)
+/* ── Ciclo de vida del portal/AP: UNA cola, UNA tarea ───────────────────────
+ *
+ * Arrancar y parar el portal se pedia antes desde tres contextos distintos (la
+ * tarea de eventos WiFi en STA_CONNECTED, la tarea esp_timer del auto-off y un
+ * callback de LVGL en "Reactivar portal web"), y ninguno se coordinaba con los
+ * otros. Dos problemas reales:
+ *
+ *  1) CARRERA sobre s_httpd. El auto-off publica s_httpd = NULL ANTES del
+ *     httpd_stop bloqueante; si justo ahi se asociaba un cliente, el handler de
+ *     evento veia NULL y arrancaba un httpd NUEVO mientras el viejo aun tenia el
+ *     puerto 80. Con CONFIG_LWIP_SO_REUSE=y el segundo bind tiene exito y quedan
+ *     dos listeners solapados.
+ *  2) I/O DE FLASH fuera de sitio. config_server_start hace mount_spiffs + varias
+ *     lecturas NVS; llamarlo desde la tarea de eventos WiFi la bloquea, y desde
+ *     un callback de LVGL congela la UI (el watchdog SW da la UI por colgada a
+ *     los 3 fallos seguidos y fuerza reset).
+ *
+ * Solucion: todas las transiciones se PIDEN encolando un trabajo y las EJECUTA
+ * esta unica tarea, en serie. Al ser un solo ejecutor no hace falta mutex: dos
+ * transiciones no pueden solaparse por construccion. Los que piden no se
+ * bloquean nunca (xQueueSend con timeout 0). */
+typedef enum {
+    CFG_JOB_START,        /* levantar el portal HTTP si no lo esta */
+    CFG_JOB_STOP_HTTP,    /* auto-off: parar HTTP, dejar el AP vivo (el mini usa UDP) */
+    CFG_JOB_WIFI_APPLY,   /* aplicar el on/off de Ajustes SIN reiniciar la placa */
+} cfg_job_t;
+
+static QueueHandle_t s_job_q = NULL;
+
+/* Encola un trabajo. Nunca bloquea: si la cola esta llena es que ya hay una
+ * transicion del mismo tipo pendiente, y perderla es inocuo. */
+static void cfg_job_post(cfg_job_t job)
+{
+    if (!s_job_q) return;
+    (void)xQueueSend(s_job_q, &job, 0);
+}
+
+/* Para el HTTP dejando el AP en pie. Solo lo llama la tarea de ciclo de vida. */
+static void cfg_http_stop(void)
+{
+    if (!s_httpd) return;
+    httpd_handle_t h = s_httpd;
+    s_httpd = NULL;
+    httpd_stop(h);      /* bloqueante: por eso esto vive en su propia tarea */
+}
+
+static void cfg_lifecycle_task(void *arg)
 {
     (void)arg;
-    /* El mini C6 esta SIEMPRE asociado al AP (recibe la telemetria UDP por
-     * broadcast), asi que "hay algun cliente" contaria SIEMPRE al mini y el
-     * portal no se apagaria nunca (testigo verde fijo, se pierde el ahorro).
-     * Mantenemos el portal vivo solo si hay ALGUN cliente ADEMAS del mini (el
-     * movil con la app): es decir, >= 2 STAs asociados. Si lo apagaramos con el
-     * movil aun asociado, este no genera un nuevo STA_CONNECTED y el portal no
-     * volveria a arrancar solo -> "conectado pero sin datos". La actividad HTTP
-     * tambien lo mantiene vivo aparte, via ap_off_timer_kick en cada peticion. */
-    wifi_sta_list_t stas = { 0 };
-    esp_err_t err = esp_wifi_ap_get_sta_list(&stas);
-    if (err != ESP_OK || stas.num >= 2) {
-        /* err != ESP_OK: no pudimos consultar (glitch del RPC a la C6) -> por
-         * seguridad asumimos que puede haber alguien y seguimos vivos. */
-        ap_off_timer_kick();
-        vTaskDelete(NULL);
-        return;
+    cfg_job_t job;
+    for (;;) {
+        if (xQueueReceive(s_job_q, &job, portMAX_DELAY) != pdTRUE) continue;
+
+        switch (job) {
+        case CFG_JOB_START:
+            config_server_start();      /* idempotente */
+            break;
+
+        case CFG_JOB_STOP_HTTP: {
+            if (!s_httpd) break;        /* ya parado */
+            /* El mini C6 esta SIEMPRE asociado al AP (recibe la telemetria UDP por
+             * broadcast), asi que "hay algun cliente" contaria SIEMPRE al mini y el
+             * portal no se apagaria nunca (testigo verde fijo, se pierde el ahorro).
+             * Mantenemos el portal vivo solo si hay ALGUN cliente ADEMAS del mini (el
+             * movil con la app): es decir, >= 2 STAs asociados. Si lo apagaramos con el
+             * movil aun asociado, este no genera un nuevo STA_CONNECTED y el portal no
+             * volveria a arrancar solo -> "conectado pero sin datos". La actividad HTTP
+             * tambien lo mantiene vivo aparte, via ap_off_timer_kick en cada peticion. */
+            wifi_sta_list_t stas = { 0 };
+            esp_err_t err = esp_wifi_ap_get_sta_list(&stas);
+            if (err != ESP_OK || stas.num >= 2) {
+                /* err != ESP_OK: no pudimos consultar (glitch del RPC a la C6) -> por
+                 * seguridad asumimos que puede haber alguien y seguimos vivos. */
+                ap_off_timer_kick();
+                break;
+            }
+            ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
+            cfg_http_stop();
+            /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
+            break;
+        }
+
+        case CFG_JOB_WIFI_APPLY: {
+            /* Toggle de Ajustes en caliente. wifi_ap_init relee "enabled" de NVS y
+             * hace stop o start segun toque; aqui solo acompanamos con lo que ella
+             * no toca: el portal HTTP y el DNS del captive portal. */
+            uint8_t enabled = 1;
+            nvs_handle_t h;
+            if (nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+                if (nvs_get_u8(h, "enabled", &enabled) != ESP_OK) enabled = 1;
+                nvs_close(h);
+            }
+            if (!enabled) {
+                /* Orden importante: primero se cierran los servicios que hablan por
+                 * la red y luego se baja la radio. Al reves, httpd_stop y
+                 * stop_dns_server trabajarian sobre sockets de un netif ya caido. */
+                ESP_LOGI(TAG, "Wi-Fi OFF en caliente: parando portal y radio");
+                if (s_ap_off_timer) esp_timer_stop(s_ap_off_timer);
+                cfg_http_stop();
+                if (s_dns) { stop_dns_server(s_dns); s_dns = NULL; }
+                wifi_ap_init();         /* con enabled=0 hace esp_wifi_stop() */
+            } else {
+                ESP_LOGI(TAG, "Wi-Fi ON en caliente: levantando radio y portal");
+                if (wifi_ap_init() == ESP_OK) config_server_start();
+            }
+            break;
+        }
+        }
     }
-    if (s_httpd) {
-        ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
-        httpd_handle_t h = s_httpd;
-        s_httpd = NULL;          /* publicar el cierre ANTES del stop bloqueante */
-        httpd_stop(h);
-        /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
+}
+
+/* Arranca la tarea de ciclo de vida. Idempotente. */
+static void cfg_lifecycle_ensure(void)
+{
+    if (s_job_q) return;
+    s_job_q = xQueueCreate(4, sizeof(cfg_job_t));
+    if (!s_job_q) { ESP_LOGE(TAG, "sin memoria para la cola de ciclo de vida"); return; }
+    /* Prioridad 3, la misma que el httpd: no debe preemptar a LVGL (prio 4). */
+    if (xTaskCreate(cfg_lifecycle_task, "cfg_life", 4096, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "no pude crear la tarea de ciclo de vida del portal");
+        vQueueDelete(s_job_q);
+        s_job_q = NULL;
     }
-    vTaskDelete(NULL);
+}
+
+void config_server_request_wifi_apply(void)
+{
+    cfg_job_post(CFG_JOB_WIFI_APPLY);
+}
+
+void config_server_request_start(void)
+{
+    cfg_job_post(CFG_JOB_START);
 }
 
 static void ap_auto_off_cb(void *arg)
 {
     (void)arg;
     if (!s_httpd) return;   /* ya parado */
-    /* Solo lanzar la tarea; nada bloqueante aqui (ver comentario de arriba). */
-    if (xTaskCreate(ap_auto_off_task, "ap_autooff", 3072, NULL, 3, NULL) != pdPASS) {
-        ESP_LOGW(TAG, "Auto-off: no pude crear la tarea, reintento en la proxima ventana");
-        ap_off_timer_kick();
-    }
+    /* Nada bloqueante en la tarea esp_timer: esp_wifi_ap_get_sta_list es un RPC al
+     * C6 por SDIO y httpd_stop espera a que salga la tarea httpd (hasta
+     * send_wait_timeout = 30 s si hay una descarga en vuelo). Bloquear aqui
+     * paralizaria TODOS los demas timers, incluido el feed de 1 s del modo
+     * excedente solar: pasados 3 s sin refresco, frigo_solar_tick marca la
+     * telemetria como no fresca y ABRE el rele del frigo. */
+    cfg_job_post(CFG_JOB_STOP_HTTP);
 }
 
 static void ap_off_timer_ensure(void)
@@ -228,8 +337,10 @@ static void cfg_srv_ap_sta_connected(void *arg, esp_event_base_t base,
              e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5],
              e->aid);
     /* Cada nueva asociación reabre la ventana de auto-off del HTTP. Si el
-     * server estaba parado por inactividad, lo reactivamos. */
-    if (!s_httpd) config_server_start();
+     * server estaba parado por inactividad, lo reactivamos — ENCOLANDO el
+     * arranque, no llamandolo aqui: config_server_start monta SPIFFS y lee NVS,
+     * y esto corre en la tarea de eventos del sistema. */
+    if (!s_httpd) cfg_job_post(CFG_JOB_START);
     ap_off_timer_arm();
 }
 static void cfg_srv_ap_sta_disconnected(void *arg, esp_event_base_t base,
@@ -341,6 +452,12 @@ esp_err_t wifi_ap_init(void)
     static bool subsystems_inited = false;
     static bool wifi_drv_inited  = false;   /* esp_wifi_init separado: reintentable si falla el C6 */
     esp_err_t err;
+
+    /* Lo primero, y ANTES de cualquier salida temprana de esta funcion (AP
+     * deshabilitado, C6 que no responde): sin la tarea de ciclo de vida el
+     * toggle de Ajustes no tendria quien lo ejecutara y el Wi-Fi se quedaria
+     * apagado hasta reiniciar, que es justo lo que queremos evitar. */
+    cfg_lifecycle_ensure();
 
     // 1) One-time subsystems init
     if (!subsystems_inited) {
@@ -1133,15 +1250,26 @@ static esp_err_t post_save(httpd_req_t *req) {
     char *body = malloc(len + 1);
     if (!body) return ESP_FAIL;
     
-    /* Bucle recv: httpd_req_recv puede devolver menos de len -> body truncado. */
+    /* Bucle recv: httpd_req_recv puede devolver menos de len -> body truncado.
+     * Tope de esperas SEGUIDAS, igual que en ota_update.c: antes se reintentaba
+     * sin limite, asi que un cliente que anunciara Content-Length y luego se
+     * callara (el movil sale de cobertura a mitad del POST) dejaba este bucle
+     * girando para siempre. El httpd tiene UNA sola tarea -> no se pierde una
+     * peticion, se queda MUDO el portal entero hasta reiniciar. Con
+     * recv_wait_timeout=30 s, 4 esperas son ~2 min de silencio antes de rendirse. */
+    const int MAX_ESPERAS = 4;
+    int esperas = 0;
     int received = 0;
     while (received < (int)len) {
         int ret = httpd_req_recv(req, body + received, len - received);
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
         if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+                ESP_LOGE(TAG, "/save: %d esperas seguidas sin datos, se corta", esperas);
             free(body);
             return ESP_FAIL;
         }
+        esperas = 0;   /* han llegado datos: la cuenta de esperas SEGUIDAS se reinicia */
         received += ret;
     }
     body[received] = '\0';

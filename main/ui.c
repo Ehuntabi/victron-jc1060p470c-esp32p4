@@ -1030,8 +1030,8 @@ static void volume_btn_event_cb(lv_event_t *e)
 }
 
 /* Toggle Wi-Fi AP on/off al pulsar el icono — comportamiento idéntico al
- * switch del panel Settings: guarda NVS, sincroniza el switch y muestra el
- * mismo modal "Cambio en Wi-Fi requiere reiniciar" con Cancelar / Reiniciar. */
+ * switch del panel Settings: guarda NVS, sincroniza el switch y aplica el
+ * cambio EN CALIENTE (sin reiniciar la placa). */
 static void wifi_btn_event_cb(lv_event_t *e)
 {
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
@@ -1046,14 +1046,13 @@ static void wifi_btn_event_cb(lv_event_t *e)
     nvs_commit(h);
     nvs_close(h);
 
-    /* Sincronizar el switch del Settings antes de mostrar el modal — si el
-     * usuario cancela, el modal volverá a invertir y todo queda coherente. */
+    /* Sincronizar el switch del Settings con el nuevo estado. */
     if (ui->wifi.ap_enable) {
         if (en) lv_obj_add_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
         else    lv_obj_clear_state(ui->wifi.ap_enable, LV_STATE_CHECKED);
     }
 
-    ui_show_wifi_restart_dialog(ui);
+    config_server_request_wifi_apply();
 }
 
 void ui_set_ble_mac(const uint8_t *mac) {

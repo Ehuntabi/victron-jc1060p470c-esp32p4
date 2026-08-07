@@ -67,7 +67,13 @@ static void ap_switch_cb(lv_event_t *e)
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
     bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
 
-    /* Guardar el nuevo estado en NVS; si cancela, el modal lo revertirá. */
+    (void)ui;
+    /* Guardar el nuevo estado en NVS y aplicarlo EN CALIENTE: antes esto solo
+     * escribia NVS y sacaba un modal "hay que reiniciar". wifi_ap_init() ya
+     * estaba escrita para re-invocarse (flags de init separados, netif creado
+     * una sola vez, handlers idempotentes), asi que lo unico que faltaba era
+     * llamarla — y hacerlo FUERA del hilo de LVGL, que es lo que hace
+     * config_server_request_wifi_apply(). */
     nvs_handle_t h;
     if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_u8(h, "enabled", checked ? 1 : 0);
@@ -75,7 +81,7 @@ static void ap_switch_cb(lv_event_t *e)
         nvs_close(h);
     }
 
-    ui_show_wifi_restart_dialog(ui);
+    config_server_request_wifi_apply();
 }
 
 void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
@@ -348,11 +354,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 static void reactivate_portal_cb(lv_event_t *e)
 {
     (void)e;
-    /* config_server_start() es idempotente: si ya estaba arriba devuelve
-     * OK sin hacer nada; si estaba parado por auto-off, lo reactiva. */
-    esp_err_t err = config_server_start();
-    ESP_LOGI("settings_panel", "Reactivar portal web: %s",
-             esp_err_to_name(err));
+    /* Encolar, NO llamar a config_server_start() aqui: monta SPIFFS y lee NVS,
+     * y estamos en el hilo de LVGL. El arranque es idempotente, asi que si el
+     * portal ya estaba arriba el trabajo no hace nada. */
+    config_server_request_start();
+    ESP_LOGI("settings_panel", "Reactivar portal web: solicitado");
 }
 
 void wifi_event_cb(lv_event_t *e)

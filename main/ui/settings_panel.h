@@ -45,7 +45,6 @@ void ui_settings_panel_show_page(int idx);
  * El caller ya debe haber guardado el nuevo estado en NVS antes de llamar.
  * El botón Cancelar revierte el NVS al opuesto y sincroniza el checkbox
  * de Settings (ui->wifi.ap_enable) si está creado. */
-void ui_show_wifi_restart_dialog(ui_state_t *ui);
 
 /* Mostrar el aviso emergente de arranque "Nuevo viaje?" (misma estetica que
  * los demas dialogos): "Seguir viaje" no toca nada; "Nuevo viaje" resetea el
