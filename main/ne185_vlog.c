@@ -30,6 +30,7 @@
 #include "dashboard_state.h"
 #include "datalogger.h"      /* datalogger_sd_montada() */
 #include "camera.h"          /* camera_sd_bus_lock/unlock */
+#include "sd_safe.h"         /* stat/fopen/mkdir sueltos con el cerrojo incluido */
 
 #define TAG              "ne185_vlog"
 #define LOG_DIR          "/sdcard/ne185v"
@@ -231,7 +232,7 @@ esp_err_t ne185_vlog_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    mkdir(LOG_DIR, 0775);   /* si la SD no esta lista todavia, falla sin ruido */
+    sd_mkdir(LOG_DIR, 0775, 3000);   /* si la SD no esta lista todavia, falla sin ruido */
 
     const esp_timer_create_args_t args = {
         .callback = sample_timer_cb,

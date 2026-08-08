@@ -4,7 +4,10 @@ dependencies:
     version: '>=5.3.0'
   lvgl/lvgl: '>=8.4.0,<9.0.0'
   espressif/esp_lvgl_port:
-    version: '>=2.3.0,<3.0.0'
+    # <2.9.0: la 2.9.0 broto sola al re-resolver dependencias (component
+    # manager coge la mas nueva que cumpla el rango); sin probarla en placa
+    # real no se sube sin querer en un release de otra cosa. 2026-08-08.
+    version: '>=2.3.0,<2.9.0'
   # esp_lcd_jd9165 forkeado a components/esp_lcd_jd9165/ con el read_id
   # del init parcheado (cuelga el host esperando respuesta del panel ->
   # WDT 5 s). No dependemos del componente managed para no traerlo de

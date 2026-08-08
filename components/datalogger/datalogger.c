@@ -1,5 +1,6 @@
 #include "datalogger.h"
 #include "camera.h"          /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
+#include "sd_safe.h"         /* stat/fopen/mkdir sueltos con el cerrojo incluido */
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
@@ -197,8 +198,8 @@ static esp_err_t mount_sd(void)
     sdmmc_card_print_info(stdout, s_card);
     /* Crear directorio frigo si no existe */
     struct stat st;
-    if (stat(LOG_DIR, &st) != 0) {
-        mkdir(LOG_DIR, 0775);
+    if (!sd_stat(LOG_DIR, &st, 3000)) {
+        sd_mkdir(LOG_DIR, 0775, 3000);
         ESP_LOGI(TAG, "Creado directorio %s", LOG_DIR);
     }
     return ESP_OK;

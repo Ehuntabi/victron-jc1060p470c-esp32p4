@@ -85,10 +85,11 @@ CONFIG_LV_FONT_MONTSERRAT_24=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
-# Coredump por UART (vuelca ELF base64 al panicar; sin particion extra).
-# Extraccion: idf.py monitor -> copiar bloque CORE DUMP START..END;
-# luego espcoredump.py info_corefile -t b64 dump.b64
-CONFIG_ESP_COREDUMP_ENABLE_TO_UART=y
+# Coredump a la particion "coredump" (partitions.csv): al panicar/TWDT/INT_WDT
+# se vuelca ANTES del reset. En el siguiente arranque, log_capture.c lo lee con
+# esp_core_dump_get_summary() y lo exporta a /sdcard/crash_*.txt (analisis a
+# posteriori, sin necesitar el monitor serie conectado en el momento del crash).
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
 

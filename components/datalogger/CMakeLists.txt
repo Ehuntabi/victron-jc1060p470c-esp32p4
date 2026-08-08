@@ -13,4 +13,5 @@ idf_component_register(
         rtc_rx8025t
         esp_hw_support
         camera
+        sd_safe
 )

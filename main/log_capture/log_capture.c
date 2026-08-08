@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -16,6 +17,7 @@
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_log.h"
+#include "esp_core_dump.h"
 
 static log_capture_entry_t *s_buf = NULL;
 static size_t   s_head  = 0;        /* siguiente posicion a escribir */
@@ -388,9 +390,9 @@ static const char *reset_reason_name(esp_reset_reason_t r)
     }
 }
 
-/* Lista /sdcard/log_*.txt, ordena por mtime, borra los mas viejos hasta dejar `keep`.
- * Usa malloc temporal (~10 KB), libera al salir. */
-static void rotate_logs(int keep)
+/* Lista /sdcard/<prefix>*.txt, ordena por mtime, borra los mas viejos hasta
+ * dejar `keep`. Usa malloc temporal (~10 KB), libera al salir. */
+static void rotate_files(const char *prefix, int keep)
 {
     /* Sin cerrojo no se toca la SD: la rotacion puede esperar a la proxima vuelta,
      * pisar el GDMA de la camara no. 2026-07-26. */
@@ -403,10 +405,11 @@ static void rotate_logs(int keep)
     entry_t *entries = malloc(sizeof(entry_t) * MAX_ENTRIES);
     if (!entries) { closedir(d); camera_sd_bus_unlock(); return; }
 
+    size_t prefix_len = strlen(prefix);
     int n = 0;
     struct dirent *de;
     while ((de = readdir(d)) != NULL && n < MAX_ENTRIES) {
-        if (strncmp(de->d_name, "log_", 4) != 0) continue;
+        if (strncmp(de->d_name, prefix, prefix_len) != 0) continue;
         size_t l = strlen(de->d_name);
         if (l < 5 || l >= sizeof(entries[0].name) ||
             strcmp(de->d_name + l - 4, ".txt") != 0) continue;
@@ -464,7 +467,81 @@ esp_err_t log_capture_autosave_now(int keep)
 
     esp_err_t err = log_capture_save_to_file(path);
     if (err == ESP_OK && keep > 0) {
-        rotate_logs(keep);
+        rotate_files("log_", keep);
     }
     return err;
+}
+
+/* ── Coredump (panic/TWDT/INT_WDT) -> /sdcard/crash_*.txt ──────────────────
+ *
+ * El coredump de ESP-IDF (particion "coredump" en partitions.csv) se escribe
+ * SOLO POR HARDWARE justo al panicar, antes del reset — nunca depende del
+ * hilo de ejecucion que crasheo, así que sobrevive exactamente los cuelgues
+ * que el ring buffer en RAM (arriba) NO puede: ese buffer se pierde en el
+ * reset porque nadie llega a volcarlo a tiempo. Aqui solo LEEMOS lo que el
+ * hardware ya dejo grabado, en el arranque siguiente. */
+esp_err_t log_capture_export_coredump(int keep)
+{
+    static const char *TAG = "coredump";
+    if (esp_core_dump_image_check() != ESP_OK) {
+        return ESP_ERR_NOT_FOUND;   /* no habia coredump pendiente */
+    }
+
+    esp_core_dump_summary_t *sum = heap_caps_malloc(sizeof(*sum), MALLOC_CAP_SPIRAM);
+    if (!sum) return ESP_ERR_NO_MEM;
+
+    esp_err_t err = esp_core_dump_get_summary(sum);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "coredump presente pero ilegible: %s", esp_err_to_name(err));
+        free(sum);
+        esp_core_dump_image_erase();   /* corrupto: no insistir en el siguiente boot */
+        return err;
+    }
+
+    char reason[160] = "";
+    esp_core_dump_get_panic_reason(reason, sizeof(reason));
+
+    const char *rname = reset_reason_name(esp_reset_reason());
+    time_t now = time(NULL);
+    struct tm tmv;
+    localtime_r(&now, &tmv);
+    char path[80];
+    snprintf(path, sizeof(path),
+             "/sdcard/crash_%s_%04d%02d%02d_%02d%02d%02d.txt",
+             rname, tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+             tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+
+    if (!camera_sd_bus_lock(3000)) { free(sum); return ESP_ERR_TIMEOUT; }
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        camera_sd_bus_unlock();
+        free(sum);
+        return ESP_FAIL;
+    }
+    fprintf(f, "%s\n\n", reason[0] ? reason : "(motivo no disponible)");
+    fprintf(f, "tarea: %s (tcb=0x%08" PRIx32 ")\n", sum->exc_task, sum->exc_tcb);
+    fprintf(f, "exc_pc=0x%08" PRIx32 "  <- riscv32-esp-elf-addr2line -e joint_spl_145_control.elf -fCp 0x%08" PRIx32 "\n",
+            sum->exc_pc, sum->exc_pc);
+    fprintf(f, "mcause=0x%08" PRIx32 "  mtval=0x%08" PRIx32 "  mstatus=0x%08" PRIx32 "  mtvec=0x%08" PRIx32 "\n",
+            sum->ex_info.mcause, sum->ex_info.mtval, sum->ex_info.mstatus, sum->ex_info.mtvec);
+    fprintf(f, "ra=0x%08" PRIx32 "  sp=0x%08" PRIx32 "\n", sum->ex_info.ra, sum->ex_info.sp);
+    for (int i = 0; i < 8; i++) {
+        fprintf(f, "a%d=0x%08" PRIx32 "%s", i, sum->ex_info.exc_a[i], (i % 4 == 3) ? "\n" : "  ");
+    }
+    fprintf(f, "elf_sha256=%s\n", sum->app_elf_sha256);
+    fprintf(f, "\nstackdump (%" PRIu32 " bytes, hex):\n", sum->exc_bt_info.dump_size);
+    for (uint32_t i = 0; i < sum->exc_bt_info.dump_size; i++) {
+        fprintf(f, "%02x", sum->exc_bt_info.stackdump[i]);
+        if ((i % 32) == 31) fprintf(f, "\n");
+    }
+    fprintf(f, "\n");
+    fclose(f);
+    camera_sd_bus_unlock();
+    free(sum);
+
+    esp_core_dump_image_erase();   /* ya exportado: no releerlo en el proximo boot */
+    ESP_LOGW(TAG, "coredump exportado -> %s", path);
+
+    if (keep > 0) rotate_files("crash_", keep);
+    return ESP_OK;
 }

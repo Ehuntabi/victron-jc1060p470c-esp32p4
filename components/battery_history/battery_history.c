@@ -1,5 +1,6 @@
 #include "battery_history.h"
 #include "camera.h"   /* camera_sd_bus_lock/unlock: evitar contencion SD<->camara */
+#include "sd_safe.h"  /* stat/fopen/mkdir sueltos con el cerrojo incluido */
 #include <string.h>
 #include <stdlib.h>
 #include "esp_log.h"
@@ -266,20 +267,22 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     if (s_flush_mutex && xSemaphoreTake(s_flush_mutex, 0) != pdTRUE) {
         return false;
     }
-    /* Comprobar si /sdcard existe (datalogger lo monta) */
+    /* Comprobar si /sdcard existe (datalogger lo monta). Timeout corto: este
+     * callback corre en la tarea esp_timer compartida, igual que el flush de
+     * mas abajo. */
     struct stat st;
-    if (stat("/sdcard", &st) != 0) {
+    if (!sd_stat("/sdcard", &st, 200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return false;
     }
 
     /* Crear directorio bateria si hace falta */
     if (!s_bh_dir_ok) {
-        if (stat(BH_LOG_DIR, &st) == 0) {
+        if (sd_stat(BH_LOG_DIR, &st, 200)) {
             ESP_LOGI(TAG, "Directorio %s ya existe", BH_LOG_DIR);
             s_bh_dir_ok = true;
         } else {
-            int r = mkdir(BH_LOG_DIR, 0775);
+            int r = sd_mkdir(BH_LOG_DIR, 0775, 200);
             if (r == 0) {
                 ESP_LOGI(TAG, "Creado directorio %s", BH_LOG_DIR);
                 s_bh_dir_ok = true;

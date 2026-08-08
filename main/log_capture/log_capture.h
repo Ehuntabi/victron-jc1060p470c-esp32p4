@@ -58,6 +58,15 @@ esp_err_t log_capture_save_to_file(const char *path);
  * archivos "log_*.txt" en /sdcard. SD debe estar montada antes de llamar. */
 esp_err_t log_capture_autosave_now(int keep);
 
+/* Si ESP-IDF dejo un coredump en la particion "coredump" (panic/TWDT/INT_WDT
+ * de un boot anterior — ver partitions.csv), lo exporta a
+ * "/sdcard/crash_<reason>_<YYYYMMDD_HHMMSS>.txt" (tarea, PC de la excepcion,
+ * registros RISC-V, stackdump en hex) y lo BORRA de la particion. Aplica
+ * rotacion FIFO dejando como max `keep` archivos "crash_*.txt". SD debe estar
+ * montada antes de llamar. Devuelve ESP_ERR_NOT_FOUND si no habia coredump
+ * pendiente (caso normal, la inmensa mayoria de los arranques). */
+esp_err_t log_capture_export_coredump(int keep);
+
 #ifdef __cplusplus
 }
 #endif

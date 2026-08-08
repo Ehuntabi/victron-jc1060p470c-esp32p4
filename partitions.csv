@@ -13,11 +13,16 @@
 # actualizacion por Wi-Fi NO la toca, solo cambia el firmware; si algun dia
 # cambia la web, hay que grabar por cable.
 #
-# Ocupado: 9 MB de 16. Quedan 7 MB libres.
+# coredump: volcado automatico de ESP-IDF al crashear (panic/TWDT/INT_WDT), ANTES
+# del reset. main/log_capture/log_capture.c lo exporta a /sdcard/crash_*.txt en el
+# siguiente arranque (motivo, tarea, PC, registros RISC-V) y lo borra de la particion.
 #
-# Name,     Type, SubType, Offset,    Size,      Flags
-nvs,        data, nvs,     0x9000,    0x4000,
-otadata,    data, ota,     0xd000,    0x2000,
-ota_0,      app,  ota_0,   0x10000,   0x400000,
-ota_1,      app,  ota_1,   0x410000,  0x400000,
-spiffs,     data, spiffs,  0x810000,  0x0F0000,
+# Ocupado: 9.06 MB de 16. Quedan ~6.94 MB libres.
+#
+# Name,     Type, SubType,  Offset,    Size,      Flags
+nvs,        data, nvs,      0x9000,    0x4000,
+otadata,    data, ota,      0xd000,    0x2000,
+ota_0,      app,  ota_0,    0x10000,   0x400000,
+ota_1,      app,  ota_1,    0x410000,  0x400000,
+spiffs,     data, spiffs,   0x810000,  0x0F0000,
+coredump,   data, coredump, 0x900000,  0x10000,
