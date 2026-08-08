@@ -1,6 +1,6 @@
 # Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**v1.4.0** · **[Español](#español) | [English](#english)**
+**v1.4.4** · **[Español](#español) | [English](#english)**
 
 ---
 
@@ -132,6 +132,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Software (`/main/watchdog.c`): task monitor adicional que comprueba salud de LVGL cada 3 s; si el lock falla 3 veces consecutivas fuerza un reset controlado. También vigila por heartbeat las tareas de app (>10 s sin latido → reset). Grace period de 30 s al boot.
 - **A propósito NO hace flush a SD antes de ese reset**: si el cuelgue lo causa el propio subsistema SD/FAT (mutex retenido por una tarea muerta), el flush haría deadlock y el reset nunca ocurriría. Se prefiere perder el último bloque de muestras a no reiniciar.
 - Contador de resets por TWDT/INT_WDT/panic **y por watchdog SW** en NVS, visible en Settings → About junto al motivo del último reinicio. Un reset forzado por el monitor SW aparece como `Watchdog SW (UI congelada)` o `Watchdog SW (tarea muda)`, no como un genérico "Software".
+- **v1.4.4**: todo acceso a la SD se serializa con la cámara vía `camera_sd_bus_lock()` para evitar contención SDMMC → INT_WDT (recurrente en versiones previas). Los flushes periódicos de `datalogger`, `battery_history` y `ne185_vlog` tenían un `stat()` de comprobación de cabecera que se colaba FUERA de ese cerrojo — arreglado.
 
 #### Portal web
 - AP `VictronConfig` automático al arrancar.
@@ -298,6 +299,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Software (`main/watchdog.c`): monitor task that checks LVGL health every 3 s; if the lock fails 3 times in a row it forces a controlled reset. It also watches app tasks by heartbeat (>10 s silent → reset). 30 s grace period at boot.
 - **It deliberately does NOT flush to SD before that reset**: if the hang is caused by the SD/FAT subsystem itself (mutex held by a dead task), the flush would deadlock and the reset would never happen. Losing the last block of samples beats not rebooting.
 - Reset counter for TWDT/INT_WDT/panic **and SW watchdog** in NVS, shown in Settings → About next to the last reset reason. A reset forced by the SW monitor reads as `Watchdog SW (UI congelada)` or `Watchdog SW (tarea muda)` rather than a generic "Software".
+- **v1.4.4**: every SD access is serialized with the camera via `camera_sd_bus_lock()` to avoid SDMMC contention → INT_WDT (recurring in earlier versions). The periodic flushes in `datalogger`, `battery_history` and `ne185_vlog` had a header-check `stat()` that slipped OUTSIDE that lock — fixed.
 
 #### Web portal
 - `VictronConfig` AP starts automatically on boot.
