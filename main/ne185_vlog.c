@@ -118,11 +118,12 @@ static void flush_to_sd(void)
     char path[80];
     get_day_filename(first_ts, path, sizeof path);
     struct stat st;
-    bool need_header = (stat(path, &st) != 0);
 
-    /* Timeout corto a proposito: si la camara tiene el bus, se intenta luego. */
+    /* Timeout corto a proposito: si la camara tiene el bus, se intenta luego.
+     * El stat() de need_header TAMBIEN toca la SD: va DESPUES del cerrojo. */
     if (!camera_sd_bus_lock(200)) return;
 
+    bool need_header = (stat(path, &st) != 0);
     FILE *f = fopen(path, "a");
     if (!f) {
         camera_sd_bus_unlock();

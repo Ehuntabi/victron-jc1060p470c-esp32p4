@@ -43,17 +43,21 @@ void dashboard_state_init(void)
     if (!s.mtx) s.mtx = xSemaphoreCreateMutex();
 }
 
-static void lock(void)
+/* Timeout acotado (no portMAX_DELAY): consistente con el resto del firmware
+ * (ne185, frigo), que nunca bloquea indefinidamente un mutex. Si no se
+ * consigue, el caller se salta esta actualizacion/lectura en vez de colgarse. */
+static bool lock(void)
 {
     if (!s.mtx) s.mtx = xSemaphoreCreateMutex();
-    if (s.mtx) xSemaphoreTake(s.mtx, portMAX_DELAY);
+    if (!s.mtx) return false;
+    return xSemaphoreTake(s.mtx, pdMS_TO_TICKS(100)) == pdTRUE;
 }
 static void unlock(void) { if (s.mtx) xSemaphoreGive(s.mtx); }
 
 void dashboard_state_on_record(const victron_data_t *data)
 {
     if (!data) return;
-    lock();
+    if (!lock()) return;
     switch (data->type) {
         case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
             const victron_record_battery_monitor_t *b = &data->record.battery;
@@ -113,7 +117,8 @@ void dashboard_state_on_record(const victron_data_t *data)
 void dashboard_state_snapshot(dashboard_snapshot_t *out)
 {
     if (!out) return;
-    lock();
+    memset(out, 0, sizeof(*out));
+    if (!lock()) return;
     out->bat_has        = s.bat_has;
     out->soc_deci       = s.soc_deci;
     out->bat_v_centi    = s.bat_v_centi;
@@ -139,24 +144,41 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
      * llamarlas con el nuestro retenido crea un orden de adquisicion que
      * podria deadlock-ear si algun cambio futuro hace que esos modulos
      * llamen a dashboard_state_on_record bajo su lock. */
-    lock();
-    bool     bat_has = s.bat_has;
-    uint16_t soc_deci = s.soc_deci;
-    uint16_t bat_v_centi = s.bat_v_centi;
-    int32_t  bat_i_milli = s.bat_i_milli;
-    uint16_t ttg_min = s.ttg_min;
-    uint16_t bat_alarm = s.bat_alarm;
-    bool     solar_has = s.solar_has;
-    uint16_t pv_w = s.pv_w;
-    uint16_t solar_yield_centikwh = s.solar_yield_centikwh;
-    uint8_t  solar_state = s.solar_state;
-    uint8_t  solar_err = s.solar_err;
-    bool     dcdc_has = s.dcdc_has;
-    uint16_t dc_in_v_centi = s.dc_in_v_centi;
-    uint16_t dc_out_v_centi = s.dc_out_v_centi;
-    uint8_t  dc_state = s.dc_state;
-    uint8_t  dc_err = s.dc_err;
-    unlock();
+    bool     bat_has = false;
+    uint16_t soc_deci = 0;
+    uint16_t bat_v_centi = 0;
+    int32_t  bat_i_milli = 0;
+    uint16_t ttg_min = 0;
+    uint16_t bat_alarm = 0;
+    bool     solar_has = false;
+    uint16_t pv_w = 0;
+    uint16_t solar_yield_centikwh = 0;
+    uint8_t  solar_state = 0;
+    uint8_t  solar_err = 0;
+    bool     dcdc_has = false;
+    uint16_t dc_in_v_centi = 0;
+    uint16_t dc_out_v_centi = 0;
+    uint8_t  dc_state = 0;
+    uint8_t  dc_err = 0;
+    if (lock()) {
+        bat_has = s.bat_has;
+        soc_deci = s.soc_deci;
+        bat_v_centi = s.bat_v_centi;
+        bat_i_milli = s.bat_i_milli;
+        ttg_min = s.ttg_min;
+        bat_alarm = s.bat_alarm;
+        solar_has = s.solar_has;
+        pv_w = s.pv_w;
+        solar_yield_centikwh = s.solar_yield_centikwh;
+        solar_state = s.solar_state;
+        solar_err = s.solar_err;
+        dcdc_has = s.dcdc_has;
+        dc_in_v_centi = s.dc_in_v_centi;
+        dc_out_v_centi = s.dc_out_v_centi;
+        dc_state = s.dc_state;
+        dc_err = s.dc_err;
+        unlock();
+    }
 
     float pv_kwh = energy_today_pv_kwh();
     float ld_kwh = energy_today_loads_kwh();

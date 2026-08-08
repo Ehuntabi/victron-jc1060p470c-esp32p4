@@ -293,7 +293,6 @@ static bool bh_flush_to_sd_dated(time_t file_date)
 
     char path[64];
     bh_get_day_filename(file_date ? file_date : time(NULL), path, sizeof path);
-    bool need_header = (stat(path, &st) != 0);
 
     /* === FASE 1: Snapshot bajo lock, sin I/O. ===
      * Mantener BH_LOCK durante fprintf a SD bloquea sample_timer_cb y
@@ -360,11 +359,13 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Timeout
      * corto: este callback corre en la tarea esp_timer compartida, un lock
      * largo aqui retrasaria TODOS los demas timers del firmware. Si no se
-     * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego. */
+     * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego.
+     * El stat() de need_header TAMBIEN toca la SD: va DESPUES del cerrojo. */
     if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return false;
     }
+    bool need_header = (stat(path, &st) != 0);
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed (errno=%d: %s)", path, errno, strerror(errno));

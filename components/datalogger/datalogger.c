@@ -284,17 +284,19 @@ static void flush_pending_to_sd_impl(void)
     /* fopen ANTES de tocar el estado pendiente: si falla preservamos las
      * entradas para el proximo intento. */
     struct stat st;
-    bool need_header = (stat(path, &st) != 0);
 
     /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
      * activo (contencion SDMMC -> INT WDT -> reinicio). Timeout corto: este
      * callback corre en la tarea esp_timer compartida, un lock largo aqui
      * retrasaria TODOS los demas timers del firmware. Si no se consigue el
-     * bus, omitir este flush; los datos quedan en el ring para el siguiente. */
+     * bus, omitir este flush; los datos quedan en el ring para el siguiente.
+     * El stat() de need_header TAMBIEN toca la SD: tiene que ir DESPUES del
+     * cerrojo, si no la contencion SDMMC salta igual. */
     if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
     }
+    bool need_header = (stat(path, &st) != 0);
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed", path);
