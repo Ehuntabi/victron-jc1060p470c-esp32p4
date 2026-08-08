@@ -1,22 +1,15 @@
-## v1.4.5
+## v1.4.6
 
-**Coredump automático a SD.** ESP-IDF vuelca ELF a una partición dedicada
-(`coredump`, nueva en `partitions.csv`) justo al panicar/TWDT/INT_WDT, ANTES
-del reset — sobrevive exactamente los cuelgues que el ring buffer en RAM no
-puede. En el siguiente arranque se exporta a
-`/sdcard/crash_<motivo>_<fecha>.txt` (tarea, PC de la excepción, registros
-RISC-V, stackdump) para analizar a posteriori sin monitor serie conectado en
-el momento del crash.
+Refactor de estructura, sin cambio de comportamiento: `config_server.c` baja
+de 2828 a 1785 líneas. Dos bloques grandes y autocontenidos salen a su
+propio fichero:
 
-**Acceso a SD centralizado en `sd_safe`.** Nuevo componente con wrappers
-(`sd_stat`/`sd_fopen`/`sd_mkdir`/`sd_unlink`/`sd_rename`) que incluyen el
-cerrojo `camera_sd_bus_lock()` por dentro — estructuralmente imposible
-olvidarlo en una llamada suelta, que es exactamente el bug real detectado en
-v1.4.4 (un `stat()` sin cerrojo en 3 sitios: `datalogger`, `battery_history`,
-`ne185_vlog`). De paso se encontró y arregló un cuarto hueco en
-`battery_history` que no se había pillado antes (`stat("/sdcard")` + `mkdir`
-sin cerrojo en el flush de 60 s).
+- `charts_svg.c` — gráficos SVG con auto-escala (históricos frigo/batería).
+- `data_export_tar.c` — streaming `.tar` de las carpetas de `/sdcard`
+  (frigo, batería, solar, capturas, vigilancia, config, logs, viaje).
 
-Revisado sistemáticamente el resto de módulos que tocan `/sdcard`
-(`solar_daily`, `config_backup`, `log_cleanup`, `log_browser`, `gallery`,
-`config_server`): ya estaban todos correctos.
+El resto (auth, ciclo de vida del AP/portal, handlers core) se queda en
+`config_server.c` por estar más entrelazado con su estado interno.
+`check_basic_auth`/`REQUIRE_AUTH` se mueven a `config_server_internal.h`
+(costura interna, no API pública) para que los tres ficheros compartan la
+misma lógica de auth sin duplicarla.
