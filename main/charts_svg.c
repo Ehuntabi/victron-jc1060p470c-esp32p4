@@ -10,6 +10,7 @@
 #include "battery_history.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_heap_caps.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -73,14 +74,21 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
     if (!camera_sd_bus_lock(3000)) return NULL;
     bool have_stat = (stat(path, &st) == 0);
     camera_sd_bus_unlock();
-    if (!have_stat || st.st_size <= 0 || st.st_size > 512 * 1024) return NULL; /* limite 512KB */
+    /* Limite 3MB: el CSV de bateria (4 fuentes cada ~10s) llega a ~1,5MB por
+     * dia completo; 512KB (limite anterior) se quedaba corto a partir de un
+     * tercio del dia y el endpoint devolvia vacio el resto -> "el log de
+     * bateria sale vacio" reportado el 09-ago. 2026-08-09. */
+    if (!have_stat || st.st_size <= 0 || st.st_size > 3 * 1024 * 1024) return NULL;
 
     if (!camera_sd_bus_lock(3000)) return NULL;
     FILE *f = fopen(path, "rb");
     camera_sd_bus_unlock();
     if (!f) return NULL;
 
-    char *buf = malloc(st.st_size + 1);
+    /* PSRAM: hasta 3MB no cabe con margen en la RAM interna (compartida con
+     * pila LVGL, WiFi, camara...). Mismo criterio que el resto de buffers
+     * grandes del proyecto (log_capture, thumbnails de camara). */
+    char *buf = heap_caps_malloc(st.st_size + 1, MALLOC_CAP_SPIRAM);
     if (!buf) {
         while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
         fclose(f);
@@ -89,7 +97,7 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
     }
 
     /* Leer en trozos de 4 KB soltando el cerrojo entre cada uno: un fread()
-     * del fichero entero de una sola vez (hasta 512 KB) retenia el cerrojo
+     * del fichero entero de una sola vez (hasta 3 MB) retenia el cerrojo
      * tanto tiempo que bloqueaba interrupciones >300ms -> INT WDT. Mismo
      * patron ya arreglado en tar_stream_dir (data_export_tar.c). 2026-08-09. */
     size_t n = 0;
