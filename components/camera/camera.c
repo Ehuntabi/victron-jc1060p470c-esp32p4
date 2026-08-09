@@ -558,11 +558,21 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
  * celdas cambian -> movimiento -> foto a SD (rate-limited por cooldown). */
 #define MOT_GW            32
 #define MOT_GH            18
-/* Calibrado con datos reales (escena con pantalla apagada, brillo~17): el ruido en
- * reposo da maxdiff~5 y una persona moviendose da maxdiff 13-26. Umbral 10 separa
- * limpiamente (sobre el ruido, bajo el movimiento). 35 era inalcanzable -> mov=0. */
+/* MOT_CELL_DIFF calibrado con datos reales (escena con pantalla apagada, brillo~17):
+ * el ruido en reposo da maxdiff~5 y una persona moviendose da maxdiff 13-26. Umbral
+ * 10 separa limpiamente (sobre el ruido, bajo el movimiento).
+ *
+ * MOT_CELL_COUNT recalibrado el 2026-08-09 con 300 fotos reales de una sesion de
+ * autocaravana vacia y a oscuras (luz interior encendida y constante): el ruido de
+ * sensor en poca luz da picos de diff aislados enormes (celda suelta, maxdiff hasta
+ * 151) que con el umbral anterior (4 celdas) disparaban falsos positivos en rafaga
+ * -> las 300 fotos de la sesion (tope MOT_MAX_PHOTOS) eran casi todas la misma
+ * cocina vacia. Midiendo con la MISMA rejilla sobre pares de fotogramas reales:
+ * ruido en reposo cambia como mucho 19 celdas de 576; una persona delante de la
+ * camara cambia 296-381. 30 deja margen amplio a los dos lados (~6x sobre el pico
+ * de ruido, ~10x por debajo del minimo de persona real). */
 #define MOT_CELL_DIFF     10     /* diff por celda (0-255) que cuenta como cambio */
-#define MOT_CELL_COUNT    4      /* nº de celdas cambiadas para declarar movimiento */
+#define MOT_CELL_COUNT    30     /* nº de celdas cambiadas para declarar movimiento */
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
 #define MOT_MAX_PHOTOS    300    /* tope por SESION de vigilancia (anti-runaway) */
 
