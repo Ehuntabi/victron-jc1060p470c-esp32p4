@@ -1878,6 +1878,53 @@ static int frigo_today_base(int count)
     return count;
 }
 
+/* "YYYY-MM-DD" -> "DD-MM-YYYY", solo para mostrar. El string de origen (nombre
+ * de fichero, orden alfabetico ascendente) no se toca. */
+static void fmt_date_ddmmaaaa(const char *iso, char *out, size_t out_len)
+{
+    if (!iso || strlen(iso) != 10) { snprintf(out, out_len, "%s", iso ? iso : ""); return; }
+    snprintf(out, out_len, "%.2s-%.2s-%.4s", iso + 8, iso + 5, iso);
+}
+
+/* Pega al final de `buf` (que ya trae el CSV de hoy) las muestras del anillo
+ * del datalogger posteriores a la ultima que trajo el CSV, y actualiza `n`.
+ *
+ * Mismo motivo que bh_append_ring_tail (bateria, mas abajo): el CSV llega
+ * hasta el ultimo volcado (cada 60 s) pero SOBREVIVE a los reinicios, y el
+ * anillo tiene el minuto en curso pero arranca vacio en cada arranque. Juntos
+ * dan el dia entero; solo el CSV o solo el anillo dejan el dia partido en dos
+ * vistas ("HOY" con lo de despues del reinicio, la fecha de hoy navegable con
+ * lo de antes). */
+static void frigo_append_ring_tail(frigo_log_entry_t *buf, int *n, int max)
+{
+    char today[11];
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    snprintf(today, sizeof today, "%04d-%02d-%02d",
+             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+
+    int last_min = (*n > 0) ? buf[*n - 1].hh * 60 + buf[*n - 1].mm : -1;
+    int count = datalogger_get_count();
+    for (int i = 0; i < count && *n < max; ++i) {
+        const datalogger_entry_t *e = datalogger_get_entry(i);
+        if (!e) continue;
+        if (strncmp(e->timestamp, today, 10) != 0) continue;   /* no es de hoy */
+        int hh = 0, mm = 0;
+        if (sscanf(e->timestamp + 11, "%d:%d", &hh, &mm) != 2) continue;
+        if (hh * 60 + mm <= last_min) continue;   /* ya venia en el CSV */
+        frigo_log_entry_t *o = &buf[*n];
+        o->hh = hh;
+        o->mm = mm;
+        o->t_aletas = e->T_Aletas;
+        o->t_congel = e->T_Congelador;
+        o->t_exter  = e->T_Exterior;
+        o->fan_pct  = e->fan_percent;
+        o->excedente_solar = e->excedente_solar ? 1 : 0;
+        (*n)++;
+    }
+}
+
 static void frigo_chart_load_day(void)
 {
     if (!s_chart) return;
@@ -1888,10 +1935,15 @@ static void frigo_chart_load_day(void)
     lv_chart_set_all_value(s_chart, s_ser_fan,        LV_CHART_POINT_NONE);
     lv_chart_set_all_value(s_chart, s_ser_solar,      LV_CHART_POINT_NONE);
 
-    if (s_frigo_day_idx < 0) {
-        /* Solo las muestras de HOY: el ring del datalogger son 200 muestras
-         * (~16 h a una cada 5 min) y no se reinicia a medianoche, asi que sin
-         * acotar por fecha la vista "HOY" arrastraba muestras de ayer. */
+    time_t frigo_now = time(NULL);
+    struct tm frigo_lt;
+    localtime_r(&frigo_now, &frigo_lt);
+    bool frigo_clock_ok = frigo_lt.tm_year > 100;
+
+    if (s_frigo_day_idx < 0 && !frigo_clock_ok) {
+        /* Reloj sin hora aun: no hay como nombrar el CSV de hoy ni fecharlo
+         * (BOOT+HH:MM:SS en vez de fecha real). Mostrar el anillo entero sin
+         * fusionar con la SD, que es lo unico util sin fecha. */
         int count = datalogger_get_count();
         int base  = frigo_today_base(count);
         int n     = count - base;
@@ -1934,7 +1986,20 @@ static void frigo_chart_load_day(void)
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
         (void)valid;
     } else {
-        const char *date = s_frigo_dates[s_frigo_day_idx];
+        /* HOY (idx<0, reloj en hora) fusiona el CSV de hoy con la cola del
+         * anillo, igual que hace la bateria (bh_loader_task, mas abajo): el
+         * CSV sobrevive a los reinicios pero solo llega hasta el ultimo
+         * volcado (cada 60 s), y el anillo tiene el minuto en curso pero
+         * arranca vacio en cada arranque. Sin esto, HOY solo ensenaba lo de
+         * despues del ultimo reinicio y el resto del dia solo se veia
+         * navegando a la fecha de hoy como "historico". */
+        char date[LOG_BROWSER_DATE_LEN];
+        if (s_frigo_day_idx < 0) {
+            snprintf(date, sizeof date, "%04d-%02d-%02d",
+                     frigo_lt.tm_year + 1900, frigo_lt.tm_mon + 1, frigo_lt.tm_mday);
+        } else {
+            snprintf(date, sizeof date, "%s", s_frigo_dates[s_frigo_day_idx]);
+        }
         if (s_frigo_buf == NULL) {
             s_frigo_buf = heap_caps_malloc(sizeof(frigo_log_entry_t) * FRIGO_LOG_MAX_ENTRIES,
                                            MALLOC_CAP_SPIRAM);
@@ -1947,6 +2012,8 @@ static void frigo_chart_load_day(void)
             char path[64];
             snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
             n = s_frigo_buf ? log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES) : 0;
+            if (s_frigo_day_idx < 0 && s_frigo_buf)
+                frigo_append_ring_tail(s_frigo_buf, &n, FRIGO_LOG_MAX_ENTRIES);
             s_frigo_loaded_idx = s_frigo_buf ? s_frigo_day_idx : -2;
             s_frigo_loaded_n   = n;
         }
@@ -1986,7 +2053,15 @@ static void frigo_chart_load_day(void)
         }
         frigo_apply_temp_range(t_min, t_max);
         update_frigo_xlabels_from_buf(n);
-        if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, date);
+        if (s_frigo_lbl_date) {
+            if (s_frigo_day_idx < 0) {
+                lv_label_set_text(s_frigo_lbl_date, "HOY");
+            } else {
+                char disp[11];
+                fmt_date_ddmmaaaa(date, disp, sizeof disp);
+                lv_label_set_text(s_frigo_lbl_date, disp);
+            }
+        }
     }
     lv_chart_refresh(s_chart);
 }
@@ -2102,6 +2177,10 @@ static void frigo_step_day(bool atras)
         else                                       s_frigo_day_idx = -1;
     }
     s_frigo_win_a = 0.0f; s_frigo_win_b = 1.0f;
+    /* Volver a HOY relee: su CSV y el anillo han seguido creciendo mientras
+     * se miraban otros dias. Los dias pasados no cambian, asi que esos si
+     * valen tal cual desde el buffer (misma logica que bh_step_day). */
+    if (s_frigo_day_idx < 0) s_frigo_loaded_idx = -2;
     frigo_update_zoom_label();
     frigo_chart_load_day();
 }
@@ -2595,10 +2674,15 @@ static void bh_chart_load_day(void)
          * callback de LVGL y leer el CSV congelaria la UI hasta el reinicio
          * (ver el comentario de s_bh_loader_task). */
         bh_clear_chart_series();
-        if (s_bh_lbl_date)
-            lv_label_set_text_fmt(s_bh_lbl_date, "%s ...",
-                                  s_bh_day_idx < 0 ? "HOY (24H)"
-                                                   : s_bh_dates[s_bh_day_idx]);
+        if (s_bh_lbl_date) {
+            if (s_bh_day_idx < 0) {
+                lv_label_set_text(s_bh_lbl_date, "HOY (24H) ...");
+            } else {
+                char disp[11];
+                fmt_date_ddmmaaaa(s_bh_dates[s_bh_day_idx], disp, sizeof disp);
+                lv_label_set_text_fmt(s_bh_lbl_date, "%s ...", disp);
+            }
+        }
         for (int s = 0; s < BH_SRC_COUNT; ++s) {
             if (s_bh_totals[s])
                 lv_label_set_text_fmt(s_bh_totals[s], "%s ...", s_bh_short_names[s]);
@@ -2697,9 +2781,13 @@ static void bh_paint_hist_day(void)
         }
     }
     if (s_bh_lbl_date) {
-        lv_label_set_text(s_bh_lbl_date,
-                          s_bh_loaded_idx < 0 ? "HOY (24H)"
-                                              : s_bh_dates[s_bh_loaded_idx]);
+        if (s_bh_loaded_idx < 0) {
+            lv_label_set_text(s_bh_lbl_date, "HOY (24H)");
+        } else {
+            char disp[11];
+            fmt_date_ddmmaaaa(s_bh_dates[s_bh_loaded_idx], disp, sizeof disp);
+            lv_label_set_text(s_bh_lbl_date, disp);
+        }
     }
     lv_chart_refresh(s_bh_chart);
 }
