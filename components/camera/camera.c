@@ -127,33 +127,54 @@ static bool downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
     }
     if (bytes < (uint32_t)SRC_W * SRC_H * 2) return false;
 
-    const ppa_srm_oper_config_t op = {
-        .in = {
-            .buffer         = p,
-            .pic_w          = SRC_W,
-            .pic_h          = SRC_H,
-            .block_w        = SRC_W,
-            .block_h        = SRC_H,
-            .block_offset_x = 0,
-            .block_offset_y = 0,
-            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
-        },
-        .out = {
-            .buffer      = dst,
-            .buffer_size = THUMB_SZ,
-            .pic_w       = THUMB_W,
-            .pic_h       = THUMB_H,
-            .srm_cm      = PPA_SRM_COLOR_MODE_RGB888,
-        },
-        .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
-        .scale_x        = 0.5f,
-        .scale_y        = 0.5f,
-        .mode           = PPA_TRANS_MODE_BLOCKING,
-    };
-    if (ppa_do_scale_rotate_mirror(s_ppa, &op) != ESP_OK) {
-        ESP_LOGW(TAG, "PPA: fallo al reducir");
-        return false;
+    /* Trocear en franjas horizontales en vez de pasar el frame ENTERO (4,1 MB)
+     * al PPA de una tacada. El driver ya trocea su propio esp_cache_msync interno
+     * en bloques de 128 KB (CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS, fix del
+     * 04-ago), pero entre bloque y bloque solo suelta y vuelve a coger el mismo
+     * spinlock en un bucle cerrado: NUNCA cede la CPU de verdad. Si el otro core
+     * pierde la carrera por ese spinlock las suficientes veces seguidas, se queda
+     * sin entrar en su propia seccion critica el tiempo que dispara el INT WDT
+     * (visto el 09-ago en las tareas httpd y nimble_host). Un vTaskDelay(1) real
+     * entre franjas SI fuerza un cambio de contexto y deja pasar al otro core. */
+    #define THUMB_STRIPS 4
+    _Static_assert(SRC_H % THUMB_STRIPS == 0, "SRC_H debe dividirse exacto");
+    _Static_assert(THUMB_H % THUMB_STRIPS == 0, "THUMB_H debe dividirse exacto");
+    const uint32_t strip_h_in  = SRC_H / THUMB_STRIPS;
+    const uint32_t strip_h_out = THUMB_H / THUMB_STRIPS;
+
+    for (int s = 0; s < THUMB_STRIPS; s++) {
+        const ppa_srm_oper_config_t op = {
+            .in = {
+                .buffer         = p,
+                .pic_w          = SRC_W,
+                .pic_h          = SRC_H,
+                .block_w        = SRC_W,
+                .block_h        = strip_h_in,
+                .block_offset_x = 0,
+                .block_offset_y = (uint32_t)s * strip_h_in,
+                .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+            },
+            .out = {
+                .buffer         = dst,
+                .buffer_size    = THUMB_SZ,
+                .pic_w          = THUMB_W,
+                .pic_h          = THUMB_H,
+                .block_offset_x = 0,
+                .block_offset_y = (uint32_t)s * strip_h_out,
+                .srm_cm         = PPA_SRM_COLOR_MODE_RGB888,
+            },
+            .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+            .scale_x        = 0.5f,
+            .scale_y        = 0.5f,
+            .mode           = PPA_TRANS_MODE_BLOCKING,
+        };
+        if (ppa_do_scale_rotate_mirror(s_ppa, &op) != ESP_OK) {
+            ESP_LOGW(TAG, "PPA: fallo al reducir (franja %d/%d)", s + 1, THUMB_STRIPS);
+            return false;
+        }
+        vTaskDelay(1);
     }
+    #undef THUMB_STRIPS
     /* El PPA escribe por DMA: invalidar cache antes de leerlo desde la CPU. */
     esp_cache_msync(dst, THUMB_SZ, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
 
