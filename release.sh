@@ -24,6 +24,10 @@ cd "$(dirname "$0")"
 REPO="Ehuntabi/victron-jc1060p470c-esp32p4"
 IDF_EXPORT="$HOME/.espressif/esp-idf-5.4/export.sh"
 APP_BIN="build/joint_spl_145_control.bin"
+# Directorio unico de releases (firmware P4 + app Flutter): solo la ULTIMA
+# version de cada uno, para no liarse entre varios .bin/.apk sueltos por el
+# home. Las versiones viejas se borran de aqui en el paso 4, no se acumulan.
+RELDIR="$HOME/joint-releases"
 
 # ── 0) argumentos ────────────────────────────────────────────────────────────
 VER_IN="${1:-}"
@@ -72,7 +76,17 @@ idf.py build
 # ── 4) imagen fusionada para el release ──────────────────────────────────────
 OUT="joint-spl-145-control-$TAG-esp32p4-full.bin"
 ( cd build && python -m esptool --chip esp32p4 merge_bin -o "$OUT" @flash_args )
-echo "[ok] imagen fusionada: build/$OUT"
+
+# Mover a RELDIR como LA UNICA version presente: borrar antes cualquier .bin
+# de firmware que hubiera de un release anterior (full o app-only), tanto en
+# RELDIR como el que va quedando suelto en build/ de releases pasadas.
+mkdir -p "$RELDIR"
+rm -f "$RELDIR"/joint-spl-145-control-v*-esp32p4-full.bin \
+      "$RELDIR"/joint-spl-145-control-v*-app.bin \
+      build/joint-spl-145-control-v*-esp32p4-full.bin
+mv "build/$OUT" "$RELDIR/"
+cp "$APP_BIN" "$RELDIR/joint-spl-145-control-$TAG-app.bin"
+echo "[ok] copiado a $RELDIR (full + app), version anterior borrada de ahi y de build/"
 
 # ── 5) verificar que la versión embebida == tag ──────────────────────────────
 EMB="$(python3 - "$APP_BIN" <<'PY'
@@ -99,9 +113,13 @@ LISTO EN LOCAL. Para publicar, ejecuta cuando quieras:
   gh release create $TAG -R $REPO \\
      --title "Joint SPL 145 Control $TAG" \\
      --notes-file NOTAS.md \\
-     "build/$OUT"
+     "$RELDIR/$OUT"
 
   # 3) grabar en la placa
   idf.py -p /dev/ttyACM0 flash
+
+  # OTA por el portal Wi-Fi: sube $RELDIR/joint-spl-145-control-$TAG-app.bin
 ────────────────────────────────────────────────────────────────────────────
+
+Unico .bin de cada tipo en $RELDIR (firmware full + app-bin para OTA).
 EOF
