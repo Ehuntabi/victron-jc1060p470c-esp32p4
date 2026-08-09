@@ -8,6 +8,8 @@
 #include "camera.h"
 #include "datalogger.h"
 #include "battery_history.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -69,15 +71,42 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
     /* Sin cerrojo no se toca la SD: se falla la lectura en vez de pisar el GDMA
      * de la camara. 2026-07-26. */
     if (!camera_sd_bus_lock(3000)) return NULL;
-    if (stat(path, &st) != 0) { camera_sd_bus_unlock(); return NULL; }
-    if (st.st_size <= 0 || st.st_size > 512 * 1024) { camera_sd_bus_unlock(); return NULL; } /* limite 512KB */
+    bool have_stat = (stat(path, &st) == 0);
+    camera_sd_bus_unlock();
+    if (!have_stat || st.st_size <= 0 || st.st_size > 512 * 1024) return NULL; /* limite 512KB */
+
+    if (!camera_sd_bus_lock(3000)) return NULL;
     FILE *f = fopen(path, "rb");
-    if (!f) { camera_sd_bus_unlock(); return NULL; }
+    camera_sd_bus_unlock();
+    if (!f) return NULL;
+
     char *buf = malloc(st.st_size + 1);
-    if (!buf) { fclose(f); camera_sd_bus_unlock(); return NULL; }
-    size_t n = fread(buf, 1, st.st_size, f);
+    if (!buf) {
+        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+        fclose(f);
+        camera_sd_bus_unlock();
+        return NULL;
+    }
+
+    /* Leer en trozos de 4 KB soltando el cerrojo entre cada uno: un fread()
+     * del fichero entero de una sola vez (hasta 512 KB) retenia el cerrojo
+     * tanto tiempo que bloqueaba interrupciones >300ms -> INT WDT. Mismo
+     * patron ya arreglado en tar_stream_dir (data_export_tar.c). 2026-08-09. */
+    size_t n = 0;
+    while (n < (size_t)st.st_size) {
+        size_t want = (size_t)st.st_size - n;
+        if (want > 4096) want = 4096;
+        if (!camera_sd_bus_lock(3000)) break;
+        size_t r = fread(buf + n, 1, want, f);
+        camera_sd_bus_unlock();
+        if (r == 0) break;
+        n += r;
+        if ((n % (8 * 4096)) == 0) vTaskDelay(1);   /* ceder CPU cada ~32KB */
+    }
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     fclose(f);
     camera_sd_bus_unlock();
+
     buf[n] = 0;
     if (out_len) *out_len = n;
     return buf;
