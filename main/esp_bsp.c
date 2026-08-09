@@ -429,7 +429,11 @@ static lv_disp_t    *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         .io_handle      = lcd.io,
         .panel_handle   = lcd.panel,
         .control_handle = NULL,
-        .buffer_size    = BSP_LCD_H_RES * BSP_LCD_V_RES, /* pantalla completa para avoid_tearing */
+        /* Buffer parcial (no pantalla completa): acota el tamano de cada
+         * esp_cache_msync en el flush DSI, para no bloquear interrupciones
+         * el tiempo suficiente como para disparar el INT WDT (avoid_tearing
+         * ya esta desactivado, BSP_LCD_DPI_BUFFER_NUMS=1). */
+        .buffer_size    = BSP_LCD_DRAW_BUFF_SIZE,
         .double_buffer  = cfg->double_buffer,
         .hres           = BSP_LCD_H_RES,
         .vres           = BSP_LCD_V_RES,
