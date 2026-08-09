@@ -1518,7 +1518,7 @@ static esp_err_t handle_captive_redirect(httpd_req_t *req) {
     ESP_LOGI(TAG, "Captive portal redirect for %s", req->uri);
     // Android /generate_204 — responder 302 para forzar el portal
     httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/index.html");
+    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/");
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, NULL, 0);
     return ESP_OK;
