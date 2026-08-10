@@ -262,11 +262,13 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
         n += snprintf(buf + n, maxlen - n,
             ",\"camper\":{\"luz_int\":%s,\"luz_ext\":%s,\"bomba\":%s,\"shore\":%s,"
             "\"tank_limpia\":%u,\"tank_grises\":%u,\"bat_servicio_v\":%.2f,\"fresh\":%s}"
-            ",\"frigo\":{\"temp_c\":%.1f,\"fan_pct\":%u,\"mode\":%u,\"t_min\":%u,\"t_max\":%u}}",
+            ",\"frigo\":{\"temp_c\":%.1f,\"temp_aletas_c\":%.1f,\"temp_exterior_c\":%.1f,"
+            "\"fan_pct\":%u,\"mode\":%u,\"t_min\":%u,\"t_max\":%u}}",
             cd.light_in ? "true" : "false", cd.light_out ? "true" : "false",
             cd.pump ? "true" : "false", cd.shore ? "true" : "false",
             (unsigned)cd.s1, (unsigned)cd.r1, cd.battery1_v, cd.fresh ? "true" : "false",
-            fs.T_Congelador, (unsigned)fs.fan_percent, (unsigned)fs.mode,
+            fs.T_Congelador, fs.T_Aletas, fs.T_Exterior,
+            (unsigned)fs.fan_percent, (unsigned)fs.mode,
             (unsigned)fs.T_min, (unsigned)fs.T_max);
     }
     return (n > 0 && (size_t)n < maxlen) ? (size_t)n : 0;
