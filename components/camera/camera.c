@@ -698,11 +698,20 @@ static void vig_migrate_legacy_flat_files(void)
 {
     if (!camera_sd_bus_lock(3000)) return;
     DIR *d = opendir(VIG_SD_DIR);
-    if (!d) { camera_sd_bus_unlock(); return; }
+    camera_sd_bus_unlock();
+    if (!d) return;
 
+    /* Un fichero a la vez, SOLTANDO el bus entre cada uno (readdir aparte de
+     * stat+mkdir+rename): si hay muchos ficheros sueltos (primer arranque tras
+     * meses sin este cambio), retener el bus todo el bucle asfixiaria la
+     * ventana GDMA de la camara -> INT WDT. Mismo patron que vig_write_jpeg_sd. */
     int moved = 0;
-    struct dirent *de;
-    while ((de = readdir(d)) != NULL) {
+    for (;;) {
+        if (!camera_sd_bus_lock(1000)) break;
+        struct dirent *de = readdir(d);
+        camera_sd_bus_unlock();
+        if (!de) break;
+
         const char *n = de->d_name;
         size_t l = strlen(n);
         if (l != 23 || strcmp(n + 19, ".jpg") != 0 || n[8] != '_') continue;
@@ -721,11 +730,14 @@ static void vig_migrate_legacy_flat_files(void)
         snprintf(oldpath, sizeof(oldpath), "%s/%s", VIG_SD_DIR, n);
         snprintf(newpath, sizeof(newpath), "%s/%s", daydir, n);
 
+        if (!camera_sd_bus_lock(1000)) continue;   /* se reintenta en el proximo arranque */
         struct stat stx;
         if (stat(daydir, &stx) != 0) mkdir(daydir, 0777);
         if (rename(oldpath, newpath) == 0) moved++;
         else ESP_LOGW(TAG, "vig: no pude migrar %s", n);
+        camera_sd_bus_unlock();
     }
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     closedir(d);
     camera_sd_bus_unlock();
     if (moved > 0) ESP_LOGI(TAG, "vig: migradas %d fotos sueltas a carpetas por dia", moved);
@@ -782,7 +794,13 @@ void camera_set_surveillance(bool on)
     if (on) {
         s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
                              * no acumulado de por vida (si no, dejaba de capturar) */
+        /* Bajo s_vig_mtx: camera_vig_store lee s_vig_session_start bajo el
+         * mismo mutex (captura concurrente en otra tarea). volatile no basta
+         * para un time_t de 64 bits en una CPU de 32 bits -> sin el mutex la
+         * escritura/lectura podria quedar partida a medias. */
+        if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
         s_vig_session_start = time(NULL);   /* nombra la carpeta de esta sesion */
+        if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
     }
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }

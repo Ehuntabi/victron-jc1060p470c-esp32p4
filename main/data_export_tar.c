@@ -238,28 +238,39 @@ static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
  * el contenido este organizado en subcarpetas. Escanea root_dir, arma las
  * listas dirs[]/prefixes[] dinamicamente (una entrada por subcarpeta, con
  * prefijo "<root_name>/<subcarpeta>") y reutiliza tar_send_dirs tal cual. */
-#define TAR_MAX_SUBDIRS 96
+/* 256 de margen: no hay rotacion de sesiones de vigilancia (se acumulan sin
+ * limite), asi que un cap bajo se alcanzaria con el uso normal del dispositivo
+ * y truncaria el .tar SIN avisar. dirs[]/prefixes[] van al heap (no a la pila
+ * del worker httpd) para poder permitirse este margen sin arriesgar su stack. */
+#define TAR_MAX_SUBDIRS 256
 typedef struct { char dir[192]; char prefix[128]; } tar_subdir_entry_t;
 
 static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_dir,
                                            const char *root_name, const char *attach_name)
 {
     tar_subdir_entry_t *entries = malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS);
-    const char *dirs[TAR_MAX_SUBDIRS];
-    const char *prefixes[TAR_MAX_SUBDIRS];
-    int n = 0;
+    const char **dirs = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
+    const char **prefixes = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
+    if (!entries || !dirs || !prefixes) {
+        free(entries); free(dirs); free(prefixes);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
 
-    if (entries && camera_sd_bus_lock(3000)) {
+    int n = 0;
+    bool truncated = false;
+    if (camera_sd_bus_lock(3000)) {
         DIR *dp = opendir(root_dir);
         camera_sd_bus_unlock();
         if (dp) {
             struct dirent *de;
-            while (n < TAR_MAX_SUBDIRS) {
+            for (;;) {
                 if (!camera_sd_bus_lock(1000)) break;
                 de = readdir(dp);
                 camera_sd_bus_unlock();
                 if (!de) break;
                 if (de->d_name[0] == '.') continue;
+                if (n == TAR_MAX_SUBDIRS) { truncated = true; continue; }   /* seguir leyendo por si acaba pronto, solo para el log */
                 snprintf(entries[n].dir, sizeof(entries[n].dir), "%s/%s", root_dir, de->d_name);
                 snprintf(entries[n].prefix, sizeof(entries[n].prefix), "%s/%s", root_name, de->d_name);
                 dirs[n] = entries[n].dir;
@@ -271,9 +282,13 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
             camera_sd_bus_unlock();
         }
     }
+    if (truncated) {
+        ESP_LOGW(TAG, "%s: %s tiene mas de %d subcarpetas, el .tar se corta (quedan fuera algunas)",
+                 attach_name, root_dir, TAR_MAX_SUBDIRS);
+    }
 
     esp_err_t err = tar_send_dirs(req, attach_name, dirs, prefixes, n);
-    free(entries);
+    free(entries); free(dirs); free(prefixes);
     return err;
 }
 

@@ -496,11 +496,19 @@ void log_capture_migrate_legacy_flat_files(void)
     static const char *MTAG = "logmigrate";
     if (!camera_sd_bus_lock(3000)) return;
     DIR *d = opendir("/sdcard");
-    if (!d) { camera_sd_bus_unlock(); return; }
+    camera_sd_bus_unlock();
+    if (!d) return;
 
+    /* Un fichero a la vez, SOLTANDO el bus entre cada uno: igual que el resto
+     * de I/O de metadatos de este fichero, para no asfixiar la ventana GDMA de
+     * la camara si hay muchos ficheros sueltos que migrar. */
     int moved = 0;
-    struct dirent *de;
-    while ((de = readdir(d)) != NULL) {
+    for (;;) {
+        if (!camera_sd_bus_lock(1000)) break;
+        struct dirent *de = readdir(d);
+        camera_sd_bus_unlock();
+        if (!de) break;
+
         const char *n = de->d_name;
         if (strncmp(n, "log_", 4) != 0 && strncmp(n, "crash_", 6) != 0) continue;
 
@@ -522,10 +530,13 @@ void log_capture_migrate_legacy_flat_files(void)
         snprintf(oldpath, sizeof(oldpath), "/sdcard/%s", n);
         snprintf(newpath, sizeof(newpath), "%s/%s", daydir, n);
 
+        if (!camera_sd_bus_lock(1000)) continue;   /* se reintenta en el proximo arranque */
         ensure_log_daydir(daydir);
         if (rename(oldpath, newpath) == 0) moved++;
         else ESP_LOGW(MTAG, "no pude migrar %s", n);
+        camera_sd_bus_unlock();
     }
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     closedir(d);
     camera_sd_bus_unlock();
     if (moved > 0) ESP_LOGI(MTAG, "migrados %d logs/crash sueltos a carpetas por dia", moved);
@@ -542,7 +553,12 @@ esp_err_t log_capture_autosave_now(int keep)
     char daydir[32];
     snprintf(daydir, sizeof(daydir), LOG_SD_DIR "/%04d%02d%02d",
              tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday);
-    if (camera_sd_bus_lock(2000)) { ensure_log_daydir(daydir); camera_sd_bus_unlock(); }
+    /* Si no se consigue el lock, no crear el directorio -> NO seguir: encolar
+     * el guardado igualmente haria que log_save_task fallase el fopen (ENOENT)
+     * en silencio, mientras aqui se devolveria OK. Mejor fallar ya, claro. */
+    if (!camera_sd_bus_lock(2000)) return ESP_ERR_TIMEOUT;
+    ensure_log_daydir(daydir);
+    camera_sd_bus_unlock();
 
     char path[96];
     snprintf(path, sizeof(path),
