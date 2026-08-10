@@ -1555,6 +1555,17 @@ static void frigo_legend_toggle_cb(lv_event_t *e);
 static void frigo_apply_window(void);
 static void frigo_update_zoom_label(void);
 
+/* "YYYY-MM-DD" de hoy. Usado para no listar el CSV de hoy como fecha
+ * navegable ademas de "HOY" (idx -1): mismo dia, dos pestanas identicas. */
+static void today_ymd(char out[11])
+{
+    time_t now = time(NULL);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    snprintf(out, 11, "%04d-%02d-%02d",
+             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+}
+
 static void chart_screen_close_cb(lv_event_t *e)
 {
     lv_obj_t *screen = lv_event_get_user_data(e);
@@ -1749,6 +1760,12 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Inicializar navegacion: listar fechas SD y mostrar HOY */
     s_frigo_n_dates = log_browser_list_dates("/sdcard/frigo",
                                              s_frigo_dates, LOG_BROWSER_MAX_DATES);
+    if (s_frigo_n_dates > 0) {
+        char today[11];
+        today_ymd(today);
+        if (strcmp(s_frigo_dates[s_frigo_n_dates - 1], today) == 0)
+            s_frigo_n_dates--;
+    }
     s_frigo_day_idx = -1;
     s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
     frigo_chart_load_day();
@@ -2598,6 +2615,12 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* Listar fechas SD y arrancar en HOY */
     s_bh_n_dates = log_browser_list_dates("/sdcard/bateria",
                                           s_bh_dates, LOG_BROWSER_MAX_DATES);
+    if (s_bh_n_dates > 0) {
+        char today[11];
+        today_ymd(today);
+        if (strcmp(s_bh_dates[s_bh_n_dates - 1], today) == 0)
+            s_bh_n_dates--;
+    }
     s_bh_day_idx = -1;
     s_bh_loaded_idx = -2;   /* al abrir la pantalla, releer (ver bh_step_day) */
     /* Lector de dias historicos: se crea una vez y vive lo que la aplicacion
