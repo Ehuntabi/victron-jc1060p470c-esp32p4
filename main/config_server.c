@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <ctype.h>
 #include "esp_netif_types.h"
 #include "dns_server.h" 
 #include <lwip/inet.h>
@@ -965,40 +966,79 @@ static esp_err_t handle_snapshot(httpd_req_t *req) {
 #define VIG_MAX     16        /* capturas del anillo en RAM (pendientes de volcar) */
 #define VIG_SD_MAX  24        /* ficheros de la tarjeta que se muestran (los mas nuevos) */
 #define VIG_SD_DIR_PATH "/sdcard/vigilancia"
-#define VIG_NAME_LEN 32       /* "AAAAMMDD_HHMMSS_nnn.jpg" = 24 con el NUL */
+/* "AAAAMMDD_HHMMSS/AAAAMMDD_HHMMSS_nnn.jpg" (carpeta de sesion + fichero) = 39 con el NUL */
+#define VIG_NAME_LEN 48
 
-/* Nombres de las capturas de la tarjeta, ascendente (el mas nuevo al final).
- * El nombre es AAAAMMDD_HHMMSS_nnn.jpg, asi que ordenar por texto ES ordenar por
- * fecha. Devuelve cuantos hay en la lista; *total_out son los que hay en la
- * carpeta, para poder decir cuantos quedan fuera en vez de truncar en silencio. */
+/* Insercion ordenada en `names`, quedandose con las `max` MAS RECIENTES (el
+ * mas nuevo al final). Compartida por vig_sd_list para cada .jpg encontrado,
+ * ya en formato "sesion/fichero.jpg". */
+static void vig_sd_list_insert(char names[][VIG_NAME_LEN], int max, int *n, int *total,
+                               const char *combined)
+{
+    (*total)++;
+    if (*n == max) {
+        if (strcmp(combined, names[0]) <= 0) return;   /* mas viejo que todos */
+        memmove(names[0], names[1], (size_t)(max - 1) * VIG_NAME_LEN);
+        (*n)--;
+    }
+    int pos = *n;
+    while (pos > 0 && strcmp(names[pos - 1], combined) > 0) {
+        memcpy(names[pos], names[pos - 1], VIG_NAME_LEN);
+        pos--;
+    }
+    snprintf(names[pos], VIG_NAME_LEN, "%s", combined);
+    (*n)++;
+}
+
+/* Nombres de las capturas de la tarjeta como "sesion/fichero.jpg", ascendente
+ * (la mas nueva al final): VIG_SD_DIR_PATH tiene una subcarpeta por sesion
+ * (AAAAMMDD_HHMMSS, o AAAAMMDD para lo migrado de antes de este cambio), y
+ * dentro los .jpg. Ambos niveles usan nombres con fecha, asi que ordenar
+ * "sesion/fichero" por texto ES ordenar por fecha. Devuelve cuantos hay en la
+ * lista; *total_out son los que hay en toda la tarjeta, para poder decir
+ * cuantos quedan fuera en vez de truncar en silencio. */
 static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
 {
     if (total_out) *total_out = 0;
     if (!camera_sd_bus_lock(2000)) return 0;
-    DIR *d = opendir(VIG_SD_DIR_PATH);
-    if (!d) { camera_sd_bus_unlock(); return 0; }
+    DIR *dtop = opendir(VIG_SD_DIR_PATH);
+    camera_sd_bus_unlock();
+    if (!dtop) return 0;
+
     int n = 0, total = 0;
-    struct dirent *ent;
-    while ((ent = readdir(d)) != NULL) {
-        const char *nm = ent->d_name;
-        const size_t l = strlen(nm);
-        if (l < 5 || l >= VIG_NAME_LEN) continue;
-        if (strcmp(nm + l - 4, ".jpg") != 0) continue;
-        total++;
-        if (n == max) {
-            if (strcmp(nm, names[0]) <= 0) continue;   /* mas viejo que todos */
-            memmove(names[0], names[1], (size_t)(max - 1) * VIG_NAME_LEN);
-            n--;
+    for (;;) {
+        if (!camera_sd_bus_lock(1000)) break;
+        struct dirent *dses = readdir(dtop);
+        camera_sd_bus_unlock();
+        if (!dses) break;
+        if (dses->d_name[0] == '.') continue;
+
+        char sesdir[64];
+        snprintf(sesdir, sizeof(sesdir), "%s/%s", VIG_SD_DIR_PATH, dses->d_name);
+        if (!camera_sd_bus_lock(1000)) break;
+        DIR *dsub = opendir(sesdir);
+        camera_sd_bus_unlock();
+        if (!dsub) continue;
+
+        for (;;) {
+            if (!camera_sd_bus_lock(1000)) break;
+            struct dirent *ent = readdir(dsub);
+            camera_sd_bus_unlock();
+            if (!ent) break;
+            const char *nm = ent->d_name;
+            const size_t l = strlen(nm);
+            if (l < 5 || strcmp(nm + l - 4, ".jpg") != 0) continue;
+            char combined[VIG_NAME_LEN];
+            int cl = snprintf(combined, sizeof(combined), "%s/%s", dses->d_name, nm);
+            if (cl < 0 || (size_t)cl >= sizeof(combined)) continue;
+            vig_sd_list_insert(names, max, &n, &total, combined);
         }
-        int pos = n;
-        while (pos > 0 && strcmp(names[pos - 1], nm) > 0) {
-            memcpy(names[pos], names[pos - 1], VIG_NAME_LEN);
-            pos--;
-        }
-        snprintf(names[pos], VIG_NAME_LEN, "%s", nm);
-        n++;
+        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+        closedir(dsub);
+        camera_sd_bus_unlock();
     }
-    closedir(d);
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+    closedir(dtop);
     camera_sd_bus_unlock();
     if (total_out) *total_out = total;
     return n;
@@ -1041,6 +1081,23 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
+/* El id de un fichero de tarjeta es ahora "sesion/fichero.jpg" (antes solo
+ * "fichero.jpg"): valida por caracteres permitidos en vez de solo rechazar
+ * '/' y "..", que ahora SI puede llevar (como separador de un nivel, nunca
+ * mas de uno). Nuestros propios nombres (strftime + contador) nunca usan otra
+ * cosa que digitos, '_', '.' y esa unica '/'. */
+static bool vig_sd_name_safe(const char *s)
+{
+    if (strstr(s, "..")) return false;
+    int slashes = 0;
+    for (const char *p = s; *p; p++) {
+        if (*p == '/') { if (++slashes > 1) return false; continue; }
+        if (isdigit((unsigned char)*p) || *p == '_' || *p == '.') continue;
+        return false;
+    }
+    return true;
+}
+
 static esp_err_t handle_vigilancia(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     const char *uri = req->uri;
@@ -1052,7 +1109,7 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
          * captura del anillo en RAM aun sin volcar. */
         const size_t il = strlen(idstr);
         if (il >= 5 && il < VIG_NAME_LEN && strcmp(idstr + il - 4, ".jpg") == 0) {
-            if (strchr(idstr, '/') || strstr(idstr, "..")) {
+            if (!vig_sd_name_safe(idstr)) {
                 httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
                 return ESP_FAIL;
             }
@@ -1103,14 +1160,18 @@ static esp_err_t handle_vigilancia(httpd_req_t *req) {
                      when, (unsigned)(lens[i] / 1024), (unsigned)ids[i], (unsigned)ids[i]);
             httpd_resp_sendstr_chunk(req, line);
         }
-        /* Historial de la tarjeta, del mas nuevo al mas viejo. El nombre lleva la
-         * fecha (AAAAMMDD_HHMMSS), asi que se muestra tal cual formateada. */
+        /* Historial de la tarjeta, del mas nuevo al mas viejo. nm es
+         * "sesion/fichero.jpg"; el FICHERO lleva la fecha exacta de la foto
+         * (AAAAMMDD_HHMMSS), asi que se extrae de ahi y no de la sesion (que
+         * es solo el inicio de la sesion, puede ser un rato antes). */
         for (int i = sd_n - 1; i >= 0; i--) {
             const char *nm = sd_names[i];
+            const char *slash = strrchr(nm, '/');
+            const char *fn = slash ? slash + 1 : nm;
             snprintf(line, sizeof(line),
                      "<div class=cap><div class=t>%.4s-%.2s-%.2s %.2s:%.2s:%.2s &middot; tarjeta</div>"
                      "<a href='/vigilancia/%s'><img src='/vigilancia/%s' loading=lazy></a></div>",
-                     nm, nm + 4, nm + 6, nm + 9, nm + 11, nm + 13, nm, nm);
+                     fn, fn + 4, fn + 6, fn + 9, fn + 11, fn + 13, nm, nm);
             httpd_resp_sendstr_chunk(req, line);
         }
         char foot[240];
