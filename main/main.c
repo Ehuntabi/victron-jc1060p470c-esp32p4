@@ -304,7 +304,7 @@ static void log_autosave_task(void *arg)
      * en flash desde el crash. La SD ya esta montada (ver comentario arriba). */
     esp_err_t cd_err = log_capture_export_coredump(20);
     if (cd_err == ESP_OK) {
-        ESP_LOGW("LOGSAVE", "coredump de un crash anterior exportado a /sdcard/crash_*.txt");
+        ESP_LOGW("LOGSAVE", "coredump de un crash anterior exportado a /sdcard/logs/<dia>/crash_*.txt");
     } else if (cd_err != ESP_ERR_NOT_FOUND) {
         ESP_LOGW("LOGSAVE", "coredump export fallo: %s", esp_err_to_name(cd_err));
     }
@@ -312,7 +312,7 @@ static void log_autosave_task(void *arg)
     vTaskDelay(pdMS_TO_TICKS(30000));
     esp_err_t err = log_capture_autosave_now(20);
     if (err == ESP_OK) {
-        ESP_LOGI("LOGSAVE", "autosave OK -> /sdcard/log_*.txt (rotacion FIFO 20)");
+        ESP_LOGI("LOGSAVE", "autosave OK -> /sdcard/logs/<dia>/log_*.txt (rotacion FIFO 20)");
     } else {
         ESP_LOGW("LOGSAVE", "autosave failed: %s", esp_err_to_name(err));
     }

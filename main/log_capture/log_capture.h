@@ -49,7 +49,7 @@ void log_capture_clear(void);
 
 /* Vuelca el buffer completo (no filtrado) a un archivo de texto.
  * Formato: "12345 [I] tag: msg\n" por linea.
- * path: ruta absoluta (ej. "/sdcard/log_20260520_103045.txt"). */
+ * path: ruta absoluta (ej. "/sdcard/logs/20260520/log_power_20260520_103045.txt"). */
 esp_err_t log_capture_save_to_file(const char *path);
 
 /* Auto-save: genera el path

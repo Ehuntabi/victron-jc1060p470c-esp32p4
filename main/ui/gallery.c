@@ -57,6 +57,7 @@ static lv_obj_t   *s_img        = NULL;   /* lv_img de la imagen actual */
 static lv_obj_t   *s_lbl        = NULL;   /* nombre + contador */
 static lv_obj_t   *s_lbl_hint   = NULL;   /* "Cargando..." / errores / vacio */
 static lv_obj_t   *s_lbl_folder = NULL;   /* texto del boton de carpeta */
+static lv_obj_t   *s_btn_open   = NULL;   /* boton visible "Abrir": nivel de sesion/dia */
 static lv_img_dsc_t s_dsc;
 static uint8_t    *s_img_buf    = NULL;   /* RGB565 decodificado (PSRAM) */
 static char        s_files[GAL_MAX_FILES][GAL_NAME_LEN];
@@ -301,14 +302,15 @@ static void gallery_request_load(void)
 
     if (gallery_listing_subdirs()) {
         /* Nivel de eleccion de sesion/dia: no hay imagen que decodificar,
-         * solo el nombre de la subcarpeta (se abre tocando la imagen). */
+         * solo el nombre de la subcarpeta y el boton "Abrir" bien visible. */
         lv_img_set_src(s_img, NULL);
         if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
         lv_label_set_text_fmt(s_lbl, "%s   (%d/%d)", s_files[s_idx], s_idx + 1, s_count);
-        lv_label_set_text(s_lbl_hint, "Toca la imagen para abrir esta carpeta");
-        lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_open) lv_obj_clear_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
         return;
     }
+    if (s_btn_open) lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
 
     if (s_loading) { s_pending = true; return; }
     gallery_start_load();
@@ -332,6 +334,7 @@ static void gallery_after_scan(void)
         lv_label_set_text(s_lbl, "");
         lv_label_set_text(s_lbl_hint, FOLDERS[s_folder].empty);
         lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_open) lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
     } else {
         gallery_request_load();
     }
@@ -388,7 +391,7 @@ static void gallery_close_cb(lv_event_t *e)
     if (s_screen) {
         lv_obj_del(s_screen);   /* arrastra s_img/s_lbl/... */
         s_screen = NULL;
-        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL;
+        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL; s_btn_open = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
 }
@@ -455,6 +458,21 @@ void ui_gallery_open(void)
     lv_obj_set_style_text_align(s_lbl_hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(s_lbl_hint, "");
     lv_obj_center(s_lbl_hint);
+
+    /* Boton "Abrir" bien visible, centrado (mismo sitio que ocuparia la
+     * imagen): unica forma clara de entrar en la sesion/dia mostrada por
+     * s_lbl. Oculto salvo en el nivel de eleccion de sesion/dia
+     * (gallery_request_load lo muestra/oculta). */
+    s_btn_open = lv_btn_create(scr);
+    lv_obj_set_size(s_btn_open, 260, 80);
+    lv_obj_center(s_btn_open);
+    lv_obj_set_style_bg_color(s_btn_open, lv_color_hex(0x2E7D32), 0);
+    lv_obj_t *lbl_open = lv_label_create(s_btn_open);
+    lv_obj_set_style_text_font(lbl_open, &lv_font_montserrat_24_es, 0);
+    lv_label_set_text(lbl_open, LV_SYMBOL_EYE_OPEN " Abrir carpeta");
+    lv_obj_center(lbl_open);
+    lv_obj_add_event_cb(s_btn_open, gallery_img_clicked_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
 
     make_nav_btn(scr, LV_SYMBOL_LEFT,  LV_ALIGN_LEFT_MID,   8, gallery_prev_cb);
     make_nav_btn(scr, LV_SYMBOL_RIGHT, LV_ALIGN_RIGHT_MID, -8, gallery_next_cb);
