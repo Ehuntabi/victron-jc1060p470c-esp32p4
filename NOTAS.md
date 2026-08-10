@@ -1,17 +1,14 @@
-## v1.4.9
+## v1.4.10
 
-Un solo arreglo, motivado por la app móvil: `/data/bateria.csv` (y las
-gráficas de Batería del portal) salían vacías la mayor parte del día.
+Dos arreglos, ambos motivados por el uso real de la app móvil.
 
-`read_file_to_buf` (compartida por Frigo/Batería/NE185) limitaba la lectura
-a 512 KB reservados en RAM interna. El CSV de Frigo nunca lo toca (~288
-líneas/día), pero el de Batería registra 4 fuentes cada ~10 s — unas 34.500
-líneas/día, ~1,5 MB. A partir de aproximadamente un tercio del día el
-fichero ya superaba los 512 KB y el endpoint devolvía vacío el resto,
-sistemáticamente, hasta el día siguiente.
+`/api/state` solo mandaba la temperatura del congelador (`temp_c`). El
+panel físico de Frigo siempre mostró también Aletas y Exterior, pero esas
+dos sondas nunca salieron por la API — la app se quedaba forzosamente con
+una sola. Ahora `frigo` incluye `temp_aletas_c` y `temp_exterior_c`.
 
-Límite subido a 3 MB, reservados en PSRAM (la RAM interna no tiene margen
-para un buffer de ese tamaño, compartida con LVGL/WiFi/cámara). Esto es lo
-que necesitaba la app del móvil para poder mostrar las 4 fuentes de
-batería (BatteryMonitor, SolarCharger, OrionTR, ACCharger) del día
-completo en vez de solo el primer tercio.
+Al navegar por días en los logs (Frigo y Batería), el CSV del día en curso
+aparecía dos veces: como "HOY" (RAM + CSV fusionados) y otra vez como
+fecha suelta al final de la lista de días de la SD, con los mismos datos.
+`log_browser_list_dates` no tenía forma de saber que "HOY" ya cubre esa
+fecha; ahora se descarta si coincide con el día de hoy.
