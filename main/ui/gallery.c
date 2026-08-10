@@ -114,7 +114,11 @@ static void gallery_scan(void)
         const char *n = e->d_name;
         bool match;
         if (subdirs) {
-            match = n[0] != '.';   /* toda subcarpeta de sesion/dia cuenta */
+            /* Solo carpetas de verdad: un fichero suelto que se le hubiera
+             * escapado a la migracion (nombre raro) no debe listarse como si
+             * fuera una sesion abrible. DT_DIR ya es de fiar en este proyecto
+             * (mismo filtro que data_export_tar.c/log_cleanup.c). */
+            match = n[0] != '.' && e->d_type == DT_DIR;
         } else {
             size_t l = strlen(n);
             match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
