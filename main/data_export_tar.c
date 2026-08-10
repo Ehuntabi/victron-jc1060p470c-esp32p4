@@ -232,6 +232,51 @@ static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
     return ESP_OK;
 }
 
+/* Para carpetas RAIZ cuyo contenido son subcarpetas (p.ej. /sdcard/vigilancia
+ * con una subcarpeta por sesion, o /sdcard/logs con una por dia): tar_stream_dir
+ * SALTA subcarpetas (DT_DIR), asi que sin esto el .tar saldria vacio en cuanto
+ * el contenido este organizado en subcarpetas. Escanea root_dir, arma las
+ * listas dirs[]/prefixes[] dinamicamente (una entrada por subcarpeta, con
+ * prefijo "<root_name>/<subcarpeta>") y reutiliza tar_send_dirs tal cual. */
+#define TAR_MAX_SUBDIRS 96
+typedef struct { char dir[192]; char prefix[128]; } tar_subdir_entry_t;
+
+static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_dir,
+                                           const char *root_name, const char *attach_name)
+{
+    tar_subdir_entry_t *entries = malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS);
+    const char *dirs[TAR_MAX_SUBDIRS];
+    const char *prefixes[TAR_MAX_SUBDIRS];
+    int n = 0;
+
+    if (entries && camera_sd_bus_lock(3000)) {
+        DIR *dp = opendir(root_dir);
+        camera_sd_bus_unlock();
+        if (dp) {
+            struct dirent *de;
+            while (n < TAR_MAX_SUBDIRS) {
+                if (!camera_sd_bus_lock(1000)) break;
+                de = readdir(dp);
+                camera_sd_bus_unlock();
+                if (!de) break;
+                if (de->d_name[0] == '.') continue;
+                snprintf(entries[n].dir, sizeof(entries[n].dir), "%s/%s", root_dir, de->d_name);
+                snprintf(entries[n].prefix, sizeof(entries[n].prefix), "%s/%s", root_name, de->d_name);
+                dirs[n] = entries[n].dir;
+                prefixes[n] = entries[n].prefix;
+                n++;
+            }
+            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            closedir(dp);
+            camera_sd_bus_unlock();
+        }
+    }
+
+    esp_err_t err = tar_send_dirs(req, attach_name, dirs, prefixes, n);
+    free(entries);
+    return err;
+}
+
 static esp_err_t handle_tar_dir(httpd_req_t *req, const char *src_dir, const char *attach_name)
 {
     const char *const dirs[1] = { src_dir };
@@ -277,7 +322,7 @@ esp_err_t handle_data_capturas_tar(httpd_req_t *req)
 esp_err_t handle_data_vigilancia_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
-    return handle_tar_dir(req, "/sdcard/vigilancia", "vigilancia.tar");
+    return handle_tar_dir_of_subdirs(req, "/sdcard/vigilancia", "vigilancia", "vigilancia.tar");
 }
 
 esp_err_t handle_data_config_tar(httpd_req_t *req)
@@ -286,10 +331,10 @@ esp_err_t handle_data_config_tar(httpd_req_t *req)
     return handle_tar_dir(req, "/sdcard/config_backup", "config.tar");
 }
 
-/* Logs de sistema = ficheros sueltos log_*.txt en la RAIZ de la SD. handle_tar_dir
- * salta las subcarpetas, asi que solo empaqueta esos ficheros de nivel superior. */
+/* Logs de sistema: /sdcard/logs/<YYYYMMDD>/log_*.txt y crash_*.txt, una
+ * subcarpeta por dia. */
 esp_err_t handle_data_logs_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
-    return handle_tar_dir(req, "/sdcard", "logs.tar");
+    return handle_tar_dir_of_subdirs(req, "/sdcard/logs", "logs", "logs.tar");
 }

@@ -390,39 +390,60 @@ static const char *reset_reason_name(esp_reset_reason_t r)
     }
 }
 
-/* Lista /sdcard/<prefix>*.txt, ordena por mtime, borra los mas viejos hasta
- * dejar `keep`. Usa malloc temporal (~10 KB), libera al salir. */
+#define LOG_SD_DIR "/sdcard/logs"
+
+/* Crea LOG_SD_DIR y su subcarpeta de dia si no existen. Llamar bajo
+ * camera_sd_bus_lock (mismo patron que el resto de I/O de metadatos). */
+static void ensure_log_daydir(const char *daydir)
+{
+    struct stat stx;
+    if (stat(LOG_SD_DIR, &stx) != 0) mkdir(LOG_SD_DIR, 0777);
+    if (stat(daydir, &stx) != 0) mkdir(daydir, 0777);
+}
+
+/* Lista LOG_SD_DIR/<dia>/<prefix>*.txt en todas las subcarpetas de dia,
+ * ordena por mtime, borra los mas viejos hasta dejar `keep` EN TOTAL (misma
+ * semantica que antes: conserva los N ficheros mas recientes, no N por dia).
+ * Las carpetas de dia que quedan vacias tras borrar se eliminan. Usa malloc
+ * temporal (~10 KB), libera al salir. */
 static void rotate_files(const char *prefix, int keep)
 {
     /* Sin cerrojo no se toca la SD: la rotacion puede esperar a la proxima vuelta,
      * pisar el GDMA de la camara no. 2026-07-26. */
     if (!camera_sd_bus_lock(3000)) return;
-    DIR *d = opendir("/sdcard");
-    if (!d) { camera_sd_bus_unlock(); return; }
+    DIR *dtop = opendir(LOG_SD_DIR);
+    if (!dtop) { camera_sd_bus_unlock(); return; }
 
-    typedef struct { char name[64]; time_t mtime; } entry_t;
+    typedef struct { char rel[80]; time_t mtime; } entry_t;
     const int MAX_ENTRIES = 128;
     entry_t *entries = malloc(sizeof(entry_t) * MAX_ENTRIES);
-    if (!entries) { closedir(d); camera_sd_bus_unlock(); return; }
+    if (!entries) { closedir(dtop); camera_sd_bus_unlock(); return; }
 
     size_t prefix_len = strlen(prefix);
     int n = 0;
-    struct dirent *de;
-    while ((de = readdir(d)) != NULL && n < MAX_ENTRIES) {
-        if (strncmp(de->d_name, prefix, prefix_len) != 0) continue;
-        size_t l = strlen(de->d_name);
-        if (l < 5 || l >= sizeof(entries[0].name) ||
-            strcmp(de->d_name + l - 4, ".txt") != 0) continue;
-        char path[320];
-        snprintf(path, sizeof(path), "/sdcard/%s", de->d_name);
-        struct stat st;
-        if (stat(path, &st) != 0) continue;
-        strncpy(entries[n].name, de->d_name, sizeof(entries[n].name) - 1);
-        entries[n].name[sizeof(entries[n].name) - 1] = 0;
-        entries[n].mtime = st.st_mtime;
-        n++;
+    struct dirent *dday;
+    while ((dday = readdir(dtop)) != NULL && n < MAX_ENTRIES) {
+        if (dday->d_name[0] == '.') continue;
+        char daydir[64];
+        snprintf(daydir, sizeof(daydir), "%s/%s", LOG_SD_DIR, dday->d_name);
+        DIR *dsub = opendir(daydir);
+        if (!dsub) continue;   /* no es una carpeta de dia (o vacia/inaccesible) */
+        struct dirent *de;
+        while ((de = readdir(dsub)) != NULL && n < MAX_ENTRIES) {
+            if (strncmp(de->d_name, prefix, prefix_len) != 0) continue;
+            size_t l = strlen(de->d_name);
+            if (l < 5 || strcmp(de->d_name + l - 4, ".txt") != 0) continue;
+            char path[160];
+            snprintf(path, sizeof(path), "%s/%s", daydir, de->d_name);
+            struct stat st;
+            if (stat(path, &st) != 0) continue;
+            snprintf(entries[n].rel, sizeof(entries[n].rel), "%s/%s", dday->d_name, de->d_name);
+            entries[n].mtime = st.st_mtime;
+            n++;
+        }
+        closedir(dsub);
     }
-    closedir(d);
+    closedir(dtop);
     camera_sd_bus_unlock();
 
     if (n > keep) {
@@ -440,14 +461,74 @@ static void rotate_files(const char *prefix, int keep)
          * 2026-07-26. */
         if (camera_sd_bus_lock(3000)) {
             for (int i = 0; i < n - keep; i++) {
-                char path[320];
-                snprintf(path, sizeof(path), "/sdcard/%s", entries[i].name);
+                char path[160];
+                snprintf(path, sizeof(path), "%s/%s", LOG_SD_DIR, entries[i].rel);
                 unlink(path);
+            }
+            camera_sd_bus_unlock();
+        }
+        /* Carpetas de dia que se hayan quedado vacias: fuera (rmdir falla
+         * en silencio si aun les queda algo dentro). */
+        if (camera_sd_bus_lock(3000)) {
+            DIR *dtop2 = opendir(LOG_SD_DIR);
+            if (dtop2) {
+                struct dirent *dday2;
+                while ((dday2 = readdir(dtop2)) != NULL) {
+                    if (dday2->d_name[0] == '.') continue;
+                    char daydir[64];
+                    snprintf(daydir, sizeof(daydir), "%s/%s", LOG_SD_DIR, dday2->d_name);
+                    rmdir(daydir);
+                }
+                closedir(dtop2);
             }
             camera_sd_bus_unlock();
         }
     }
     free(entries);
+}
+
+/* Migra a LOG_SD_DIR/<YYYYMMDD>/ los log_*.txt y crash_*.txt sueltos que
+ * quedaron en la raiz de la SD de antes de este cambio. La fecha se extrae
+ * del propio nombre de fichero (sufijo fijo "_YYYYMMDD_HHMMSS.txt", 20
+ * caracteres antes de la extension), no del reloj actual. */
+void log_capture_migrate_legacy_flat_files(void)
+{
+    static const char *MTAG = "logmigrate";
+    if (!camera_sd_bus_lock(3000)) return;
+    DIR *d = opendir("/sdcard");
+    if (!d) { camera_sd_bus_unlock(); return; }
+
+    int moved = 0;
+    struct dirent *de;
+    while ((de = readdir(d)) != NULL) {
+        const char *n = de->d_name;
+        if (strncmp(n, "log_", 4) != 0 && strncmp(n, "crash_", 6) != 0) continue;
+
+        size_t l = strlen(n);
+        if (l < 20 || strcmp(n + l - 4, ".txt") != 0) continue;
+        const char *day = n + l - 20 + 1;   /* saltar el '_' del sufijo "_YYYYMMDD_HHMMSS.txt" */
+        bool digits_ok = true;
+        for (int i = 0; i < 8 && digits_ok; i++) {
+            if (!isdigit((unsigned char)day[i])) digits_ok = false;
+        }
+        if (!digits_ok) continue;
+
+        char daystr[9];
+        memcpy(daystr, day, 8);
+        daystr[8] = '\0';
+
+        char daydir[32], oldpath[96], newpath[128];
+        snprintf(daydir, sizeof(daydir), "%s/%s", LOG_SD_DIR, daystr);
+        snprintf(oldpath, sizeof(oldpath), "/sdcard/%s", n);
+        snprintf(newpath, sizeof(newpath), "%s/%s", daydir, n);
+
+        ensure_log_daydir(daydir);
+        if (rename(oldpath, newpath) == 0) moved++;
+        else ESP_LOGW(MTAG, "no pude migrar %s", n);
+    }
+    closedir(d);
+    camera_sd_bus_unlock();
+    if (moved > 0) ESP_LOGI(MTAG, "migrados %d logs/crash sueltos a carpetas por dia", moved);
 }
 
 esp_err_t log_capture_autosave_now(int keep)
@@ -458,9 +539,14 @@ esp_err_t log_capture_autosave_now(int keep)
     time_t now = time(NULL);
     struct tm tmv;
     localtime_r(&now, &tmv);
-    char path[80];
+    char daydir[32];
+    snprintf(daydir, sizeof(daydir), LOG_SD_DIR "/%04d%02d%02d",
+             tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday);
+    if (camera_sd_bus_lock(2000)) { ensure_log_daydir(daydir); camera_sd_bus_unlock(); }
+
+    char path[96];
     snprintf(path, sizeof(path),
-             "/sdcard/log_%s_%04d%02d%02d_%02d%02d%02d.txt",
+             "%s/log_%s_%04d%02d%02d_%02d%02d%02d.txt", daydir,
              reason,
              tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
              tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
@@ -505,13 +591,17 @@ esp_err_t log_capture_export_coredump(int keep)
     time_t now = time(NULL);
     struct tm tmv;
     localtime_r(&now, &tmv);
-    char path[80];
+    char daydir[32];
+    snprintf(daydir, sizeof(daydir), LOG_SD_DIR "/%04d%02d%02d",
+             tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday);
+    char path[96];
     snprintf(path, sizeof(path),
-             "/sdcard/crash_%s_%04d%02d%02d_%02d%02d%02d.txt",
+             "%s/crash_%s_%04d%02d%02d_%02d%02d%02d.txt", daydir,
              rname, tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
              tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
 
     if (!camera_sd_bus_lock(3000)) { free(sum); return ESP_ERR_TIMEOUT; }
+    ensure_log_daydir(daydir);
     FILE *f = fopen(path, "w");
     if (!f) {
         camera_sd_bus_unlock();

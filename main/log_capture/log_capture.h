@@ -52,20 +52,30 @@ void log_capture_clear(void);
  * path: ruta absoluta (ej. "/sdcard/log_20260520_103045.txt"). */
 esp_err_t log_capture_save_to_file(const char *path);
 
-/* Auto-save: genera el path "/sdcard/log_<reason>_<YYYYMMDD_HHMMSS>.txt",
- * donde <reason> proviene de esp_reset_reason() del boot actual (power/wdt/
+/* Auto-save: genera el path
+ * "/sdcard/logs/<YYYYMMDD>/log_<reason>_<YYYYMMDD_HHMMSS>.txt", donde
+ * <reason> proviene de esp_reset_reason() del boot actual (power/wdt/
  * panic/sw/brownout/...), y aplica rotacion FIFO dejando como max `keep`
- * archivos "log_*.txt" en /sdcard. SD debe estar montada antes de llamar. */
+ * archivos "log_*.txt" en total (contando todas las carpetas de dia). SD debe
+ * estar montada antes de llamar. */
 esp_err_t log_capture_autosave_now(int keep);
 
 /* Si ESP-IDF dejo un coredump en la particion "coredump" (panic/TWDT/INT_WDT
  * de un boot anterior — ver partitions.csv), lo exporta a
- * "/sdcard/crash_<reason>_<YYYYMMDD_HHMMSS>.txt" (tarea, PC de la excepcion,
- * registros RISC-V, stackdump en hex) y lo BORRA de la particion. Aplica
- * rotacion FIFO dejando como max `keep` archivos "crash_*.txt". SD debe estar
- * montada antes de llamar. Devuelve ESP_ERR_NOT_FOUND si no habia coredump
- * pendiente (caso normal, la inmensa mayoria de los arranques). */
+ * "/sdcard/logs/<YYYYMMDD>/crash_<reason>_<YYYYMMDD_HHMMSS>.txt" (tarea, PC de
+ * la excepcion, registros RISC-V, stackdump en hex) y lo BORRA de la
+ * particion. Aplica rotacion FIFO dejando como max `keep` archivos
+ * "crash_*.txt" en total. SD debe estar montada antes de llamar. Devuelve
+ * ESP_ERR_NOT_FOUND si no habia coredump pendiente (caso normal, la inmensa
+ * mayoria de los arranques). */
 esp_err_t log_capture_export_coredump(int keep);
+
+/* Migra a /sdcard/logs/<YYYYMMDD>/ los log_*.txt y crash_*.txt sueltos que
+ * hubiera en la raiz de la SD de antes de organizar por dia (la fecha se
+ * extrae del propio nombre de fichero). Idempotente (no hace nada si ya no
+ * queda ninguno suelto). Llamar una vez al arrancar, con la SD montada,
+ * antes de log_capture_autosave_now/log_capture_export_coredump. */
+void log_capture_migrate_legacy_flat_files(void);
 
 #ifdef __cplusplus
 }

@@ -296,6 +296,10 @@ static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 static void log_autosave_task(void *arg)
 {
     (void)arg;
+    /* Migrar logs/crash sueltos de antes de organizar por dia (una vez,
+     * antes de escribir nada nuevo). La SD ya esta montada. */
+    log_capture_migrate_legacy_flat_files();
+
     /* Coredump (si lo hay) primero: no depende del ring buffer en RAM, ya esta
      * en flash desde el crash. La SD ya esta montada (ver comentario arriba). */
     esp_err_t cd_err = log_capture_export_coredump(20);

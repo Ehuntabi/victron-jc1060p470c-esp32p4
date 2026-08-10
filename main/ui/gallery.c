@@ -33,6 +33,7 @@ typedef struct {
     const char *ext2;   /* segunda extension aceptada (NULL si ninguna) */
     const char *label;  /* texto del boton de carpeta */
     const char *empty;  /* mensaje cuando no hay ficheros */
+    bool has_subdirs;   /* true: primero se elige subcarpeta (sesion/dia) antes de listar fotos */
 } gal_folder_t;
 
 /* Solo JPG: el carrusel ya guarda JPG (rapido). Las .bmp viejas que pudiera
@@ -40,11 +41,15 @@ typedef struct {
  * decode sigue soportando .bmp por si acaso, pero no se enumeran. */
 static const gal_folder_t FOLDERS[] = {
     { "/sdcard/screenshots", ".jpg", NULL, LV_SYMBOL_IMAGE " Carrusel",
-      "No hay capturas del carrusel\n(usa el carrusel primero)" },
+      "No hay capturas del carrusel\n(usa el carrusel primero)", false },
     { "/sdcard/vigilancia",  ".jpg", NULL, LV_SYMBOL_EYE_OPEN " Vigilancia",
-      "No hay fotos de vigilancia" },
+      "No hay fotos de vigilancia", true },
 };
 #define GAL_FOLDER_COUNT ((int)(sizeof(FOLDERS) / sizeof(FOLDERS[0])))
+
+/* Subcarpeta de vigilancia elegida (sesion o, para lo migrado, dia); vacio =
+ * aun no se ha elegido -> gallery_scan() lista subcarpetas en vez de fotos. */
+static char s_vig_subdir[GAL_NAME_LEN] = "";
 
 /* Estado del overlay. Todo se toca en el hilo de LVGL o bajo lvgl_port_lock. */
 static lv_obj_t   *s_screen     = NULL;   /* overlay raiz (NULL = cerrado) */
@@ -68,15 +73,36 @@ static int cmp_names(const void *a, const void *b)
     return strcmp((const char *)a, (const char *)b);
 }
 
+/* true si toca listar subcarpetas (sesiones/dias de vigilancia) en vez de
+ * ficheros: solo aplica a la carpeta activa cuando tiene has_subdirs y aun no
+ * se ha elegido ninguna. */
+static bool gallery_listing_subdirs(void)
+{
+    return FOLDERS[s_folder].has_subdirs && s_vig_subdir[0] == '\0';
+}
+
+/* Carpeta real que toca escanear/leer ahora mismo: la de la carpeta activa, o
+ * su subcarpeta elegida si ya se entro en una. */
+static void gallery_current_dir(char *out, size_t outsz)
+{
+    const gal_folder_t *f = &FOLDERS[s_folder];
+    if (f->has_subdirs && s_vig_subdir[0]) snprintf(out, outsz, "%s/%s", f->dir, s_vig_subdir);
+    else                                   snprintf(out, outsz, "%s", f->dir);
+}
+
 static void gallery_scan(void)
 {
     s_count = 0;
     const gal_folder_t *f = &FOLDERS[s_folder];
+    bool subdirs = gallery_listing_subdirs();
+    char dir[96];
+    gallery_current_dir(dir, sizeof(dir));
+
     /* No retener el bus de la SD durante TODO el escaneo (congelaba el hilo
      * LVGL hasta 3 s): se toma solo alrededor de cada operacion y se suelta
      * entre entradas, igual que gallery_read_file entre trozos. */
     if (!camera_sd_bus_lock(2000)) return;
-    DIR *d = opendir(f->dir);
+    DIR *d = opendir(dir);
     camera_sd_bus_unlock();
     if (!d) return;
 
@@ -85,9 +111,14 @@ static void gallery_scan(void)
         struct dirent *e = readdir(d);
         if (e == NULL) { camera_sd_bus_unlock(); break; }
         const char *n = e->d_name;
-        size_t l = strlen(n);
-        bool match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
+        bool match;
+        if (subdirs) {
+            match = n[0] != '.';   /* toda subcarpeta de sesion/dia cuenta */
+        } else {
+            size_t l = strlen(n);
+            match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
                                  (f->ext2 && strcasecmp(n + l - 4, f->ext2) == 0));
+        }
         if (match) {
             strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
             s_files[s_count][GAL_NAME_LEN - 1] = '\0';
@@ -188,8 +219,17 @@ static void gallery_load_task(void *arg)
     uint32_t gen    = s_gen;
     int      idx    = s_idx;
     int      folder = s_folder;
+    char     subdir[GAL_NAME_LEN];
+    strncpy(subdir, s_vig_subdir, sizeof(subdir) - 1);
+    subdir[sizeof(subdir) - 1] = '\0';
+
+    char dirpath[96];
+    if (FOLDERS[folder].has_subdirs && subdir[0])
+        snprintf(dirpath, sizeof(dirpath), "%s/%s", FOLDERS[folder].dir, subdir);
+    else
+        snprintf(dirpath, sizeof(dirpath), "%s", FOLDERS[folder].dir);
     char path[128];
-    snprintf(path, sizeof(path), "%s/%s", FOLDERS[folder].dir, s_files[idx]);
+    snprintf(path, sizeof(path), "%s/%s", dirpath, s_files[idx]);
 
     size_t flen = 0;
     int w = 0, h = 0;
@@ -258,6 +298,18 @@ static void gallery_request_load(void)
 {
     s_gen++;   /* invalida cualquier carga en vuelo que ya no sea la ultima */
     if (s_count == 0) return;
+
+    if (gallery_listing_subdirs()) {
+        /* Nivel de eleccion de sesion/dia: no hay imagen que decodificar,
+         * solo el nombre de la subcarpeta (se abre tocando la imagen). */
+        lv_img_set_src(s_img, NULL);
+        if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
+        lv_label_set_text_fmt(s_lbl, "%s   (%d/%d)", s_files[s_idx], s_idx + 1, s_count);
+        lv_label_set_text(s_lbl_hint, "Toca la imagen para abrir esta carpeta");
+        lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
     if (s_loading) { s_pending = true; return; }
     gallery_start_load();
 }
@@ -266,7 +318,13 @@ static void gallery_request_load(void)
 static void gallery_after_scan(void)
 {
     s_idx = 0;
-    if (s_lbl_folder) lv_label_set_text(s_lbl_folder, FOLDERS[s_folder].label);
+    if (s_lbl_folder) {
+        if (FOLDERS[s_folder].has_subdirs && s_vig_subdir[0]) {
+            lv_label_set_text_fmt(s_lbl_folder, LV_SYMBOL_LEFT " %s", s_vig_subdir);
+        } else {
+            lv_label_set_text(s_lbl_folder, FOLDERS[s_folder].label);
+        }
+    }
     if (s_count == 0) {
         s_gen++;   /* invalida cargas en vuelo */
         lv_img_set_src(s_img, NULL);
@@ -295,10 +353,30 @@ static void gallery_next_cb(lv_event_t *e)
     gallery_request_load();
 }
 
+/* Si se esta dentro de una subcarpeta de vigilancia, primero vuelve a la
+ * lista de sesiones/dias; si no, cambia de carpeta (Carrusel <-> Vigilancia)
+ * como siempre. Mismo boton, doble funcion segun el nivel. */
 static void gallery_folder_cb(lv_event_t *e)
 {
     (void)e;
-    s_folder = (s_folder + 1) % GAL_FOLDER_COUNT;
+    if (FOLDERS[s_folder].has_subdirs && s_vig_subdir[0]) {
+        s_vig_subdir[0] = '\0';
+    } else {
+        s_folder = (s_folder + 1) % GAL_FOLDER_COUNT;
+        s_vig_subdir[0] = '\0';
+    }
+    gallery_scan();
+    gallery_after_scan();
+}
+
+/* Toca la imagen mientras se listan sesiones/dias -> entra en la que este
+ * mostrada. Fuera de ese nivel (viendo fotos) no hace nada. */
+static void gallery_img_clicked_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!gallery_listing_subdirs() || s_count == 0) return;
+    strncpy(s_vig_subdir, s_files[s_idx], sizeof(s_vig_subdir) - 1);
+    s_vig_subdir[sizeof(s_vig_subdir) - 1] = '\0';
     gallery_scan();
     gallery_after_scan();
 }
@@ -342,6 +420,7 @@ void ui_gallery_open(void)
 {
     if (s_screen) return;   /* ya abierto */
     s_folder = 1;           /* por defecto: Vigilancia (no el carrusel) */
+    s_vig_subdir[0] = '\0'; /* siempre se entra por la lista de sesiones/dias */
     gallery_scan();
 
     lv_obj_t *scr = lv_obj_create(lv_scr_act());
@@ -356,6 +435,10 @@ void ui_gallery_open(void)
 
     s_img = lv_img_create(scr);
     lv_obj_center(s_img);
+    /* Clickable siempre: solo hace algo mientras se lista una sesion/dia de
+     * vigilancia (gallery_img_clicked_cb la abre); viendo fotos no hace nada. */
+    lv_obj_add_flag(s_img, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_img, gallery_img_clicked_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl = lv_label_create(scr);
     lv_obj_set_style_text_font(s_lbl, &lv_font_montserrat_20_es, 0);

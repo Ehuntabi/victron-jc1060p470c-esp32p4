@@ -24,6 +24,8 @@
 #include <math.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <ctype.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -471,11 +473,16 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
  * timeouts 0x107); ahora se sortea con SD-en-SPI3 + cerrojo de bus + volcado
  * diferido a baja prioridad. */
 #define VIG_RING 8    /* 8 capturas basta para "quien entro"; ahorra ~0.5MB PSRAM */
-typedef struct { uint8_t *buf; size_t len; time_t ts; uint32_t id; } vig_slot_t;
+typedef struct { uint8_t *buf; size_t len; time_t ts; time_t session; uint32_t id; } vig_slot_t;
 static vig_slot_t       s_vig[VIG_RING];
 static int              s_vig_head = 0;        /* proxima posicion de escritura */
 static uint32_t         s_vig_seq  = 0;        /* contador global -> id unico */
 static SemaphoreHandle_t s_vig_mtx = NULL;
+
+/* Hora de inicio de la sesion de vigilancia activa (fijada en
+ * camera_set_surveillance(true)): nombra la carpeta /sdcard/vigilancia/<sesion>/
+ * donde caen todas las fotos de ese ON->OFF, aunque cruce medianoche. */
+static volatile time_t  s_vig_session_start = 0;
 
 /* Guarda una copia del JPEG en el anillo (la mas antigua se libera). Llamada desde
  * la tarea de camara. Copia los bytes -> s_jpeg_out se puede reusar luego. */
@@ -495,7 +502,10 @@ static void camera_vig_store(const uint8_t *jpg, size_t len, time_t ts)
     xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
     vig_slot_t *sl = &s_vig[s_vig_head];
     if (sl->buf) free(sl->buf);
-    sl->buf = copy; sl->len = len; sl->ts = ts; sl->id = ++s_vig_seq;
+    /* session se copia AQUI (captura), no al drenar a SD: el volcado es asincrono
+     * y para cuando le toque podria haber arrancado ya una sesion nueva. */
+    sl->buf = copy; sl->len = len; sl->ts = ts; sl->session = s_vig_session_start;
+    sl->id = ++s_vig_seq;
     s_vig_head = (s_vig_head + 1) % VIG_RING;
     xSemaphoreGive(s_vig_mtx);
 }
@@ -620,18 +630,26 @@ void camera_sd_bus_unlock(void)
 #define VIG_SD_DIR   "/sdcard/vigilancia"
 #define VIG_SD_CHUNK (8 * 1024)   /* trozo pequeno: se SUELTA el bus entre trozos */
 
-static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t len)
+static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
+                               const uint8_t *jpg, size_t len)
 {
-    char path[96];
+    char sess_dir[64];
     struct tm tmv;
+    localtime_r(&session, &tmv);
+    strftime(sess_dir, sizeof(sess_dir), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
+
+    char path[128];
+    size_t p = snprintf(path, sizeof(path), "%s/", sess_dir);
     localtime_r(&ts, &tmv);
-    size_t p = strftime(path, sizeof(path), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
+    p += strftime(path + p, sizeof(path) - p, "%Y%m%d_%H%M%S", &tmv);
     snprintf(path + p, sizeof(path) - p, "_%03lu.jpg", (unsigned long)(id % 1000));
 
-    /* Crear dir + abrir bajo el bus (I/O de metadatos). */
+    /* Crear carpeta base + subcarpeta de sesion, y abrir, todo bajo el bus
+     * (I/O de metadatos). */
     if (!camera_sd_bus_lock(2000)) return false;
     struct stat stx;
     if (stat(VIG_SD_DIR, &stx) != 0) mkdir(VIG_SD_DIR, 0777);
+    if (stat(sess_dir, &stx) != 0) mkdir(sess_dir, 0777);
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     camera_sd_bus_unlock();
     if (fd < 0) { ESP_LOGW(TAG, "vig: no abre SD (%s)", path); return false; }
@@ -667,10 +685,56 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, const uint8_t *jpg, size_t
     return ok;
 }
 
+/* Migra a VIG_SD_DIR/<YYYYMMDD>/ las fotos sueltas que quedaron en la raiz de
+ * VIG_SD_DIR de antes de este cambio (nombre YYYYMMDD_HHMMSS_NNN.jpg, 23
+ * caracteres). No se puede reconstruir la sesion real a la que pertenecian
+ * (la captura es por movimiento: el hueco entre dos fotos de una misma
+ * sesion puede ser arbitrariamente largo), asi que se agrupan por dia
+ * natural, el unico criterio reconstruible con certeza. Las carpetas de dia
+ * (8 digitos) no chocan nunca con las de sesion nueva (15 caracteres,
+ * YYYYMMDD_HHMMSS). Se ejecuta una vez al arrancar, antes de lanzar el
+ * drenador. */
+static void vig_migrate_legacy_flat_files(void)
+{
+    if (!camera_sd_bus_lock(3000)) return;
+    DIR *d = opendir(VIG_SD_DIR);
+    if (!d) { camera_sd_bus_unlock(); return; }
+
+    int moved = 0;
+    struct dirent *de;
+    while ((de = readdir(d)) != NULL) {
+        const char *n = de->d_name;
+        size_t l = strlen(n);
+        if (l != 23 || strcmp(n + 19, ".jpg") != 0 || n[8] != '_') continue;
+        bool digits_ok = true;
+        for (int i = 0; i < 8 && digits_ok; i++) {
+            if (!isdigit((unsigned char)n[i])) digits_ok = false;
+        }
+        if (!digits_ok) continue;
+
+        char day[9];
+        memcpy(day, n, 8);
+        day[8] = '\0';
+
+        char daydir[48], oldpath[96], newpath[128];
+        snprintf(daydir, sizeof(daydir), "%s/%s", VIG_SD_DIR, day);
+        snprintf(oldpath, sizeof(oldpath), "%s/%s", VIG_SD_DIR, n);
+        snprintf(newpath, sizeof(newpath), "%s/%s", daydir, n);
+
+        struct stat stx;
+        if (stat(daydir, &stx) != 0) mkdir(daydir, 0777);
+        if (rename(oldpath, newpath) == 0) moved++;
+        else ESP_LOGW(TAG, "vig: no pude migrar %s", n);
+    }
+    closedir(d);
+    camera_sd_bus_unlock();
+    if (moved > 0) ESP_LOGI(TAG, "vig: migradas %d fotos sueltas a carpetas por dia", moved);
+}
+
 static void vig_sd_drain_task(void *arg)
 {
     for (;;) {
-        uint8_t *copy = NULL; size_t clen = 0; uint32_t cid = 0; time_t cts = 0;
+        uint8_t *copy = NULL; size_t clen = 0; uint32_t cid = 0; time_t cts = 0; time_t csession = 0;
 
         /* Coger el pendiente mas ANTIGUO (menor id) y copiarlo fuera del anillo,
          * para no retener el mutex durante la escritura lenta a SD. */
@@ -685,6 +749,7 @@ static void vig_sd_drain_task(void *arg)
                 if (copy) {
                     memcpy(copy, s_vig[best].buf, s_vig[best].len);
                     clen = s_vig[best].len; cid = s_vig[best].id; cts = s_vig[best].ts;
+                    csession = s_vig[best].session;
                 }
             }
             xSemaphoreGive(s_vig_mtx);
@@ -692,7 +757,7 @@ static void vig_sd_drain_task(void *arg)
 
         if (!copy) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }  /* nada pendiente */
 
-        bool ok = vig_write_jpeg_sd(cid, cts, copy, clen);
+        bool ok = vig_write_jpeg_sd(cid, cts, csession, copy, clen);
         free(copy);
 
         if (ok && s_vig_mtx) {
@@ -714,8 +779,11 @@ void camera_set_surveillance(bool on)
     s_surveillance = on;
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
     s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
-    if (on) s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
-                                 * no acumulado de por vida (si no, dejaba de capturar) */
+    if (on) {
+        s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
+                             * no acumulado de por vida (si no, dejaba de capturar) */
+        s_vig_session_start = time(NULL);   /* nombra la carpeta de esta sesion */
+    }
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
@@ -1029,6 +1097,10 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
         ESP_LOGE(TAG, "no se pudieron crear los mutex de camara (sin heap) -> sin camara");
         return ESP_ERR_NO_MEM;
     }
+
+    /* Migrar fotos sueltas de antes de organizar vigilancia por sesion (una
+     * vez, antes de arrancar el drenador para no competir con el por el bus). */
+    vig_migrate_legacy_flat_files();
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
