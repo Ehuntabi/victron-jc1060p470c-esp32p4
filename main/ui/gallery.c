@@ -492,6 +492,7 @@ void ui_gallery_open(void)
     s_lbl_open = lv_label_create(s_btn_open);
     lv_obj_set_style_text_font(s_lbl_open, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_align(s_lbl_open, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_line_space(s_lbl_open, 10, 0);
     lv_label_set_text(s_lbl_open, LV_SYMBOL_EYE_OPEN " Abrir carpeta");
     lv_obj_center(s_lbl_open);
     lv_obj_add_event_cb(s_btn_open, gallery_img_clicked_cb, LV_EVENT_CLICKED, NULL);
