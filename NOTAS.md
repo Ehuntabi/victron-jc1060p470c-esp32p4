@@ -1,9 +1,13 @@
-## v1.4.16
+## v1.4.17
 
-Ajuste de UI en la galería de la tarjeta SD (visor de imágenes de vigilancia).
+Arreglo de fiabilidad en la actualización por Wi-Fi (`/ota`).
 
-Al elegir sesión/día, la fecha aparecía suelta arriba de la pantalla,
-desconectada tanto de las flechas de navegación (centradas) como del botón
-"Abrir carpeta" que la abre. Ahora la fecha va integrada como primera línea
-de ese botón, en la misma franja horizontal que las flechas — y se muestra
-solo la fecha (sin hora) para que quepa en el ancho del botón.
+El primer intento de instalar una actualización a veces no hacía nada
+visible y la pantalla se reiniciaba sola a medias, sin llegar a escribir el
+firmware nuevo. Repitiendo justo después del reinicio sí funcionaba.
+
+Causa: `esp_ota_begin()` borra de golpe el hueco de flash de destino antes
+de recibir ningún byte — un bloqueo largo (varios segundos) que hacía
+saltar el watchdog interno que vigila si la pantalla se queda congelada.
+Ahora la actualización avisa a ese watchdog de que el bloqueo es esperado,
+así que ya no hace falta reintentar.
