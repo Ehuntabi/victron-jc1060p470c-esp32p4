@@ -59,6 +59,9 @@ static lv_obj_t   *s_lbl_hint   = NULL;   /* "Cargando..." / errores / vacio */
 static lv_obj_t   *s_lbl_folder = NULL;   /* texto del boton de carpeta */
 static lv_obj_t   *s_btn_open   = NULL;   /* boton visible "Abrir": nivel de sesion/dia */
 static lv_obj_t   *s_lbl_open   = NULL;   /* texto (fecha + "Abrir carpeta") dentro de s_btn_open */
+static lv_obj_t   *s_btn_delete = NULL;   /* boton "Borrar carpeta": nivel de sesion/dia */
+static lv_obj_t   *s_del_modal  = NULL;   /* dialogo de confirmacion de borrado (NULL = cerrado) */
+static char        s_del_dir[96] = "";    /* carpeta completa a borrar, fijada al pulsar "Borrar carpeta" */
 static lv_img_dsc_t s_dsc;
 static uint8_t    *s_img_buf    = NULL;   /* RGB565 decodificado (PSRAM) */
 static char        s_files[GAL_MAX_FILES][GAL_NAME_LEN];
@@ -328,11 +331,13 @@ static void gallery_request_load(void)
                                    date, s_idx + 1, s_count);
         }
         lv_obj_add_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
-        if (s_btn_open) lv_obj_clear_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_open)   lv_obj_clear_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_delete) lv_obj_clear_flag(s_btn_delete, LV_OBJ_FLAG_HIDDEN);
         return;
     }
     lv_obj_clear_flag(s_lbl, LV_OBJ_FLAG_HIDDEN);
-    if (s_btn_open) lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+    if (s_btn_open)   lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+    if (s_btn_delete) lv_obj_add_flag(s_btn_delete, LV_OBJ_FLAG_HIDDEN);
 
     if (s_loading) { s_pending = true; return; }
     gallery_start_load();
@@ -356,7 +361,8 @@ static void gallery_after_scan(void)
         lv_label_set_text(s_lbl, "");
         lv_label_set_text(s_lbl_hint, FOLDERS[s_folder].empty);
         lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
-        if (s_btn_open) lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_open)   lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+        if (s_btn_delete) lv_obj_add_flag(s_btn_delete, LV_OBJ_FLAG_HIDDEN);
     } else {
         gallery_request_load();
     }
@@ -406,6 +412,167 @@ static void gallery_img_clicked_cb(lv_event_t *e)
     gallery_after_scan();
 }
 
+/* ── Borrado de una carpeta de sesion/dia de vigilancia ──────────────────── */
+
+/* Borra todos los ficheros de s_del_dir y la carpeta misma, soltando el bus de
+ * la SD entre operaciones (igual que gallery_scan/gallery_read_file, para no
+ * bloquear LVGL ni el GDMA de la camara). Corre fuera del hilo de LVGL. */
+static void gallery_delete_task(void *arg)
+{
+    (void)arg;
+    char dir[sizeof(s_del_dir)];
+    strncpy(dir, s_del_dir, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+
+    if (camera_sd_bus_lock(2000)) {
+        DIR *d = opendir(dir);
+        camera_sd_bus_unlock();
+        if (d) {
+            while (1) {
+                if (!camera_sd_bus_lock(1000)) break;
+                struct dirent *e = readdir(d);
+                if (!e) { camera_sd_bus_unlock(); break; }
+                char name[GAL_NAME_LEN];
+                strncpy(name, e->d_name, sizeof(name) - 1);
+                name[sizeof(name) - 1] = '\0';
+                camera_sd_bus_unlock();
+
+                if (name[0] != '.') {
+                    char fpath[sizeof(dir) + GAL_NAME_LEN + 2];
+                    snprintf(fpath, sizeof(fpath), "%s/%s", dir, name);
+                    if (camera_sd_bus_lock(2000)) { unlink(fpath); camera_sd_bus_unlock(); }
+                }
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            closedir(d);
+            camera_sd_bus_unlock();
+        }
+        if (camera_sd_bus_lock(2000)) { rmdir(dir); camera_sd_bus_unlock(); }
+    }
+
+    if (lvgl_port_lock(2000)) {
+        if (s_screen) {
+            s_vig_subdir[0] = '\0';   /* por si acaso: volver siempre al listado */
+            gallery_scan();
+            gallery_after_scan();
+        }
+        lvgl_port_unlock();
+    }
+    vTaskDelete(NULL);
+}
+
+static void gallery_delete_modal_btn_cb(lv_event_t *e)
+{
+    lv_obj_t *btn = lv_event_get_target(e);
+    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
+    const char *txt = lbl ? lv_label_get_text(lbl) : "";
+    bool confirmed = (txt && strstr(txt, "Borrar") != NULL);
+
+    if (s_del_modal) { lv_obj_del(s_del_modal); s_del_modal = NULL; }
+    if (!confirmed) return;
+
+    if (s_btn_open)   lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+    if (s_btn_delete) lv_obj_add_flag(s_btn_delete, LV_OBJ_FLAG_HIDDEN);
+    if (s_lbl_hint) {
+        lv_label_set_text(s_lbl_hint, "Borrando...");
+        lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (xTaskCreate(gallery_delete_task, "gal_del", 4096, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "No pude crear la tarea de borrado");
+        gallery_request_load();   /* recupera los botones si no se pudo lanzar */
+    }
+}
+
+/* Dialogo de confirmacion, mismo estilo que el resto de la app (dialogo
+ * oscuro sobre lv_layer_top, sin lv_msgbox: ver frigo_panel.c/
+ * settings_victron_keys.c). Botones "Cancelar" / "Borrar". */
+static void gallery_show_delete_confirm(const char *msg)
+{
+    if (s_del_modal) return;
+
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_del_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 560, 240);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_label_set_text(title, LV_SYMBOL_WARNING "  ¿Borrar carpeta?");
+
+    lv_obj_t *m = lv_label_create(dlg);
+    lv_obj_set_style_text_font(m, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(m, lv_color_white(), 0);
+    lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(m, lv_pct(100));
+    lv_obj_set_style_text_align(m, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(m, msg);
+
+    lv_obj_t *row_btns = lv_obj_create(dlg);
+    lv_obj_remove_style_all(row_btns);
+    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *btn_cancel = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_cancel, 200, 56);
+    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_cancel, 12, 0);
+    lv_obj_t *lc = lv_label_create(btn_cancel);
+    lv_label_set_text(lc, "Cancelar");
+    lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lc);
+    lv_obj_add_event_cb(btn_cancel, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *btn_ok = lv_btn_create(row_btns);
+    lv_obj_set_size(btn_ok, 200, 56);
+    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_radius(btn_ok, 12, 0);
+    lv_obj_t *lo = lv_label_create(btn_ok);
+    lv_label_set_text(lo, LV_SYMBOL_TRASH " Borrar");
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
+    lv_obj_center(lo);
+    lv_obj_add_event_cb(btn_ok, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void gallery_delete_clicked_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!gallery_listing_subdirs() || s_count == 0) return;
+
+    snprintf(s_del_dir, sizeof(s_del_dir), "%s/%s", FOLDERS[s_folder].dir, s_files[s_idx]);
+
+    char date[16];
+    gal_format_subdir_date(s_files[s_idx], date, sizeof(date));
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "Se borrara la carpeta del %s y todas sus fotos.\nNo se puede deshacer.",
+             date);
+    gallery_show_delete_confirm(msg);
+}
+
 static void gallery_close_cb(lv_event_t *e)
 {
     (void)e;
@@ -414,6 +581,7 @@ static void gallery_close_cb(lv_event_t *e)
         lv_obj_del(s_screen);   /* arrastra s_img/s_lbl/... */
         s_screen = NULL;
         s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL; s_btn_open = NULL; s_lbl_open = NULL;
+        s_btn_delete = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
 }
@@ -497,6 +665,19 @@ void ui_gallery_open(void)
     lv_obj_center(s_lbl_open);
     lv_obj_add_event_cb(s_btn_open, gallery_img_clicked_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
+
+    /* Boton "Borrar carpeta": mas pequeno y con hueco de sobra debajo de
+     * "Abrir carpeta" para que no se pulsen por error uno en vez del otro. */
+    s_btn_delete = lv_btn_create(scr);
+    lv_obj_set_size(s_btn_delete, 220, 60);
+    lv_obj_align_to(s_btn_delete, s_btn_open, LV_ALIGN_OUT_BOTTOM_MID, 0, 50);
+    lv_obj_set_style_bg_color(s_btn_delete, lv_color_hex(0xB71C1C), 0);
+    lv_obj_t *lbl_delete = lv_label_create(s_btn_delete);
+    lv_obj_set_style_text_font(lbl_delete, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_delete, LV_SYMBOL_TRASH " Borrar carpeta");
+    lv_obj_center(lbl_delete);
+    lv_obj_add_event_cb(s_btn_delete, gallery_delete_clicked_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_flag(s_btn_delete, LV_OBJ_FLAG_HIDDEN);
 
     make_nav_btn(scr, LV_SYMBOL_LEFT,  LV_ALIGN_LEFT_MID,   8, gallery_prev_cb);
     make_nav_btn(scr, LV_SYMBOL_RIGHT, LV_ALIGN_RIGHT_MID, -8, gallery_next_cb);
