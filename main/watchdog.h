@@ -17,6 +17,11 @@ esp_err_t watchdog_init(void);
  * desde el primer arranque tras último wipe. */
 uint32_t watchdog_get_reset_count(void);
 
+/* Suspende (true) o reanuda (false) la detección de UI congelada. Para
+ * operaciones que se sabe que bloquean LVGL mucho rato sin ser un cuelgue
+ * real (p.ej. el borrado de flash al empezar una actualización OTA). */
+void watchdog_suspend(bool suspend);
+
 /* Devuelve la causa del último reset, en formato legible para mostrar en UI
  * ("Power-on", "Watchdog (TWDT)", "Panic", etc.). El puntero apunta a una
  * cadena estática y no debe liberarse. */

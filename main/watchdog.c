@@ -18,6 +18,7 @@ static const char *KEY_FORCED = "forced";
 
 static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
+static volatile bool s_suspended = false;
 
 /* Configuración del monitor LVGL */
 #define WD_MONITOR_PERIOD_MS   3000   /* cadencia de chequeo */
@@ -161,7 +162,7 @@ static void wd_monitor_task(void *arg)
         if (lvgl_port_lock(WD_LVGL_LOCK_TIMEOUT)) {
             lvgl_port_unlock();
             consecutive_fail = 0;
-        } else if (!in_grace) {
+        } else if (!in_grace && !s_suspended) {
             consecutive_fail++;
             ESP_LOGW(TAG, "LVGL lock timeout (%d/%d)",
                      consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
@@ -228,6 +229,11 @@ esp_err_t watchdog_init(void)
     BaseType_t ok = xTaskCreate(wd_monitor_task, "wd_monitor",
                                 4096, NULL, 2, NULL);
     return (ok == pdPASS) ? ESP_OK : ESP_FAIL;
+}
+
+void watchdog_suspend(bool suspend)
+{
+    s_suspended = suspend;
 }
 
 uint32_t watchdog_get_reset_count(void)
