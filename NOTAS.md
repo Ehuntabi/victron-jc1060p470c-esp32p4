@@ -1,5 +1,8 @@
-## v1.4.18
+## v1.4.19
 
-Retoque de UI en el botón "Abrir carpeta" de la galería SD: un poco más de
-separación vertical entre la fecha y el texto "Abrir carpeta" (añadido en
-v1.4.16), para que se lean más despegados.
+Nueva función en la galería de la tarjeta SD: **borrar carpetas de
+vigilancia** directamente desde la pantalla.
+
+Al elegir sesión/día, aparece un botón rojo "Borrar carpeta" bien separado
+de "Abrir carpeta" (para no confundirlos). Pide confirmación antes de
+borrar nada, y el borrado ocurre en segundo plano sin bloquear la pantalla.
