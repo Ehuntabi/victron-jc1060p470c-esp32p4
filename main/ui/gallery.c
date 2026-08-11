@@ -58,6 +58,7 @@ static lv_obj_t   *s_lbl        = NULL;   /* nombre + contador */
 static lv_obj_t   *s_lbl_hint   = NULL;   /* "Cargando..." / errores / vacio */
 static lv_obj_t   *s_lbl_folder = NULL;   /* texto del boton de carpeta */
 static lv_obj_t   *s_btn_open   = NULL;   /* boton visible "Abrir": nivel de sesion/dia */
+static lv_obj_t   *s_lbl_open   = NULL;   /* texto (fecha + "Abrir carpeta") dentro de s_btn_open */
 static lv_img_dsc_t s_dsc;
 static uint8_t    *s_img_buf    = NULL;   /* RGB565 decodificado (PSRAM) */
 static char        s_files[GAL_MAX_FILES][GAL_NAME_LEN];
@@ -89,6 +90,15 @@ static void gallery_current_dir(char *out, size_t outsz)
     const gal_folder_t *f = &FOLDERS[s_folder];
     if (f->has_subdirs && s_vig_subdir[0]) snprintf(out, outsz, "%s/%s", f->dir, s_vig_subdir);
     else                                   snprintf(out, outsz, "%s", f->dir);
+}
+
+/* Nombre de subcarpeta ("AAAAMMDD_HHMMSS" de sesion, o "AAAAMMDD" del dia
+ * migrado) -> "AAAA-MM-DD" para mostrar. La hora se omite: con ella el texto
+ * no cabe en el ancho del boton "Abrir carpeta" (ver s_btn_open). */
+static void gal_format_subdir_date(const char *name, char *out, size_t outsz)
+{
+    if (strlen(name) >= 8) snprintf(out, outsz, "%.4s-%.2s-%.2s", name, name + 4, name + 6);
+    else                    snprintf(out, outsz, "%s", name);
 }
 
 static void gallery_scan(void)
@@ -305,15 +315,23 @@ static void gallery_request_load(void)
     if (s_count == 0) return;
 
     if (gallery_listing_subdirs()) {
-        /* Nivel de eleccion de sesion/dia: no hay imagen que decodificar,
-         * solo el nombre de la subcarpeta y el boton "Abrir" bien visible. */
+        /* Nivel de eleccion de sesion/dia: no hay imagen que decodificar. La
+         * fecha va integrada en el boton "Abrir carpeta" (mismo sitio que se
+         * pulsa), en vez de suelta arriba de la pantalla. */
         lv_img_set_src(s_img, NULL);
         if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
-        lv_label_set_text_fmt(s_lbl, "%s   (%d/%d)", s_files[s_idx], s_idx + 1, s_count);
+        lv_obj_add_flag(s_lbl, LV_OBJ_FLAG_HIDDEN);
+        if (s_lbl_open) {
+            char date[16];
+            gal_format_subdir_date(s_files[s_idx], date, sizeof(date));
+            lv_label_set_text_fmt(s_lbl_open, "%s   (%d/%d)\n" LV_SYMBOL_EYE_OPEN " Abrir carpeta",
+                                   date, s_idx + 1, s_count);
+        }
         lv_obj_add_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
         if (s_btn_open) lv_obj_clear_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
         return;
     }
+    lv_obj_clear_flag(s_lbl, LV_OBJ_FLAG_HIDDEN);
     if (s_btn_open) lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
 
     if (s_loading) { s_pending = true; return; }
@@ -395,7 +413,7 @@ static void gallery_close_cb(lv_event_t *e)
     if (s_screen) {
         lv_obj_del(s_screen);   /* arrastra s_img/s_lbl/... */
         s_screen = NULL;
-        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL; s_btn_open = NULL;
+        s_img = NULL; s_lbl = NULL; s_lbl_hint = NULL; s_lbl_folder = NULL; s_btn_open = NULL; s_lbl_open = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
 }
@@ -468,13 +486,14 @@ void ui_gallery_open(void)
      * s_lbl. Oculto salvo en el nivel de eleccion de sesion/dia
      * (gallery_request_load lo muestra/oculta). */
     s_btn_open = lv_btn_create(scr);
-    lv_obj_set_size(s_btn_open, 260, 80);
+    lv_obj_set_size(s_btn_open, 300, 100);
     lv_obj_center(s_btn_open);
     lv_obj_set_style_bg_color(s_btn_open, lv_color_hex(0x2E7D32), 0);
-    lv_obj_t *lbl_open = lv_label_create(s_btn_open);
-    lv_obj_set_style_text_font(lbl_open, &lv_font_montserrat_24_es, 0);
-    lv_label_set_text(lbl_open, LV_SYMBOL_EYE_OPEN " Abrir carpeta");
-    lv_obj_center(lbl_open);
+    s_lbl_open = lv_label_create(s_btn_open);
+    lv_obj_set_style_text_font(s_lbl_open, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_align(s_lbl_open, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(s_lbl_open, LV_SYMBOL_EYE_OPEN " Abrir carpeta");
+    lv_obj_center(s_lbl_open);
     lv_obj_add_event_cb(s_btn_open, gallery_img_clicked_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(s_btn_open, LV_OBJ_FLAG_HIDDEN);
 
