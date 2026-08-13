@@ -708,9 +708,8 @@ static void mount_spiffs(void) {
         while ((entry = readdir(dir)) != NULL) {
             ESP_LOGI(TAG, "  %s", entry->d_name);
             if (s_spiffs_file_count < SPIFFS_ALLOWLIST_MAX) {
-                strncpy(s_spiffs_files[s_spiffs_file_count], entry->d_name,
-                        SPIFFS_ALLOWLIST_NAME_MAX - 1);
-                s_spiffs_files[s_spiffs_file_count][SPIFFS_ALLOWLIST_NAME_MAX - 1] = '\0';
+                snprintf(s_spiffs_files[s_spiffs_file_count], SPIFFS_ALLOWLIST_NAME_MAX,
+                         "%s", entry->d_name);
                 s_spiffs_file_count++;
             } else {
                 ESP_LOGW(TAG, "allow-list llena (%d), %s ira siempre por flash",
