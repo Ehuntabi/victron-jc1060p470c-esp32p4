@@ -607,6 +607,12 @@ static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (l
  * antes de su I/O -> escriben solo cuando el GDMA esta parado. */
 static SemaphoreHandle_t s_sd_bus = NULL;
 
+/* Handle de la tarea de streaming, para que operaciones externas que se sabe
+ * que bloquean mucho rato (p.ej. el borrado/escritura de flash de una OTA)
+ * puedan desuscribirla del Task Watchdog de ESP-IDF mientras dura, igual que
+ * watchdog_suspend() ya hace con el watchdog SW propio del proyecto. */
+static TaskHandle_t s_cam_stream_task = NULL;
+
 /* Para escritores de SD externos: tomar/soltar el bus alrededor de su I/O a SD.
  * lock devuelve false si no lo consigue en timeout_ms (el que llama debe omitir la
  * escritura y reintentar luego). Si la camara no ha arrancado (mutex NULL) no hay
@@ -619,6 +625,11 @@ bool camera_sd_bus_lock(uint32_t timeout_ms)
 void camera_sd_bus_unlock(void)
 {
     if (s_sd_bus) xSemaphoreGive(s_sd_bus);
+}
+
+TaskHandle_t camera_stream_task_handle(void)
+{
+    return s_cam_stream_task;
 }
 
 /* ── Drenador anillo PSRAM -> SD ("sin prisas") ──────────────────────────────
@@ -1122,7 +1133,7 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
 
     /* Tarea de streaming continuo: mide luminosidad (auto-brillo) y servira para
      * la vigilancia por movimiento. */
-    xTaskCreate(camera_stream_task, "cam_stream", 6144, NULL, 4, NULL);
+    xTaskCreate(camera_stream_task, "cam_stream", 6144, NULL, 4, &s_cam_stream_task);
 
     /* Drenador del anillo de vigilancia -> SD (baja prioridad, "sin prisas").
      * Idle si no hay capturas pendientes; con SD no montada reintenta. */

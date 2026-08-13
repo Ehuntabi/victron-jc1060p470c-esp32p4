@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "driver/i2c_master.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +32,13 @@ bool camera_get_luma(uint8_t *out_luma);
  * luego). Si la camara no esta arrancada (mutex no creado) permite siempre. */
 bool camera_sd_bus_lock(uint32_t timeout_ms);
 void camera_sd_bus_unlock(void);
+
+/* Handle de la tarea de streaming (NULL si la camara no arranco). Para que
+ * operaciones que se sabe que bloquean mucho rato (p.ej. el borrado/escritura
+ * de flash de una OTA) puedan desuscribirla temporalmente del Task Watchdog
+ * de ESP-IDF con esp_task_wdt_delete()/esp_task_wdt_add(), evitando un reset
+ * espureo mientras dura. */
+TaskHandle_t camera_stream_task_handle(void);
 
 /* Codifica el ultimo frame a JPEG por HW (recorte 960x544). THREAD-SAFE (mutex del
  * encoder). Devuelve una COPIA nueva en PSRAM: el que llama hace free(*out). false

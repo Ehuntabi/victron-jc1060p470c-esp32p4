@@ -21,13 +21,35 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_task_wdt.h"
 #include "watchdog.h"
+#include "camera.h"
 
 static const char *TAG = "ota";
 
 /* Trozo de lectura. 4 KB va sobrado y no come RAM: el cuello de botella es el
  * Wi-Fi, no la flash. */
 #define OTA_CHUNK 4096
+
+/* Ademas del watchdog SW propio del proyecto, desuscribe la tarea de camara
+ * del Task Watchdog de ESP-IDF mientras dura la OTA (borrado en esp_ota_begin
+ * + bucle de escritura): son operaciones de flash largas que pueden monopolizar
+ * el nucleo lo suficiente para que cam_stream no llegue a latir en el timeout
+ * del TWDT. Reproducido en la placa 2026-08-13: "Reset reason: Watchdog (TASK)",
+ * "task_wdt ... cam_stream". watchdog_suspend() NO cubre esto: es un mecanismo
+ * de ESP-IDF totalmente aparte del watchdog.c del proyecto. Sin camara
+ * arrancada, camera_stream_task_handle() da NULL y esto no hace nada. */
+static void ota_wdt_suspend(bool suspend)
+{
+    watchdog_suspend(suspend);
+    TaskHandle_t cam = camera_stream_task_handle();
+    if (!cam) return;
+    esp_err_t err = suspend ? esp_task_wdt_delete(cam) : esp_task_wdt_add(cam);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "TWDT camara: no se pudo %s (%s)",
+                 suspend ? "desuscribir" : "resuscribir", esp_err_to_name(err));
+    }
+}
 
 /* Reinicio diferido: hay que contestar al navegador ANTES de reiniciar, si no el
  * movil se queda esperando y parece que ha fallado. */
@@ -80,12 +102,12 @@ esp_err_t ota_update_receive(httpd_req_t *req)
      * esto el watchdog de UI congelada (watchdog.c) puede saltar y reiniciar
      * la placa a medias, antes de recibir un solo byte. Se reanuda en TODAS
      * las salidas de aqui en adelante, exito o fallo. */
-    watchdog_suspend(true);
+    ota_wdt_suspend(true);
 
     esp_ota_handle_t ota = 0;
     esp_err_t err = esp_ota_begin(destino, req->content_len, &ota);
     if (err != ESP_OK) {
-        watchdog_suspend(false);
+        ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_begin: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "No se pudo preparar la actualizacion.");
@@ -95,7 +117,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     char *buf = malloc(OTA_CHUNK);
     if (!buf) {
         esp_ota_abort(ota);
-        watchdog_suspend(false);
+        ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "Sin memoria para la actualizacion.");
         return ESP_OK;
@@ -146,7 +168,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
 
     if (fallo) {
         esp_ota_abort(ota);
-        watchdog_suspend(false);
+        ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req,
             "La subida se ha cortado. NO se ha tocado el firmware actual: "
@@ -157,7 +179,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* esp_ota_end valida la imagen (cabecera y firma del binario). */
     err = esp_ota_end(ota);
     if (err != ESP_OK) {
-        watchdog_suspend(false);
+        ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_end: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req,
@@ -167,7 +189,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     }
 
     err = esp_ota_set_boot_partition(destino);
-    watchdog_suspend(false);
+    ota_wdt_suspend(false);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_ota_set_boot_partition: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
