@@ -659,7 +659,30 @@ esp_err_t wifi_ap_init(void)
     return ESP_OK;
 }
 
-// Mount SPIFFS partition and list contents
+/* Allow-list en RAM de los ficheros reales de SPIFFS, rellenada una vez en
+ * mount_spiffs() desde el mismo listado que ya se hacia para depurar.
+ * serve_from_spiffs() la consulta ANTES de tocar flash: SPIFFS es un
+ * namespace plano sin indice, y un miss (ruta que no existe, p.ej. las que
+ * mandan los probes de captive-portal del movil como /canonical.html) obliga
+ * a escanear TODA la particion para poder decir "no esta". Cada operacion de
+ * flash congela el otro nucleo (spi_flash_op_block_func); bajo carga
+ * concurrente de camara/BLE eso ya disparo el Interrupt WDT una vez
+ * (2026-08-13, ver memoria project_ota_reset_a_medias_resuelto, causa #3).
+ * d_name de SPIFFS no lleva '/' inicial (raiz), asi que se compara contra
+ * uri+1. Tamano de nombre: CONFIG_SPIFFS_OBJ_NAME_LEN (32) en sdkconfig. */
+#define SPIFFS_ALLOWLIST_NAME_MAX 32
+#define SPIFFS_ALLOWLIST_MAX      48
+static char s_spiffs_files[SPIFFS_ALLOWLIST_MAX][SPIFFS_ALLOWLIST_NAME_MAX];
+static int  s_spiffs_file_count = 0;
+
+static bool spiffs_allowlist_has(const char *name) {
+    for (int i = 0; i < s_spiffs_file_count; i++) {
+        if (strcmp(s_spiffs_files[i], name) == 0) return true;
+    }
+    return false;
+}
+
+// Mount SPIFFS partition, list contents and cache the list en RAM
 static void mount_spiffs(void) {
     ESP_LOGI(TAG, "Mounting SPIFFS...");
     esp_vfs_spiffs_conf_t conf = {
@@ -677,13 +700,22 @@ static void mount_spiffs(void) {
     esp_spiffs_info(conf.partition_label, &total, &used);
     ESP_LOGI(TAG, "SPIFFS mounted. Total: %d, Used: %d", total, used);
 
-    // Debug: list files
+    // Lista los ficheros y los cachea en s_spiffs_files para el allow-list
     DIR *dir = opendir("/spiffs");
     if (dir) {
         struct dirent *entry;
         ESP_LOGI(TAG, "SPIFFS contents:");
         while ((entry = readdir(dir)) != NULL) {
             ESP_LOGI(TAG, "  %s", entry->d_name);
+            if (s_spiffs_file_count < SPIFFS_ALLOWLIST_MAX) {
+                strncpy(s_spiffs_files[s_spiffs_file_count], entry->d_name,
+                        SPIFFS_ALLOWLIST_NAME_MAX - 1);
+                s_spiffs_files[s_spiffs_file_count][SPIFFS_ALLOWLIST_NAME_MAX - 1] = '\0';
+                s_spiffs_file_count++;
+            } else {
+                ESP_LOGW(TAG, "allow-list llena (%d), %s ira siempre por flash",
+                         SPIFFS_ALLOWLIST_MAX, entry->d_name);
+            }
         }
         closedir(dir);
     } else {
@@ -727,6 +759,14 @@ static esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path");
             return ESP_FAIL;
         }
+    }
+
+    /* Rechazar sin tocar flash lo que no esta en la allow-list de mount_spiffs()
+     * (ver comentario ahi). uri+1 porque d_name no lleva '/' inicial. */
+    if (!spiffs_allowlist_has(uri + 1)) {
+        ESP_LOGW(TAG, "404 sin tocar flash: %s", uri);
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
     }
 
     char filepath[256];
