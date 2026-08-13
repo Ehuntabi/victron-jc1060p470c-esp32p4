@@ -131,6 +131,16 @@ esp_err_t ota_update_receive(httpd_req_t *req)
             break;
         }
         restante -= leido;
+        /* Ceder la CPU tras cada chunk (~10 ms/700 chunks ~= 7 s extra en total).
+         * Sin esto, con el movil en la misma LAN los datos llegan tan seguidos
+         * que httpd_req_recv casi nunca bloquea y el nucleo que atiende esta
+         * tarea queda monopolizado por la escritura/borrado de flash: el Task
+         * Watchdog de ESP-IDF (distinto del watchdog.c del proyecto, y NO
+         * cubierto por watchdog_suspend) puede pillar sin latido incluso a la
+         * tarea IDLE de ese nucleo y reiniciar la placa a medias. Reproducido
+         * 2026-08-13: "task_wdt ... cam_stream / IDLE0" con Reset reason
+         * "Watchdog (TASK)". */
+        vTaskDelay(1);
     }
     free(buf);
 
