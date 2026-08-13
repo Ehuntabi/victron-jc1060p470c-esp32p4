@@ -52,8 +52,10 @@ static void guardar_hoy_nvs(void)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_blob(h, "hoy", &s_hoy, sizeof(s_hoy));
-    nvs_commit(h);
+    esp_err_t err = nvs_set_blob(h, "hoy", &s_hoy, sizeof(s_hoy));
+    if (err != ESP_OK) ESP_LOGW(TAG, "solar diario (set) no persistio: %s", esp_err_to_name(err));
+    err = nvs_commit(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "solar diario (commit) no persistio: %s", esp_err_to_name(err));
     nvs_close(h);
 }
 

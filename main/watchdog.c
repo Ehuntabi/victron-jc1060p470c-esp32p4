@@ -65,7 +65,8 @@ static void wd_increment_counter_nvs(void)
     nvs_get_u32(h, KEY_COUNT, &v);
     v++;
     nvs_set_u32(h, KEY_COUNT, v);
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "contador de resets no persistio: %s", esp_err_to_name(err));
     nvs_close(h);
     s_reset_count = v;
 }
@@ -87,7 +88,8 @@ static void wd_set_forced_reason_nvs(uint8_t code)
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_u8(h, KEY_FORCED, code);
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "motivo de reset forzado no persistio: %s", esp_err_to_name(err));
     nvs_close(h);
 }
 

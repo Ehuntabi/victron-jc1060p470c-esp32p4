@@ -46,7 +46,8 @@ static void ota_reboot_en(uint32_t ms)
     };
     esp_timer_handle_t t = NULL;
     if (esp_timer_create(&args, &t) == ESP_OK) {
-        esp_timer_start_once(t, (uint64_t)ms * 1000);
+        esp_err_t err = esp_timer_start_once(t, (uint64_t)ms * 1000);
+        if (err != ESP_OK) ESP_LOGW(TAG, "timer de reinicio OTA no arranco: %s", esp_err_to_name(err));
     }
 }
 

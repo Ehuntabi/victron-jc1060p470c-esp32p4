@@ -58,7 +58,8 @@ static void write_nvs(const trip_snap_t *snap)
     nvs_set_i32(h, "ah_s", snap->ahs_m);
     nvs_set_i64(h, "sol_t", snap->sol_secs);
     nvs_set_u8(h, "active", snap->active);
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "trip computer no persistio: %s", esp_err_to_name(err));
     nvs_close(h);
 }
 

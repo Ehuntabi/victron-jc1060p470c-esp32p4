@@ -91,7 +91,8 @@ static void rtc_backup_timer_cb(void *arg)
     nvs_handle_t nh;
     if (nvs_open("rtc_backup", NVS_READWRITE, &nh) == ESP_OK) {
         nvs_set_i64(nh, "epoch", (int64_t)now);
-        nvs_commit(nh);
+        esp_err_t err = nvs_commit(nh);
+        if (err != ESP_OK) ESP_LOGW(TAG, "backup de hora no persistio: %s", esp_err_to_name(err));
         nvs_close(nh);
     }
 }
@@ -537,8 +538,9 @@ void app_main(void)
         .dispatch_method = ESP_TIMER_TASK,
         .name            = "heap_log",
     };
-    esp_timer_create(&heap_log_timer_args, &heap_log_timer);
-    esp_timer_start_periodic(heap_log_timer, HEAP_LOG_INTERVAL_US);
+    esp_err_t timer_err = esp_timer_create(&heap_log_timer_args, &heap_log_timer);
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(heap_log_timer, HEAP_LOG_INTERVAL_US);
+    if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer heap_log no arranco: %s", esp_err_to_name(timer_err));
 
     /* Backup horario de la hora del sistema en NVS */
     static esp_timer_handle_t rtc_backup_timer;
@@ -548,8 +550,9 @@ void app_main(void)
         .dispatch_method = ESP_TIMER_TASK,
         .name            = "rtc_backup",
     };
-    esp_timer_create(&rtc_backup_args, &rtc_backup_timer);
-    esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
+    timer_err = esp_timer_create(&rtc_backup_args, &rtc_backup_timer);
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
+    if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer rtc_backup no arranco: %s", esp_err_to_name(timer_err));
 
     /* Modo nocturno: re-evalúa cada 60 s y aplica brillo segun la hora. */
     s_bright_mutex = xSemaphoreCreateMutex();   /* serializa el cb de brillo (R3) */
@@ -560,10 +563,11 @@ void app_main(void)
         .dispatch_method = ESP_TIMER_TASK,
         .name            = "night_mode",
     };
-    esp_timer_create(&night_args, &night_timer);
+    timer_err = esp_timer_create(&night_args, &night_timer);
     /* Cada 4 s: suficiente para que el auto-brillo siga la luz ambiente con
      * fluidez (la luma ya va suavizada) sin trabajo inutil (aplica solo si cambia). */
-    esp_timer_start_periodic(night_timer, 4ULL * 1000000ULL);
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(night_timer, 4ULL * 1000000ULL);
+    if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer night_mode no arranco: %s", esp_err_to_name(timer_err));
     /* Aplicación inmediata para no esperar al arrancar */
     night_mode_timer_cb(s_ui);
 
@@ -591,8 +595,9 @@ void app_main(void)
         .name     = "sol_feed",
     };
     esp_timer_handle_t sol_feed_timer;
-    if (esp_timer_create(&sol_feed, &sol_feed_timer) == ESP_OK)
-        esp_timer_start_periodic(sol_feed_timer, 1000000);  /* 1 s */
+    timer_err = esp_timer_create(&sol_feed, &sol_feed_timer);
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(sol_feed_timer, 1000000);  /* 1 s */
+    if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer sol_feed no arranco: %s", esp_err_to_name(timer_err));
 
     logSection("Setup complete");
 

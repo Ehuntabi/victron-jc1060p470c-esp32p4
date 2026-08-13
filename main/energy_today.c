@@ -46,7 +46,8 @@ static void write_nvs(const energy_snap_t *snap)
     nvs_set_i32(h, NVS_KEY_LD,  (int32_t)snap->ld);
     nvs_set_i32(h, NVS_KEY_YPV, (int32_t)snap->ypv);
     nvs_set_i32(h, NVS_KEY_YLD, (int32_t)snap->yld);
-    nvs_commit(h);
+    esp_err_t err = nvs_commit(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "snapshot de energia no persistio: %s", esp_err_to_name(err));
     nvs_close(h);
 }
 

@@ -304,15 +304,17 @@ static void ap_off_timer_ensure(void)
         .callback = ap_auto_off_cb,
         .name     = "ap_auto_off",
     };
-    esp_timer_create(&args, &s_ap_off_timer);
+    esp_err_t err = esp_timer_create(&args, &s_ap_off_timer);
+    if (err != ESP_OK) ESP_LOGW(TAG, "timer ap_auto_off no se creo: %s", esp_err_to_name(err));
 }
 
 static void ap_off_timer_arm(void)
 {
     if (!s_ap_off_timer) return;
     esp_timer_stop(s_ap_off_timer);   /* idempotente */
-    esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
-    ESP_LOGI(TAG, "AP auto-off armado: %d min sin clientes", AP_AUTO_OFF_MS / 60000);
+    esp_err_t err = esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
+    if (err != ESP_OK) ESP_LOGW(TAG, "AP auto-off no se pudo armar: %s", esp_err_to_name(err));
+    else ESP_LOGI(TAG, "AP auto-off armado: %d min sin clientes", AP_AUTO_OFF_MS / 60000);
 }
 
 /* Rearma el auto-off SIN loggear: se llama en cada peticion autenticada para que
@@ -322,7 +324,8 @@ static void ap_off_timer_kick(void)
 {
     if (!s_ap_off_timer) return;
     esp_timer_stop(s_ap_off_timer);
-    esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
+    esp_err_t err = esp_timer_start_once(s_ap_off_timer, (uint64_t)AP_AUTO_OFF_MS * 1000);
+    if (err != ESP_OK) ESP_LOGW(TAG, "AP auto-off no se pudo rearmar: %s", esp_err_to_name(err));
 }
 
 bool config_server_is_running(void)
@@ -444,9 +447,11 @@ void config_server_ensure_ap_password(void)
     if (regenerar) {
         /* No imprimir la clave: log_capture la persistiria en la SD. */
         ap_pass_random(pass, sizeof(pass));
-        nvs_set_str(h, "password", pass);
-        nvs_commit(h);
-        ESP_LOGW(TAG, "clave del AP regenerada (aleatoria): verla en Ajustes -> Wi-Fi");
+        esp_err_t err = nvs_set_str(h, "password", pass);
+        if (err != ESP_OK) ESP_LOGW(TAG, "clave del AP regenerada pero NO se pudo fijar en NVS: %s", esp_err_to_name(err));
+        err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG, "clave del AP regenerada pero NO persistio: %s", esp_err_to_name(err));
+        else ESP_LOGW(TAG, "clave del AP regenerada (aleatoria): verla en Ajustes -> Wi-Fi");
     }
     nvs_close(h);
 }
@@ -507,7 +512,8 @@ esp_err_t wifi_ap_init(void)
         size_t sl = sizeof(ssid), pl = sizeof(pass);
         if (nvs_get_str(h, "ssid", ssid, &sl) != ESP_OK || sl <= 1) {
             strcpy(ssid, "VictronConfig");
-            nvs_set_str(h, "ssid", ssid);
+            err = nvs_set_str(h, "ssid", ssid);
+            if (err != ESP_OK) ESP_LOGW(TAG, "ssid por defecto no se pudo fijar en NVS: %s", esp_err_to_name(err));
         }
         /* La clave la deja lista config_server_ensure_ap_password(), que corre
          * antes de la UI (ver alli el porque). Aqui solo se lee. */
@@ -516,7 +522,8 @@ esp_err_t wifi_ap_init(void)
             enabled = 1;
             nvs_set_u8(h, "enabled", enabled);
         }
-        nvs_commit(h);
+        err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG, "config wifi (ssid/enabled) no persistio: %s", esp_err_to_name(err));
         nvs_close(h);
     } else {
         ESP_LOGW(TAG, "Failed to open NVS, using defaults");
@@ -787,9 +794,11 @@ static void http_auth_init(void)
                      mac[3], mac[4], mac[5]);
             if (strcmp(pass, legacy) == 0) need_default_pass = true;
         }
+        esp_err_t err;
         if (need_default_user) {
             strcpy(user, "victron");
-            nvs_set_str(h, "http_user", user);
+            err = nvs_set_str(h, "http_user", user);
+            if (err != ESP_OK) ESP_LOGW(TAG, "http_user por defecto no se pudo fijar en NVS: %s", esp_err_to_name(err));
         }
         if (need_default_pass) {
             /* Pass ALEATORIA (no derivable de la MAC). Se muestra en
@@ -797,9 +806,11 @@ static void http_auth_init(void)
             static const char cs[] = "abcdefghijkmnpqrstuvwxyz23456789";
             for (int i = 0; i < 8; i++) pass[i] = cs[esp_random() % (sizeof(cs) - 1)];
             pass[8] = '\0';
-            nvs_set_str(h, "http_pass", pass);
+            err = nvs_set_str(h, "http_pass", pass);
+            if (err != ESP_OK) ESP_LOGW(TAG, "http_pass por defecto no se pudo fijar en NVS: %s", esp_err_to_name(err));
         }
-        nvs_commit(h);
+        err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG, "credenciales http_auth no persistieron: %s", esp_err_to_name(err));
         nvs_close(h);
         if (need_default_user || need_default_pass) {
             /* No imprimir la pass en claro: log_capture la persistiria en la SD.
@@ -1634,7 +1645,8 @@ static esp_err_t handle_settime(httpd_req_t *req)
         nvs_handle_t nh;
         if (nvs_open("rtc_backup", NVS_READWRITE, &nh) == ESP_OK) {
             nvs_set_i64(nh, "epoch", (int64_t)epoch);
-            nvs_commit(nh);
+            esp_err_t err = nvs_commit(nh);
+            if (err != ESP_OK) ESP_LOGW(TAG, "backup de hora (movil) no persistio: %s", esp_err_to_name(err));
             nvs_close(nh);
         }
         /* Refrescar el label del reloj inmediatamente */

@@ -77,7 +77,8 @@ static void ap_switch_cb(lv_event_t *e)
     nvs_handle_t h;
     if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_u8(h, "enabled", checked ? 1 : 0);
-        nvs_commit(h);
+        esp_err_t err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "wifi enabled (settings) no persistio: %s", esp_err_to_name(err));
         nvs_close(h);
     }
 
@@ -374,11 +375,13 @@ void wifi_event_cb(lv_event_t *e)
     esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
     if (err == ESP_OK) {
         if (ta == ui->wifi.ssid) {
-            nvs_set_str(h, "ssid", txt);
+            err = nvs_set_str(h, "ssid", txt);
         } else if (ta == ui->wifi.password) {
-            nvs_set_str(h, "password", txt);
+            err = nvs_set_str(h, "password", txt);
         }
-        nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "Wi-Fi ssid/password (set) no persistio: %s", esp_err_to_name(err));
+        err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "Wi-Fi config (commit) no persistio: %s", esp_err_to_name(err));
         nvs_close(h);
         ESP_LOGI(TAG_SETTINGS, "Wi-Fi config saved");
     } else {
@@ -414,7 +417,8 @@ static void portal_page_cb(lv_event_t *e)
     nvs_handle_t h;
     if (nvs_open("wifi", NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_u8(h, "portal_page", (uint8_t)sel);
-        nvs_commit(h);
+        esp_err_t err = nvs_commit(h);
+        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "portal_page no persistio: %s", esp_err_to_name(err));
         nvs_close(h);
     }
     const char *name = sel == 0 ? "Keys" : (sel == 1 ? "Logs" : "Dashboard");
