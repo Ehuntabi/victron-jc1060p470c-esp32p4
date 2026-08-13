@@ -5,7 +5,9 @@
 #include <stdint.h>
 #include <lvgl.h>
 #include "victron_ble.h"
+#include "audio_es8311.h"
 #include "ui/ui_state.h"
+#include "ui/device_tracker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,23 +69,22 @@ bool ui_overview_alarm_active(void);
  * para que la alarma sea visible. Llamado desde la deteccion de alarmas. */
 void ui_alarm_interrupt_screensaver(void);
 
-/**
- * Mark a device as offline in the Victron Keys settings page.
- * @param mac_address MAC address of the device to mark as offline
- */
-void ui_mark_device_offline(const char *mac_address);
+/* ui_mark_device_offline / ui_refresh_victron_device_list: ver
+ * ui/device_tracker.h (incluido arriba). */
 
-/**
- * Refresh the Victron device configuration list in the settings page.
- * Call this after devices are added, removed, or configuration changes.
- */
-void ui_refresh_victron_device_list(void);
+/* Uso interno del modulo UI (ui.c y ui/capture_carousel.c): cambia la vista
+ * activa segun el modo de seleccion manual o el tipo de dispositivo BLE
+ * recibido. No-static para que el carrusel de capturas pueda forzar la
+ * navegacion pantalla a pantalla. */
+void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
 
-#ifdef __cplusplus
-}
-#endif
+/* Encola un jingle para que suene en la task de audio (ui_beep_task), NUNCA
+ * en el sitio del llamante (que puede tener el lock LVGL cogido y/o correr
+ * en la task NimBLE). priority=true (alarmas) reemplaza un beep pendiente;
+ * priority=false (clicks) se descarta si la cola esta llena. No-static para
+ * que ui/ble_ingest.c pueda disparar las alarmas de SoC. */
+void ui_enqueue_jingle(audio_jingle_t j, bool priority);
 
-#endif /* UI_H */
 ui_state_t *ui_get_state(void);
 void ui_close_chart_screen(void);
 void ui_close_battery_history_screen(void);
@@ -100,3 +101,9 @@ int ui_tour_screen_count(void);
  * dispara el switch de Settings->Display; el switch se apaga solo al acabar. */
 void ui_start_capture_carousel(void);
 bool ui_capture_carousel_running(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* UI_H */

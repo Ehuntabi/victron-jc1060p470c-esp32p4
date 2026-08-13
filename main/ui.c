@@ -15,11 +15,12 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "victron_ble.h"
-#include "battery_history.h"
-#include "alerts.h"
 #include "victron_products.h"
 #include "ui/frigo_panel.h"
 #include "ui/gallery.h"
+#include "ui/device_tracker.h"
+#include "ui/capture_carousel.h"
+#include "ui/ble_ingest.h"
 #include "ne185/ne185.h"
 #include "nvs_flash.h"
 #include "config_storage.h"
@@ -109,7 +110,7 @@ static void ui_beep_task(void *arg)
  * llamante (que puede tener el lock LVGL cogido y/o correr en la task NimBLE).
  * priority=true (alarmas) usa xQueueOverwrite: reemplaza un beep de click
  * pendiente para no perderse. priority=false (clicks) se descarta si llena. */
-static void ui_enqueue_jingle(audio_jingle_t j, bool priority)
+void ui_enqueue_jingle(audio_jingle_t j, bool priority)
 {
     if (!s_beep_queue) return;
     uint8_t v = (uint8_t)j;
@@ -191,11 +192,7 @@ static void volume_icon_timer_cb(lv_timer_t *t)
         }
     }
 }
-static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
 static const char *device_type_name(victron_record_type_t type);
-static void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size);
-static void ui_update_device_activity(ui_state_t *ui, const char *mac_address);
-static void ui_check_device_timeouts(lv_timer_t *timer);
 static void clock_timer_cb(lv_timer_t *timer);
 static void idle_to_live_timer_cb(lv_timer_t *t);
 static void nav_btn_event_cb(lv_event_t *e);
@@ -214,11 +211,6 @@ static victron_data_t s_last_solar;   static bool s_has_solar   = false;
 static victron_data_t s_last_battery; static bool s_has_battery = false;
 static victron_data_t s_last_dcdc;    static bool s_has_dcdc    = false;
 
-/* Altura fija (mA) del pulso on/off del Orion Tr en el log de bateria: el Orion
- * Tr (0x04) NO reporta corriente, solo estado, asi que dibujamos esta altura
- * mientras carga y 0 cuando no. Sirve para ver CUANDO y CUANTO tiempo carga; NO
- * es corriente real (ajustable). */
-#define ORION_TR_ON_MILLIAMPS  10000   /* 10 A */
 #define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
 static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
@@ -280,8 +272,8 @@ void ui_init(void) {
         ui->last_activity_time[i] = 0;
     }
     
-    // Create timer to check for device timeouts (check every 10 seconds)
-    ui->device_timeout_timer = lv_timer_create(ui_check_device_timeouts, 10000, ui);
+    // Timer que marca "Offline" a los dispositivos sin actividad reciente
+    device_tracker_init(ui);
 
     /* Initialize view selection - load saved mode or use Overview por defecto */
     uint8_t saved_mode = (uint8_t)UI_VIEW_MODE_OVERVIEW;
@@ -633,85 +625,8 @@ void ui_on_panel_data(const victron_data_t *d) {
         default: break;
     }
 
-    /* Battery history: alimenta el modulo con la corriente del dispositivo */
-    switch (d->type) {
-        case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
-            battery_history_update_latest(BH_SRC_BATTERY_MONITOR,
-                d->record.battery.battery_current_milli,
-                d->record.battery.battery_voltage_centi);
-            /* Deteccion cruce de SoC */
-            uint16_t soc_dp = d->record.battery.soc_deci_percent;
-            if (soc_dp != 0xFFFF) {
-                int soc_pct = soc_dp / 10;
-                int crit_th = alerts_get_soc_critical();
-                int warn_th = alerts_get_soc_warning();
-                static int s_last_soc = -1;
-                static bool s_crit_active = false;
-                static bool s_warn_active = false;
-                if (s_last_soc >= 0) {
-                    /* Cruce a la baja del umbral critico */
-                    if (s_last_soc >= crit_th && soc_pct < crit_th && !s_crit_active) {
-                        s_crit_active = true;
-                        /* Encolar (no sonar aqui): esto corre en la task NimBLE
-                         * con el lock LVGL cogido; sonar sincrono lo congelaria
-                         * ~0.3-1s. La task de audio lo toca fuera del lock. */
-                        ui_enqueue_jingle(AUDIO_JINGLE_CRITICAL, true);
-                    }
-                    /* Recuperacion */
-                    if (soc_pct >= crit_th + 2) s_crit_active = false;
-                    /* Cruce a la baja del warning (solo si no ya en critico) */
-                    if (s_last_soc >= warn_th && soc_pct < warn_th && soc_pct >= crit_th && !s_warn_active) {
-                        s_warn_active = true;
-                        ui_enqueue_jingle(AUDIO_JINGLE_WARNING, true);
-                    }
-                    if (soc_pct >= warn_th + 2) s_warn_active = false;
-                }
-                s_last_soc = soc_pct;
-            }
-            break;
-        }
-        case VICTRON_BLE_RECORD_SOLAR_CHARGER:
-            /* Con la tension se puede dibujar tambien la potencia que entra a
-             * la bateria, y compararla con la que da el panel. */
-            battery_history_update_latest(BH_SRC_SOLAR_CHARGER,
-                (int32_t)d->record.solar.battery_current_deci * 100,
-                (int32_t)d->record.solar.battery_voltage_centi);
-            /* Potencia del PANEL (produccion real): va aparte de la corriente
-             * que entra a la bateria, porque parte puede ir directa al consumo. */
-            battery_history_update_pv((int32_t)d->record.solar.pv_power_w);
-            solar_daily_on_pv((int32_t)d->record.solar.pv_power_w);
-            break;
-        case VICTRON_BLE_RECORD_ORION_XS:
-            /* Corriente Y tension de salida (lado bateria). Con la tension se
-             * puede saber cuantos kWh ha metido el DC-DC, no solo cuando estuvo
-             * cargando. */
-            battery_history_update_latest(BH_SRC_ORION_XS,
-                (int32_t)d->record.orion.output_current_deci * 100,
-                (int32_t)d->record.orion.output_voltage_centi);
-            break;
-        case VICTRON_BLE_RECORD_AC_CHARGER:
-            /* Idem para el cargador de 230 V: con su tension se puede repartir
-             * cuanto ha cargado cada fuente. */
-            battery_history_update_latest(BH_SRC_AC_CHARGER,
-                (int32_t)d->record.ac_charger.battery_current_1_deci * 100,
-                (int32_t)d->record.ac_charger.battery_voltage_1_centi);
-            break;
-        case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
-            /* Orion Tr (0x04): no da corriente, solo estado. Pulso on/off en la
-             * serie OrionTR: altura fija mientras carga, 0 cuando no -> se ve
-             * cuando y cuanto tiempo carga. El "total Ah" de esta serie sera
-             * altura*tiempo, NO amperios-hora reales. */
-            uint8_t st = d->record.dcdc.device_state;
-            bool charging = (st == VIC_STATE_BULK || st == VIC_STATE_ABSORPTION ||
-                             st == VIC_STATE_FLOAT || st == VIC_STATE_STORAGE ||
-                             st == VIC_STATE_EQUALIZE || st == VIC_STATE_POWER_SUPPLY);
-            battery_history_update_latest(BH_SRC_ORION_XS,
-                charging ? ORION_TR_ON_MILLIAMPS : 0, 0);
-            break;
-        }
-        default:
-            break;
-    }
+    /* Battery history + deteccion de cruce de alarma SoC: ver ui/ble_ingest.c. */
+    ble_ingest_feed_history(d);
 
     if (!ui->has_received_data) {
         ui->has_received_data = true;
@@ -1090,7 +1005,7 @@ void ui_set_ble_mac(const uint8_t *mac) {
     lvgl_port_unlock();
 }
 
-static void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
+void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
 {
     if (ui == NULL) {
         return;
@@ -1231,177 +1146,6 @@ static const char *device_type_name(victron_record_type_t type)
     return ui_view_registry_name(type);
 }
 
-static void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size)
-{
-    if (data == NULL || status_out == NULL || status_size == 0) {
-        return;
-    }
-
-    switch (data->type) {
-        case VICTRON_BLE_RECORD_BATTERY_MONITOR: {
-            const victron_record_battery_monitor_t *batt = &data->record.battery;
-            if (batt->soc_deci_percent != 0xFFFF && batt->battery_voltage_centi > 0) {
-                uint16_t soc_pct = batt->soc_deci_percent / 10;
-                uint16_t soc_dec = batt->soc_deci_percent % 10;
-                uint16_t volts = batt->battery_voltage_centi / 100;
-                uint16_t hundredths = batt->battery_voltage_centi % 100;
-                snprintf(status_out, status_size, "SOC: %u.%u%% | Voltage: %u.%02uV", 
-                         soc_pct, soc_dec, volts, hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - Battery Monitor");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
-            const victron_record_solar_charger_t *solar = &data->record.solar;
-            if (solar->pv_power_w > 0 && solar->battery_voltage_centi > 0) {
-                uint16_t volts = solar->battery_voltage_centi / 100;
-                uint16_t hundredths = solar->battery_voltage_centi % 100;
-                snprintf(status_out, status_size, "Power: %uW | Battery: %u.%02uV", 
-                         solar->pv_power_w, volts, hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - Solar Charger");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_LYNX_SMART_BMS: {
-            const victron_record_lynx_smart_bms_t *bms = &data->record.lynx;
-            if (bms->soc_deci_percent > 0 && bms->battery_voltage_centi > 0) {
-                uint16_t soc_pct = bms->soc_deci_percent / 10;
-                uint16_t soc_dec = bms->soc_deci_percent % 10;
-                uint16_t volts = bms->battery_voltage_centi / 100;
-                uint16_t hundredths = bms->battery_voltage_centi % 100;
-                snprintf(status_out, status_size, "SOC: %u.%u%% | Voltage: %u.%02uV", 
-                         soc_pct, soc_dec, volts, hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - Lynx Smart BMS");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_INVERTER: {
-            const victron_record_inverter_t *inv = &data->record.inverter;
-            if (inv->ac_apparent_power_va > 0 && inv->battery_voltage_centi > 0) {
-                uint16_t volts = inv->battery_voltage_centi / 100;
-                uint16_t hundredths = inv->battery_voltage_centi % 100;
-                snprintf(status_out, status_size, "Power: %uVA | Battery: %u.%02uV", 
-                         inv->ac_apparent_power_va, volts, hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - Inverter");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
-            const victron_record_dcdc_converter_t *dcdc = &data->record.dcdc;
-            if (dcdc->input_voltage_centi > 0 && dcdc->output_voltage_centi > 0) {
-                uint16_t in_volts = dcdc->input_voltage_centi / 100;
-                uint16_t in_hundredths = dcdc->input_voltage_centi % 100;
-                uint16_t out_volts = dcdc->output_voltage_centi / 100;
-                uint16_t out_hundredths = dcdc->output_voltage_centi % 100;
-                snprintf(status_out, status_size, "In: %u.%02uV | Out: %u.%02uV", 
-                         in_volts, in_hundredths, out_volts, out_hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - DC/DC Converter");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_ORION_XS: {
-            const victron_record_orion_xs_t *orion = &data->record.orion;
-            if (orion->input_voltage_centi > 0 && orion->output_voltage_centi > 0) {
-                uint16_t in_volts = orion->input_voltage_centi / 100;
-                uint16_t in_hundredths = orion->input_voltage_centi % 100;
-                uint16_t out_volts = orion->output_voltage_centi / 100;
-                uint16_t out_hundredths = orion->output_voltage_centi % 100;
-                snprintf(status_out, status_size, "In: %u.%02uV | Out: %u.%02uV", 
-                         in_volts, in_hundredths, out_volts, out_hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - Orion XS");
-            }
-            break;
-        }
-
-        case VICTRON_BLE_RECORD_VE_BUS: {
-            const victron_record_ve_bus_t *vebus = &data->record.vebus;
-            if (vebus->soc_percent > 0 && vebus->battery_voltage_centi > 0) {
-                uint16_t volts = vebus->battery_voltage_centi / 100;
-                uint16_t hundredths = vebus->battery_voltage_centi % 100;
-                snprintf(status_out, status_size, "SOC: %u%% | Battery: %u.%02uV", 
-                         vebus->soc_percent, volts, hundredths);
-            } else {
-                snprintf(status_out, status_size, "Active - VE.Bus System");
-            }
-            break;
-        }
-
-        default:
-            snprintf(status_out, status_size, "Active - Device Connected");
-            break;
-    }
-}
-
-static void ui_update_device_activity(ui_state_t *ui, const char *mac_address)
-{
-    if (ui == NULL || mac_address == NULL) {
-        return;
-    }
-    
-    // Get current time in milliseconds
-    uint32_t current_time = lv_tick_get();
-    
-    // Find existing entry or empty slot
-    int slot = -1;
-    for (int i = 0; i < UI_MAX_VICTRON_DEVICES; i++) {
-        if (strcmp(ui->last_active_devices[i], mac_address) == 0) {
-            // Found existing entry
-            slot = i;
-            break;
-        }
-        if (slot == -1 && ui->last_active_devices[i][0] == '\0') {
-            // Found empty slot
-            slot = i;
-        }
-    }
-    
-    if (slot >= 0) {
-        // Update activity record
-        strncpy(ui->last_active_devices[slot], mac_address, sizeof(ui->last_active_devices[slot]) - 1);
-        ui->last_active_devices[slot][sizeof(ui->last_active_devices[slot]) - 1] = '\0';
-        ui->last_activity_time[slot] = current_time;
-    }
-}
-
-static void ui_check_device_timeouts(lv_timer_t *timer)
-{
-    ui_state_t *ui = (ui_state_t *)timer->user_data;
-    if (ui == NULL) {
-        return;
-    }
-    
-    uint32_t current_time = lv_tick_get();
-    const uint32_t timeout_ms = 30000; // 30 seconds timeout
-    
-    // Check each tracked device for timeout
-    for (int i = 0; i < UI_MAX_VICTRON_DEVICES; i++) {
-        if (ui->last_active_devices[i][0] != '\0') {
-            uint32_t time_since_last = current_time - ui->last_activity_time[i];
-            
-            if (time_since_last > timeout_ms) {
-                // Device has timed out - mark as offline
-                ui_settings_panel_update_victron_device_status(ui, ui->last_active_devices[i], 
-                                                              "", "", "Offline - No data received");
-                
-                // Clear the tracking entry
-                ui->last_active_devices[i][0] = '\0';
-                ui->last_activity_time[i] = 0;
-            }
-        }
-    }
-}
-
 static void tabview_touch_event_cb(lv_event_t *e) {
     ui_state_t *ui = lv_event_get_user_data(e);
     if (ui == NULL) {
@@ -1445,36 +1189,6 @@ static void tabview_touch_event_cb(lv_event_t *e) {
     }
 }
 
-void ui_mark_device_offline(const char *mac_address)
-{
-    if (mac_address == NULL) {
-        return;
-    }
-    
-    ui_state_t *ui = &g_ui;
-    
-    // Update device status to offline
-    ui_settings_panel_update_victron_device_status(ui, mac_address, "", "", "Offline - Connection lost");
-    
-    // Remove from activity tracking
-    for (int i = 0; i < UI_MAX_VICTRON_DEVICES; i++) {
-        if (strcmp(ui->last_active_devices[i], mac_address) == 0) {
-            ui->last_active_devices[i][0] = '\0';
-            ui->last_activity_time[i] = 0;
-            break;
-        }
-    }
-}
-
-void ui_refresh_victron_device_list(void)
-{
-    ui_state_t *ui = &g_ui;
-    ESP_LOGI("ui", "Refreshing Victron device list in settings panel");
-    if (lvgl_port_lock(200)) {
-        ui_settings_panel_refresh_victron_devices(ui);
-        lvgl_port_unlock();
-    }
-}
 // force font update
 // force tab font
 
@@ -1529,273 +1243,3 @@ void ui_update_wifi_ssid(ui_state_t *ui)
     }
 }
 
-/* ──────────────────────────────────────────────────────────────────────
- * Navegacion de pantallas para captura (carrusel a demanda de Settings y
- * /captura por WiFi). LVGL no es thread-safe: se toma lvgl_port_lock y se
- * suelta durante las esperas para que lleguen datos BLE reales y se dibuje
- * la vista antes de fotografiarla.
- * ────────────────────────────────────────────────────────────────────── */
-#define TOUR_DIR        "/sdcard/screenshots"
-#define TOUR_SETTLE_MS        1500   /* dejar que la vista se actualice/dibuje */
-
-static void tour_set_view(ui_state_t *ui, ui_view_mode_t mode)
-{
-    if (lvgl_port_lock(1000)) {
-        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);  /* Live */
-        ui->view_selection.mode = mode;
-        ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
-        lvgl_port_unlock();
-    }
-}
-
-/* Espera a que la vista se dibuje MANTENIENDO la pantalla despierta. La
- * navegacion programatica del tour NO cuenta como actividad del usuario, asi
- * que sin esto, pasados 60 s, saltarian el auto-return de Ajustes (l.868), el
- * idle-to-live o el salvapantallas (que cambiaria de vista) y arruinarian las
- * capturas. Reseteamos los tres relojes de inactividad en cada paso; si el
- * salvapantallas ya estuviera activo, ui_notify_user_activity lo despierta. */
-static void tour_settle(void)
-{
-    if (lvgl_port_lock(500)) {
-        lv_disp_trig_activity(NULL);   /* auto-return de Ajustes (inactive_time) */
-        ui_notify_user_activity();     /* idle-to-live + screensaver_wake */
-        lvgl_port_unlock();
-    }
-    vTaskDelay(pdMS_TO_TICKS(TOUR_SETTLE_MS));
-}
-
-/* ─── Carrusel de captura a demanda (switch en Settings→Display) ──────────────
- * Recorre SOLO las 8 pantallas de datos (6 device-views + grafico bateria +
- * grafico frigo), captura cada una a BMP en la SD (sobrescribe mismos nombres),
- * y al terminar apaga el switch y muestra el resultado. Reutiliza
- * tour_set_view/tour_settle/screenshot_save_bmp. A diferencia de
- * screenshot_tour_task: sin marcador, sin retardo de 60 s y sin las paginas de
- * Ajustes. Un unico disparo a la vez (s_capture_running). */
-static volatile bool s_capture_running = false;
-
-/* Guarda una pantalla contando aciertos y recordando el PRIMER error (para
- * diagnostico sin serie: distingue "sin PSRAM" de "SD ocupada/error"). */
-static void cap_save(const char *path, int *ok, esp_err_t *first_err)
-{
-    esp_err_t e = screenshot_save_jpeg(path);
-    if (e == ESP_OK) (*ok)++;
-    else if (*first_err == ESP_OK) *first_err = e;
-}
-
-/* Apaga el switch y refleja el resultado (bajo lock LVGL; valida los objetos
- * por si la pagina Display se hubiera reconstruido durante la captura). */
-static void capture_carousel_finish(ui_state_t *ui, int ok, esp_err_t first_err)
-{
-    if (lvgl_port_lock(1000)) {
-        if (ui->capture_switch && lv_obj_is_valid(ui->capture_switch)) {
-            lv_obj_clear_state(ui->capture_switch, LV_STATE_CHECKED);
-        }
-        if (ui->capture_status_lbl && lv_obj_is_valid(ui->capture_status_lbl)) {
-            if (ok >= 8) {
-                lv_label_set_text(ui->capture_status_lbl,
-                                  "8/8 capturas guardadas en la SD");
-            } else {
-                const char *why = (first_err == ESP_ERR_NO_MEM) ? "sin PSRAM"
-                                : (first_err == ESP_FAIL)        ? screenshot_last_error()
-                                :                                  "error";
-                lv_label_set_text_fmt(ui->capture_status_lbl,
-                                      "%d/8 - fallo: %s", ok, why);
-            }
-        }
-        lvgl_port_unlock();
-    }
-}
-
-static void capture_carousel_task(void *arg)
-{
-    ui_state_t *ui = &g_ui;
-    const ui_view_mode_t saved_mode = ui->view_selection.mode;
-    int ok = 0;
-    esp_err_t first_err = ESP_OK;
-    char path[96];
-
-    const int total = ui_tour_screen_count();
-    ESP_LOGI("CAPCAR", "Carrusel de captura: %d pantallas -> %s", total, TOUR_DIR);
-
-    /* UN SOLO bucle sobre ui_tour_goto_screen: es la MISMA lista que usa la
-     * pagina web /capturas, asi que una pantalla nueva en el tour entra aqui
-     * sola. Antes habia una lista propia de 8 que se habia quedado corta: se
-     * dejaba fuera el historico solar, la galeria, los 3 detalles de tarjeta y
-     * TODAS las paginas de ajustes. El numero delante del nombre mantiene el
-     * orden al listarlas. screenshot_save_jpeg ya crea el directorio padre bajo
-     * camera_sd_bus_lock, no hace falta mkdir. 2026-07-26. */
-    for (int i = 0; i < total; ++i) {
-        const char *name = ui_tour_goto_screen(i);   /* ya hace tour_settle() */
-        if (!name) continue;
-        snprintf(path, sizeof(path), TOUR_DIR "/%02d_%s.jpg", i, name);
-        cap_save(path, &ok, &first_err);
-    }
-
-    /* Restaurar: cerrar lo que quede abierto y volver a Live + la vista previa. */
-    if (lvgl_port_lock(1000)) {
-        ui_close_chart_screen();
-        ui_close_battery_history_screen();
-        ui_close_solar_history_screen();
-        ui_gallery_close();
-        ui_close_card_detail();
-        ui->view_selection.mode = saved_mode;
-        lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-        ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
-        lvgl_port_unlock();
-    }
-
-    ESP_LOGI("CAPCAR", "Carrusel terminado: %d/%d capturas (first_err=0x%x)",
-             ok, total, (int)first_err);
-    capture_carousel_finish(ui, ok, first_err);
-    s_capture_running = false;
-    vTaskDelete(NULL);
-}
-
-bool ui_capture_carousel_running(void)
-{
-    return s_capture_running;
-}
-
-void ui_start_capture_carousel(void)
-{
-    if (s_capture_running) {
-        ESP_LOGW("CAPCAR", "Carrusel ya en curso, ignoro");
-        return;
-    }
-    s_capture_running = true;
-    if (xTaskCreate(capture_carousel_task, "cap_carousel", 12288, NULL, 3, NULL) != pdPASS) {
-        s_capture_running = false;
-        ESP_LOGE("CAPCAR", "No pude crear la tarea del carrusel");
-    }
-}
-
-/* --- Navegacion por indice para las capturas por WiFi ---
- * Mapea un indice 0..(N-1) a una pantalla concreta, navega hasta ella (cerrando
- * antes cualquier overlay para partir de un estado limpio) y espera a que se
- * dibuje con tour_settle(). Reutiliza la misma logica que el auto-tour. Se
- * llama desde el handler HTTP /captura?n=<i> (config_server.c), que luego hace
- * screenshot_take_bmp() y devuelve el BMP. Devuelve el nombre corto de la
- * pantalla (para el nombre de fichero) o NULL si el indice esta fuera de rango. */
-static const struct { ui_view_mode_t mode; const char *name; } TOUR_LIVE[] = {
-    { UI_VIEW_MODE_OVERVIEW,        "overview"        },
-    { UI_VIEW_MODE_DEFAULT_BATTERY, "bateria"         },
-    { UI_VIEW_MODE_SOLAR_CHARGER,   "solar"           },
-    { UI_VIEW_MODE_BATTERY_MONITOR, "monitor_bateria" },
-    { UI_VIEW_MODE_INVERTER,        "inversor"        },
-    { UI_VIEW_MODE_DCDC_CONVERTER,  "dcdc"            },
-};
-/* Detalle de tarjeta: solo estas 3 categorias pintan algo (ver el switch de
- * ui_show_card_detail); el resto cae al default y saldria vacio. */
-static const struct { victron_record_type_t cat; const char *name; } TOUR_CARD[] = {
-    { VICTRON_BLE_RECORD_SOLAR_CHARGER,   "detalle_solar"   },
-    { VICTRON_BLE_RECORD_BATTERY_MONITOR, "detalle_bateria" },
-    { VICTRON_BLE_RECORD_DCDC_CONVERTER,  "detalle_dcdc"    },
-};
-/* MISMO ORDEN que las llamadas a settings_menu_add_entry() en settings_panel.c:
- * el indice del tour es el orden de registro en s_page_ctxs, no el visual.
- * Faltaban "Tarjeta SD" y "Autocaravana", y eso no dejaba dos capturas sin
- * nombre: DESPLAZABA todas las de detras, asi que la pagina de Tarjeta SD se
- * guardaba como "sonido", la de Sonido como "victron_keys", etc. Si se anade una
- * entrada al menu, hay que anadirla AQUI en su sitio. 2026-07-26. */
-static const char *TOUR_SET_NAMES[] = {
-    "frigo",         /* Opciones Frigo        */
-    "logs",          /* Historial en graficos */
-    "wifi",          /* Wi-Fi                 */
-    "display",       /* Pantalla              */
-    "tarjeta_sd",    /* Tarjeta SD            */
-    "sonido",        /* Sonido y alertas      */
-    "autocaravana",  /* Autocaravana          */
-    "victron_keys",  /* Victron Keys          */
-    "about",         /* Acerca de             */
-};
-#define TOUR_N_LIVE   ((int)(sizeof(TOUR_LIVE) / sizeof(TOUR_LIVE[0])))
-#define TOUR_N_CARD   ((int)(sizeof(TOUR_CARD) / sizeof(TOUR_CARD[0])))
-#define TOUR_I_BATLOG  (TOUR_N_LIVE)              /* 6  */
-#define TOUR_I_FRIGLOG (TOUR_N_LIVE + 1)          /* 7  */
-#define TOUR_I_SOLLOG  (TOUR_N_LIVE + 2)          /* 8  historico solar */
-#define TOUR_I_GALLERY (TOUR_N_LIVE + 3)          /* 9  galeria */
-#define TOUR_I_CARD0   (TOUR_N_LIVE + 4)          /* 10..12 detalles de tarjeta */
-#define TOUR_I_SETMAIN (TOUR_I_CARD0 + TOUR_N_CARD)  /* 13 */
-#define TOUR_I_SETSUB0 (TOUR_I_SETMAIN + 1)          /* 14 */
-
-int ui_tour_screen_count(void)
-{
-    return TOUR_I_SETSUB0 + ui_settings_panel_page_count();
-}
-
-const char *ui_tour_goto_screen(int idx)
-{
-    ui_state_t *ui = &g_ui;
-    if (idx < 0 || idx >= ui_tour_screen_count()) return NULL;
-
-    /* Partir siempre de estado limpio: cerrar overlays abiertos. */
-    if (lvgl_port_lock(1000)) {
-        ui_close_chart_screen();
-        ui_close_battery_history_screen();
-        ui_close_solar_history_screen();
-        ui_gallery_close();
-        ui_close_card_detail();
-        lvgl_port_unlock();
-    }
-
-    const char *name = "pantalla";
-    if (idx < TOUR_N_LIVE) {
-        tour_set_view(ui, TOUR_LIVE[idx].mode);
-        name = TOUR_LIVE[idx].name;
-    } else if (idx == TOUR_I_BATLOG) {
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-            ui_show_battery_history_screen(ui);
-            lvgl_port_unlock();
-        }
-        name = "log_bateria";
-    } else if (idx == TOUR_I_FRIGLOG) {
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-            ui_show_chart_screen(ui);
-            lvgl_port_unlock();
-        }
-        name = "log_frigo";
-    } else if (idx == TOUR_I_SOLLOG) {
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-            ui_show_solar_history_screen(ui);
-            lvgl_port_unlock();
-        }
-        name = "log_solar";
-    } else if (idx == TOUR_I_GALLERY) {
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-            ui_gallery_open();
-            lvgl_port_unlock();
-        }
-        name = "galeria";
-    } else if (idx >= TOUR_I_CARD0 && idx < TOUR_I_CARD0 + TOUR_N_CARD) {
-        int c = idx - TOUR_I_CARD0;
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
-            ui_show_card_detail(ui, TOUR_CARD[c].cat);
-            lvgl_port_unlock();
-        }
-        name = TOUR_CARD[c].name;
-    } else if (idx == TOUR_I_SETMAIN) {
-        if (lvgl_port_lock(1000)) {
-            ui_settings_panel_go_to_main();
-            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
-            lvgl_port_unlock();
-        }
-        name = "ajustes";
-    } else {
-        int s = idx - TOUR_I_SETSUB0;
-        if (lvgl_port_lock(1000)) {
-            lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_OFF);
-            ui_settings_panel_show_page(s);
-            lvgl_port_unlock();
-        }
-        name = (s < (int)(sizeof(TOUR_SET_NAMES) / sizeof(TOUR_SET_NAMES[0])))
-                   ? TOUR_SET_NAMES[s] : "ajustes";
-    }
-
-    tour_settle();
-    return name;
-}
