@@ -122,7 +122,7 @@ dependencies:
       type: service
     version: 1.2.1
   espressif/esp_lcd_touch_gt911:
-    component_hash: 07f678e4202d79bbad917805dcec4134ff08344177720f32ec4898267ad9e394
+    component_hash: 737bdf29e0823eacf041381e81db2aaf5d378f3b5417df7f415f83319e3e790b
     dependencies:
     - name: espressif/esp_lcd_touch
       registry_url: https://components.espressif.com
@@ -134,7 +134,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.2.0~3
+    version: 1.2.1
   espressif/esp_lvgl_port:
     component_hash: fb6c1fdfe70d4ca39a035d63ca394a35f17ec84ce16ff98ecb13a54155d75da4
     dependencies:
