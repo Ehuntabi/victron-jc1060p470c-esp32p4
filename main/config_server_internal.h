@@ -6,10 +6,15 @@
 
 #include "esp_http_server.h"
 
-/* Definidas en config_server.c. */
+/* Definidas en config_server_auth.c. */
 esp_err_t check_basic_auth(httpd_req_t *req);
 esp_err_t check_basic_auth_strict(httpd_req_t *req);
 extern const char SETTIME_SCRIPT[];
+
+/* Definida en config_server.c (ciclo de vida del AP/portal). La necesita
+ * check_basic_auth[_strict] para mantener vivo el HTTP server mientras haya
+ * peticiones validas. */
+void ap_off_timer_kick(void);
 
 /* Helper macro: pone al inicio de los handlers que exigen auth. Si falla
  * la respuesta 401 ya está enviada — devolvemos ESP_OK para que el http
