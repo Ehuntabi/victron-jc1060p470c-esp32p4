@@ -759,6 +759,53 @@ void ui_refresh_clock(void)
     }
 }
 
+/* ── Overlay de "actualizando firmware" durante la OTA ──────────────────────
+ * Fondo opaco a pantalla completa en lv_layer_top() (por encima de cualquier
+ * tab/modal) con un texto grande centrado. Sin animacion ni redibujado
+ * periodico: al no cambiar nada en pantalla mientras dura, no vuelve a
+ * generar el tearing que se ve en el resto de la UI bajo la misma carga de
+ * flash (ver watchdog.c / project_ota_parpadeo_azul_confirmado). Bloquea el
+ * touch (LV_OBJ_FLAG_CLICKABLE) para que nadie pueda tocar nada mientras la
+ * OTA esta en marcha. */
+static lv_obj_t *s_ota_overlay = NULL;
+static lv_obj_t *s_ota_overlay_lbl = NULL;
+
+void ui_ota_overlay_show(const char *msg)
+{
+    if (!lvgl_port_lock(300)) return;
+    if (!s_ota_overlay) {
+        s_ota_overlay = lv_obj_create(lv_layer_top());
+        lv_obj_set_size(s_ota_overlay, lv_pct(100), lv_pct(100));
+        lv_obj_set_style_bg_color(s_ota_overlay, lv_color_hex(0x06080C), 0);
+        lv_obj_set_style_bg_opa(s_ota_overlay, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(s_ota_overlay, 0, 0);
+        lv_obj_set_style_radius(s_ota_overlay, 0, 0);
+        lv_obj_set_style_pad_all(s_ota_overlay, 0, 0);
+        lv_obj_clear_flag(s_ota_overlay, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(s_ota_overlay, LV_OBJ_FLAG_CLICKABLE);
+
+        s_ota_overlay_lbl = lv_label_create(s_ota_overlay);
+        lv_obj_set_style_text_font(s_ota_overlay_lbl, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(s_ota_overlay_lbl, lv_color_white(), 0);
+        lv_label_set_long_mode(s_ota_overlay_lbl, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(s_ota_overlay_lbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(s_ota_overlay_lbl, lv_pct(80));
+        lv_obj_center(s_ota_overlay_lbl);
+    }
+    lv_label_set_text(s_ota_overlay_lbl, msg);
+    lvgl_port_unlock();
+}
+
+void ui_ota_overlay_hide(void)
+{
+    if (!s_ota_overlay) return;
+    if (!lvgl_port_lock(300)) return;
+    lv_obj_del(s_ota_overlay);
+    s_ota_overlay = NULL;
+    s_ota_overlay_lbl = NULL;
+    lvgl_port_unlock();
+}
+
 /* ── Auto-volver a Live tras 60 s sin actividad del usuario ──
  * Disparado por s_idle_to_live_timer; reset en ui_notify_user_activity
  * (que solo se llama desde LV_EVENT_PRESSED real del usuario).
