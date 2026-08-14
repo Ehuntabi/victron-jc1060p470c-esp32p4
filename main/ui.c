@@ -812,15 +812,29 @@ void ui_ota_overlay_show(const char *msg)
     lvgl_port_stop();
 }
 
+/* Bug real visto en placa (2026-08-14): con un solo intento de lock de
+ * 300 ms, bajo la misma contencion de bus flash/PSRAM que causa el
+ * parpadeo, el lock podia fallar aqui -- y como lvgl_port_resume() ya se
+ * habia llamado ANTES del lock, la funcion se salia sin borrar el overlay,
+ * dejandolo pegado en pantalla (con el touch bloqueado, LV_OBJ_FLAG_
+ * CLICKABLE) para siempre: "Overview no se ve" era en realidad el aviso de
+ * OTA atascado encima. Reintentar varias veces antes de rendirse. */
 void ui_ota_overlay_hide(void)
 {
     if (!s_ota_overlay) return;
     lvgl_port_resume();
-    if (!lvgl_port_lock(300)) return;
-    lv_obj_del(s_ota_overlay);
-    s_ota_overlay = NULL;
-    s_ota_overlay_lbl = NULL;
-    lvgl_port_unlock();
+    const int MAX_INTENTOS = 5;
+    for (int i = 0; i < MAX_INTENTOS; i++) {
+        if (lvgl_port_lock(300)) {
+            lv_obj_del(s_ota_overlay);
+            s_ota_overlay = NULL;
+            s_ota_overlay_lbl = NULL;
+            lvgl_port_unlock();
+            return;
+        }
+        ESP_LOGW(TAG_UI, "ui_ota_overlay_hide: lock ocupado, reintento %d/%d", i + 1, MAX_INTENTOS);
+    }
+    ESP_LOGE(TAG_UI, "ui_ota_overlay_hide: no se pudo quitar el overlay tras %d intentos", MAX_INTENTOS);
 }
 
 /* ── Auto-volver a Live tras 60 s sin actividad del usuario ──
