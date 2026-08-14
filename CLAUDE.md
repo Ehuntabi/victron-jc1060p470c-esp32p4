@@ -57,16 +57,20 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.28*
   - history/: battery_history_screen.c, frigo_history_screen.c, chart_common.c
   - vigilancia/: ausente_mode.c, gallery.c, capture_carousel.c
   - widgets/: ui_card.c, ui_format.c, ui_state.h, lv_font_thermometer.c
-- main/config_server.c: portal HTTP — handlers core (root, keys, static,
-  save, api_state, dashboard, settime, capturas) + arranque/registro de URIs
-  del httpd y del DNS del captive portal
-- main/config_server_ap.c: ciclo de vida del AP Wi-Fi — radio (wifi_ap_init),
-  timers de auto-off del HTTP, cola de trabajos (start/stop/apply); expone
-  cfg_http_stop()/cfg_dns_stop() (definidas en config_server.c) para pararlo
-  sin tocar sus estaticos
-- lo autocontenido vive aparte: charts_svg.c, data_export_tar.c,
-  config_server_vigilancia.c (galeria /snapshot y /vigilancia),
-  config_server_auth.c (Basic Auth + servido de SPIFFS)
+- main/portal/ (2026-08-14, antes plano en main/):
+  - config_server.c: portal HTTP — handlers core (root, keys, static,
+    save, api_state, dashboard, settime, capturas) + arranque/registro de
+    URIs del httpd y del DNS del captive portal
+  - config_server_ap.c: ciclo de vida del AP Wi-Fi — radio (wifi_ap_init),
+    timers de auto-off del HTTP, cola de trabajos (start/stop/apply);
+    expone cfg_http_stop()/cfg_dns_stop() (definidas en config_server.c)
+    para pararlo sin tocar sus estaticos
+  - config_server_vigilancia.c (galeria /snapshot y /vigilancia),
+    config_server_auth.c (Basic Auth + servido de SPIFFS), charts_svg.c,
+    data_export_tar.c, ota_update.c (actualizacion de firmware por Wi-Fi)
+- main/data/ (2026-08-14, antes plano en main/): capa de estado/telemetria
+  compartida por el portal y las pantallas de ui/ — dashboard_state.c
+  (/api/state), energy_today.c, solar_daily.c, trip_computer.c
 - components/audio_es8311/: codec con jingles BOOT_OK/CRITICAL/WARNING/CONFIRM
 - components/alerts/: thresholds NVS (freezer/SoC)
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
