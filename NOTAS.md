@@ -1,3 +1,20 @@
+## v1.5.0
+
+Sin cambios de cara al usuario: auditoría completa pre-release (funcional,
+seguridad, refactor y documentación) más continuación de la reorganización
+interna del código.
+
+- `config_server.c` partido en handlers HTTP + `config_server_ap.c` (ciclo
+  de vida del AP Wi-Fi: radio, timers de auto-off, cola de trabajos):
+  1336 → 748 líneas.
+- `main/ui/` (49 ficheros sueltos) agrupado por tema en subcarpetas:
+  `devices/`, `history/`, `settings/`, `views/`, `vigilancia/`, `widgets/`.
+  Solo movimiento de ficheros, sin cambios de lógica.
+- Documentación desactualizada corregida: número de versión en README/
+  CLAUDE.md, y datos de hardware erróneos en VICTRON-CONTEXT.md (ventilador
+  listado en GPIO21 cuando es GPIO5, RTC listado como RX8130 cuando es
+  RX8025T).
+
 ## v1.4.28
 
 Arreglo real: las miniaturas de la galería de vigilancia (Ajustes → Tarjeta
