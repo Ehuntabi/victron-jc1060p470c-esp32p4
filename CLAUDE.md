@@ -1,6 +1,6 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.28**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.0**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -25,6 +25,17 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.28*
 - Compilar: `idf.py build`
 - Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
 - Monitor: `idf.py -p /dev/ttyACM0 monitor`
+- OTA habitual: subir directamente por Wi-Fi desde este portatil a
+  `http://192.168.4.1/ota` (pide Basic Auth strict: usuario/clave de
+  Ajustes -> Wi-Fi). El USB queda solo para cuando hace falta diagnosticar
+  un arranque (log de boot, crash, NVS) — sacar la placa de donde esta
+  instalada es un engorro.
+
+## CI
+- `.github/workflows/build.yml` (2026-08-14): compila con `idf.py build`
+  en cada push/PR via `espressif/esp-idf-ci-action@v1` (docker
+  `espressif/idf:v5.4.4`, target `esp32p4`). Solo pilla errores de
+  COMPILACION, no sustituye probar en la placa.
 
 ## Versionado / releases
 - La version que se ve en Ajustes -> Acerca de sale SOLA de `git describe`
