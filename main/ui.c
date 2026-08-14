@@ -761,12 +761,22 @@ void ui_refresh_clock(void)
 
 /* ── Overlay de "actualizando firmware" durante la OTA ──────────────────────
  * Fondo opaco a pantalla completa en lv_layer_top() (por encima de cualquier
- * tab/modal) con un texto grande centrado. Sin animacion ni redibujado
- * periodico: al no cambiar nada en pantalla mientras dura, no vuelve a
- * generar el tearing que se ve en el resto de la UI bajo la misma carga de
- * flash (ver watchdog.c / project_ota_parpadeo_azul_confirmado). Bloquea el
- * touch (LV_OBJ_FLAG_CLICKABLE) para que nadie pueda tocar nada mientras la
- * OTA esta en marcha. */
+ * tab/modal) con un texto grande centrado, mas PARAR el motor de refresco de
+ * LVGL entero (lvgl_port_stop/resume) mientras dure.
+ *
+ * Solo tapar la pantalla con el overlay NO basta (probado en placa
+ * 2026-08-14: seguia parpadeando en azul por encima del texto): los timers
+ * normales de la UI (reloj, tarjetas de telemetria...) siguen vivos por
+ * debajo y cada uno de sus refrescos periodicos dispara una transferencia
+ * real al panel DSI, que es justo la que se puede cortar a medias con el
+ * buffer unico sin anti-tear (ver project_ota_parpadeo_azul_confirmado). El
+ * overlay tapa el CONTENIDO pero no evita la transferencia en si.
+ *
+ * lv_refr_now(NULL) fuerza el flush del aviso SINCRONO antes de parar el
+ * timer (si no, podria pararse antes de que el tick periodico llegara a
+ * pintar el overlay, dejando la pantalla congelada con el contenido viejo).
+ * Bloquea el touch (LV_OBJ_FLAG_CLICKABLE) para que nadie pueda tocar nada
+ * mientras la OTA esta en marcha. */
 static lv_obj_t *s_ota_overlay = NULL;
 static lv_obj_t *s_ota_overlay_lbl = NULL;
 
@@ -793,12 +803,19 @@ void ui_ota_overlay_show(const char *msg)
         lv_obj_center(s_ota_overlay_lbl);
     }
     lv_label_set_text(s_ota_overlay_lbl, msg);
+    /* Por si veniamos de un lvgl_port_stop() anterior (2a llamada, cambio de
+     * texto a "reiniciando"): hace falta reanudar para que ESTE cambio se
+     * pueda pintar, antes de forzar el flush y volver a parar. */
+    lvgl_port_resume();
+    lv_refr_now(NULL);
     lvgl_port_unlock();
+    lvgl_port_stop();
 }
 
 void ui_ota_overlay_hide(void)
 {
     if (!s_ota_overlay) return;
+    lvgl_port_resume();
     if (!lvgl_port_lock(300)) return;
     lv_obj_del(s_ota_overlay);
     s_ota_overlay = NULL;
