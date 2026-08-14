@@ -1,6 +1,19 @@
 # Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**v1.4.28** · **[Español](#español) | [English](#english)**
+**v1.5.0** · **[Español](#español) | [English](#english)**
+
+---
+
+## Índice de documentación / Documentation index
+
+| Si quieres... / If you want to... | Lee / Read |
+|---|---|
+| Instalar el firmware sin usar terminal / Install without a terminal | [`docs/INSTALACION.md`](docs/INSTALACION.md) |
+| Desarrollar: mapa del código, comandos, hardware / Develop: code map, commands, hardware | [`CLAUDE.md`](CLAUDE.md) |
+| Flujo multi-PC (sobremesa ↔ portátil) / Multi-PC dev workflow | [`docs/DESARROLLO.md`](docs/DESARROLLO.md) |
+| Referencia de hardware: pinouts, esquemáticos, protocolo NE185 / Hardware reference | [`docs/`](docs/) |
+| Historial de cambios por versión / Version changelog | [`NOTAS.md`](NOTAS.md) |
+| Contexto de los 3 proyectos Victron (uso interno, portátil) / Cross-project context (internal) | [`VICTRON-CONTEXT.md`](VICTRON-CONTEXT.md), [`AUTOCARAVANA-SETUP.md`](AUTOCARAVANA-SETUP.md) |
 
 ---
 
