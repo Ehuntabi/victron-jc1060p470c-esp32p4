@@ -1,3 +1,18 @@
+## v1.5.1
+
+Sin cambios de cara al usuario: continuación del mismo pase de
+reorganización de v1.5.0.
+
+- `main/` (fuera de `ui/`) agrupado por dominio: `main/portal/`
+  (`config_server*.c/h`, `charts_svg.c`, `data_export_tar.c`,
+  `ota_update.c`) y `main/data/` (`dashboard_state.c`, `energy_today.c`,
+  `solar_daily.c`, `trip_computer.c`). Solo movimiento de ficheros.
+- Los `.md` de la raíz agrupados: `INSTALACION.md`/`DESARROLLO.md`
+  movidos a `docs/`, índice nuevo en el README.
+- CI: build automático (`idf.py build`) en cada push/PR via GitHub
+  Actions, para detectar errores de compilación antes de llegar a la
+  placa.
+
 ## v1.5.0
 
 Sin cambios de cara al usuario: auditoría completa pre-release (funcional,
