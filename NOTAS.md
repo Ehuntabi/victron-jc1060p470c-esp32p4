@@ -1,3 +1,12 @@
+## v1.4.28
+
+Arreglo real: las miniaturas de la galería de vigilancia (Ajustes → Tarjeta
+SD → Ver galería, o `/vigilancia` en el portal) salían siempre rotas
+(icono roto en vez de la foto), aunque el listado con fechas se veía bien.
+Llevaba así desde el 10-ago (migración al esquema de carpetas por sesión):
+un filtro de seguridad interno rechazaba cualquier nombre de fichero que
+llevara letras, y **todos** llevan ".jpg" al final.
+
 ## v1.4.27
 
 Sin cambios de cara al usuario: sigue la reorganización interna del código
