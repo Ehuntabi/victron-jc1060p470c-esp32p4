@@ -71,7 +71,6 @@ void trip_label_refresh(void);
 static void backup_export_cb(lv_event_t *e);
 static void backup_import_cb(lv_event_t *e);
 static void sd_trip_timer_cb(lv_timer_t *t);
-static void brightness_slider_event_cb(lv_event_t *e);
 
 
 
@@ -98,12 +97,7 @@ static void cb_open_gallery(lv_event_t *e)
     ui_gallery_open();
 }
 
-static void cb_screensaver_event_cb(lv_event_t *e);
-static void slider_ss_brightness_event_cb(lv_event_t *e);
-static void spinbox_ss_time_increment_event_cb(lv_event_t *e);
-static void spinbox_ss_time_decrement_event_cb(lv_event_t *e);
 static void screensaver_timer_cb(lv_timer_t *timer);
-static void view_selection_dropdown_event_cb(lv_event_t *e);
 
 void screensaver_enable(ui_state_t *ui, bool enable);
 static void screensaver_wake(ui_state_t *ui);
@@ -111,13 +105,6 @@ static void screensaver_wake(ui_state_t *ui);
  * salvapantallas esta activado O si el modo nocturno esta activado (para poder
  * apagar de noche aunque el salvapantallas este off). */
 static void screensaver_sync_timer_state(ui_state_t *ui);
-
-/* ── Modo nocturno (auto brillo por hora del RTC) ─────────────── */
-static void night_switch_cb(lv_event_t *e);
-static void night_start_dec_cb(lv_event_t *e);
-static void night_start_inc_cb(lv_event_t *e);
-static void night_end_dec_cb(lv_event_t *e);
-static void night_end_inc_cb(lv_event_t *e);
 
 /* Aplica inmediatamente el brillo correcto según hora actual + config. */
 static bool night_in_window(int h, uint8_t s, uint8_t e)

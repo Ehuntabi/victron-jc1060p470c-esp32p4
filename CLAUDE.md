@@ -42,7 +42,9 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19*
 - Logs sin acentos para evitar problemas de codificación
 
 ## Estructura clave
-- main/main.c: app_main, init audio/alerts/RTC
+- main/main.c: app_main() son 10 llamadas a init_*() en fases (una por
+  seccion del arranque: display/UI, SD+RTC+frigo, red, telemetria,
+  audio+BLE, timers periodicos, camara...), todas en el mismo fichero
 - main/ui.c: tabview, barra inferior, screensaver, hora
 - main/ui/settings_panel.c: orquestador del menu de Settings (paginas SD,
   Autocaravana, screensaver/modo nocturno); las paginas concretas viven cada
@@ -50,6 +52,11 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19*
   settings_victron_keys.c, settings_about.c, settings_sound.c,
   trip_manager.c, settings_dialogs.c (dialogo modal generico)
 - main/ui/frigo_panel.c: panel del frigorífico
+- main/config_server.c: portal HTTP + ciclo de vida del AP Wi-Fi (handlers
+  core: root, keys, static, save, api_state, dashboard, settime, capturas);
+  lo autocontenido vive aparte: charts_svg.c, data_export_tar.c,
+  config_server_vigilancia.c (galeria /snapshot y /vigilancia),
+  config_server_auth.c (Basic Auth + servido de SPIFFS)
 - components/audio_es8311/: codec con jingles BOOT_OK/CRITICAL/WARNING/CONFIRM
 - components/alerts/: thresholds NVS (freezer/SoC)
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
