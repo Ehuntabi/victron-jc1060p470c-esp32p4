@@ -45,15 +45,6 @@ void ui_wifi_set_enabled_cache(bool enabled);
  * Útil tras inicializar el RTC y configurar la hora del sistema en arranque. */
 void ui_refresh_clock(void);
 
-/* Overlay fijo a pantalla completa durante la actualizacion de firmware por
- * Wi-Fi (ver main/portal/ota_update.c): tapa el parpadeo/tearing normal del
- * buffer unico de LVGL bajo carga de flash (no lo arregla, solo lo oculta) y
- * bloquea el touch para que no se pueda tocar nada mientras la OTA esta en
- * marcha. Toman el lock de LVGL internamente: seguras de llamar desde
- * cualquier tarea (incluida la del httpd, que es de donde se llaman). */
-void ui_ota_overlay_show(const char *msg);
-void ui_ota_overlay_hide(void);
-
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 /* Estado actual de la alarma del congelador (criterio robusto de main.c).
  * La vista Overview lo consulta en vez de re-evaluar el umbral. */
