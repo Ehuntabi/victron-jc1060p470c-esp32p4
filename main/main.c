@@ -321,8 +321,16 @@ static void log_autosave_task(void *arg)
 }
 
 
-/* ── app_main ────────────────────────────────────────────────── */
-void app_main(void)
+/* ── Arranque en fases ───────────────────────────────────────────────────
+ * Mismo orden y comportamiento que antes, solo descompuesto en funciones
+ * nombradas para que app_main() se lea de un vistazo: cada init_*() ocupa el
+ * mismo hueco del arranque donde vivia su bloque original, sin reordenar
+ * nada. ─────────────────────────────────────────────────────────────────── */
+
+/* Log de diagnostico de arranque: captura en RAM, motivo del ultimo reset,
+ * info del chip y de flash/heap. Devuelve false si no se pudo leer la flash
+ * (aborta el arranque, como hacia el `return` original). */
+static bool init_boot_diagnostics(void)
 {
     /* --- Captura de logs en RAM (hook a esp_log_set_vprintf) --- */
     /* Antes que nada para capturar todo el boot. Ringbuffer en PSRAM ~120 KB. */
@@ -350,7 +358,7 @@ void app_main(void)
     uint32_t flash_size;
     if (esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
         ESP_LOGE(TAG, "Get flash size failed");
-        return;
+        return false;
     }
     ESP_LOGI(TAG,
         "%" PRIu32 "MB flash, min free heap: %" PRIu32 ", free PSRAM: %u",
@@ -358,7 +366,13 @@ void app_main(void)
         esp_get_minimum_free_heap_size(),
         heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
     );
+    return true;
+}
 
+/* NVS + clave Wi-Fi del portal + watchdog. Debe ir ANTES de la UI: Ajustes
+ * lee la clave una sola vez al arrancar. */
+static void init_nvs_wifi_pass_watchdog(void)
+{
     /* --- NVS --- */
     esp_err_t nvs_err = nvs_flash_init();
     if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -374,8 +388,12 @@ void app_main(void)
 
     /* --- Watchdog: registra causa del ultimo reset y arranca task monitor LVGL --- */
     watchdog_init();
+}
 
-    /* --- Display --- */
+/* Display + UI + splash (se muestra aqui, se oculta en finish_boot_splash)
+ * + callback de touch para el salvapantallas. */
+static void init_display_ui(void)
+{
     logSection("Display init");
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
@@ -415,7 +433,12 @@ void app_main(void)
     if (indev) {
         indev->driver->feedback_cb = touch_activity_cb;
     }
+}
 
+/* SD + auto-save de logs + hora (TZ/RTC/backup NVS) + frigo + mutex de
+ * dashboard_state. */
+static void init_sd_rtc_frigo(void)
+{
     /* --- SD + RTC + Frigo --- */
     esp_err_t sd_err = datalogger_init();
     if (sd_err != ESP_OK)
@@ -477,7 +500,11 @@ void app_main(void)
     /* Crear el mutex de dashboard_state antes de arrancar httpd/BLE/sim,
      * que son los que acceden al estado concurrentemente. */
     dashboard_state_init();
+}
 
+/* Wi-Fi AP + portal HTTP + publisher UDP hacia el mini. */
+static void init_network(void)
+{
     /* --- WiFi + config server --- */
     wifi_ap_init();
     config_server_start();
@@ -486,8 +513,11 @@ void app_main(void)
 
     /* --- Publisher UDP hacia el mini (1 Hz broadcast 192.168.4.255:4242) --- */
     udp_tx_start();
+}
 
-    /* --- BLE Victron --- */
+/* Historicos (bateria/energia/viaje/solar) + alertas + NE185. */
+static void init_telemetry(void)
+{
     battery_history_init();
     log_cleanup_init(60); /* Borrar logs > 60 dias */
     alerts_init();
@@ -506,7 +536,11 @@ void app_main(void)
      * en la SD, no pinta nada. Sirve para deducir la formula real del NE185,
      * que hoy esta sin verificar (ver ne185_vlog.h). */
     ne185_vlog_init();
+}
 
+/* Audio (codec ES8311 + beep de prueba) + BLE Victron. */
+static void init_audio_ble(void)
+{
     /* Audio: inicializar codec ES8311 + PA y hacer beep de prueba */
     {
         i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
@@ -529,7 +563,12 @@ void app_main(void)
      * DESACTIVADO en produccion (doble seguro, como el tour): descomentar la
      * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
     /* sim_overview_start(); */
+}
 
+/* Timers periodicos: traza de memoria, backup de hora, y modo nocturno
+ * (auto-brillo por hora/luminosidad). */
+static void init_periodic_timers(void)
+{
     /* --- Traza de memoria cada 10 min (vigilar fugas con uptime largo) --- */
     static esp_timer_handle_t heap_log_timer;
     const esp_timer_create_args_t heap_log_timer_args = {
@@ -570,8 +609,12 @@ void app_main(void)
     if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer night_mode no arranco: %s", esp_err_to_name(timer_err));
     /* Aplicación inmediata para no esperar al arrancar */
     night_mode_timer_cb(s_ui);
+}
 
-    /* Splash visible al menos 1.5 s desde su creacion, luego ocultar. */
+/* Splash visible al menos 1.5 s desde su creacion (splash_show, en
+ * init_display_ui), luego ocultar y ofrecer el aviso de "Nuevo viaje?". */
+static void finish_boot_splash(void)
+{
     if (lvgl_port_lock(0)) {
         splash_hide();
         /* Aviso emergente de arranque: ofrecer empezar un viaje nuevo (reset del
@@ -583,7 +626,12 @@ void app_main(void)
         if (!trip_computer_is_active()) ui_show_new_trip_dialog();
         lvgl_port_unlock();
     }
+}
 
+/* Camara (fase 1: solo init + deteccion, sin tocar brillo todavia) + feed
+ * periodico de telemetria al modo excedente solar del frigo. */
+static void init_camera_and_solar_feed(void)
+{
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
@@ -595,12 +643,15 @@ void app_main(void)
         .name     = "sol_feed",
     };
     esp_timer_handle_t sol_feed_timer;
-    timer_err = esp_timer_create(&sol_feed, &sol_feed_timer);
+    esp_err_t timer_err = esp_timer_create(&sol_feed, &sol_feed_timer);
     if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(sol_feed_timer, 1000000);  /* 1 s */
     if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer sol_feed no arranco: %s", esp_err_to_name(timer_err));
+}
 
-    logSection("Setup complete");
-
+/* Marca la version actual como buena (cancela el rollback automatico de OTA
+ * si venimos de una actualizacion "a prueba"). */
+static void mark_boot_successful(void)
+{
     /* Damos por buena esta version: hemos llegado al final del arranque.
      *
      * Si viene de una actualizacion por Wi-Fi, hasta aqui estaba "a prueba"; si
@@ -615,4 +666,22 @@ void app_main(void)
         ESP_LOGW("main", "no se pudo marcar la version como buena: %s",
                  esp_err_to_name(ota_ok));
     }
+}
+
+/* ── app_main ────────────────────────────────────────────────── */
+void app_main(void)
+{
+    if (!init_boot_diagnostics()) return;
+    init_nvs_wifi_pass_watchdog();
+    init_display_ui();
+    init_sd_rtc_frigo();
+    init_network();
+    init_telemetry();
+    init_audio_ble();
+    init_periodic_timers();
+    finish_boot_splash();
+    init_camera_and_solar_feed();
+
+    logSection("Setup complete");
+    mark_boot_successful();
 }
