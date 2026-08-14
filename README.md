@@ -1,6 +1,6 @@
 # Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**v1.4.4** · **[Español](#español) | [English](#english)**
+**v1.4.28** · **[Español](#español) | [English](#english)**
 
 ---
 
@@ -137,7 +137,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 #### Portal web
 - AP `VictronConfig` automático al arrancar.
 - **Auto-off del servidor HTTP a los 15 min** sin clientes nuevos (ahorro). El **AP sigue emitiendo siempre**, porque el display "mini" recibe su telemetría por UDP sobre esa red. El portal se reactiva solo en cuanto un cliente se asocia, así que no hay que reiniciar nada; si el móvil ya estaba asociado, hay un botón *Reactivar portal web* en Ajustes → Wi-Fi.
-- **Seguridad — dos niveles** (`check_basic_auth` / `check_basic_auth_strict` en `config_server.c`):
+- **Seguridad — dos niveles** (`check_basic_auth` / `check_basic_auth_strict` en `config_server_auth.c`):
   - *Abierto*: todo lo demás. Basta con estar en el Wi-Fi. Como el P4 solo levanta Soft-AP, cualquier cliente HTTP ha pasado antes por la clave WPA2, que es aleatoria y se regenera sola si es débil. Exigir además usuario y clave HTTP era una segunda puerta con la misma llave, y dejaba a la app fuera (sondea `/api/state` a 1 Hz y se comía 401 tras 401).
   - *Estricto — `/ota`, `/save` y `/keys`*: siempre piden usuario y contraseña. Son los que **reescriben el firmware** o **entregan las claves AES de los Victron**; sin esto, prestar el Wi-Fi a un invitado equivalía a darle control total. La app **no usa ninguno de los tres**, así que no le afecta; el navegador las pide una vez y las recuerda. Se consultan en Ajustes → Wi-Fi.
   - Poniendo `PORTAL_REQUIRE_BASIC_AUTH` a 1 se exige también en el nivel abierto (y entonces la app volvería a necesitar credenciales).
@@ -304,7 +304,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 #### Web portal
 - `VictronConfig` AP starts automatically on boot.
 - **HTTP server auto-off after 15 min** with no new clients (power saving). The **AP itself never stops**, because the "mini" display receives its telemetry over UDP on that network. The portal comes back on its own as soon as a client associates, so nothing needs restarting; if the phone was already associated there is a *Reactivar portal web* button in Settings → Wi-Fi.
-- **Security — two tiers** (`check_basic_auth` / `check_basic_auth_strict` in `config_server.c`):
+- **Security — two tiers** (`check_basic_auth` / `check_basic_auth_strict` in `config_server_auth.c`):
   - *Open*: everything else. Being on the Wi-Fi is enough. Since the P4 only ever brings up a Soft-AP, every HTTP client has already passed the WPA2 key, which is random and regenerated automatically if weak. Demanding an HTTP user/password on top was a second door with the same key, and it locked the app out (it polls `/api/state` at 1 Hz and collected 401 after 401).
   - *Strict — `/ota`, `/save` and `/keys`*: always prompt for user and password. These are the ones that **rewrite the firmware** or **hand over the Victron AES keys**; without this, lending someone the Wi-Fi key amounted to giving them full control. The app **uses none of the three**, so it is unaffected; a browser asks once and remembers. Look them up in Settings → Wi-Fi.
   - Setting `PORTAL_REQUIRE_BASIC_AUTH` to 1 enforces credentials on the open tier too (the app would then need them again).

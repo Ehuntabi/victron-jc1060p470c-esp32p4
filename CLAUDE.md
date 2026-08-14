@@ -1,6 +1,6 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.28**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -67,12 +67,7 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19*
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
 
 ## Pendientes activos
-1. Victron Keys 2 columnas (intento alternativo, el anterior no renderizaba textos)
-2. DS18B20: RESUELTO 2026-07-02 (2 sensores OK en GPIO4). Gotcha: el bus 1-Wire
-   necesita resets de warm-up ANTES de enumerar; sin ellos frigo_init daba 0
-   sensores al arrancar aunque el HW fuera correcto (commit a60d93e).
-3. Ventilador GPIO21 (cuando esté cableado)
-4. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
+1. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
    Ahora está a 18 kHz (`FRIGO_FAN_FREQ_HZ` en `components/frigo/frigo.h`): inaudible
    para adultos, pero **NO para oídos jóvenes** (su límite ronda los 19-20 kHz). Por
    encima de 20 kHz no lo oye nadie.

@@ -305,11 +305,11 @@ Productos conocidos con payload grande:
 ### 8.1 Pantalla 7" (victron)
 - ESP32-P4 (principal) + ESP32-C6 vía SDIO (Wi-Fi/BT con esp_hosted)
 - Display DSI 1024x600 (panel JD9165BA)
-- Touch GT911, RTC RX8130, microSD slot 0 IOMUX
+- Touch GT911, RTC RX8025T (I²C 0x32, pila CR1220), microSD slot 0 IOMUX
 - Codec audio ES8311 + amplificador NS4150 (GPIO11 PA_CTRL)
 - Pines I2S: MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9
-- Ventilador frigo PWM en GPIO21 (esperando cableado)
-- Bus 1-Wire DS18B20 en GPIO26 (pullup 4.7K) (esperando conexión)
+- Ventilador frigo PWM en GPIO5 (JP1 pin 15), ya cableado y en uso (18 kHz)
+- Bus 1-Wire DS18B20 en GPIO4 (JP1 pin 13, pullup 4.7K), ya cableado y en uso
 
 ### 8.2 RS-485 (NE185)
 - MAX485 con auto-DE (no GPIO direction)
@@ -337,8 +337,6 @@ Productos conocidos con payload grande:
 1. Sniff CHECK button del NE187 → entender frame15 canónico
 2. Luces NE185 no apagan: probar `FF 01 00 80 80`
 3. Orion DC/DC: verificar los 5 básicos antes de tocar código (ver §5.2 paso 3)
-4. Ventilador GPIO21 (esperando cableado físico)
-5. DS18B20 físicos (esperando conexión)
 
 ### Pendientes UI:
 1. Debug rotación del salvapantallas (modo Rotar Live/Frigo/Batería cada N min)
