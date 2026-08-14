@@ -46,12 +46,17 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.28*
   seccion del arranque: display/UI, SD+RTC+frigo, red, telemetria,
   audio+BLE, timers periodicos, camara...), todas en el mismo fichero
 - main/ui.c: tabview, barra inferior, screensaver, hora
-- main/ui/settings_panel.c: orquestador del menu de Settings (paginas SD,
-  Autocaravana, screensaver/modo nocturno); las paginas concretas viven cada
-  una en su propio fichero: settings_wifi.c, settings_display.c,
-  settings_victron_keys.c, settings_about.c, settings_sound.c,
-  trip_manager.c, settings_dialogs.c (dialogo modal generico)
-- main/ui/frigo_panel.c: panel del frigorífico
+- main/ui/ agrupado por tema (2026-08-14, antes plano):
+  - settings/: settings_panel.c (orquestador: paginas SD, Autocaravana,
+    screensaver/modo nocturno) + paginas concretas (settings_wifi.c,
+    settings_display.c, settings_victron_keys.c, settings_about.c,
+    settings_sound.c, trip_manager.c, settings_dialogs.c)
+  - views/: frigo_panel.c y el resto de pantallas (view_overview.c,
+    view_battery_monitor.c, view_simple*.c, view_solar_charger.c...)
+  - devices/: device_tracker.c, ble_ingest.c
+  - history/: battery_history_screen.c, frigo_history_screen.c, chart_common.c
+  - vigilancia/: ausente_mode.c, gallery.c, capture_carousel.c
+  - widgets/: ui_card.c, ui_format.c, ui_state.h, lv_font_thermometer.c
 - main/config_server.c: portal HTTP — handlers core (root, keys, static,
   save, api_state, dashboard, settime, capturas) + arranque/registro de URIs
   del httpd y del DNS del captive portal
