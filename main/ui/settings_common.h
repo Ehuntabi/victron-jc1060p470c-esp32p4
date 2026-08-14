@@ -47,6 +47,15 @@ extern lv_obj_t *s_settings_main_page;
 /* Callback comun de los campos de texto (teclado en pantalla). */
 void ta_event_cb(lv_event_t *e);
 
+/* Dialogo modal generico de confirmacion/aviso (settings_dialogs.c). Un unico
+ * helper para que todas las confirmaciones de Ajustes queden identicas en
+ * estilo y tamano (600x280, borde rosa). ok_txt es el texto del boton derecho;
+ * on_confirm se ejecuta solo si se pulsa ese boton (NULL = solo informativo). */
+typedef void (*ui_confirm_action_t)(void);
+void ui_show_confirm_dialog(const char *title, const char *msg,
+                            const char *ok_txt, ui_confirm_action_t on_confirm);
+void ui_show_info_dialog(const char *title, const char *msg);
+
 #ifdef __cplusplus
 }
 #endif

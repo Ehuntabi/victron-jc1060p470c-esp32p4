@@ -44,7 +44,11 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19*
 ## Estructura clave
 - main/main.c: app_main, init audio/alerts/RTC
 - main/ui.c: tabview, barra inferior, screensaver, hora
-- main/ui/settings_panel.c: todas las páginas de Settings
+- main/ui/settings_panel.c: orquestador del menu de Settings (paginas SD,
+  Autocaravana, screensaver/modo nocturno); las paginas concretas viven cada
+  una en su propio fichero: settings_wifi.c, settings_display.c,
+  settings_victron_keys.c, settings_about.c, settings_sound.c,
+  trip_manager.c, settings_dialogs.c (dialogo modal generico)
 - main/ui/frigo_panel.c: panel del frigorífico
 - components/audio_es8311/: codec con jingles BOOT_OK/CRITICAL/WARNING/CONFIRM
 - components/alerts/: thresholds NVS (freezer/SoC)
