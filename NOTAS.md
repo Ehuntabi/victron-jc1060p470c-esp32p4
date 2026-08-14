@@ -1,4 +1,4 @@
-## Sin publicar (tras v1.4.26)
+## v1.4.27
 
 Sin cambios de cara al usuario: sigue la reorganización interna del código
 (mismo patrón que v1.4.25/v1.4.26).
@@ -8,6 +8,9 @@ Sin cambios de cara al usuario: sigue la reorganización interna del código
   portal + servido de SPIFFS): 1897 → 1336 líneas.
 - `app_main()` en `main.c` descompuesto en 10 funciones `init_*()`, una por
   fase del arranque: 294 → 16 líneas.
+- Limpieza de auditoría previa a esta Release: 11 declaraciones muertas más
+  en `settings_panel.c` (restos de una extracción anterior a
+  `settings_display.c`).
 
 ## v1.4.26
 
