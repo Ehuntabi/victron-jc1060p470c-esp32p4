@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <lvgl.h>
 #include "config_storage.h"
-#include "config_server.h"
+#include "portal/config_server.h"
 #include "victron_ble.h"
 #include "display.h"
 #include "esp_log.h"
@@ -42,7 +42,7 @@
 #include "esp_heap_caps.h"
 #include "watchdog.h"
 #include "config_backup.h"
-#include "trip_computer.h"
+#include "data/trip_computer.h"
 #include <time.h>
 #include "settings_common.h"
 

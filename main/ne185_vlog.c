@@ -27,7 +27,7 @@
 #include "esp_timer.h"
 
 #include "ne185/ne185.h"
-#include "dashboard_state.h"
+#include "data/dashboard_state.h"
 #include "datalogger.h"      /* datalogger_sd_montada() */
 #include "camera.h"          /* camera_sd_bus_lock/unlock */
 #include "sd_safe.h"         /* stat/fopen/mkdir sueltos con el cerrojo incluido */

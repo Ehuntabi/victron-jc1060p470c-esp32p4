@@ -3,7 +3,7 @@
 #include "ui.h"
 #include "battery_history.h"
 #include "alerts.h"
-#include "solar_daily.h"
+#include "data/solar_daily.h"
 #include <stdbool.h>
 #include <stdint.h>
 

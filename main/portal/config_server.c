@@ -12,7 +12,7 @@
 #include "config_server_auth.h"
 #include "config_storage.h"
 #include "victron_ble.h"
-#include "dashboard_state.h"
+#include "data/dashboard_state.h"
 #include "esp_spiffs.h"
 #include "ota_update.h"
 #include "esp_log.h"

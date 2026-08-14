@@ -24,8 +24,8 @@
 #include "watchdog.h"
 #include "datalogger.h"
 #include "battery_history.h"
-#include "solar_daily.h"
-#include "trip_computer.h"
+#include "data/solar_daily.h"
+#include "data/trip_computer.h"
 #include "ne185_vlog.h"
 
 /* La version mostrada en About sale de esp_app_get_description()->version, que

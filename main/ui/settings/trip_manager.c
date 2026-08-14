@@ -14,9 +14,9 @@
 #include <time.h>
 #include <lvgl.h>
 #include "esp_log.h"
-#include "trip_computer.h"
+#include "data/trip_computer.h"
 #include "battery_history.h"
-#include "solar_daily.h"
+#include "data/solar_daily.h"
 #include "ne185_vlog.h"
 #include "datalogger.h"
 

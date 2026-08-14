@@ -4,7 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "config_server.h"
+#include "portal/config_server.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <inttypes.h>
@@ -31,9 +31,9 @@
 #include "ui/views/view_overview.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
-#include "dashboard_state.h"
-#include "trip_computer.h"
-#include "solar_daily.h"
+#include "data/dashboard_state.h"
+#include "data/trip_computer.h"
+#include "data/solar_daily.h"
 #include "log_browser.h"
 #include "screenshot.h"
 #include "frigo.h"

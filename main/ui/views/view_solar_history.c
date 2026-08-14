@@ -21,8 +21,8 @@
 #include "ui/widgets/ui_state.h"
 #include "fonts/fonts_es.h"
 #include "battery_history.h"
-#include "solar_daily.h"
-#include "trip_computer.h"
+#include "data/solar_daily.h"
+#include "data/trip_computer.h"
 #include <stdio.h>
 #include <string.h>
 #include "esp_heap_caps.h"

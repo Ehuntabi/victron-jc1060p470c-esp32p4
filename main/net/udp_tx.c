@@ -10,7 +10,7 @@
  */
 #include "udp_tx.h"
 #include "mini_proto.h"
-#include "../dashboard_state.h"
+#include "../data/dashboard_state.h"
 #include "frigo.h"
 #include "../ne185/ne185.h"
 #include "../ui.h"

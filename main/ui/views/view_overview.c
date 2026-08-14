@@ -1,6 +1,6 @@
 #include "view_overview.h"
 #include "ui/widgets/ui_card.h"
-#include "energy_today.h"
+#include "data/energy_today.h"
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "ui.h"

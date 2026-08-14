@@ -17,7 +17,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include <stdio.h>
 #include <lvgl.h>
 #include "config_storage.h"
-#include "config_server.h"
+#include "portal/config_server.h"
 #include "victron_ble.h"
 #include "display.h"
 #include "esp_log.h"
@@ -40,8 +40,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include "esp_heap_caps.h"
 #include "watchdog.h"
 #include "config_backup.h"
-#include "trip_computer.h"
-#include "solar_daily.h"
+#include "data/trip_computer.h"
+#include "data/solar_daily.h"
 #include "ne185_vlog.h"   /* ne185_vlog_flush: tambien se vuelca al finalizar viaje */
 
 /* flush_all_before_restart: vive en settings_about.c (unico caller: reboot). */
