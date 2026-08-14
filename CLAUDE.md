@@ -52,9 +52,14 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.4.19*
   settings_victron_keys.c, settings_about.c, settings_sound.c,
   trip_manager.c, settings_dialogs.c (dialogo modal generico)
 - main/ui/frigo_panel.c: panel del frigorífico
-- main/config_server.c: portal HTTP + ciclo de vida del AP Wi-Fi (handlers
-  core: root, keys, static, save, api_state, dashboard, settime, capturas);
-  lo autocontenido vive aparte: charts_svg.c, data_export_tar.c,
+- main/config_server.c: portal HTTP — handlers core (root, keys, static,
+  save, api_state, dashboard, settime, capturas) + arranque/registro de URIs
+  del httpd y del DNS del captive portal
+- main/config_server_ap.c: ciclo de vida del AP Wi-Fi — radio (wifi_ap_init),
+  timers de auto-off del HTTP, cola de trabajos (start/stop/apply); expone
+  cfg_http_stop()/cfg_dns_stop() (definidas en config_server.c) para pararlo
+  sin tocar sus estaticos
+- lo autocontenido vive aparte: charts_svg.c, data_export_tar.c,
   config_server_vigilancia.c (galeria /snapshot y /vigilancia),
   config_server_auth.c (Basic Auth + servido de SPIFFS)
 - components/audio_es8311/: codec con jingles BOOT_OK/CRITICAL/WARNING/CONFIRM

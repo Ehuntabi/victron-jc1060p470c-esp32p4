@@ -11,10 +11,17 @@ esp_err_t check_basic_auth(httpd_req_t *req);
 esp_err_t check_basic_auth_strict(httpd_req_t *req);
 extern const char SETTIME_SCRIPT[];
 
-/* Definida en config_server.c (ciclo de vida del AP/portal). La necesita
+/* Definida en config_server_ap.c (ciclo de vida del AP/portal). La necesita
  * check_basic_auth[_strict] para mantener vivo el HTTP server mientras haya
  * peticiones validas. */
 void ap_off_timer_kick(void);
+
+/* Definidas en config_server.c (dueño real de s_httpd/s_dns: es quien hace
+ * httpd_start/start_dns_server). Las necesita config_server_ap.c para
+ * parar el portal/DNS desde el ciclo de vida del AP sin tocar esos
+ * estaticos directamente. */
+void cfg_http_stop(void);
+void cfg_dns_stop(void);
 
 /* Helper macro: pone al inicio de los handlers que exigen auth. Si falla
  * la respuesta 401 ya está enviada — devolvemos ESP_OK para que el http
