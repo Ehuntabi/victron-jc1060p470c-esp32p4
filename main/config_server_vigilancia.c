@@ -172,14 +172,23 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
  * "fichero.jpg"): valida por caracteres permitidos en vez de solo rechazar
  * '/' y "..", que ahora SI puede llevar (como separador de un nivel, nunca
  * mas de uno). Nuestros propios nombres (strftime + contador) nunca usan otra
- * cosa que digitos, '_', '.' y esa unica '/'. */
+ * cosa que digitos, '_', '.', la extension en minusculas (".jpg") y esa
+ * unica '/'.
+ *
+ * BUG encontrado 2026-08-14 (presente desde 998ce712, 2026-08-10): la lista
+ * blanca no permitia letras, asi que CUALQUIER nombre acabado en ".jpg"
+ * caia por la 'j' -> handle_vigilancia devolvia 403 para todas las
+ * miniaturas de la tarjeta desde que existe el esquema "sesion/fichero.jpg".
+ * El listado (que solo hace opendir/readdir) nunca paso por aqui, por eso
+ * los nombres/fechas se veian bien y solo las imagenes salian rotas. */
 static bool vig_sd_name_safe(const char *s)
 {
     if (strstr(s, "..")) return false;
     int slashes = 0;
     for (const char *p = s; *p; p++) {
         if (*p == '/') { if (++slashes > 1) return false; continue; }
-        if (isdigit((unsigned char)*p) || *p == '_' || *p == '.') continue;
+        if (isdigit((unsigned char)*p) || *p == '_' || *p == '.' ||
+            (*p >= 'a' && *p <= 'z')) continue;
         return false;
     }
     return true;
