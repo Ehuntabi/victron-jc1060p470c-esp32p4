@@ -6,8 +6,8 @@
 #include <lvgl.h>
 #include "victron_ble.h"
 #include "audio_es8311.h"
-#include "ui/ui_state.h"
-#include "ui/device_tracker.h"
+#include "ui/widgets/ui_state.h"
+#include "ui/devices/device_tracker.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -23,9 +23,9 @@
 #include "esp_bsp.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
-#include "ui/frigo_panel.h"
+#include "ui/views/frigo_panel.h"
 #include "camera.h"
-#include "ui/ausente_mode.h"
+#include "ui/vigilancia/ausente_mode.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
@@ -36,7 +36,7 @@
 #include "energy_today.h"
 #include "trip_computer.h"
 #include "solar_daily.h"
-#include "ui/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
+#include "ui/settings/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
 #include "ne185/ne185.h"
 #include "ne185_vlog.h"
 #include "net/udp_tx.h"

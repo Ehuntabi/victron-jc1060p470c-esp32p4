@@ -33,7 +33,7 @@
 #include "lvgl.h"
 #include "rtc_rx8025t.h"
 #include "ui.h"
-#include "ui/ausente_mode.h"   /* salida de emergencia del modo ausente por HTTP */
+#include "ui/vigilancia/ausente_mode.h"   /* salida de emergencia del modo ausente por HTTP */
 #include "ne185/ne185.h"       /* control de luces/bomba (POST /control) */
 #include "frigo.h"             /* control del ventilador (POST /control) */
 #include "esp_bsp.h"           /* bsp_display_lock/unlock para tocar LVGL desde httpd */

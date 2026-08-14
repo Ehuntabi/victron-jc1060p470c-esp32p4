@@ -1,0 +1,1045 @@
+#include "fonts/fonts_es.h"
+#include "ui/widgets/lv_font_thermometer.h"
+#include "frigo_panel.h"
+#include "alerts.h"
+#include "esp_lvgl_port.h"
+#include "esp_log.h"
+#include <stdio.h>
+
+static const char *TAG = "FRIGO_PANEL";
+
+/* ── Widgets ─────────────────────────────────────────────────── */
+static lv_obj_t *s_lbl_aletas     = NULL;
+static lv_obj_t *s_lbl_congelador = NULL;
+static lv_obj_t *s_lbl_exterior   = NULL;
+static lv_obj_t *s_lbl_fan        = NULL;  /* % real del PWM del ventilador */
+static lv_obj_t *s_lbl_exterior_overlay = NULL;
+
+static lv_obj_t *s_dd_aletas     = NULL;
+static lv_obj_t *s_dd_congelador = NULL;
+static lv_obj_t *s_dd_exterior   = NULL;
+
+/* Flag para suprimir el callback de los dropdowns cuando refrescamos sus
+ * selecciones programaticamente tras un swap. Sin esto entrariamos en
+ * recursion: refresh -> set_selected -> VALUE_CHANGED -> callback -> swap... */
+static bool s_suppress_dd_cb = false;
+
+static lv_obj_t *s_lbl_tmin_val = NULL;
+static lv_obj_t *s_lbl_tmax_val = NULL;
+
+/* Segmented control "Modo": Auto / OFF / 50% / 100% (4 botones, el activo
+ * se resalta azul). Y referencias a los 4 botones +/- de Min/Max para poder
+ * deshabilitarlos cuando el modo no es AUTO. */
+static lv_obj_t *s_btn_mode[4] = { NULL, NULL, NULL, NULL };
+static lv_obj_t *s_btn_tmin_m  = NULL;
+static lv_obj_t *s_btn_tmin_p  = NULL;
+static lv_obj_t *s_btn_tmax_m  = NULL;
+static lv_obj_t *s_btn_tmax_p  = NULL;
+static lv_obj_t *s_btn_fanmin_m  = NULL;
+static lv_obj_t *s_btn_fanmin_p  = NULL;
+static lv_obj_t *s_lbl_fanmin_val = NULL;
+
+static lv_obj_t *s_lbl_solon  = NULL;
+static lv_obj_t *s_lbl_soloff = NULL;
+
+static ui_state_t *s_ui = NULL;
+
+#define COL_NAME_W   250   /* ancho fijo columna nombre */
+#define COL_VAL_W    200   /* ancho fijo columna valor  */
+#define COL_DD_W     160   /* ancho fijo dropdown       */
+#define COL_DD_PAD    20   /* margen derecho dropdown   */
+
+/* ── Helpers modo ventilador (segmented control) ─────────────── */
+/* Resalta visualmente el boton del modo activo y deja el resto en gris. */
+static void highlight_mode_button(frigo_mode_t active)
+{
+    static const uint32_t ACTIVE_BG   = 0x4FC3F7; /* azul */
+    static const uint32_t INACTIVE_BG = 0x444444; /* gris */
+    for (int i = 0; i < 4; ++i) {
+        if (!s_btn_mode[i]) continue;
+        uint32_t bg = (i == (int)active) ? ACTIVE_BG : INACTIVE_BG;
+        lv_obj_set_style_bg_color(s_btn_mode[i], lv_color_hex(bg), 0);
+    }
+}
+
+/* En modo AUTO los thresholds Min/Max aplican: botones habilitados.
+ * En modo manual (OFF/50/100) son irrelevantes: botones grises y bloqueados. */
+static void thresholds_set_enabled(bool en)
+{
+    lv_obj_t *btns[4] = { s_btn_tmin_m, s_btn_tmin_p, s_btn_tmax_m, s_btn_tmax_p };
+    for (int i = 0; i < 4; ++i) {
+        if (!btns[i]) continue;
+        if (en) {
+            lv_obj_clear_state(btns[i], LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(btns[i], LV_OPA_COVER, 0);
+        } else {
+            lv_obj_add_state(btns[i], LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(btns[i], LV_OPA_30, 0);
+        }
+    }
+}
+
+static void apply_mode_visual(frigo_mode_t m)
+{
+    highlight_mode_button(m);
+    thresholds_set_enabled(m == FRIGO_MODE_AUTO);
+}
+
+static void btn_mode_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_mode_t m = (frigo_mode_t)(intptr_t)lv_event_get_user_data(e);
+    frigo_set_mode(m);
+    apply_mode_visual(m);
+}
+
+/* ── Helpers asignacion con swap ─────────────────────────────── */
+/* Refresca la seleccion visible de los 3 dropdowns segun el state actual,
+ * SIN disparar sus VALUE_CHANGED (para no entrar en recursion via swap). */
+static void refresh_dd_selections(void)
+{
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
+    s_suppress_dd_cb = true;
+    /* Un rol sin sonda presente vale FRIGO_SONDA_AUSENTE (0xFF): no se le puede
+     * pasar tal cual al dropdown. Se ensenia la primera opcion; que ese rol no
+     * tiene dato ya se ve en su temperatura ("-- C") y en el aviso emergente. */
+    #define SEL(dd, slot) \
+        if (dd) lv_dropdown_set_selected((dd), \
+            st->assignment[(slot)] < st->n_sensors ? st->assignment[(slot)] : 0)
+    SEL(s_dd_aletas,     FRIGO_SLOT_ALETAS);
+    SEL(s_dd_congelador, FRIGO_SLOT_CONGELADOR);
+    SEL(s_dd_exterior,   FRIGO_SLOT_EXTERIOR);
+    #undef SEL
+    s_suppress_dd_cb = false;
+}
+
+/* Asigna new_idx al slot target. Si new_idx ya estaba asignado a OTRO slot,
+ * hace swap: ese otro slot recibe lo que tenia el target. Garantiza
+ * permutacion 1:1. */
+static void apply_assignment_with_swap(frigo_slot_t target, uint8_t new_idx)
+{
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
+    uint8_t prev_in_target = st->assignment[target];
+    for (int s = 0; s < 3; ++s) {
+        if (s == (int)target) continue;
+        if (st->assignment[s] == new_idx) {
+            frigo_set_assignment((frigo_slot_t)s, prev_in_target);
+            break;
+        }
+    }
+    frigo_set_assignment(target, new_idx);
+    refresh_dd_selections();
+}
+
+/* ── Callbacks ───────────────────────────────────────────────── */
+static void dd_aletas_cb(lv_event_t *e)
+{
+    if (s_suppress_dd_cb) return;
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
+    apply_assignment_with_swap(FRIGO_SLOT_ALETAS, (uint8_t)idx);
+}
+static void dd_congelador_cb(lv_event_t *e)
+{
+    if (s_suppress_dd_cb) return;
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
+    apply_assignment_with_swap(FRIGO_SLOT_CONGELADOR, (uint8_t)idx);
+}
+static void dd_exterior_cb(lv_event_t *e)
+{
+    if (s_suppress_dd_cb) return;
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
+    uint16_t idx = lv_dropdown_get_selected(lv_event_get_target(e));
+    apply_assignment_with_swap(FRIGO_SLOT_EXTERIOR, (uint8_t)idx);
+}
+/* Repinta AMBAS etiquetas min/max desde el estado REAL (validado). Clave del
+ * fix: frigo_set_thresholds rechaza min>=max sin tocar el estado, asi que
+ * pintar desde el estado guardado (no desde el valor local tentativo)
+ * garantiza que las etiquetas nunca muestran un par invertido. */
+static void refresh_threshold_labels(void)
+{
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    char buf[12];
+    if (s_lbl_tmin_val) {
+        snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st.T_min);
+        lv_label_set_text(s_lbl_tmin_val, buf);
+    }
+    if (s_lbl_tmax_val) {
+        snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st.T_max);
+        lv_label_set_text(s_lbl_tmax_val, buf);
+    }
+}
+static void btn_tmin_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_min;
+    if (t > 30) t -= 5;
+    frigo_set_thresholds(t, st.T_max);
+    refresh_threshold_labels();
+}
+static void btn_tmin_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_min;
+    if (t + 5 <= st.T_max) t += 5;
+    frigo_set_thresholds(t, st.T_max);
+    refresh_threshold_labels();
+}
+static void btn_tmax_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_max;
+    if (t - 5 >= st.T_min) t -= 5;
+    frigo_set_thresholds(st.T_min, t);
+    refresh_threshold_labels();
+}
+static void btn_tmax_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t t = st.T_max;
+    if (t < 60) t += 5;   /* tope 60: lo valida igual frigo_set_thresholds */
+    frigo_set_thresholds(st.T_min, t);
+    refresh_threshold_labels();
+}
+
+/* Suelo PWM: % minimo al que el ventilador gira (calibracion del MOSFET).
+ * Rango 0..60 en pasos de 5 (mismo criterio que valida frigo_set_fan_min). */
+static void refresh_fanmin_label(void)
+{
+    if (!s_lbl_fanmin_val) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d %%", st.fan_min_pct);
+    lv_label_set_text(s_lbl_fanmin_val, buf);
+}
+static void btn_fanmin_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t p = st.fan_min_pct;
+    if (p >= 5) p -= 5;
+    frigo_set_fan_min(p);
+    refresh_fanmin_label();
+}
+static void btn_fanmin_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_state_t st;
+    frigo_get_state_copy(&st);
+    uint8_t p = st.fan_min_pct;
+    if (p + 5 <= 60) p += 5;
+    frigo_set_fan_min(p);
+    refresh_fanmin_label();
+}
+
+/* Modo "Excedente solar a 12V": switch ON/OFF + SoC de activacion/corte
+ * (paso 1 %, rango 80..100 / 50..soc_on-5, ver frigo_solar_set_soc_*). */
+static void sw_solar_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    frigo_solar_set_enabled(on);
+}
+static void refresh_solon_label(void)
+{
+    if (!s_lbl_solon) return;
+    lv_label_set_text_fmt(s_lbl_solon, "Activar a SoC: %d%%", frigo_solar_get_soc_on());
+}
+static void refresh_soloff_label(void)
+{
+    if (!s_lbl_soloff) return;
+    lv_label_set_text_fmt(s_lbl_soloff, "Cortar a SoC: %d%%", frigo_solar_get_soc_off());
+}
+static void btn_solon_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_on(frigo_solar_get_soc_on() - 1);
+    refresh_solon_label();
+    refresh_soloff_label();
+}
+static void btn_solon_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_on(frigo_solar_get_soc_on() + 1);
+    refresh_solon_label();
+    refresh_soloff_label();
+}
+static void btn_soloff_minus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_off(frigo_solar_get_soc_off() - 1);
+    refresh_soloff_label();
+}
+static void btn_soloff_plus_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    frigo_solar_set_soc_off(frigo_solar_get_soc_off() + 1);
+    refresh_soloff_label();
+}
+
+/* ── Construir opciones dropdown ─────────────────────────────── */
+static void build_sensor_options(char *buf, size_t len, const frigo_state_t *st)
+{
+    buf[0] = '\0';
+    for (int i = 0; i < st->n_sensors; i++) {
+        char addr[28];
+        frigo_addr_to_str(&st->sensors[i], addr, sizeof(addr));
+        char line[36];
+        snprintf(line, sizeof(line), "S%d: %s", i, addr + 18);
+        if (i > 0) strncat(buf, "\n", len - strlen(buf) - 1);
+        strncat(buf, line, len - strlen(buf) - 1);
+    }
+    if (st->n_sensors == 0) strncpy(buf, "Sin sensores", len);
+}
+
+/* ── Buscar sondas y aviso de cambios ────────────────────────── */
+
+static void buscar_sondas_cb(lv_event_t *e)
+{
+    (void)e;
+    /* Solo levanta la bandera: el escaneo real lo hace la tarea del frigo. */
+    frigo_request_rescan();
+}
+
+/* Aviso de que el conjunto de sondas ha cambiado. Se crea desde el hilo de LVGL
+ * (lo llama ui_frigo_panel_update, que corre bajo lvgl_port_lock). Mismo aspecto
+ * que ui_show_new_trip_dialog: no se usa lv_msgbox en ningun sitio del repo. */
+static lv_obj_t *s_aviso_sondas_modal = NULL;
+
+static void aviso_sondas_cerrar_cb(lv_event_t *e)
+{
+    (void)e;
+    frigo_ack_scan_event();
+    if (s_aviso_sondas_modal) {
+        lv_obj_del(s_aviso_sondas_modal);
+        s_aviso_sondas_modal = NULL;
+    }
+}
+
+static void mostrar_aviso_sondas(uint8_t flags)
+{
+    if (s_aviso_sondas_modal) return;   /* guard anti doble-apertura */
+
+    const char *txt;
+    if ((flags & FRIGO_SCAN_HAY_NUEVA) && (flags & FRIGO_SCAN_FALTA_UNA))
+        txt = "Se ha cambiado una sonda del frigo.\n"
+              "Comprueba cual es cual antes de fiarte de las temperaturas.";
+    else if (flags & FRIGO_SCAN_HAY_NUEVA)
+        txt = "Hay una sonda nueva sin asignar.\n"
+              "Dile si es aletas, congelador o exterior.";
+    else
+        txt = "Una sonda del frigo ha dejado de responder.\n"
+              "Revisa el cable o sustituyela.";
+
+    lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    s_aviso_sondas_modal = modal;
+
+    lv_obj_t *dlg = lv_obj_create(modal);
+    lv_obj_set_size(dlg, 600, 280);
+    lv_obj_center(dlg);
+    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(dlg, lv_color_hex(0xFFBB33), 0);  /* ambar: atencion */
+    lv_obj_set_style_border_width(dlg, 2, 0);
+    lv_obj_set_style_radius(dlg, 16, 0);
+    lv_obj_set_style_pad_all(dlg, 24, 0);
+    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *title = lv_label_create(dlg);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFBB33), 0);
+    lv_label_set_text(title, LV_SYMBOL_WARNING "  Sondas del frigo");
+
+    lv_obj_t *msg = lv_label_create(dlg);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(msg, lv_pct(100));
+    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(msg, txt);
+
+    lv_obj_t *btn = lv_btn_create(dlg);
+    lv_obj_set_size(btn, 240, 60);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0xFFBB33), 0);
+    lv_obj_set_style_radius(btn, 12, 0);
+    lv_obj_t *lb = lv_label_create(btn);
+    lv_label_set_text(lb, "Entendido");
+    lv_obj_set_style_text_font(lb, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(lb, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_center(lb);
+    lv_obj_add_event_cb(btn, aviso_sondas_cerrar_cb, LV_EVENT_CLICKED, NULL);
+}
+
+/* ── Helper: crear fila de sensor ────────────────────────────── */
+static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
+                                  const char *nombre,
+                                  lv_obj_t **lbl_val_out,
+                                  lv_obj_t **dd_out,
+                                  const char *opts,
+                                  uint8_t dd_selected,
+                                  lv_event_cb_t dd_cb)
+{
+    /* Contenedor en UNA fila: Nombre + temperatura + selector en la misma linea */
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_width(row, lv_pct(100));
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_style_pad_bottom(row, 8, 0);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Nombre (ancho fijo para que las temperaturas de las 3 filas queden alineadas) */
+    lv_obj_t *lbl_name = lv_label_create(row);
+    lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_name, lv_color_white(), 0);
+    lv_obj_set_width(lbl_name, 120);
+    lv_label_set_text(lbl_name, nombre);
+
+    /* Temperatura, justificada a la derecha (termina junto al selector) */
+    lv_obj_t *lbl_val = lv_label_create(row);
+    lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_width(lbl_val, 95);   /* holgado: el Congelador llega a "-18.5 °C" (signo -) */
+    lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
+    *lbl_val_out = lbl_val;
+
+    /* Selector: ocupa el resto de la fila */
+    lv_obj_t *dd = lv_dropdown_create(row);
+    lv_obj_set_flex_grow(dd, 1);
+    lv_obj_set_height(dd, 44);
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20_es, 0);
+    /* La flecha (LV_PART_INDICATOR) es LV_SYMBOL_DOWN; Inter(_es) no la trae ->
+     * Montserrat built-in para el indicator. */
+    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, LV_PART_INDICATOR);
+    lv_obj_t *dd_list = lv_dropdown_get_list(dd);
+    if (dd_list) {
+        lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_20_es, 0);
+    }
+    lv_dropdown_set_options(dd, opts);
+    lv_dropdown_set_selected(dd, dd_selected);
+    lv_obj_add_event_cb(dd, dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    *dd_out = dd;
+    return row;
+}
+
+void ui_frigo_panel_init(ui_state_t *ui)
+{
+    s_ui = ui;
+    frigo_state_t st_copy;
+    frigo_get_state_copy(&st_copy);
+    const frigo_state_t *st = &st_copy;
+
+    lv_obj_t *tab = ui->frigo_page;
+    lv_obj_set_layout(tab, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_style_pad_gap(tab, 16, 0);
+    lv_obj_set_scroll_dir(tab, LV_DIR_VER);
+
+    /* === Card 1: Sensores DS18B20 (azul) ===
+     * Altura fija para que las dos cards (sensores y ventilador) tengan
+     * exactamente el mismo tamano visual cuando van lado a lado. */
+    lv_obj_t *card_sensors = lv_obj_create(tab);
+    lv_obj_set_width(card_sensors, lv_pct(49));
+    lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_border_width(card_sensors, 1, 0);
+    lv_obj_set_style_radius(card_sensors, 12, 0);
+    lv_obj_set_style_pad_all(card_sensors, 16, 0);
+    lv_obj_set_style_pad_gap(card_sensors, 8, 0);
+    lv_obj_set_layout(card_sensors, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_sensors, LV_FLEX_FLOW_COLUMN);
+
+    char opts[128];
+    build_sensor_options(opts, sizeof(opts), st);
+
+    /* Titulo. Montserrat built-in (no _es) porque Inter no tiene los
+     * LV_SYMBOL_* y el LV_SYMBOL_LIST saldria invisible. */
+    lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
+    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
+
+    /* Filas sensores */
+    make_sensor_row(card_sensors, ui, "Aletas:",
+                    &s_lbl_aletas, &s_dd_aletas,
+                    opts, st->assignment[FRIGO_SLOT_ALETAS], dd_aletas_cb);
+
+    make_sensor_row(card_sensors, ui, "Congelador:",
+                    &s_lbl_congelador, &s_dd_congelador,
+                    opts, st->assignment[FRIGO_SLOT_CONGELADOR], dd_congelador_cb);
+
+    make_sensor_row(card_sensors, ui, "Exterior:",
+                    &s_lbl_exterior, &s_dd_exterior,
+                    opts, st->assignment[FRIGO_SLOT_EXTERIOR], dd_exterior_cb);
+
+    /* Buscar sondas: para cuando se arregla un cable o se cambia una sonda con
+     * la pantalla encendida, sin tener que reiniciar. */
+    lv_obj_t *btn_buscar = lv_btn_create(card_sensors);
+    lv_obj_set_height(btn_buscar, 48);
+    lv_obj_set_style_bg_color(btn_buscar, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_radius(btn_buscar, 10, 0);
+    lv_obj_add_event_cb(btn_buscar, buscar_sondas_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *lbl_buscar = lv_label_create(btn_buscar);
+    lv_label_set_text(lbl_buscar, LV_SYMBOL_REFRESH "  Buscar sondas");
+    lv_obj_set_style_text_font(lbl_buscar, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_buscar, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_center(lbl_buscar);
+
+    /* === Card 2: Ventilador y temperaturas (verde) === */
+    lv_obj_t *card_fan = lv_obj_create(tab);
+    lv_obj_set_width(card_fan, lv_pct(49));
+    lv_obj_set_height(card_fan, LV_SIZE_CONTENT);  /* ajusta al contenido, sin marco sobrante */
+    lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_border_width(card_fan, 1, 0);
+    lv_obj_set_style_radius(card_fan, 12, 0);
+    lv_obj_set_style_pad_all(card_fan, 16, 0);
+    /* pad_gap recortado (era 24) para que el borde inferior de esta card
+     * quede mas cerca del de la card de sensores; sigue separando bien
+     * Auto/OFF de Min/Max (antes de esto, 12). */
+    lv_obj_set_style_pad_gap(card_fan, 14, 0);
+    lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
+    /* Centrado horizontal de los hijos (las filas a pct(100) no se ven
+     * afectadas; centra los elementos mas estrechos como la fila PWM min). */
+    lv_obj_set_flex_align(card_fan, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+
+    /* Fila ventilador */
+    lv_obj_t *row_fan_hdr = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(row_fan_hdr);
+    lv_obj_set_style_bg_opa(row_fan_hdr, LV_OPA_TRANSP, 0);
+    lv_obj_set_width(row_fan_hdr, lv_pct(100));
+    lv_obj_set_height(row_fan_hdr, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_fan_hdr, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_fan_hdr, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_fan_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *lbl_fan_sec = lv_label_create(row_fan_hdr);
+    /* Montserrat built-in para que el LV_SYMBOL_REFRESH renderice. */
+    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
+    /* Valor real del PWM del ventilador (%). Vira gris->naranja->rojo igual que
+     * el aro-gauge de la vista principal, para que ambas representaciones del
+     * ventilador sean coherentes. */
+    s_lbl_fan = lv_label_create(row_fan_hdr);
+    lv_obj_set_style_text_font(s_lbl_fan, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(s_lbl_fan, lv_color_hex(0x8A93A6), 0);
+    lv_label_set_text(s_lbl_fan, "-- %");
+
+    /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
+    lv_obj_t *row_mode = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(row_mode);
+    lv_obj_set_width(row_mode, lv_pct(100));
+    lv_obj_set_height(row_mode, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_mode, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_mode, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_mode, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row_mode, 6, 0);
+    static const char *mode_labels[4] = { "Auto", "OFF", "50%", "100%" };
+    for (int i = 0; i < 4; ++i) {
+        lv_obj_t *btn = lv_btn_create(row_mode);
+        lv_obj_set_size(btn, 78, 44);
+        lv_obj_set_style_radius(btn, 8, 0);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(0x444444), 0);
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, mode_labels[i]);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
+        lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn, btn_mode_cb, LV_EVENT_CLICKED,
+                             (void *)(intptr_t)i);
+        s_btn_mode[i] = btn;
+    }
+
+    /* Separador visual entre el segmented control (Auto/OFF/50/100) y las
+     * filas Min/Max para que queden claramente diferenciados. */
+    lv_obj_t *sep = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(sep);
+    lv_obj_set_size(sep, lv_pct(85), 1);
+    lv_obj_set_style_bg_color(sep, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(sep, LV_OPA_30, 0);
+
+    /* Fila T_Min y T_Max: dos columnas lado a lado (min | max); cada
+     * columna lleva su etiqueta arriba y su selector +/- centrado debajo. */
+    lv_obj_t *row_t = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(row_t);
+    lv_obj_set_style_bg_opa(row_t, LV_OPA_TRANSP, 0);
+    lv_obj_set_width(row_t, lv_pct(100));
+    lv_obj_set_height(row_t, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_t, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_t, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_t, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* T_Min - columna: etiqueta arriba, selector +/- centrado debajo */
+    lv_obj_t *col_min = lv_obj_create(row_t);
+    lv_obj_remove_style_all(col_min);
+    lv_obj_set_layout(col_min, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_min, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_min, 8, 0);
+    lv_obj_set_width(col_min, lv_pct(50));
+    lv_obj_set_height(col_min, LV_SIZE_CONTENT);
+
+    lv_obj_t *lbl_tmin = lv_label_create(col_min);
+    lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(lbl_tmin, "Min:");
+
+    lv_obj_t *sel_min = lv_obj_create(col_min);
+    lv_obj_remove_style_all(sel_min);
+    lv_obj_set_layout(sel_min, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(sel_min, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sel_min, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(sel_min, 8, 0);
+    lv_obj_set_size(sel_min, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    s_btn_tmin_m = lv_btn_create(sel_min);
+    lv_obj_set_size(s_btn_tmin_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmin_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_mm = lv_label_create(s_btn_tmin_m);
+    lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_mm);
+    lv_obj_add_event_cb(s_btn_tmin_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_tmin_val = lv_label_create(sel_min);
+    lv_obj_set_style_text_font(s_lbl_tmin_val, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(s_lbl_tmin_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_tmin_val, 80);
+    lv_obj_set_style_text_align(s_lbl_tmin_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_min); lv_label_set_text(s_lbl_tmin_val, buf); }
+
+    s_btn_tmin_p = lv_btn_create(sel_min);
+    lv_obj_set_size(s_btn_tmin_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmin_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_p, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_t *lbl_mp = lv_label_create(s_btn_tmin_p);
+    lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_mp);
+    lv_obj_add_event_cb(s_btn_tmin_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* T_Max - columna: etiqueta arriba, selector +/- centrado debajo */
+    lv_obj_t *col_max = lv_obj_create(row_t);
+    lv_obj_remove_style_all(col_max);
+    lv_obj_set_layout(col_max, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_max, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_max, 8, 0);
+    lv_obj_set_width(col_max, lv_pct(50));
+    lv_obj_set_height(col_max, LV_SIZE_CONTENT);
+
+    lv_obj_t *lbl_tmax = lv_label_create(col_max);
+    lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(lbl_tmax, "Max:");
+
+    lv_obj_t *sel_max = lv_obj_create(col_max);
+    lv_obj_remove_style_all(sel_max);
+    lv_obj_set_layout(sel_max, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(sel_max, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sel_max, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(sel_max, 8, 0);
+    lv_obj_set_size(sel_max, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    s_btn_tmax_m = lv_btn_create(sel_max);
+    lv_obj_set_size(s_btn_tmax_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmax_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_xm = lv_label_create(s_btn_tmax_m);
+    lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_xm);
+    lv_obj_add_event_cb(s_btn_tmax_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_tmax_val = lv_label_create(sel_max);
+    lv_obj_set_style_text_font(s_lbl_tmax_val, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(s_lbl_tmax_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_tmax_val, 80);
+    lv_obj_set_style_text_align(s_lbl_tmax_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d \xc2\xb0""C", st->T_max); lv_label_set_text(s_lbl_tmax_val, buf); }
+
+    s_btn_tmax_p = lv_btn_create(sel_max);
+    lv_obj_set_size(s_btn_tmax_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_tmax_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
+    lv_obj_t *lbl_xp = lv_label_create(s_btn_tmax_p);
+    lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_xp);
+    lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Separador visual entre las filas Min/Max y el suelo PWM. */
+    lv_obj_t *sep2 = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(sep2);
+    lv_obj_set_size(sep2, lv_pct(85), 1);
+    lv_obj_set_style_bg_color(sep2, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_opa(sep2, LV_OPA_30, 0);
+
+    /* PWM min - suelo de arranque del ventilador (calibracion del MOSFET).
+     * Al fondo de la card, centrado. Aplica en todos los modos (sobre todo en
+     * AUTO a bajas temperaturas); por eso NO se bloquea en modo manual. */
+    lv_obj_t *col_fanmin = lv_obj_create(card_fan);
+    lv_obj_remove_style_all(col_fanmin);
+    lv_obj_set_layout(col_fanmin, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_fanmin, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_fanmin, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_fanmin, 8, 0);
+    lv_obj_set_size(col_fanmin, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *lbl_fanmin = lv_label_create(col_fanmin);
+    lv_obj_set_style_text_font(lbl_fanmin, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_fanmin, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(lbl_fanmin, "PWM min:");
+
+    s_btn_fanmin_m = lv_btn_create(col_fanmin);
+    lv_obj_set_size(s_btn_fanmin_m, 44, 44);
+    lv_obj_set_style_radius(s_btn_fanmin_m, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_fmm = lv_label_create(s_btn_fanmin_m);
+    lv_label_set_text(lbl_fmm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_fmm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_fmm);
+    lv_obj_add_event_cb(s_btn_fanmin_m, btn_fanmin_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_fanmin_val = lv_label_create(col_fanmin);
+    lv_obj_set_style_text_font(s_lbl_fanmin_val, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(s_lbl_fanmin_val, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_fanmin_val, 80);
+    lv_obj_set_style_text_align(s_lbl_fanmin_val, LV_TEXT_ALIGN_CENTER, 0);
+    { char buf[12]; snprintf(buf, sizeof(buf), "%d %%", st->fan_min_pct); lv_label_set_text(s_lbl_fanmin_val, buf); }
+
+    s_btn_fanmin_p = lv_btn_create(col_fanmin);
+    lv_obj_set_size(s_btn_fanmin_p, 44, 44);
+    lv_obj_set_style_radius(s_btn_fanmin_p, 8, 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_fmp = lv_label_create(s_btn_fanmin_p);
+    lv_label_set_text(lbl_fmp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_fmp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_fmp);
+    lv_obj_add_event_cb(s_btn_fanmin_p, btn_fanmin_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Estado visual inicial del segmented control + thresholds segun modo
+     * actual (FRIGO_MODE_AUTO al boot por defecto, ver frigo_init). */
+    apply_mode_visual(st->mode);
+
+    /* === Card 3: Aprovechar excedente solar (ambar) ===
+     * Card propia, a todo el ancho, al final de la pagina. */
+    lv_obj_t *card_solar = lv_obj_create(tab);
+    lv_obj_set_width(card_solar, lv_pct(100));
+    lv_obj_set_height(card_solar, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_solar, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_opa(card_solar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
+    lv_obj_set_style_border_width(card_solar, 1, 0);
+    lv_obj_set_style_radius(card_solar, 12, 0);
+    lv_obj_set_style_pad_all(card_solar, 16, 0);
+    lv_obj_set_style_pad_gap(card_solar, 16, 0);
+    lv_obj_set_layout(card_solar, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_solar, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card_solar, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Cabecera: titulo a la izquierda y el switch a la derecha, misma linea. */
+    lv_obj_t *row_solar_hdr = lv_obj_create(card_solar);
+    lv_obj_remove_style_all(row_solar_hdr);
+    lv_obj_set_width(row_solar_hdr, lv_pct(100));
+    lv_obj_set_height(row_solar_hdr, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_solar_hdr, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_solar_hdr, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_solar_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_solar_sec = lv_label_create(row_solar_hdr);
+    lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
+    lv_label_set_text(lbl_solar_sec, "Aprovechar excedente solar");
+
+    lv_obj_t *sw_solar = lv_switch_create(row_solar_hdr);
+    lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    /* Activar y Cortar en la MISMA linea (dos selectores lado a lado). */
+    lv_obj_t *row_soc = lv_obj_create(card_solar);
+    lv_obj_remove_style_all(row_soc);
+    lv_obj_set_width(row_soc, lv_pct(100));
+    lv_obj_set_height(row_soc, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_soc, 16, 0);
+
+    /* SoC de activacion (paso 1 %, rango 80..100). */
+    lv_obj_t *col_solon = lv_obj_create(row_soc);
+    lv_obj_remove_style_all(col_solon);
+    lv_obj_set_layout(col_solon, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_solon, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_solon, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_solon, 8, 0);
+    lv_obj_set_size(col_solon, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *btn_solon_m = lv_btn_create(col_solon);
+    lv_obj_set_size(btn_solon_m, 44, 44);
+    lv_obj_set_style_radius(btn_solon_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_solon_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_som = lv_label_create(btn_solon_m);
+    lv_label_set_text(lbl_som, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_som, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_som);
+    lv_obj_add_event_cb(btn_solon_m, btn_solon_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_solon = lv_label_create(col_solon);
+    lv_obj_set_style_text_font(s_lbl_solon, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_solon, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_solon, 180);
+    lv_obj_set_style_text_align(s_lbl_solon, LV_TEXT_ALIGN_CENTER, 0);
+    refresh_solon_label();
+
+    lv_obj_t *btn_solon_p = lv_btn_create(col_solon);
+    lv_obj_set_size(btn_solon_p, 44, 44);
+    lv_obj_set_style_radius(btn_solon_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_solon_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_sop = lv_label_create(btn_solon_p);
+    lv_label_set_text(lbl_sop, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_sop, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sop);
+    lv_obj_add_event_cb(btn_solon_p, btn_solon_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Suelo de corte (paso 1 %, rango 50..soc_on-5). */
+    lv_obj_t *col_soloff = lv_obj_create(row_soc);
+    lv_obj_remove_style_all(col_soloff);
+    lv_obj_set_layout(col_soloff, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(col_soloff, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(col_soloff, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(col_soloff, 8, 0);
+    lv_obj_set_size(col_soloff, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+
+    lv_obj_t *btn_soloff_m = lv_btn_create(col_soloff);
+    lv_obj_set_size(btn_soloff_m, 44, 44);
+    lv_obj_set_style_radius(btn_soloff_m, 8, 0);
+    lv_obj_set_style_bg_color(btn_soloff_m, lv_color_hex(0x444444), 0);
+    lv_obj_t *lbl_sfm = lv_label_create(btn_soloff_m);
+    lv_label_set_text(lbl_sfm, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(lbl_sfm, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sfm);
+    lv_obj_add_event_cb(btn_soloff_m, btn_soloff_minus_cb, LV_EVENT_CLICKED, NULL);
+
+    s_lbl_soloff = lv_label_create(col_soloff);
+    lv_obj_set_style_text_font(s_lbl_soloff, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_soloff, lv_color_white(), 0);
+    lv_obj_set_width(s_lbl_soloff, 180);
+    lv_obj_set_style_text_align(s_lbl_soloff, LV_TEXT_ALIGN_CENTER, 0);
+    refresh_soloff_label();
+
+    lv_obj_t *btn_soloff_p = lv_btn_create(col_soloff);
+    lv_obj_set_size(btn_soloff_p, 44, 44);
+    lv_obj_set_style_radius(btn_soloff_p, 8, 0);
+    lv_obj_set_style_bg_color(btn_soloff_p, lv_color_hex(0x00C851), 0);
+    lv_obj_t *lbl_sfp = lv_label_create(btn_soloff_p);
+    lv_label_set_text(lbl_sfp, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(lbl_sfp, &lv_font_montserrat_24, 0);
+    lv_obj_center(lbl_sfp);
+    lv_obj_add_event_cb(btn_soloff_p, btn_soloff_plus_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Overlay Exterior */
+    lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());
+    lv_obj_remove_style_all(overlay_cont);
+    lv_obj_set_layout(overlay_cont, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(overlay_cont, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(overlay_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(overlay_cont, 4, 0);
+    lv_obj_set_style_pad_all(overlay_cont, 4, 0);
+    lv_obj_set_style_bg_opa(overlay_cont, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(overlay_cont, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_radius(overlay_cont, 4, 0);
+    /* LV_SIZE_CONTENT en ancho: el texto ya tiene longitud fija
+     * (formato "%+6.1f" en update) asi que el cont mide siempre lo mismo
+     * y la barra inferior no se reflowea. */
+    lv_obj_set_size(overlay_cont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+/* alineacion gestionada por flex padre */
+
+    static lv_font_t font_thermo_with_fallback;
+    font_thermo_with_fallback = lv_font_thermometer;
+    font_thermo_with_fallback.fallback = NULL;
+    lv_obj_t *lbl_thermo_icon = lv_label_create(overlay_cont);
+    lv_obj_set_style_text_font(lbl_thermo_icon, &font_thermo_with_fallback, 0);
+    lv_obj_set_style_text_color(lbl_thermo_icon, lv_color_hex(0x00BFFF), 0);
+    lv_label_set_text(lbl_thermo_icon, "\xef\x8b\x89");
+    /* Texto fijo "Exterior:" pegado al icono del termometro (no cambia, asi
+     * que no se desplaza). El numero va aparte, en su propia caja. */
+    lv_obj_t *lbl_ext_prefix = lv_label_create(overlay_cont);
+    lv_obj_add_style(lbl_ext_prefix, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(lbl_ext_prefix, lv_color_hex(0x00BFFF), 0);
+    lv_label_set_text(lbl_ext_prefix, "Exterior:");
+
+    /* Solo el valor: caja de ancho fijo alineada a la DERECHA. Asi el "\xc2\xb0""C"
+     * queda clavado en el borde derecho y, al crecer el numero (o aparecer el
+     * '-'), crece hacia la izquierda sin que los digitos se desplacen. El
+     * ancho fijo evita ademas que la barra inferior se reflowee al cambiar el
+     * valor. Ajustado a "%+5.1f" (caso peor "-55.0 \xc2\xb0""C", rango exterior)
+     * para que el icono y "Exterior:" no queden lejos del valor. */
+    s_lbl_exterior_overlay = lv_label_create(overlay_cont);
+    lv_obj_add_style(s_lbl_exterior_overlay, &ui->styles.small, 0);
+    lv_obj_set_style_text_color(s_lbl_exterior_overlay, lv_color_hex(0x00BFFF), 0);
+    lv_obj_set_width(s_lbl_exterior_overlay, 124);
+    lv_label_set_long_mode(s_lbl_exterior_overlay, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(s_lbl_exterior_overlay, "--.- \xc2\xb0""C");
+
+    /* Igualar la altura de la card de sensores a la del ventilador (la mas alta),
+     * para que ambas queden simetricas cuando van lado a lado. */
+    lv_obj_update_layout(tab);
+    lv_coord_t h_fan = lv_obj_get_height(card_fan);
+    if (h_fan > lv_obj_get_height(card_sensors)) {
+        lv_obj_set_height(card_sensors, h_fan);
+    }
+
+    ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
+}
+
+/* ── Cerrar dropdowns abiertos ───────────────────────────────── */
+void ui_frigo_panel_close_dropdowns(void)
+{
+    if (s_dd_aletas)     lv_dropdown_close(s_dd_aletas);
+    if (s_dd_congelador) lv_dropdown_close(s_dd_congelador);
+    if (s_dd_exterior)   lv_dropdown_close(s_dd_exterior);
+}
+
+/* ── Update ──────────────────────────────────────────────────── */
+void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
+{
+    /* Reflejar cambios del modo del ventilador si vinieron desde otro lado
+     * (ej. simulacion). En uso normal el cambio lo hace el callback de los
+     * botones que ya repinta, asi que esto es defensivo. */
+    static frigo_mode_t s_last_mode = (frigo_mode_t)0xFF;
+    if (state->mode != s_last_mode) {
+        apply_mode_visual(state->mode);
+        s_last_mode = state->mode;
+    }
+
+    /* Si el numero de sensores detectados ha cambiado desde la ultima vez
+     * (tipicamente: la UI se construyo antes de que frigo_init terminase la
+     * enumeracion 1-Wire, asi que arrancaron los dropdowns vacios), regenerar
+     * la lista de opciones y restaurar la asignacion guardada en NVS. */
+    static uint8_t s_last_n = 0xFF;
+    if (state->n_sensors != s_last_n) {
+        char opts[128];
+        build_sensor_options(opts, sizeof(opts), state);
+        struct { lv_obj_t *dd; uint8_t slot; } dds[3] = {
+            { s_dd_aletas,     FRIGO_SLOT_ALETAS     },
+            { s_dd_congelador, FRIGO_SLOT_CONGELADOR },
+            { s_dd_exterior,   FRIGO_SLOT_EXTERIOR   },
+        };
+        for (int i = 0; i < 3; ++i) {
+            if (!dds[i].dd) continue;
+            lv_dropdown_set_options(dds[i].dd, opts);
+            /* Sin el n_sensors>0, un rol ausente (FRIGO_SONDA_AUSENTE = 0xFF)
+             * llegaba tal cual al dropdown cuando NO queda ninguna sonda. */
+            uint8_t sel = state->assignment[dds[i].slot];
+            if (sel >= state->n_sensors) sel = 0;
+            lv_dropdown_set_selected(dds[i].dd, sel);
+        }
+        s_last_n = state->n_sensors;
+    }
+
+    if (s_lbl_aletas) {
+        char buf[16];
+        if (state->T_Aletas < -120.0f)
+            snprintf(buf, sizeof(buf), "-- \xc2\xb0""C");
+        else
+            snprintf(buf, sizeof(buf), "%.1f \xc2\xb0""C", state->T_Aletas);
+        lv_label_set_text(s_lbl_aletas, buf);
+    }
+    if (s_lbl_congelador) {
+        char buf[16];
+        if (state->T_Congelador < -120.0f)
+            snprintf(buf, sizeof(buf), "-- \xc2\xb0""C");
+        else
+            snprintf(buf, sizeof(buf), "%.1f \xc2\xb0""C", state->T_Congelador);
+        lv_label_set_text(s_lbl_congelador, buf);
+    }
+    if (s_lbl_exterior) {
+        char buf[16];
+        if (state->T_Exterior < -120.0f)
+            snprintf(buf, sizeof(buf), "-- \xc2\xb0""C");
+        else
+            snprintf(buf, sizeof(buf), "%.1f \xc2\xb0""C", state->T_Exterior);
+        lv_label_set_text(s_lbl_exterior, buf);
+    }
+    /* Valor real del PWM del ventilador (%), con color gris->naranja->rojo (0
+     * gris -> 50 naranja -> 100 rojo), mismo criterio que el aro de la principal. */
+    if (s_lbl_fan) {
+        uint8_t pct = state->fan_percent;
+        if (pct > 100) pct = 100;
+        char fbuf[8];
+        snprintf(fbuf, sizeof(fbuf), "%u %%", pct);
+        lv_label_set_text(s_lbl_fan, fbuf);
+        uint8_t r, g, b;
+        if (pct < 50) {
+            r = 0x8A + ((int)(0xFF - 0x8A) * pct) / 50;
+            g = 0x93 + ((int)(0x98 - 0x93) * pct) / 50;
+            b = 0xA6 + ((int)(0x00 - 0xA6) * pct) / 50;
+        } else {
+            int q = pct - 50;
+            r = 0xFF;
+            g = 0x98 + ((int)(0x44 - 0x98) * q) / 50;
+            b = 0x00 + ((int)(0x44 - 0x00) * q) / 50;
+        }
+        lv_obj_set_style_text_color(s_lbl_fan, lv_color_make(r, g, b), 0);
+    }
+    if (s_lbl_exterior_overlay) {
+        char buf[32];
+        /* Solo el valor (el prefijo "Exterior:" es un label fijo aparte).
+         * Ancho del numero fijo (%+5.1f -> 5 chars: " +5.4", "-12.5", "-55.0")
+         * para que el label no cambie de tamano y la barra no se desplace. */
+        if (state->T_Exterior < -120.0f)
+            snprintf(buf, sizeof(buf), "--.- \xc2\xb0""C");
+        else
+            snprintf(buf, sizeof(buf), "%+5.1f \xc2\xb0""C", state->T_Exterior);
+        lv_label_set_text(s_lbl_exterior_overlay, buf);
+    }
+
+    /* Ha cambiado el conjunto de sondas y el usuario aun no lo ha visto. La
+     * bandera NO se limpia aqui sino en el boton del aviso: este update puede
+     * saltarse si lvgl_port_lock caduca, y un disparo unico se perderia. */
+    if (state->scan_event != 0) mostrar_aviso_sondas(state->scan_event);
+}
