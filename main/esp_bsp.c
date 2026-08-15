@@ -13,6 +13,7 @@
  */
 
 #include <string.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -205,7 +206,10 @@ esp_err_t bsp_display_brightness_set(int pct)
     if (pct > 100) pct = 100;
     if (pct <   0) pct =   0;
     ESP_LOGI(TAG, "Backlight %d%%", pct);
-    uint32_t duty = (1023u * (uint32_t)pct) / 100u;
+    /* Correccion gamma (~2.2): el ojo percibe el brillo de forma logaritmica,
+     * no lineal. Sin esto el tramo 5-50% se siente "todo apagado" y 50-100%
+     * apenas cambia. pct=0 y pct=100 siguen mapeando a duty 0 y 1023. */
+    uint32_t duty = (uint32_t)(1023.0f * powf((float)pct / 100.0f, 2.2f) + 0.5f);
     ESP_RETURN_ON_ERROR(ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LEDC_CHANNEL_NUM, duty),
                         TAG, "ledc_set_duty");
     ESP_RETURN_ON_ERROR(ledc_update_duty(LEDC_LOW_SPEED_MODE, BSP_LEDC_CHANNEL_NUM),
