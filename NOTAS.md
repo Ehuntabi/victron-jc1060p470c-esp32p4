@@ -1,3 +1,12 @@
+## v1.5.4
+
+Arreglo: la escala de brillo de la pantalla (manual, auto-brillo por luz
+ambiente, salvapantallas y modo nocturno) era lineal, y el ojo humano no
+percibe el brillo así — el tramo bajo del deslizador (5-50%) se sentía
+todo "apagado" y el tramo alto (50-100%) apenas cambiaba. Se aplica ahora
+una curva gamma (~2.2) al mapeo, así que la escala se siente uniforme de
+extremo a extremo. Confirmado en la placa.
+
 ## v1.5.3
 
 Nueva función: la card "DC/DC" del mini (segundo display ESP32-C6 de 1,47")
