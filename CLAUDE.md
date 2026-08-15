@@ -1,6 +1,6 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.0**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.2**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -109,3 +109,6 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.0**
    Si arranca peor, volver a 18 kHz.
    (Histórico: antes del IRLR7843 había un módulo D4184, limitado a ≤20 kHz. Ese límite
    ya no aplica, pero apareció el del opto.)
+   **Aplazado a propósito (15-ago-2026):** decisión del usuario, se retoma cuando
+   llegue la placa que sustituye a la actual (para hacer el cambio de opto de una vez).
+   Mientras tanto 18 kHz va bien, no es urgente.
