@@ -1,3 +1,17 @@
+## v1.5.3
+
+Nueva función: la card "DC/DC" del mini (segundo display ESP32-C6 de 1,47")
+pasa a llamarse "BATERIA MOTOR" y muestra el canal auxiliar del SmartShunt
+(tensión de arranque/motor, punto medio o temperatura, según cómo esté
+configurado el propio shunt) en vez de la tensión de entrada del Orion
+DC/DC. Mismo dato que ya se veía en el 7" (Ajustes → Batería), ahora
+también en el mini. Confirmado en la placa con el motor arrancado y
+parado: la tensión sigue correctamente los dos estados.
+
+Requiere flashear también el mini (protocolo UDP entre los dos display
+sube de versión); si el mini se queda en v1.5.2 o anterior, descarta los
+paquetes del 7" por versión distinta y no actualiza esa card.
+
 ## v1.5.2
 
 Arreglo real: la actualización de firmware por Wi-Fi (OTA) se reiniciaba a
