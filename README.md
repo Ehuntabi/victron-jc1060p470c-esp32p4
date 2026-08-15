@@ -1,6 +1,6 @@
 # Joint SPL 145 Control — VictronSolarDisplay port for Guition JC1060P470C_I (ESP32-P4)
 
-**v1.5.2** · **[Español](#español) | [English](#english)**
+**v1.5.3** · **[Español](#español) | [English](#english)**
 
 ---
 
