@@ -40,10 +40,14 @@ static void build_msg(mini_msg_t *out)
         out->shunt_soc_deci      = (int16_t)snap.soc_deci;
         out->shunt_voltage_centi = (int16_t)snap.bat_v_centi;
         out->shunt_current_milli = snap.bat_i_milli;
+        out->aux_value_raw       = snap.aux_value;
+        out->aux_input           = snap.aux_input;
     } else {
         out->shunt_soc_deci      = MINI_NO_DATA_I16;
         out->shunt_voltage_centi = MINI_NO_DATA_I16;
         out->shunt_current_milli = MINI_NO_DATA_I32;
+        out->aux_value_raw       = 0;
+        out->aux_input           = MINI_NO_DATA_U8;
     }
     if (snap.dcdc_has) {
         out->dcdc_v_in_centi  = (int16_t)snap.dc_in_v_centi;

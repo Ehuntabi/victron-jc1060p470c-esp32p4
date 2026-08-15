@@ -38,6 +38,12 @@ typedef struct {
     uint16_t dc_in_v_centi;
     uint16_t dc_out_v_centi;
     uint8_t  dc_state;
+
+    /* Canal auxiliar del SmartShunt (solo lo rellena VICTRON_BLE_RECORD_BATTERY_MONITOR;
+     * la Lynx Smart BMS no lo trae). Valido solo si bat_has. Crudo, ver
+     * ui_format_aux_value() para el criterio de formato segun aux_input. */
+    uint16_t aux_value;
+    uint8_t  aux_input;
 } dashboard_snapshot_t;
 
 void dashboard_state_snapshot(dashboard_snapshot_t *out);

@@ -21,14 +21,14 @@
 extern "C" {
 #endif
 
-#define MINI_PROTO_VERSION   1
+#define MINI_PROTO_VERSION   2
 #define MINI_PROTO_UDP_PORT  4242
 #define MINI_NO_DATA_I16     INT16_MIN   /* -32768 = sin sensor / sin dato */
 #define MINI_NO_DATA_I32     INT32_MIN
 #define MINI_NO_DATA_U8      0xFF
 
 /* Payload broadcast 7" -> mini. Tamaño fijo, sin punteros, packed.
- * Total: 28 bytes. */
+ * Total: 32 bytes (sizeof(struct mini_msg), verificado con el compilador). */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
     uint8_t  _pad0;               /* alignment */
@@ -53,12 +53,16 @@ struct __attribute__((packed)) mini_msg {
     /* Aguas (NE185 RS-485, niveles 0..3). MINI_NO_DATA_U8 si !fresh. */
     uint8_t  water_clean;         /* s1 limpia */
     uint8_t  water_gray;          /* r1 grises */
-    uint8_t  _pad3;
-    uint8_t  _pad4;
+
+    /* Canal auxiliar del SmartShunt (mismo campo "aux" que victron_records.h:
+     * crudo, la unidad depende de aux_input). MINI_NO_DATA_U8 en aux_input si
+     * no hay shunt (bat_has=false). Ver ui_format_aux_value() en el 7" para
+     * el mismo criterio de formato. */
+    uint16_t aux_value_raw;       /* V*100 (aux_input 0/1) o Kelvin*100 (2) */
+    uint8_t  aux_input;           /* 0=voltage2(arranque), 1=mid-point, 2=temp */
 
     /* Exterior. Sin sensor todavía en el 7" -> se envía MINI_NO_DATA_I16. */
     int16_t  exterior_temp_centi;
-    uint8_t  _pad5;
     uint8_t  screensaver;         /* 1 = el 7"(P4) está en salvapantallas → el mini atenúa su pantalla */
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */

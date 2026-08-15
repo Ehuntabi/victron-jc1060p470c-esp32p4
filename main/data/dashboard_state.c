@@ -17,6 +17,8 @@ static struct {
     uint16_t ttg_min;
     uint16_t bat_alarm;
     uint32_t bat_ms;
+    uint16_t aux_value;
+    uint8_t  aux_input;
 
     bool     solar_has;
     uint16_t pv_w;
@@ -68,6 +70,8 @@ void dashboard_state_on_record(const victron_data_t *data)
             s.bat_i_milli = b->battery_current_milli;
             s.ttg_min = b->time_to_go_minutes;
             s.bat_alarm = b->alarm_reason;
+            s.aux_value = b->aux_value;
+            s.aux_input = b->aux_input;
             break;
         }
         case VICTRON_BLE_RECORD_LYNX_SMART_BMS: {
@@ -127,6 +131,8 @@ void dashboard_state_snapshot(dashboard_snapshot_t *out)
     out->dc_in_v_centi  = s.dc_in_v_centi;
     out->dc_out_v_centi = s.dc_out_v_centi;
     out->dc_state       = s.dc_state;
+    out->aux_value      = s.aux_value;
+    out->aux_input      = s.aux_input;
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     out->solar_has   = s.solar_has;
     out->pv_w        = s.pv_w;

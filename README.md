@@ -122,7 +122,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Controlable desde la UI (Overview) y por `POST /control`. Encendido automático de cargas al despertar (configurable, NVS).
 
 #### Display satélite "mini" (UDP)
-- Broadcast **UDP** (1 Hz) desde el AP del 7" a un segundo display **ESP32-C6 de 1,47"** (`192.168.4.255:4242`). Payload compacto (28 bytes, CRC32) con SoC/V/A de batería, DC/DC, frigo (temperatura + ventilador) y aguas del NE185. Protocolo compartido en `main/net/mini_proto.h` (debe ir **byte a byte idéntico** en ambos firmwares). Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
+- Broadcast **UDP** (1 Hz) desde el AP del 7" a un segundo display **ESP32-C6 de 1,47"** (`192.168.4.255:4242`). Payload compacto (32 bytes, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador) y aguas del NE185. Protocolo compartido en `main/net/mini_proto.h` (debe ir **byte a byte idéntico** en ambos firmwares). Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
 
 #### Datalogger y persistencia
 - **Frigo**: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`.
@@ -290,7 +290,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Controllable from the UI (Overview) and via `POST /control`. Automatic load switch-on on wake (configurable, NVS).
 
 #### "Mini" satellite display (UDP)
-- **UDP** broadcast (1 Hz) from the 7" AP to a second **1.47" ESP32-C6** display (`192.168.4.255:4242`). Compact payload (28 bytes, CRC32) with battery SoC/V/A, DC/DC, fridge (temperature + fan) and NE185 water levels. Shared protocol in `main/net/mini_proto.h` (must be **byte-for-byte identical** in both firmwares). It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
+- **UDP** broadcast (1 Hz) from the 7" AP to a second **1.47" ESP32-C6** display (`192.168.4.255:4242`). Compact payload (32 bytes, CRC32) with battery SoC/V/A, shunt aux channel (starter/motor battery), fridge (temperature + fan) and NE185 water levels. Shared protocol in `main/net/mini_proto.h` (must be **byte-for-byte identical** in both firmwares). It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
 
 #### Datalogger and persistence
 - **Frigo**: 200-entry RAM ring + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`.
