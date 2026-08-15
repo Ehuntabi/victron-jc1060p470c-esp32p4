@@ -24,6 +24,7 @@
 #include "esp_task_wdt.h"
 #include "watchdog.h"
 #include "camera.h"
+#include "ui.h"
 
 static const char *TAG = "ota";
 
@@ -103,10 +104,15 @@ esp_err_t ota_update_receive(httpd_req_t *req)
      * la placa a medias, antes de recibir un solo byte. Se reanuda en TODAS
      * las salidas de aqui en adelante, exito o fallo. */
     ota_wdt_suspend(true);
+    /* Tapa el parpadeo de pantalla durante la OTA (no lo arregla, ver ui.c).
+     * Se oculta en TODAS las salidas de fallo de aqui en adelante; en exito
+     * se deja puesto (con el texto cambiado) porque la placa reinicia sola. */
+    ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
 
     esp_ota_handle_t ota = 0;
     esp_err_t err = esp_ota_begin(destino, req->content_len, &ota);
     if (err != ESP_OK) {
+        ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_begin: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -117,6 +123,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     char *buf = malloc(OTA_CHUNK);
     if (!buf) {
         esp_ota_abort(ota);
+        ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "Sin memoria para la actualizacion.");
@@ -168,6 +175,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
 
     if (fallo) {
         esp_ota_abort(ota);
+        ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req,
@@ -179,6 +187,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* esp_ota_end valida la imagen (cabecera y firma del binario). */
     err = esp_ota_end(ota);
     if (err != ESP_OK) {
+        ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_end: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "400 Bad Request");
@@ -191,12 +200,16 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     err = esp_ota_set_boot_partition(destino);
     ota_wdt_suspend(false);
     if (err != ESP_OK) {
+        ui_ota_overlay_hide();
         ESP_LOGE(TAG, "esp_ota_set_boot_partition: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "No se pudo activar la version nueva.");
         return ESP_OK;
     }
 
+    /* Exito: se deja el overlay puesto (con el texto cambiado) hasta que
+     * reinicie sola en 1,5 s — no hace falta ocultarlo. */
+    ui_ota_overlay_show("Firmware instalado\n\nReiniciando...");
     ESP_LOGI(TAG, "actualizacion grabada en '%s'", destino->label);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr(req,
