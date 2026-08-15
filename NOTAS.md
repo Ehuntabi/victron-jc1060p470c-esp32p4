@@ -1,3 +1,21 @@
+## v1.5.2
+
+Arreglo real: la actualización de firmware por Wi-Fi (OTA) se reiniciaba a
+medias (a un % distinto cada vez, sin completar nunca), con cualquier
+versión. Causa real: al escribir en flash durante la OTA, ESP-IDF bloquea
+temporalmente al núcleo que no está escribiendo (para proteger la caché
+compartida) — si ese bloqueo se alarga por la carga concurrente del resto
+del sistema (cámara, Bluetooth, tarjeta SD), el vigilante de tareas de
+FreeRTOS lo detecta como colgado y reinicia la placa. Con
+`CONFIG_SPIRAM_XIP_FROM_PSRAM` el código deja de necesitar la caché de
+flash durante ese bloqueo (se ejecuta desde PSRAM en su lugar), y se sube
+también el margen del vigilante de 5 a 10 segundos por seguridad extra.
+Confirmado en la placa: OTA completa sin reiniciar.
+
+También: aviso fijo en pantalla ("Actualizando firmware, no apagues la
+pantalla") durante toda la subida, con el táctil bloqueado para que no se
+pueda tocar nada mientras dura.
+
 ## v1.5.1
 
 Sin cambios de cara al usuario: continuación del mismo pase de

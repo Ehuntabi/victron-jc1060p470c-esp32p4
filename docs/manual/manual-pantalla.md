@@ -234,8 +234,9 @@ vigilancia, sin tener que sacar la tarjeta.
 3. Te pedirá un **usuario y una contraseña**: son los de la tarjeta *Acceso a
    Actualizar y Claves*, en **Ajustes → Wi-Fi**. Solo la primera vez; el
    navegador las recuerda.
-4. Sube el fichero de la versión nueva y espera. Se reinicia sola en unos 20
-   segundos.
+4. Sube el fichero de la versión nueva y espera. La pantalla se queda fija
+   con un aviso de "Actualizando firmware" (no se puede tocar nada mientras
+   dura, es normal) y se reinicia sola en unos 20 segundos.
 
 Si algo saliera mal a medias, **vuelve sola a la versión anterior**. No te quedas
 sin pantalla.
