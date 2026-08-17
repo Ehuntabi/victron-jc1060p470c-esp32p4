@@ -1,3 +1,27 @@
+## v1.5.5
+
+Arreglo: la alarma del congelador y la de SoC crítico podían quedarse
+mudas.
+
+- Congelador: el criterio exigía que la temperatura subiera de forma
+  estricta en cada lectura del sensor (~cada 2,8 s) durante los 30 minutos
+  seguidos configurados. Ruido del sensor o una meseta por cambio de fase
+  del hielo (se funde a temperatura casi constante un buen rato antes de
+  seguir subiendo) bastaban para reiniciar el contador a cero, así que en
+  la práctica casi nunca llegaba a completar la racha. Ahora se seguimiento
+  el máximo alcanzado durante la subida y solo se corta si baja más de
+  0,5°C por debajo de ese máximo — tolera ruido y mesetas, sigue cortando
+  ante un enfriamiento real. Verificado contra el CSV real de un corte de
+  gas del 17-ago (bajada de -12°C a 8°C): con el criterio viejo la alarma
+  se encendía y apagaba sola varias veces; con el nuevo se queda activa sin
+  cortes desde que cruza el umbral hasta que baja de verdad.
+- SoC crítico y la sirena repetida (congelador/SoC/tanques): sonaban solo
+  si el interruptor global "Silenciar avisos" estaba apagado. Ahora ambas
+  ignoran ese mute, igual que cualquier alarma de seguridad debería.
+
+Pendiente de confirmar con un caso real en la placa (el anterior ya había
+pasado antes de tener el arreglo).
+
 ## v1.5.4
 
 Arreglo: la escala de brillo de la pantalla (manual, auto-brillo por luz
