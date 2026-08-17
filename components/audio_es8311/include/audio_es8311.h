@@ -26,6 +26,11 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus);
  * Garantiza que nunca hay dos reproducciones a la vez sobre el codec. */
 esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if_busy);
 esp_err_t audio_play_jingle(audio_jingle_t jingle);
+/* Igual que audio_play_tones pero ignora el mute global: para las alarmas de
+ * seguridad (congelador, SoC critico, tanques), que deben oirse aunque el
+ * usuario tenga "Silenciar avisos" activado. Restaura el mute de hardware
+ * al terminar. */
+esp_err_t audio_play_alarm_tones(const audio_note_t *notes, size_t count, bool wait_if_busy);
 
 /* Volumen 0..100 (persistente en NVS namespace 'audio'). */
 esp_err_t audio_set_volume(int vol);

@@ -340,7 +340,7 @@ static void overview_alarm_task(void *arg)
              * para no afectar el volumen normal del usuario. */
             int prev_vol = audio_get_volume();
             audio_set_volume_transient(100);
-            audio_play_tones(s_alarm_pattern,
+            audio_play_alarm_tones(s_alarm_pattern,
                              sizeof(s_alarm_pattern) / sizeof(s_alarm_pattern[0]),
                              true);
             audio_set_volume_transient(prev_vol);

@@ -225,17 +225,34 @@ static void frigo_update_cb(const frigo_state_t *state)
     if (!s_ui) return;
 
     /* ── Alarma congelador ─────────────────────────────────────── */
-    static float   s_temp_prev     = 0.0f;
     static int64_t s_rising_since  = 0;
+    static float   s_rise_peak     = -200.0f;  /* T maxima vista durante la racha */
     static bool    s_alarm_active  = false;
+    /* Tolerancia a ruido de lectura y a las mesetas de temperatura por cambio
+     * de fase del hielo (se funde a T casi constante un buen rato antes de
+     * seguir subiendo). Sin esto, exigir subida estricta muestra a muestra
+     * (~cada 2.8s, ver READ_INTERVAL_MS en frigo.c) nunca acumula los N
+     * minutos seguidos en un sensor real: una sola meseta o bajada de ruido
+     * reinicia el contador a cero y la alarma no llega a sonar nunca. */
+    const float FREEZER_NOISE_MARGIN_C = 0.5f;
 
     float T = state->T_Congelador;
     int64_t now_ms = esp_timer_get_time() / 1000;
 
     if (T > -120.0f) {  /* sensor conectado */
-        if (T > s_temp_prev && s_temp_prev > -120.0f) {
-            /* temperatura subiendo */
-            if (s_rising_since == 0) s_rising_since = now_ms;
+        if (s_rising_since != 0 && T < s_rise_peak - FREEZER_NOISE_MARGIN_C) {
+            /* bajada real (no ruido/meseta): cortar la racha */
+            s_rising_since = 0;
+        }
+        if (s_rising_since == 0 && T > s_rise_peak) {
+            /* posible inicio de una nueva subida */
+            s_rising_since = now_ms;
+            s_rise_peak = T;
+        } else if (s_rising_since != 0) {
+            if (T > s_rise_peak) s_rise_peak = T;
+        }
+
+        if (s_rising_since != 0) {
             int64_t rising_ms = now_ms - s_rising_since;
             bool alarma = (rising_ms >= (int64_t)alerts_get_freezer_minutes() * 60 * 1000)
                           && (T > alerts_get_freezer_temp_c());
@@ -247,16 +264,11 @@ static void frigo_update_cb(const frigo_state_t *state)
                  * no se reintenta y la alarma nunca se muestra/quita. */
                 ui_set_freezer_alarm(s_ui, alarma);
             }
-        } else {
-            /* temperatura bajando o estable — resetear contador */
-            s_rising_since = 0;
-            if (s_alarm_active) {
-                s_alarm_active = false;
-                /* Fuera del lock: escritor de bool seguro sin LVGL (ver arriba). */
-                ui_set_freezer_alarm(s_ui, false);
-            }
+        } else if (s_alarm_active) {
+            s_alarm_active = false;
+            /* Fuera del lock: escritor de bool seguro sin LVGL (ver arriba). */
+            ui_set_freezer_alarm(s_ui, false);
         }
-        s_temp_prev = T;
     }
 
     /* ── Actualizar UI ─────────────────────────────────────────── */

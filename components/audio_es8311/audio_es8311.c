@@ -206,10 +206,9 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     return ESP_OK;
 }
 
-esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if_busy)
+static esp_err_t play_tones_impl(const audio_note_t *notes, size_t count, bool wait_if_busy)
 {
     if (!s_codec) return ESP_ERR_INVALID_STATE;
-    if (s_muted) return ESP_OK;
     if (!notes || count == 0) return ESP_ERR_INVALID_ARG;
 
     /* Serializar sobre s_codec: la alarma espera un poco (wait_if_busy),
@@ -295,6 +294,23 @@ esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if
     return ESP_OK;
 }
 
+esp_err_t audio_play_tones(const audio_note_t *notes, size_t count, bool wait_if_busy)
+{
+    if (s_muted) return ESP_OK;
+    return play_tones_impl(notes, count, wait_if_busy);
+}
+
+esp_err_t audio_play_alarm_tones(const audio_note_t *notes, size_t count, bool wait_if_busy)
+{
+    if (!s_codec) return ESP_ERR_INVALID_STATE;
+    /* Alarma de seguridad: se oye pase lo que pase con el mute global.
+     * Se desmutea el codec HW solo durante el pitido y se restaura despues. */
+    if (s_muted) esp_codec_dev_set_out_mute(s_codec, false);
+    esp_err_t ret = play_tones_impl(notes, count, wait_if_busy);
+    if (s_muted) esp_codec_dev_set_out_mute(s_codec, true);
+    return ret;
+}
+
 esp_err_t audio_play_jingle(audio_jingle_t j)
 {
     /* Notas en Hz: C5=523, D5=587, E5=659, G5=784, A5=880, C6=1047, E6=1319, G4=392, C4=261 */
@@ -306,10 +322,12 @@ esp_err_t audio_play_jingle(audio_jingle_t j)
             return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
         case AUDIO_JINGLE_CRITICAL: {
+            /* SoC bajo el umbral critico: ignora el mute global igual que la
+             * alarma sostenida del congelador/SoC (ver audio_play_alarm_tones). */
             static const audio_note_t notes[] = {
                 {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 150}, {0, 50}, {880, 300},
             };
-            return audio_play_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
+            return audio_play_alarm_tones(notes, sizeof(notes)/sizeof(notes[0]), false);
         }
         case AUDIO_JINGLE_WARNING: {
             static const audio_note_t notes[] = {
