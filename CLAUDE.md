@@ -132,7 +132,20 @@ fallo igual, que es justo lo que pasó el 21-ago-2026.
    `EMBED_FILES`, y publicar una versión limpia (son 1,1 MB y un botón que no
    debería vivir ahí para siempre).
 
-1. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
+1. **Ver la 3.5" con datos, para juzgar su estética** (pendiente 21-ago-2026).
+   Con la P4 en la mesa no hay BLE en rango, así que manda centinelas de "sin
+   dato" y el satélite pinta "--". Para verlo con valores que se mueven, basta
+   encender el simulador que ya existe:
+   - `SIM_OVERVIEW_ENABLE` a `1` en `main/sim_overview.h`
+   - descomentar `sim_overview_start();` en `main/main.c`
+
+   Inyecta batería, aguas y frigo por `ui_on_panel_data()`, la misma puerta que
+   los datos reales, así que salen por UDP hasta la 3.5" y se prueba la cadena
+   entera. **Acordarse de quitarlo después**: mientras esté puesto, la P4
+   enseña datos FALSOS en su propia pantalla y puede guardarlos en el histórico
+   de la SD.
+
+2. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
    Ahora está a 18 kHz (`FRIGO_FAN_FREQ_HZ` en `components/frigo/frigo.h`): inaudible
    para adultos, pero **NO para oídos jóvenes** (su límite ronda los 19-20 kHz). Por
    encima de 20 kHz no lo oye nadie.
