@@ -1,14 +1,20 @@
-/* mini_proto.h - Protocolo UDP-broadcast entre 7" (P4+C6) y mini (C6 1.47")
+/* mini_proto.h - Protocolo UDP-broadcast del 7" (P4+C6) hacia el satelite.
  *
- * MANTENER SINCRONIZADO con:
- *   - 7"   : main/net/mini_proto.h  (este fichero)
- *   - mini : main/net/mini_proto.h  (copia idéntica)
+ * MANTENER SINCRONIZADO entre DOS proyectos, byte a byte:
+ *   - 7"       : ~/joint/victron/main/net/mini_proto.h
+ *   - 35cabina : ~/joint/35cabina/main/net/mini_proto.h
  *
- * Cambios en el struct requieren bump de MINI_PROTO_VERSION y recompilar AMBOS.
+ * El satelite viejo, el mini C6 1.47" (~/joint/victron_mini), esta DESCARTADO
+ * desde el 20-ago-2026: la 35cabina lo sustituye. Ya NO condiciona el diseno de
+ * este protocolo, que puede crecer por encima de los 32 bytes heredados. Aviso
+ * practico por si alguno sigue enchufado: subir MINI_PROTO_VERSION lo deja mudo
+ * (rechaza las versiones que no conoce).
+ *
+ * Cambios en el struct requieren bump de MINI_PROTO_VERSION y recompilar los dos.
  *
  * Transporte: UDP broadcast a 192.168.4.255:MINI_PROTO_UDP_PORT.
  *   (intentamos primero ESP-NOW pero esp_hosted no exporta esa API.)
- * Topología: el mini se asocia al SoftAP del 7" como cliente STA (DHCP).
+ * Topologia: el satelite se asocia al SoftAP del 7" como cliente STA (DHCP).
  * Cadencia: 1 Hz desde el 7".
  *
  * Para valores "sin dato" usar el sentinel definido por campo.
