@@ -92,7 +92,7 @@ dependencies:
   espressif/esp_hosted:
     dependencies: []
     source:
-      path: components/espressif__esp_hosted
+      path: /home/jc/joint/victron/components/espressif__esp_hosted
       type: local
     version: 0.0.27
   espressif/esp_ipa:
@@ -150,7 +150,7 @@ dependencies:
       type: service
     version: 2.8.0~1
   espressif/esp_sccb_intf:
-    component_hash: c071b189e49f40940722aea01a5489f873385cc39cd5b14012341135b85d1a9d
+    component_hash: eb6a7d5c992f09583c163b2e3f5e95a0fdc87a2d9f8e026f3e59153935553889
     dependencies:
     - name: idf
       require: private
@@ -158,7 +158,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 0.0.8
+    version: 0.0.9
   espressif/esp_serial_slave_link:
     component_hash: ac1776806de0a6e371c84e87898bb983e19ce62aa7f1e2e5c4a3b0234a575d2c
     dependencies:

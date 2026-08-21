@@ -10,6 +10,7 @@
 #include "fonts/fonts_es.h"
 
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <lvgl.h>
 #include "freertos/FreeRTOS.h"
@@ -215,13 +216,30 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char *raw_ver = app_desc ? app_desc->version : APP_VERSION_FALLBACK;
     /* git describe da "v1.0.0" en un tag exacto, o "v1.0.0-<n>-g<hash>[-dirty]"
-     * en un build intermedio. Mostramos el tag base y, si hay sufijo (no es un
-     * release limpio), "-dev" -> "v1.0.0-dev" en vez del hash feo. */
+     * en un build intermedio, donde <n> es cuantos commits van por encima del
+     * tag. Se muestra "v1.0.0 +7": el tag y esa cuenta.
+     *
+     * Antes ponia "-dev" a secas y ahi estaba el problema: TODOS los builds
+     * entre dos versiones se llamaban igual, asi que mirando la pantalla no
+     * habia forma de saber cual tenias puesto. Con la cuenta se ordenan solos y
+     * se sigue viendo que no es una version publicada.
+     *
+     * Sumarle 0.0.1 al tag no vale: inventaria un numero de version que no
+     * existe (sin tag, sin release, sin binario guardado) y ademas tampoco
+     * distinguiria un build de otro. Si no hay cuenta -- "v1.0.0-dirty", que es
+     * un tag exacto con cambios sin commitear -- se queda el aviso de siempre. */
     char ver_disp[48];
     const char *dash = strchr(raw_ver, '-');
-    if (dash) snprintf(ver_disp, sizeof(ver_disp), "%.*s-dev",
-                       (int)(dash - raw_ver), raw_ver);
-    else      snprintf(ver_disp, sizeof(ver_disp), "%s", raw_ver);
+    int commits = dash ? atoi(dash + 1) : 0;
+    if (dash && commits > 0) {
+        snprintf(ver_disp, sizeof(ver_disp), "%.*s +%d",
+                 (int)(dash - raw_ver), raw_ver, commits);
+    } else if (dash) {
+        snprintf(ver_disp, sizeof(ver_disp), "%.*s-dev",
+                 (int)(dash - raw_ver), raw_ver);
+    } else {
+        snprintf(ver_disp, sizeof(ver_disp), "%s", raw_ver);
+    }
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
