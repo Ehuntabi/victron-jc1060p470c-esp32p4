@@ -577,7 +577,7 @@ esp_err_t wifi_ap_init(void)
     ap_cfg.ap.password[sizeof(ap_cfg.ap.password) - 1] = '\0';
 
     /* pass en DEBUG para no persistir la credencial en los logs de SD/serie */
-    ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA_WPA2_PSK",
+    ESP_LOGI(TAG, "AP cfg: ssid='%s' ch=%d auth=WPA2_PSK",
              ssid, ap_cfg.ap.channel);
     ESP_LOGD(TAG, "AP pass configurada (%u chars)", (unsigned)strlen(pass));
 
@@ -604,6 +604,48 @@ esp_err_t wifi_ap_init(void)
         xEventGroupWaitBits(s_ap_evt, AP_EVT_STARTED,
                             pdFALSE, pdTRUE, pdMS_TO_TICKS(2000));
     }
+    /* REAPLICAR la configuracion despues de arrancar, y comprobar que ha
+     * cuajado.
+     *
+     * En esp_hosted el AP no lo levanta este chip: lo levanta el C6 por RPC. Y
+     * se ha visto (21-ago-2026) que el set_config de ANTES del start devuelve
+     * ESP_OK, el esclavo dice "softap started"... y en el aire aparece SU AP de
+     * fabrica, "ESP_<MAC>" y ABIERTO, en vez del configurado. O sea que el
+     * esclavo rehace su configuracion al arrancar y se come la que le mandamos.
+     *
+     * Se reaplica y se LEE DE VUELTA para no volver a fiarnos de un ESP_OK que
+     * no significa nada: si lo que hay puesto no es lo que pedimos, se dice en
+     * el log con todas las letras en vez de dejar al satelite dando vueltas con
+     * un "no encuentro la red" que despista. */
+    esp_err_t re_err = esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
+    if (re_err != ESP_OK) {
+        ESP_LOGW(TAG, "reaplicar AP cfg fallo: %s", esp_err_to_name(re_err));
+    }
+
+    wifi_config_t leida = {0};
+    if (esp_wifi_get_config(WIFI_IF_AP, &leida) == ESP_OK) {
+        ESP_LOGI(TAG, "AP en la radio: ssid='%s' authmode=%d ch=%d",
+                 (const char *)leida.ap.ssid, leida.ap.authmode, leida.ap.channel);
+        /* Que no coincida es lo ESPERADO hoy, no una sorpresa: esp_hosted le
+         * pone al AP el nombre del chip ("ESP_<MAC>") y lo levanta abierto, se
+         * configure lo que se configure. Por eso se avisa como W y no como E, y
+         * se dice el nombre de verdad -- que es el que hay que poner en los
+         * satelites, y el que llevaba toda la noche despistando porque la
+         * pantalla de Ajustes muestra otro. */
+        if (strcmp((const char *)leida.ap.ssid, ssid) != 0) {
+            ESP_LOGW(TAG, "El AP NO se llama '%s' sino '%s': lo renombra esp_hosted. "
+                          "Es el nombre que tienen que buscar los satelites.",
+                     ssid, (const char *)leida.ap.ssid);
+        }
+        if (leida.ap.authmode == WIFI_AUTH_OPEN) {
+            ESP_LOGW(TAG, "El AP esta ABIERTO (sin cifrar) pese a configurar WPA2: "
+                          "esp_hosted no aplica la clave.");
+        }
+
+    } else {
+        ESP_LOGW(TAG, "no se pudo releer la config del AP");
+    }
+
     dhcp_set_captiveportal_url();
 
     /* Arrancar contador auto-off del HTTP server: si en 15 min no llega
