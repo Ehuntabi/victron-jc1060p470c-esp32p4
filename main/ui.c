@@ -1276,17 +1276,36 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
     }
 }
 
+/* Pone en la casilla de Ajustes el SSID que de verdad usa el AP, que es el
+ * guardado en NVS (lo mismo que lee wifi_ap_init).
+ *
+ * ANTES SE LO INVENTABA a partir de la MAC ("ESP_%02X%02X%02X" -> "ESP_DC078D")
+ * y lo escribia encima de lo que hubiera. Eso RENOMBRABA EL AP: la casilla se
+ * guarda sola al perder el foco (settings_wifi.c, DEFOCUSED/READY), asi que
+ * bastaba con abrir esa pantalla y tocarla para que el AP dejara de llamarse
+ * como se llamaba. Paso el 21-ago-2026: un AP que llevaba semanas como
+ * "VictronConfig" amanecio como "ESP_DC078D" y el satelite dejo de encontrarlo
+ * (udp_rx: Desconectado reason=201).
+ *
+ * Si no hay nada guardado se deja el mismo valor de fabrica que usa el AP, no
+ * el nombre del chip: lo que se muestre aqui tiene que ser lo que el AP va a
+ * anunciar, porque es lo que se acaba guardando. */
 void ui_update_wifi_ssid(ui_state_t *ui)
 {
     if (!ui || !ui->wifi.ssid) return;
-    uint8_t mac[6];
-    if (esp_wifi_get_mac(WIFI_IF_AP, mac) == ESP_OK) {
-        char ssid[20];
-        snprintf(ssid, sizeof(ssid), "ESP_%02X%02X%02X", mac[3], mac[4], mac[5]);
-        if (lvgl_port_lock(50)) {
-            lv_textarea_set_text(ui->wifi.ssid, ssid);
-            lvgl_port_unlock();
-        }
+
+    char ssid[33] = {0};
+    nvs_handle_t h;
+    if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(ssid);
+        if (nvs_get_str(h, "ssid", ssid, &len) != ESP_OK) ssid[0] = '\0';
+        nvs_close(h);
+    }
+    if (ssid[0] == '\0') strcpy(ssid, "VictronConfig");
+
+    if (lvgl_port_lock(50)) {
+        lv_textarea_set_text(ui->wifi.ssid, ssid);
+        lvgl_port_unlock();
     }
 }
 
