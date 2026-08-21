@@ -261,13 +261,28 @@ void config_server_get_web_credentials(char *user, size_t ulen,
 
 /* Basic auth del portal: DOS NIVELES (2026-08-07).
  *
- * Nivel abierto (la mayoria de endpoints). El P4 solo levanta Soft-AP
- * (WIFI_MODE_AP, no hay modo estacion), asi que TODO cliente HTTP ha tenido que
- * pasar antes por la clave WPA2 del AP, que es aleatoria de 8+ caracteres y se
- * regenera sola si alguna vez es debil (config_server_ensure_ap_password).
- * Exigir ademas usuario y clave HTTP era una segunda puerta con la misma llave
- * efectiva, y en la practica dejaba a la app fuera: pedia /api/state una vez por
- * segundo y se llevaba 401 tras 401. Por eso este nivel esta abierto.
+ * Nivel abierto (la mayoria de endpoints). Estuvo ABIERTO de verdad hasta el
+ * 2026-08-21 con este razonamiento: "el P4 solo levanta Soft-AP, asi que TODO
+ * cliente HTTP ha tenido que pasar antes por la clave WPA2 del AP; pedir ademas
+ * usuario y clave era una segunda puerta con la misma llave, y dejaba a la app
+ * fuera (pedia /api/state cada segundo y se comia un 401 detras de otro)".
+ *
+ * ESA PREMISA ERA FALSA: el AP NO TIENE CLAVE. esp_hosted (el C6 que hace de
+ * radio) ignora el SSID y la clave que le manda este chip y levanta la red
+ * ABIERTA con su nombre de fabrica. Verificado el 2026-08-21 releyendo la
+ * config con esp_wifi_get_config y escaneando desde el satelite; y ya era asi
+ * en julio, no es de ahora. Es un problema conocido y sin resolver de
+ * esp-hosted (issue #37 de esp-hosted-mcu, abierto desde marzo de 2025;
+ * mismo sintoma en arduino-esp32 #9570: "the WiFi AP is always named as
+ * ESP_0C... and the wifi auth is open").
+ *
+ * O sea que la "segunda puerta con la misma llave" era una puerta SIN llave:
+ * cualquiera a veinte metros se asociaba sin contrasena y llegaba a la CAMARA
+ * DEL INTERIOR (/snapshot, /vigilancia), a /control, a /ausente y a las
+ * descargas de /data. Por eso ahora tambien este nivel pide credenciales.
+ *
+ * Si algun dia el AP va con WPA2 de verdad se puede volver a valorar -- pero
+ * entonces con la premisa comprobada, no supuesta.
  *
  * Nivel estricto: /ota, /save y /keys. Sin esto, quien tuviera la clave del
  * Wi-Fi podia REESCRIBIR EL FIRMWARE (/ota) o llevarse y cambiar las claves AES
@@ -277,9 +292,10 @@ void config_server_get_web_credentials(char *user, size_t ulen,
  * /data), asi que cerrarlos no le afecta en absoluto; al navegador se le piden
  * las credenciales una vez y las recuerda. Se ven en Ajustes -> Wi-Fi.
  *
- * Poniendo PORTAL_REQUIRE_BASIC_AUTH a 1 se exige tambien en el nivel abierto
- * (y entonces la app necesitaria credenciales otra vez). */
-#define PORTAL_REQUIRE_BASIC_AUTH 0
+ * Con PORTAL_REQUIRE_BASIC_AUTH a 1 se exige tambien en el nivel abierto: la
+ * app de Android necesita usuario y clave (se ponen una vez en sus ajustes; se
+ * leen en Ajustes -> Wi-Fi de la pantalla). A 0 vuelve a quedar abierto. */
+#define PORTAL_REQUIRE_BASIC_AUTH 1
 
 /* Comprobacion REAL de credenciales. La usan siempre los endpoints peligrosos.
  * No-static: declarada en config_server_internal.h. */
