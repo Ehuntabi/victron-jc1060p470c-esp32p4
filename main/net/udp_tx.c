@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 static const char *TAG = "udp_tx";
 
@@ -97,6 +98,31 @@ static void build_msg(mini_msg_t *out)
 
     /* Salvapantallas: el mini atenúa su pantalla cuando el 7" está dormido. */
     out->screensaver = ui_screensaver_is_active() ? 1 : 0;
+
+    /* Día de calendario para el satélite, que no tiene reloj: se apaga con el
+     * contacto y al encender no sabe ni qué día es. Con esto puede contar las
+     * noches que ha durado una parada. Ver mini_proto.h para el porqué del día
+     * y no del instante.
+     *
+     * time(NULL) devuelve una fecha de 1970 mientras el RTC no haya puesto la
+     * hora del sistema; en ese caso se manda 0 = "sin dato" y el satélite
+     * espera callado en vez de contar noches inventadas. */
+    time_t ahora = time(NULL);
+    struct tm tm_local;
+    if (ahora > MINI_EPOCH_VALIDO && localtime_r(&ahora, &tm_local)) {
+        /* mktime() sobre la medianoche local da el instante UTC de ese día;
+         * dividir entre 86400 lo convierte en el número de día. Se pasa por
+         * mktime en vez de dividir 'ahora' directamente porque 'ahora' es UTC
+         * y el corte de día que importa es el LOCAL. */
+        tm_local.tm_hour = 0;
+        tm_local.tm_min  = 0;
+        tm_local.tm_sec  = 0;
+        tm_local.tm_isdst = -1;
+        time_t medianoche = mktime(&tm_local);
+        out->fecha_dias = (uint16_t)(medianoche / 86400);
+    } else {
+        out->fecha_dias = 0;
+    }
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
     out->crc32 = esp_crc32_le(0, (const uint8_t *)out,
