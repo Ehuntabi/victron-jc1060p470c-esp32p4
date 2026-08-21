@@ -62,7 +62,6 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                const char *default_ssid,
                                const char *default_pass,
                                uint8_t ap_enabled);
-void wifi_event_cb(lv_event_t *e);
 void password_toggle_btn_event_cb(lv_event_t *e);
 /* Trip computer + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
 /* Trip computer: vive en trip_manager.c. */

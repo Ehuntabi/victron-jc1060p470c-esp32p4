@@ -57,7 +57,7 @@ static void ap_switch_cb(lv_event_t *e);
 
 /* Namespace NVS donde vive la configuracion Wi-Fi. */
 #define WIFI_NAMESPACE "wifi"
-void wifi_event_cb(lv_event_t *e);
+static void wifi_save_cb(lv_event_t *e);
 void password_toggle_btn_event_cb(lv_event_t *e);
 
 static void ap_switch_cb(lv_event_t *e)
@@ -165,10 +165,12 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_CANCEL, ui);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_READY, ui);
-    /* Persistir en NVS solo al confirmar (READY/DEFOCUSED), no por cada tecla
-     * (evita un nvs_commit por pulsacion -> desgaste de flash). */
-    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_READY, ui);
-    lv_obj_add_event_cb(ui->wifi.ssid, wifi_event_cb, LV_EVENT_DEFOCUSED, ui);
+    /* SIN guardado automatico: lo escribe el boton "Guardar red" de abajo.
+     * Guardar al perder el foco fue la mitad de un accidente serio (21-ago-2026):
+     * la otra mitad rellenaba esta casilla con un nombre inventado a partir de
+     * la MAC, y bastaba tocarla y salir para RENOMBRAR EL AP sin querer,
+     * dejando al satelite sin red que buscar. Con un boton, no se guarda nada
+     * hasta que se pide. */
 
     /* Password row */
     lv_obj_t *pass_row = lv_obj_create(card1);
@@ -207,10 +209,20 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_CANCEL, ui);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_READY, ui);
-    /* Persistir en NVS solo al confirmar (READY/DEFOCUSED), no por cada tecla
-     * (evita un nvs_commit por pulsacion -> desgaste de flash). */
-    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_READY, ui);
-    lv_obj_add_event_cb(ui->wifi.password, wifi_event_cb, LV_EVENT_DEFOCUSED, ui);
+    /* SIN guardado automatico, igual que el SSID: manda el boton de abajo. */
+
+    /* Boton de guardar, a lo ancho de la card y debajo de los dos campos.
+     * Escribe los DOS y reaplica el AP en caliente
+     * (config_server_request_wifi_apply), asi el nombre nuevo sale sin
+     * reiniciar ni tocar el interruptor del punto de acceso. */
+    lv_obj_t *btn_save = lv_btn_create(card1);
+    lv_obj_set_width(btn_save, lv_pct(100));
+    lv_obj_set_style_bg_color(btn_save, lv_color_hex(0x2E7D32), 0);
+    lv_obj_add_event_cb(btn_save, wifi_save_cb, LV_EVENT_CLICKED, ui);
+    lv_obj_t *lbl_save = lv_label_create(btn_save);
+    lv_obj_set_style_text_font(lbl_save, &lv_font_montserrat_24_es, 0);
+    lv_label_set_text(lbl_save, "Guardar red");
+    lv_obj_center(lbl_save);
 
     /* === Card 2: Pagina inicial del portal + Reactivar (mitad ancho, dcho) ===
      * El desplegable de pagina inicial y, JUSTO DEBAJO, el boton para
@@ -363,30 +375,40 @@ static void reactivate_portal_cb(lv_event_t *e)
     ESP_LOGI("settings_panel", "Reactivar portal web: solicitado");
 }
 
-void wifi_event_cb(lv_event_t *e)
+/* Guarda SSID y password y reaplica el AP en caliente. Sustituye al guardado
+ * automatico al perder el foco, que renombraba el AP sin pedirlo. */
+static void wifi_save_cb(lv_event_t *e)
 {
-    ui_state_t *ui = lv_event_get_user_data(e);
-    lv_obj_t *ta = lv_event_get_target(e);
-    const char *txt = lv_textarea_get_text(ta);
-    if (ui == NULL) {
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (ui == NULL || ui->wifi.ssid == NULL || ui->wifi.password == NULL) return;
+
+    const char *ssid = lv_textarea_get_text(ui->wifi.ssid);
+    const char *pass = lv_textarea_get_text(ui->wifi.password);
+
+    /* Un SSID vacio dejaria el AP sin nombre: wifi_ap_init lo rechaza y vuelve
+     * al de fabrica, asi que mejor no guardar nada y que se vea que no ha
+     * pasado nada. */
+    if (ssid == NULL || ssid[0] == '\0') {
+        ESP_LOGW(TAG_SETTINGS, "SSID vacio: no se guarda");
         return;
     }
+
     nvs_handle_t h;
     esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
-    if (err == ESP_OK) {
-        if (ta == ui->wifi.ssid) {
-            err = nvs_set_str(h, "ssid", txt);
-        } else if (ta == ui->wifi.password) {
-            err = nvs_set_str(h, "password", txt);
-        }
-        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "Wi-Fi ssid/password (set) no persistio: %s", esp_err_to_name(err));
-        err = nvs_commit(h);
-        if (err != ESP_OK) ESP_LOGW(TAG_SETTINGS, "Wi-Fi config (commit) no persistio: %s", esp_err_to_name(err));
-        nvs_close(h);
-        ESP_LOGI(TAG_SETTINGS, "Wi-Fi config saved");
-    } else {
+    if (err != ESP_OK) {
         ESP_LOGE(TAG_SETTINGS, "nvs_open failed: %s", esp_err_to_name(err));
+        return;
     }
+    err = nvs_set_str(h, "ssid", ssid);
+    if (err == ESP_OK) err = nvs_set_str(h, "password", pass ? pass : "");
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_SETTINGS, "Wi-Fi config no persistio: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG_SETTINGS, "Wi-Fi guardado: SSID='%s' -> reaplicando AP", ssid);
+    config_server_request_wifi_apply();
 }
 
 void password_toggle_btn_event_cb(lv_event_t *e)
