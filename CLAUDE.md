@@ -46,6 +46,32 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.3**
   muestra datos viejos, `idf.py reconfigure` + borrar el .obj de esp_app_desc lo
   refresca (release.sh ya lo hace).
 
+## ⚠️ Trampa recurrente: `dependencies.lock` y la ruta de esp_hosted
+
+**Cada `idf.py build` que re-resuelva dependencias reescribe `dependencies.lock`
+con la RUTA ABSOLUTA de la máquina** para el componente local
+`components/espressif__esp_hosted`:
+
+```
+path: /home/<usuario>/joint/victron/components/espressif__esp_hosted
+```
+
+En GitHub Actions esa ruta no existe y **el CI falla** con
+`ERROR: The "path" field in the manifest file ... does not point to a directory`.
+
+Ha pasado ya **tres veces** (commits `e3f710d`, `314a41b`, `edd2a8a`), una de
+ellas desde otro equipo (`/home/db3/...`).
+
+**Antes de commitear, comprobar siempre:**
+
+```bash
+grep -n "path: /" dependencies.lock   # no debe devolver nada
+```
+
+Y si aparece, dejarla relativa (`path: components/espressif__esp_hosted`) **y
+commitear SIN volver a compilar**: un build posterior la reescribe y te comes el
+fallo igual, que es justo lo que pasó el 21-ago-2026.
+
 ## Convenciones del proyecto
 - Estética card-based aplicada en Settings (cada página con su color de borde)
 - Textos en español, sin emojis (excepto símbolos LV_SYMBOL_*)
