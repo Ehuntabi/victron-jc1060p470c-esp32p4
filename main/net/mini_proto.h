@@ -39,8 +39,8 @@ extern "C" {
 #define MINI_EPOCH_VALIDO    1609459200L
 
 /* Payload broadcast 7" -> mini. Tamaño fijo, sin punteros, packed.
- * Total: 34 bytes (sizeof(struct mini_msg), verificado con el compilador).
- * Eran 32 hasta la versión 3, que añadió fecha_dias. */
+ * Total: 36 bytes (sizeof(struct mini_msg), verificado con el compilador).
+ * Eran 32 hasta la versión 3, que añadió epoch_local. */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
     uint8_t  _pad0;               /* alignment */
@@ -77,17 +77,21 @@ struct __attribute__((packed)) mini_msg {
     int16_t  exterior_temp_centi;
     uint8_t  screensaver;         /* 1 = el 7"(P4) está en salvapantallas → el mini atenúa su pantalla */
 
-    /* Día de calendario del 7", en DÍAS desde 1970-01-01 y en su hora LOCAL.
-     * 0 = el RTC todavía no tiene hora buena (o no hay RTC).
+    /* Reloj para el satélite, que no tiene ninguno: se apaga con el contacto y
+     * al encender no sabe ni qué día es. Segundos desde 1970 YA DESPLAZADOS a
+     * la hora local del 7" (epoch + huso), o 0 si su RTC todavía no tiene hora
+     * buena.
      *
-     * Va el día y no el instante a propósito: lo que se cuenta en el satélite
-     * son NOCHES de parada, no periodos de 24 h -- llegas el viernes por la
-     * tarde y te vas el sábado por la mañana y eso es UNA noche. Restando dos
-     * días de calendario sale bien, y de paso el satélite no necesita saber
-     * nada de zonas horarias ni tener reloj propio.
+     * Desplazado a local y no en UTC a propósito: así el satélite saca el día
+     * de calendario con una división entera (epoch_local / 86400) sin saber
+     * nada de husos ni de horario de verano, y le hacen falta las dos cosas:
+     *   - el DÍA para contar noches de parada (llegas el viernes por la tarde
+     *     y te vas el sábado por la mañana: eso es UNA noche);
+     *   - la HORA para las áreas que cobran por periodos de 24 h desde que
+     *     entras, donde el calendario no sirve.
      *
-     * uint16 llega hasta el año 2149. */
-    uint16_t fecha_dias;
+     * uint32 sin signo llega hasta 2106. */
+    uint32_t epoch_local;
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };

@@ -29,6 +29,19 @@ static const char *TAG = "udp_tx";
 static uint32_t s_sent_ok = 0;
 static uint32_t s_sent_err = 0;
 
+/* Días transcurridos desde 1970-01-01 para una fecha civil (algoritmo
+ * days_from_civil de Howard Hinnant). Exacto para cualquier fecha del
+ * calendario gregoriano proléptico y sin depender de la libc. */
+static int32_t dias_desde_1970(int y, unsigned m, unsigned d)
+{
+    y -= (m <= 2);
+    const int32_t  era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = (unsigned)(y - era * 400);                 /* [0, 399]    */
+    const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;     /* [0, 146096] */
+    return era * 146097 + (int32_t)doe - 719468;
+}
+
 static void build_msg(mini_msg_t *out)
 {
     memset(out, 0, sizeof(*out));
@@ -110,18 +123,23 @@ static void build_msg(mini_msg_t *out)
     time_t ahora = time(NULL);
     struct tm tm_local;
     if (ahora > MINI_EPOCH_VALIDO && localtime_r(&ahora, &tm_local)) {
-        /* mktime() sobre la medianoche local da el instante UTC de ese día;
-         * dividir entre 86400 lo convierte en el número de día. Se pasa por
-         * mktime en vez de dividir 'ahora' directamente porque 'ahora' es UTC
-         * y el corte de día que importa es el LOCAL. */
-        tm_local.tm_hour = 0;
-        tm_local.tm_min  = 0;
-        tm_local.tm_sec  = 0;
-        tm_local.tm_isdst = -1;
-        time_t medianoche = mktime(&tm_local);
-        out->fecha_dias = (uint16_t)(medianoche / 86400);
+        /* Se manda el epoch DESPLAZADO a hora local, para que el satélite saque
+         * el día de calendario con una división y no necesite saber nada de
+         * husos ni de horario de verano.
+         *
+         * Se arma a mano desde los campos de localtime_r en vez de usar
+         * tm_gmtoff o timegm(): la newlib de ESP-IDF no trae ninguno de los
+         * dos. Y a mano sale exacto, sin el "adivina el horario de verano" que
+         * haría mktime() en las dos horas ambiguas del año. */
+        int32_t dias = dias_desde_1970(tm_local.tm_year + 1900,
+                                       (unsigned)tm_local.tm_mon + 1,
+                                       (unsigned)tm_local.tm_mday);
+        out->epoch_local = (uint32_t)(dias * 86400L
+                                      + tm_local.tm_hour * 3600
+                                      + tm_local.tm_min * 60
+                                      + tm_local.tm_sec);
     } else {
-        out->fecha_dias = 0;
+        out->epoch_local = 0;
     }
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
