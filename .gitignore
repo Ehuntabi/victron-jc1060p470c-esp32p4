@@ -19,3 +19,6 @@ logs/
 # Volcados locales de la SD por WiFi (.tar descargados, no van al repo)
 descargas/
 *.part
+
+# Firmware del C6 empotrado: 1,1 MB regenerables desde ~/esp_hosted_slave
+main/slave_fw/*.bin

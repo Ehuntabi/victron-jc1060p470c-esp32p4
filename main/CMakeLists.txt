@@ -1,6 +1,11 @@
 file(GLOB_RECURSE SOURCES "*.c")
 
 idf_component_register(
+    # Firmware del C6 (la radio) empotrado, para poder actualizarlo desde aqui
+    # sin red ni cables: ver main/portal/slave_ota.c. Se genera compilando
+    # ~/esp_hosted_slave (idf.py -B build_c6 build) y copiando su
+    # network_adapter.bin. NO se versiona: son 1,1 MB regenerables.
+    EMBED_FILES slave_fw/network_adapter.bin
     SRCS       ${SOURCES}
     INCLUDE_DIRS "."
     PRIV_REQUIRES app_update
