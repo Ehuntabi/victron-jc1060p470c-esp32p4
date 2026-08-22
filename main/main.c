@@ -456,6 +456,12 @@ static void init_sd_rtc_frigo(void)
     if (sd_err != ESP_OK)
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
 
+    /* Si alguna vez se encendio el simulador, dejo apartado el registro real
+     * del dia como "<csv>.real" y el inventado ocupando su nombre. Aqui se
+     * deshace, antes de que el registrador toque el csv de hoy. No hace nada
+     * en el caso normal (no hay .real que devolver). */
+    if (sd_err == ESP_OK) sim_overview_restaurar_reales();
+
     /* Auto-save de logs a SD 30 s tras boot (con rotacion FIFO 20 archivos).
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);

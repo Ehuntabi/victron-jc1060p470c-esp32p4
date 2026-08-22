@@ -3,6 +3,16 @@
  * en sim_overview.h o desactivar para deshabilitar. */
 #include "sim_overview.h"
 
+/* Fuera de la guarda: sim_overview_restaurar_reales() tiene que compilar y
+ * ejecutarse justo cuando el simulador esta APAGADO. */
+#include <dirent.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include "esp_log.h"
+
+static const char *TAG = "sim_overview";
+
 #if SIM_OVERVIEW_ENABLE
 
 #include <math.h>
@@ -21,8 +31,6 @@
 #include "frigo.h"
 #include "ui.h"
 #include "victron_records.h"
-
-static const char *TAG = "sim_overview";
 
 /* Periodo del ciclo completo de la simulacion: 60 segundos. Los distintos
  * indicadores tienen sub-ciclos (algunos mas rapidos, otros lentos) para
@@ -130,10 +138,7 @@ static void sim_task(void *arg) {
         /* === Tanques: limpia se vacia en 50 s y se rellena de golpe.
          *   Grises sube de 0 a lleno en 60 s y se vacia de golpe.
          *   Luces y bomba alternan estados a distinto ritmo. */
-        /* TEMPORAL (22-ago-2026): limpia clavada a 4/4 para ver la 3.5" con el
-         * deposito lleno. Original: tri(95,5,t,50000) -- baja y sube en 50 s.
-         * Descomentar al terminar de ajustar la pantalla. */
-        float s1_pct = 100.0f;
+        float s1_pct = tri(95.0f, 5.0f, t, 50000);   /* baja-sube */
         float r1_pct = tri(5.0f, 95.0f, t, 60000);   /* sube-baja */
         bool lin   = ((t / 7000)  % 2) == 0;
         bool lout  = ((t / 11000) % 2) == 1;
@@ -324,4 +329,55 @@ void sim_overview_start(void) {
 
 #else  /* !SIM_OVERVIEW_ENABLE */
 void sim_overview_start(void) { /* no-op */ }
+#endif
+
+/* === Devolver el registro real al apagar el simulador =====================
+ *
+ * sim_apartar() renombra a "<fichero>.real" el csv del dia antes de escribir
+ * el inventado. Apagar el simulador NO lo deshacia: no queda nada corriendo
+ * que lo haga, y el portal no sabe renombrar en la SD. Resultado: el dia
+ * inventado se quedaba en el historico del frigo pareciendo real, y el bueno
+ * escondido detras de una extension.
+ *
+ * Paso el 22-ago-2026 y se descubrio de casualidad. Esto es el reverso exacto
+ * de sim_apartar, y corre en CADA arranque de produccion: da igual quien
+ * encendiera el simulador ni cuando, si dejo un .real por ahi se recupera.
+ *
+ * Con el simulador ENCENDIDO no hace nada, obviamente: lo apartado esta en
+ * uso y devolverlo seria machacar el inventado que se acaba de escribir. */
+#if SIM_OVERVIEW_ENABLE
+void sim_overview_restaurar_reales(void) { /* no-op: los .real estan en uso */ }
+#else
+
+/* FATFS no permite rename() sobre un nombre que ya existe, asi que el
+ * inventado se borra ANTES. Es lo que se quiere: lo inventado sobra. */
+static void restaurar_dir(const char *dir)
+{
+    DIR *d = opendir(dir);
+    if (!d) return;                      /* la carpeta no existe: nada que hacer */
+
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        size_t n = strlen(ent->d_name);
+        if (n <= 5 || strcmp(ent->d_name + n - 5, ".real") != 0) continue;
+
+        char real[128], bueno[128];
+        snprintf(real, sizeof(real), "%s/%s", dir, ent->d_name);
+        snprintf(bueno, sizeof(bueno), "%.*s", (int)(strlen(real) - 5), real);
+
+        unlink(bueno);                   /* el csv inventado */
+        if (rename(real, bueno) == 0) {
+            ESP_LOGW(TAG, "registro real devuelto a su sitio: %s", bueno);
+        } else {
+            ESP_LOGE(TAG, "NO se pudo devolver %s -> %s", real, bueno);
+        }
+    }
+    closedir(d);
+}
+
+void sim_overview_restaurar_reales(void)
+{
+    restaurar_dir("/sdcard/frigo");
+    restaurar_dir("/sdcard/bateria");
+}
 #endif
