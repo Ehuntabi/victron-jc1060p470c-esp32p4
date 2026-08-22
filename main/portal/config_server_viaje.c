@@ -291,6 +291,14 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     totales_borrar();
+    {   /* Numeracion nueva: ver el comentario de la idempotencia en el handler. */
+        nvs_handle_t h;
+        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+            nvs_set_u32(h, NVS_LAST_ID, 0);
+            nvs_commit(h);
+            nvs_close(h);
+        }
+    }
     {   /* El epoch del inicio, para contar los dias al cerrar. Se guarda en vez
          * de deducirlo del nombre de la carpeta: ahi solo esta la fecha, y un
          * viaje de una noche saldria como "0 dias". */
@@ -735,8 +743,22 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
     /* IDEMPOTENCIA. Con reintentos lo mismo puede llegar dos veces (se entrego
      * pero se perdio la respuesta). Se responde OK igualmente para que el
-     * satelite lo de por entregado y no se atasque reintentando para siempre. */
-    if (id != 0 && id <= last_id_get()) {
+     * satelite lo de por entregado y no se atasque reintentando para siempre.
+     *
+     * EL INICIO SE EXCLUYE, y no es un descuido. El contador vive en la NVS del
+     * satelite: si esa NVS se borra (un reflasheo con borrado, un cambio de
+     * placa) su numeracion vuelve a 1 mientras esta P4 sigue recordando que iba
+     * por el 50. Con el inicio dentro de esta comprobacion, TODO lo que llegara
+     * despues se descartaria como duplicado respondiendo 200, el satelite
+     * vaciaria su cola creyendolo entregado y se perderia el viaje entero sin un
+     * solo mensaje de error.
+     *
+     * Empezar un viaje es, por definicion, empezar una numeracion nueva: el
+     * inicio pasa siempre y pone el contador a cero. Un inicio repetido de
+     * verdad no cuela igualmente -- op_inicio devuelve 409 si ya hay uno
+     * abierto. Detectado auditando el 22-ago-2026. */
+    bool es_inicio = !strcmp(jop->valuestring, "inicio");
+    if (!es_inicio && id != 0 && id <= last_id_get()) {
         ESP_LOGI(TAG, "id %lu ya aplicado, lo descarto", (unsigned long)id);
         cJSON_Delete(j);
         httpd_resp_sendstr(req, "duplicado");
