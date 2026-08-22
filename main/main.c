@@ -574,7 +574,7 @@ static void init_audio_ble(void)
     /* Modo simulacion: inyecta datos ficticios para previsualizar Overview.
      * DESACTIVADO en produccion (doble seguro, como el tour): descomentar la
      * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
-    sim_overview_start();   /* TEMPORAL: datos falsos para ver la 3.5 */
+    /* sim_overview_start(); */
 }
 
 /* Timers periodicos: traza de memoria, backup de hora, y modo nocturno

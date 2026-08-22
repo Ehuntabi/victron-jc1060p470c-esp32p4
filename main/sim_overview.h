@@ -2,7 +2,7 @@
 #pragma once
 
 /* Cambia a 0 para desactivar la simulacion (modo produccion). */
-#define SIM_OVERVIEW_ENABLE  1
+#define SIM_OVERVIEW_ENABLE  0
 
 #ifdef __cplusplus
 extern "C" {
