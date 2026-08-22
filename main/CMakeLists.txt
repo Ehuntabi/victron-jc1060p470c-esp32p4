@@ -1,23 +1,6 @@
 file(GLOB_RECURSE SOURCES "*.c")
 
-# Firmware del C6 (la radio) empotrado, para actualizarlo desde el propio 7" sin
-# red ni cables: ver main/portal/slave_ota.c. Se genera compilando
-# ~/esp_hosted_slave (idf.py -B build_c6 build) y copiando su
-# network_adapter.bin aqui.
-#
-# NO se versiona (1,1 MB regenerables), asi que es OPCIONAL: si no esta -- en el
-# CI, o en un clon recien hecho -- se compila sin el y el boton "Actualizar
-# radio C6" avisa de que este firmware no lo lleva, en vez de romper el build.
-set(SLAVE_FW "slave_fw/network_adapter.bin")
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/${SLAVE_FW}")
-    set(SLAVE_EMBED EMBED_FILES ${SLAVE_FW})
-else()
-    set(SLAVE_EMBED "")
-    message(STATUS "main: sin ${SLAVE_FW} -> se compila sin el firmware del C6")
-endif()
-
 idf_component_register(
-    ${SLAVE_EMBED}
     SRCS       ${SOURCES}
     INCLUDE_DIRS "."
     PRIV_REQUIRES app_update
@@ -56,10 +39,6 @@ idf_component_register(
     espcoredump          # log_capture.c: exportar coredump de un crash anterior
     sd_safe              # wrappers fopen/stat/mkdir/unlink/rename con cerrojo SD incluido
 )
-
-if(NOT SLAVE_EMBED STREQUAL "")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE SLAVE_FW_EMBEBIDO=1)
-endif()
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     LOG_LOCAL_LEVEL=ESP_LOG_VERBOSE

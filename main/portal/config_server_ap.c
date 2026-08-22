@@ -632,9 +632,17 @@ esp_err_t wifi_ap_init(void)
          * se dice el nombre de verdad -- que es el que hay que poner en los
          * satelites, y el que llevaba toda la noche despistando porque la
          * pantalla de Ajustes muestra otro. */
+        /* Con el C6 en condiciones esto no salta nunca. Si salta, es que ese
+         * chip lleva el firmware de FABRICA, que ignora la configuracion y
+         * levanta su AP por defecto ("ESP_<MAC>", abierto). Paso el 21-ago-2026
+         * en una de las dos pantallas y se arreglo grabandole al C6 el firmware
+         * de ~/esp_hosted_slave; la otra ya venia bien. El procedimiento esta en
+         * el historial (commit del boton "Actualizar radio C6", retirado despues
+         * de usarlo). */
         if (strcmp((const char *)leida.ap.ssid, ssid) != 0) {
-            ESP_LOGW(TAG, "El AP NO se llama '%s' sino '%s': lo renombra esp_hosted. "
-                          "Es el nombre que tienen que buscar los satelites.",
+            ESP_LOGW(TAG, "El AP NO se llama '%s' sino '%s': el C6 esta ignorando "
+                          "la configuracion (firmware de fabrica). Es el nombre que "
+                          "tendrian que buscar los satelites mientras siga asi.",
                      ssid, (const char *)leida.ap.ssid);
         }
         if (leida.ap.authmode == WIFI_AUTH_OPEN) {

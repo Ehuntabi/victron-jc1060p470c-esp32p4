@@ -5,7 +5,6 @@
  * Es el mismo codigo movido de sitio, sin cambios de comportamiento.
  */
 #include "settings_panel.h"
-#include "../../portal/slave_ota.h"
 #include "settings_common.h"
 #include "ui.h"
 #include "ui/widgets/ui_card.h"
@@ -59,7 +58,6 @@ static void ap_switch_cb(lv_event_t *e);
 /* Namespace NVS donde vive la configuracion Wi-Fi. */
 #define WIFI_NAMESPACE "wifi"
 static void wifi_save_cb(lv_event_t *e);
-static void slave_ota_btn_cb(lv_event_t *e);
 void password_toggle_btn_event_cb(lv_event_t *e);
 
 static void ap_switch_cb(lv_event_t *e)
@@ -226,17 +224,6 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text(lbl_save, "Guardar red");
     lv_obj_center(lbl_save);
 
-    /* Actualizar la radio (C6). En rojo y separado del resto a proposito: es lo
-     * unico de esta pantalla que puede dejar el aparato sin Wi-Fi y sin BLE si
-     * sale mal, asi que no debe parecerse a un boton mas. Ver slave_ota.c. */
-    lv_obj_t *btn_c6 = lv_btn_create(card1);
-    lv_obj_set_width(btn_c6, lv_pct(100));
-    lv_obj_set_style_bg_color(btn_c6, lv_color_hex(0x8B2E2E), 0);
-    lv_obj_add_event_cb(btn_c6, slave_ota_btn_cb, LV_EVENT_CLICKED, ui);
-    lv_obj_t *lbl_c6 = lv_label_create(btn_c6);
-    lv_obj_set_style_text_font(lbl_c6, &lv_font_montserrat_24_es, 0);
-    lv_label_set_text(lbl_c6, "Actualizar radio C6");
-    lv_obj_center(lbl_c6);
 
     /* === Card 2: Pagina inicial del portal + Reactivar (mitad ancho, dcho) ===
      * El desplegable de pagina inicial y, JUSTO DEBAJO, el boton para
@@ -387,20 +374,6 @@ static void reactivate_portal_cb(lv_event_t *e)
      * portal ya estaba arriba el trabajo no hace nada. */
     config_server_request_start();
     ESP_LOGI("settings_panel", "Reactivar portal web: solicitado");
-}
-
-/* Lanza la actualizacion del firmware del C6. El aviso de lo que implica va en
- * slave_ota.c; aqui solo se impide pulsarlo dos veces. */
-static void slave_ota_btn_cb(lv_event_t *e)
-{
-    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
-    (void)ui;
-    if (slave_ota_en_curso()) {
-        ESP_LOGW(TAG_SETTINGS, "Actualizacion del C6 ya en marcha");
-        return;
-    }
-    ESP_LOGW(TAG_SETTINGS, "Actualizacion del C6 pedida desde Ajustes");
-    slave_ota_start();
 }
 
 /* Guarda SSID y password y reaplica el AP en caliente. Sustituye al guardado

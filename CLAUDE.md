@@ -113,25 +113,6 @@ fallo igual, que es justo lo que pasó el 21-ago-2026.
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
 
 ## Pendientes activos
-0. **NO quitar todavía el botón "Actualizar radio C6"** ni el binario empotrado
-   (`main/slave_fw/network_adapter.bin`, 1,1 MB, no versionado). Sirve para
-   arreglar el AP de **las dos** pantallas P4 y **falta la de repuesto**.
-
-   El C6 sale de fábrica con un firmware que ignora la configuración del AP:
-   se le manda `VictronConfig` + WPA2 y él levanta `ESP_<MAC>` **abierto**
-   (así estuvo desde julio, ver `main/portal/slave_ota.c`). Se arregla desde
-   la propia pantalla: **Ajustes → Wi-Fi → botón rojo "Actualizar radio C6"**.
-   La de casa ya está hecha (21-ago-2026); la de repuesto anunciaba
-   `ESP_F7C849`, o sea que sigue con el de fábrica.
-
-   Para regenerar el binario si hiciera falta:
-   `cd ~/esp_hosted_slave && idf.py -B build_c6 build` y copiar
-   `build_c6/network_adapter.bin` a `main/slave_fw/`.
-
-   **Cuando las dos estén hechas**: quitar el botón, el fichero empotrado y su
-   `EMBED_FILES`, y publicar una versión limpia (son 1,1 MB y un botón que no
-   debería vivir ahí para siempre).
-
 1. **Ver la 3.5" con datos, para juzgar su estética** (pendiente 21-ago-2026).
    Con la P4 en la mesa no hay BLE en rango, así que manda centinelas de "sin
    dato" y el satélite pinta "--". Para verlo con valores que se mueven, basta
