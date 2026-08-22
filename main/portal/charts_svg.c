@@ -806,7 +806,11 @@ esp_err_t handle_data_index(httpd_req_t *req)
           "<a href='/data/vigilancia.tar'>vigilancia</a>"
           "<a href='/data/config.tar'>config</a>"
           "<a href='/data/logs.tar'>logs</a>"
-          "<a href='/data/viaje.tar'><b>viaje</b></a>"
+          /* "viaje" ahora lleva a la LISTA de viajes, que es donde se elige
+           * cual bajarse y donde se ve si alguno esta incompleto. El paquete de
+           * siempre (todo el historico) se llama ya por lo que es. */
+          "<a href='/data/viajes'><b>viajes</b></a>"
+          "<a href='/data/historico.tar'>historico</a>"
         "</div>"
         "</body></html>";
     httpd_resp_sendstr(req, html);

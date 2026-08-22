@@ -732,6 +732,11 @@ esp_err_t config_server_start(void) {
      * registros). Ver main/portal/config_server_viaje.c. */
     httpd_uri_t uri_viaje = { .uri = "/api/viaje", .method = HTTP_POST, .handler = handle_api_viaje };
     httpd_register_uri_handler(server, &uri_viaje);
+    /* Lista de viajes con su estado, y el historico con su nombre de verdad. */
+    httpd_uri_t uri_viajes = { .uri = "/data/viajes", .method = HTTP_GET, .handler = handle_data_viajes };
+    httpd_register_uri_handler(server, &uri_viajes);
+    httpd_uri_t uri_hist = { .uri = "/data/historico.tar", .method = HTTP_GET, .handler = handle_data_historico_tar };
+    httpd_register_uri_handler(server, &uri_hist);
 
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);

@@ -10,3 +10,6 @@ esp_err_t handle_api_viaje(httpd_req_t *req);
  * una fila de telemetria cada 5 min y una de contadores cada hora. Llamar una
  * vez al iniciar; no hace nada mientras no haya viaje. */
 void viaje_telemetria_start(void);
+
+/* GET /data/viajes — lista de viajes guardados con su estado y su enlace. */
+esp_err_t handle_data_viajes(httpd_req_t *req);

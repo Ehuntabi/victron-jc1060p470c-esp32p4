@@ -316,16 +316,82 @@ esp_err_t handle_data_solar_tar(httpd_req_t *req)
     return handle_tar_dir(req, "/sdcard/solar", "solar.tar");
 }
 
-/* Paquete para el analizador del PC: bateria + solar + frigo con las carpetas
- * ya puestas dentro, para poder montar un viaje sin sacar la tarjeta.
+/* El HISTORICO entero: bateria + solar + frigo de todos los dias, con las
+ * carpetas ya puestas dentro.
+ *
+ * Esto se llamaba "viaje.tar" y el nombre MENTIA desde que existe: no es un
+ * viaje, es todo lo que hay. Ahora "viaje" significa un viaje de verdad (ver
+ * config_server_viaje.c) y esto pasa a llamarse por lo que es. El analizador
+ * del PC sigue teniendo lo suyo.
+ *
  * Las fotos de vigilancia NO van aqui a proposito: pesan mucho y tienen su
  * propio paquete. */
-esp_err_t handle_data_viaje_tar(httpd_req_t *req)
+esp_err_t handle_data_historico_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
     static const char *const dirs[]     = { "/sdcard/bateria", "/sdcard/solar", "/sdcard/frigo" };
     static const char *const prefixes[] = { "bateria",         "solar",         "frigo"         };
-    return tar_send_dirs(req, "viaje.tar", dirs, prefixes, 3);
+    return tar_send_dirs(req, "historico.tar", dirs, prefixes, 3);
+}
+
+/* UN viaje: /data/viaje.tar?v=<carpeta>. Sin 'v' manda a la lista, en vez de
+ * devolver el historico como antes -- un enlace viejo que ahora diera otra cosa
+ * distinta sin avisar es peor que uno que no funcione.
+ *
+ * Solo se bajan los COMPLETOS. Los que perdieron algo se pueden bajar igual con
+ * incompleto=si, pero salen con _INCOMPLETO en el nombre: nadie se lo va a
+ * tragar por entero al verlo en su carpeta de descargas. */
+esp_err_t handle_data_viaje_tar(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+
+    char q[160] = {0};
+    char v[96] = {0}, inc[8] = {0};
+    if (httpd_req_get_url_query_str(req, q, sizeof q) != ESP_OK ||
+        httpd_query_key_value(q, "v", v, sizeof v) != ESP_OK || !v[0]) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/data/viajes");
+        httpd_resp_sendstr(req, "Elige un viaje en /data/viajes");
+        return ESP_OK;
+    }
+    /* v viene de la URL: se filtra antes de tocarlo, que acaba siendo una ruta. */
+    for (char *p = v; *p; p++) {
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+              (*p >= '0' && *p <= '9') || *p == '-' || *p == '_')) { *p = '_'; }
+    }
+    bool con_fallos = (httpd_query_key_value(q, "incompleto", inc, sizeof inc) == ESP_OK);
+
+    char dir[160], nombre[128];
+    snprintf(dir, sizeof(dir), "/sdcard/viajes/%s", v);
+    struct stat st;
+    if (stat(dir, &st) != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "ese viaje no existe");
+        return ESP_FAIL;
+    }
+
+    char marca[200];
+    snprintf(marca, sizeof(marca), "%s/INCOMPLETO.txt", dir);
+    bool incompleto = (stat(marca, &st) == 0);
+    snprintf(marca, sizeof(marca), "%s/resumen.txt", dir);
+    bool cerrado = (stat(marca, &st) == 0);
+
+    if (!cerrado) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "Ese viaje sigue en curso. Finalizalo en la pantalla "
+                                "de la cabina antes de bajarlo.");
+        return ESP_OK;
+    }
+    if (incompleto && !con_fallos) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "A ese viaje le faltan apuntes. Bajalo desde "
+                                "/data/viajes, que avisa de lo que falta.");
+        return ESP_OK;
+    }
+
+    snprintf(nombre, sizeof(nombre), "%s%s.tar", v, incompleto ? "_INCOMPLETO" : "");
+    const char *dirs[1]     = { dir };
+    const char *prefixes[1] = { v };
+    return tar_send_dirs(req, nombre, dirs, prefixes, 1);
 }
 
 esp_err_t handle_data_capturas_tar(httpd_req_t *req)

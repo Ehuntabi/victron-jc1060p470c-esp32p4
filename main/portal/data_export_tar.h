@@ -8,7 +8,10 @@
 esp_err_t handle_data_frigo_tar(httpd_req_t *req);
 esp_err_t handle_data_bateria_tar(httpd_req_t *req);
 esp_err_t handle_data_solar_tar(httpd_req_t *req);
+/* UN viaje: /data/viaje.tar?v=<carpeta>. Sin 'v' redirige a la lista. */
 esp_err_t handle_data_viaje_tar(httpd_req_t *req);
+/* El historico entero (bateria+solar+frigo). Se llamaba viaje.tar y mentia. */
+esp_err_t handle_data_historico_tar(httpd_req_t *req);
 esp_err_t handle_data_capturas_tar(httpd_req_t *req);
 esp_err_t handle_data_vigilancia_tar(httpd_req_t *req);
 esp_err_t handle_data_config_tar(httpd_req_t *req);

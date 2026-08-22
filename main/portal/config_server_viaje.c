@@ -30,6 +30,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <stdlib.h>
+#include <dirent.h>
 
 static const char *TAG = "viaje_srv";
 
@@ -50,6 +51,12 @@ static const char *TAG = "viaje_srv";
 #define NVS_T_MONEDA    "t_moneda"    /* la primera vista */
 #define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
 #define NVS_T_INICIO    "t_inicio"    /* epoch del inicio, para contar los dias */
+#define NVS_T_APLIC     "t_aplic"     /* apuntes APLICADOS de este viaje */
+
+/* Marca de que al viaje le faltan apuntes. Un fichero y no una linea dentro de
+ * otro: la lista de descargas tiene que decidir el estado de cada viaje con un
+ * stat(), sin abrir y parsear nada. */
+#define MARCA_INCOMPLETO "INCOMPLETO.txt"
 
 /* El destino cabe en 20 caracteres (lo limita la 3.5"); la fecha son 10 y la
  * barra 1. Con 64 sobra y no hay que pensar en desbordes al componer rutas. */
@@ -290,6 +297,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         nvs_handle_t h;
         if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
             nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
+            nvs_set_u32(h, NVS_T_APLIC, 1);   /* el inicio ya cuenta */
             nvs_commit(h);
             nvs_close(h);
         }
@@ -377,7 +385,50 @@ static void escribir_resumen(const char *carpeta)
     fclose(f);
 }
 
-static esp_err_t op_fin(httpd_req_t *req, uint32_t id)
+/* Compara lo que dice el satelite que genero con lo que esta P4 ha aplicado.
+ *
+ * Sin esto, un viaje al que le falte un repostaje se descargaria con pinta de
+ * estar entero y el analizador del PC se lo tragaria como bueno. Es justo el
+ * fallo que mas cuesta detectar despues: no falta el fichero, falta UNA LINEA.
+ *
+ * Devuelve cuantos faltan (0 = entero). */
+static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
+{
+    const cJSON *je = cJSON_GetObjectItem(j, "eventos");
+    if (!cJSON_IsNumber(je)) return 0;      /* satelite viejo: no se puede saber */
+
+    uint32_t esperados = (uint32_t)je->valuedouble;
+    uint32_t aplicados = 0;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u32(h, NVS_T_APLIC, &aplicados);
+        nvs_close(h);
+    }
+    aplicados++;                            /* este mismo fin */
+
+    if (aplicados >= esperados) return 0;
+    uint32_t faltan = esperados - aplicados;
+
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/" MARCA_INCOMPLETO, carpeta);
+    FILE *f = fopen(ruta, "w");
+    if (f) {
+        fprintf(f, "A este viaje le faltan %lu apunte%s.\n\n",
+                (unsigned long)faltan, faltan == 1 ? "" : "s");
+        fprintf(f, "La pantalla de la cabina dice haber generado %lu y aqui han\n"
+                   "llegado %lu. Se perdieron por el camino: la cola se lleno, o\n"
+                   "hubo un reinicio en mal momento.\n\n",
+                (unsigned long)esperados, (unsigned long)aplicados);
+        fprintf(f, "Lo demas es correcto. Este aviso esta para que no des el\n"
+                   "viaje por entero al analizarlo.\n");
+        fclose(f);
+    }
+    ESP_LOGW(TAG, "viaje INCOMPLETO: esperados %lu, aplicados %lu",
+             (unsigned long)esperados, (unsigned long)aplicados);
+    return faltan;
+}
+
+static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
@@ -396,7 +447,20 @@ static esp_err_t op_fin(httpd_req_t *req, uint32_t id)
         return ESP_OK;
     }
     diario(carpeta, "fin", "");
+    uint32_t faltan = comprobar_completo(j, carpeta);
     escribir_resumen(carpeta);
+    if (faltan) {
+        FILE *rf; char rr[RUTA_MAX];
+        snprintf(rr, sizeof(rr), "%s/resumen.txt", carpeta);
+        rf = fopen(rr, "a");
+        if (rf) {
+            fprintf(rf, "\n*** VIAJE INCOMPLETO: faltan %lu apuntes. ***\n",
+                    (unsigned long)faltan);
+            fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
+                        MARCA_INCOMPLETO ".\n");
+            fclose(rf);
+        }
+    }
     camera_sd_bus_unlock();
 
     estado_set(NULL, id);
@@ -510,6 +574,15 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     csv_por_tipo(carpeta, jt->valuestring, jd, cuando);
     camera_sd_bus_unlock();
     totales_sumar(jt->valuestring, jd);
+    {   nvs_handle_t h;
+        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+            uint32_t n = 0;
+            nvs_get_u32(h, NVS_T_APLIC, &n);
+            nvs_set_u32(h, NVS_T_APLIC, n + 1);
+            nvs_commit(h);
+            nvs_close(h);
+        }
+    }
 
     estado_set(carpeta, id);
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
@@ -672,7 +745,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
     esp_err_t ret;
     if      (!strcmp(jop->valuestring, "inicio")) ret = op_inicio(req, j, id);
-    else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, id);
+    else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, j, id);
     else if (!strcmp(jop->valuestring, "registro")) ret = op_registro(req, j, id); else {
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "op? (inicio|fin|registro)");
@@ -681,4 +754,89 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
     cJSON_Delete(j);
     return ret;
+}
+
+
+/* ── Descarga de viajes ────────────────────────────────────────────────────
+ *
+ * Hasta ahora /data/viaje.tar NO era un viaje: empaquetaba el historico entero
+ * (bateria + solar + frigo). El nombre mentia desde que existe. Ahora ese
+ * paquete es /data/historico.tar y "viaje" significa un viaje de verdad.
+ *
+ * Un viaje solo se puede bajar cuando la P4 SABE que no le falta nada. El aviso
+ * ya estaba escrito en el codigo del tar: "el analizador del PC se traga un
+ * viaje incompleto creyendo que esta entero". */
+
+typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO } estado_viaje_t;
+
+static estado_viaje_t estado_de(const char *nombre)
+{
+    char abierto[CARPETA_MAX];
+    if (viaje_abierto(abierto, sizeof(abierto))) {
+        const char *base = strrchr(abierto, '/');
+        if (base && !strcmp(base + 1, nombre)) return V_EN_CURSO;
+    }
+    char ruta[RUTA_MAX];
+    struct stat st;
+    snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, nombre);
+    if (stat(ruta, &st) == 0) return V_INCOMPLETO;
+    snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/resumen.txt", nombre);
+    if (stat(ruta, &st) == 0) return V_LISTO;
+    return V_EN_CURSO;      /* sin resumen: nunca se cerro */
+}
+
+esp_err_t handle_data_viajes(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_sendstr_chunk(req,
+        "<!doctype html><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<style>body{font-family:system-ui,sans-serif;background:#111;color:#eee;"
+        "margin:0;padding:16px}h1{font-size:20px}a{color:#4FC3F7}"
+        "li{margin:14px 0;list-style:none;border-left:3px solid #333;padding-left:10px}"
+        ".ok{border-color:#66BB6A}.inc{border-color:#FFA726}.cur{border-color:#888}"
+        ".e{font-size:13px;color:#aaa}</style>"
+        "<h1>Viajes guardados</h1><ul>");
+
+    DIR *d = opendir(VIAJES_DIR);
+    bool alguno = false;
+    if (d) {
+        struct dirent *ent;
+        char linea[512];
+        while ((ent = readdir(d)) != NULL) {
+            if (ent->d_name[0] == '.') continue;
+            alguno = true;
+            estado_viaje_t e = estado_de(ent->d_name);
+            if (e == V_LISTO) {
+                snprintf(linea, sizeof(linea),
+                    "<li class=ok><b>%s</b><div class=e>Listo</div>"
+                    "<a href='/data/viaje.tar?v=%s'>Descargar</a></li>",
+                    ent->d_name, ent->d_name);
+            } else if (e == V_INCOMPLETO) {
+                /* Salida de emergencia: si algo se perdio para siempre, el viaje
+                 * quedaria bloqueado eternamente. Se deja bajar, pero con el
+                 * nombre gritando lo que es -- imposible confundirlo con uno
+                 * entero al verlo en la carpeta de descargas del PC. */
+                snprintf(linea, sizeof(linea),
+                    "<li class=inc><b>%s</b><div class=e>INCOMPLETO: le faltan apuntes. "
+                    "Lee " MARCA_INCOMPLETO " dentro.</div>"
+                    "<a href='/data/viaje.tar?v=%s&incompleto=si'>Descargar de todos modos</a></li>",
+                    ent->d_name, ent->d_name);
+            } else {
+                snprintf(linea, sizeof(linea),
+                    "<li class=cur><b>%s</b><div class=e>En curso: finalizalo en la "
+                    "pantalla de la cabina antes de bajarlo</div></li>", ent->d_name);
+            }
+            httpd_resp_sendstr_chunk(req, linea);
+        }
+        closedir(d);
+    }
+    if (!alguno) httpd_resp_sendstr_chunk(req, "<li>Todavia no hay ningun viaje.</li>");
+    httpd_resp_sendstr_chunk(req,
+        "</ul><p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
+        "los dias) esta en <a href='/data/historico.tar'>historico.tar</a>.</p>"
+        "<p><a href='/data'>Volver</a></p>");
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
 }
