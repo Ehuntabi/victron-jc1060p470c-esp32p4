@@ -45,11 +45,17 @@ static float tri(float lo, float hi, uint32_t now, uint32_t period_ms) {
     return lo + (hi - lo) * k;
 }
 
+/* El nivel del NE185 va de 0 a 4, no de 0 a 3: "0=Reserva, 1=1/4, 2=2/4,
+ * 3=3/4, 4=4/4" (ver s1 en ne185/ne185.h). Esta funcion topaba en 3, asi que el
+ * simulador NUNCA podia enseñar un deposito lleno -- ni en el 7" ni en el
+ * satelite. Corregido el 22-ago-2026 al pedir el usuario ver las aguas limpias
+ * a 4/4 y salir un 3. */
 static uint8_t tank_level_from_pct(float pct) {
-    if (pct < 16.0f) return 0;
-    if (pct < 50.0f) return 1;
-    if (pct < 83.0f) return 2;
-    return 3;
+    if (pct < 12.0f) return 0;   /* reserva */
+    if (pct < 33.0f) return 1;
+    if (pct < 58.0f) return 2;
+    if (pct < 83.0f) return 3;
+    return 4;                    /* lleno */
 }
 
 static void sim_task(void *arg) {
@@ -78,6 +84,13 @@ static void sim_task(void *arg) {
         d.record.battery.battery_voltage_centi = v_centi;
         d.record.battery.battery_current_milli = cur_milli;
         d.record.battery.time_to_go_minutes = ttg;
+
+        /* Canal auxiliar = bateria de ARRANQUE (aux_input 0 = voltage2). Sin
+         * esto llegaba 0.00 V al satelite y la tarjeta del motor salia a cero.
+         * Se mueve poco a proposito: una bateria de arranque en reposo va entre
+         * 12,4 y 12,8 y solo sube al alternador. */
+        d.record.battery.aux_input = 0;
+        d.record.battery.aux_value = (uint16_t)(1240 + (int)(tri(0.0f, 40.0f, t, 45000)));
         ui_on_panel_data(&d);
 
         /* === Solar: oscila entre 0 W (noche) y 280 W (mediodia), ciclo
@@ -117,7 +130,10 @@ static void sim_task(void *arg) {
         /* === Tanques: limpia se vacia en 50 s y se rellena de golpe.
          *   Grises sube de 0 a lleno en 60 s y se vacia de golpe.
          *   Luces y bomba alternan estados a distinto ritmo. */
-        float s1_pct = tri(95.0f, 5.0f, t, 50000);   /* baja-sube */
+        /* TEMPORAL (22-ago-2026): limpia clavada a 4/4 para ver la 3.5" con el
+         * deposito lleno. Original: tri(95,5,t,50000) -- baja y sube en 50 s.
+         * Descomentar al terminar de ajustar la pantalla. */
+        float s1_pct = 100.0f;
         float r1_pct = tri(5.0f, 95.0f, t, 60000);   /* sube-baja */
         bool lin   = ((t / 7000)  % 2) == 0;
         bool lout  = ((t / 11000) % 2) == 1;
