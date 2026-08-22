@@ -9,6 +9,7 @@
 #include "charts_svg.h"
 #include "data_export_tar.h"
 #include "config_server_vigilancia.h"
+#include "config_server_viaje.h"
 #include "config_server_auth.h"
 #include "config_storage.h"
 #include "victron_ble.h"
@@ -727,6 +728,10 @@ esp_err_t config_server_start(void) {
     httpd_register_uri_handler(server, &uri_ausente);
     httpd_uri_t uri_control = { .uri = "/control", .method = HTTP_POST, .handler = handle_control };
     httpd_register_uri_handler(server, &uri_control);
+    /* Apuntes del satelite 3.5" (inicio/fin de viaje y, mas adelante, los
+     * registros). Ver main/portal/config_server_viaje.c. */
+    httpd_uri_t uri_viaje = { .uri = "/api/viaje", .method = HTTP_POST, .handler = handle_api_viaje };
+    httpd_register_uri_handler(server, &uri_viaje);
 
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
     httpd_register_uri_handler(server, &uri_static);
