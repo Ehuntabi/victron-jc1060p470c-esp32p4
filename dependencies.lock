@@ -92,7 +92,7 @@ dependencies:
   espressif/esp_hosted:
     dependencies: []
     source:
-      path: components/espressif__esp_hosted
+      path: /home/jc/joint/victron/components/espressif__esp_hosted
       type: local
     version: 0.0.27
   espressif/esp_ipa:

@@ -1,6 +1,6 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.5.3**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.6.6**
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -113,18 +113,19 @@ fallo igual, que es justo lo que pasó el 21-ago-2026.
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
 
 ## Pendientes activos
-1. **Ver la 3.5" con datos, para juzgar su estética** (pendiente 21-ago-2026).
-   Con la P4 en la mesa no hay BLE en rango, así que manda centinelas de "sin
-   dato" y el satélite pinta "--". Para verlo con valores que se mueven, basta
-   encender el simulador que ya existe:
+1. **Ninguno del satélite 3.5"** — cerrado el 22-ago-2026: se vio con datos del
+   simulador y se ajustó la estética (`~/joint/35cabina`, tag `v1.0.1`).
+
+   **Sobre el simulador**, que se usa para las capturas: además de inventar lo
+   que se ve en pantalla, **escribe un día entero inventado** en
+   `/sdcard/frigo/<fecha>.csv` y `/sdcard/bateria/<fecha>.csv` (el solar NO lo
+   toca). Desde v1.6.6 deja rastro y **se deshace solo**: el registro real se
+   aparta como `<csv>.real`, y si no había ninguno se deja una marca vacía
+   `<csv>.sim`. `sim_overview_restaurar_reales()` corre en cada arranque de
+   producción y devuelve o borra según la marca. Ya no hay que acordarse de
+   nada, pero **mientras el simulador esté puesto la P4 enseña datos FALSOS**:
    - `SIM_OVERVIEW_ENABLE` a `1` en `main/sim_overview.h`
    - descomentar `sim_overview_start();` en `main/main.c`
-
-   Inyecta batería, aguas y frigo por `ui_on_panel_data()`, la misma puerta que
-   los datos reales, así que salen por UDP hasta la 3.5" y se prueba la cadena
-   entera. **Acordarse de quitarlo después**: mientras esté puesto, la P4
-   enseña datos FALSOS en su propia pantalla y puede guardarlos en el histórico
-   de la SD.
 
 2. **PWM del ventilador a 25 kHz — NO es solo cambiar la línea** (27-jul-2026).
    Ahora está a 18 kHz (`FRIGO_FAN_FREQ_HZ` en `components/frigo/frigo.h`): inaudible
