@@ -15,6 +15,7 @@
 #include "ui.h"
 #include "data/dashboard_state.h"
 #include "portal/config_server.h"
+#include "portal/config_server_viaje.h"
 #include "frigo.h"
 #include "battery_history.h"
 #include "log_cleanup.h"
@@ -587,6 +588,10 @@ static void init_audio_ble(void)
             ESP_LOGW(TAG, "I2C bus no disponible para audio");
         }
     }
+    /* Telemetria del viaje: mientras haya uno abierto, va dejando su rastro en
+     * la carpeta del viaje ademas del historico de siempre. */
+    viaje_telemetria_start();
+
     victron_ble_register_callback(ui_on_panel_data);
     victron_ble_init();
 

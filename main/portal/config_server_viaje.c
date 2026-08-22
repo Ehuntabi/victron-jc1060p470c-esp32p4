@@ -18,12 +18,18 @@
 #include "config_server_auth.h"
 #include "camera.h"          /* camera_sd_bus_lock: serializar con el GDMA */
 #include "cJSON.h"
+#include "data/dashboard_state.h"
+#include "data/trip_computer.h"
+#include "frigo.h"
+#include "ne185/ne185.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 static const char *TAG = "viaje_srv";
 
@@ -31,6 +37,19 @@ static const char *TAG = "viaje_srv";
 #define NVS_NS          "viaje_p4"
 #define NVS_CARPETA     "carpeta"     /* ruta del viaje abierto, ausente si no hay */
 #define NVS_LAST_ID     "last_id"     /* ultimo id aplicado (idempotencia) */
+/* Totales del viaje, acumulados SEGUN LLEGAN los apuntes en vez de sumando los
+ * CSV al cerrar. Dos motivos: parsear CSV en el P4 seria bastante codigo para
+ * algo que se puede ir sumando, y si el viaje se corta a lo bruto (bateria,
+ * averia) los totales ya estan puestos al dia en vez de perderse. */
+#define NVS_T_LITROS    "t_litros"
+#define NVS_T_COMBUS    "t_combus"
+#define NVS_T_PEAJE     "t_peaje"
+#define NVS_T_BOMBONA   "t_bombona"
+#define NVS_T_MANTEN    "t_manten"
+#define NVS_T_PARADAS   "t_paradas"
+#define NVS_T_MONEDA    "t_moneda"    /* la primera vista */
+#define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
+#define NVS_T_INICIO    "t_inicio"    /* epoch del inicio, para contar los dias */
 
 /* El destino cabe en 20 caracteres (lo limita la 3.5"); la fecha son 10 y la
  * barra 1. Con 64 sobra y no hay que pensar en desbordes al componer rutas. */
@@ -136,6 +155,86 @@ static void diario(const char *carpeta, const char *que, const char *detalle)
     diario_en(carpeta, cuando, que, detalle);
 }
 
+/* ── Totales del viaje ────────────────────────────────────────────────────── */
+
+static double nvs_get_d(nvs_handle_t h, const char *k)
+{
+    /* NVS no guarda double: se mete el patron de bits en un u64. Es exacto y
+     * evita redondeos que en dinero se notan. */
+    uint64_t raw = 0;
+    if (nvs_get_u64(h, k, &raw) != ESP_OK) return 0.0;
+    double v; memcpy(&v, &raw, sizeof(v));
+    return v;
+}
+
+static void nvs_set_d(nvs_handle_t h, const char *k, double v)
+{
+    uint64_t raw; memcpy(&raw, &v, sizeof(raw));
+    nvs_set_u64(h, k, raw);
+}
+
+/* Suma lo que trae el apunte a los totales del viaje.
+ *
+ * OJO CON LAS MONEDAS: se suman los numeros tal cual, sin convertir. Un viaje
+ * que cruza a Suiza mezclaria euros y francos en el mismo total y el resultado
+ * no significaria nada. No se convierte (haria falta un cambio, que este
+ * aparato no tiene y quedaria desfasado), pero SI se detecta: si aparece mas de
+ * una moneda, el resumen lo dice en vez de dar un total que parece bueno. */
+static void totales_sumar(const char *tipo, const cJSON *datos)
+{
+    if (!datos) return;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+
+    const cJSON *jm = cJSON_GetObjectItem(datos, "moneda");
+    if (cJSON_IsString(jm) && jm->valuestring[0]) {
+        char vista[8] = {0};
+        size_t n = sizeof(vista);
+        if (nvs_get_str(h, NVS_T_MONEDA, vista, &n) != ESP_OK || !vista[0]) {
+            nvs_set_str(h, NVS_T_MONEDA, jm->valuestring);
+        } else if (strcmp(vista, jm->valuestring) != 0) {
+            nvs_set_u8(h, NVS_T_VARIAS, 1);
+        }
+    }
+
+    /* atof de un campo de texto; los importes viajan como cadena porque es lo
+     * que hay tecleado, con su coma o su punto tal cual. */
+    const cJSON *ji;
+    #define IMPORTE_DE(campo) ( (ji = cJSON_GetObjectItem(datos, campo)) && \
+                                cJSON_IsString(ji) ? atof(ji->valuestring) : 0.0 )
+
+    if (!strcmp(tipo, "repostaje")) {
+        nvs_set_d(h, NVS_T_LITROS, nvs_get_d(h, NVS_T_LITROS) + IMPORTE_DE("litros"));
+        nvs_set_d(h, NVS_T_COMBUS, nvs_get_d(h, NVS_T_COMBUS) + IMPORTE_DE("importe"));
+    } else if (!strcmp(tipo, "peaje")) {
+        nvs_set_d(h, NVS_T_PEAJE, nvs_get_d(h, NVS_T_PEAJE) + IMPORTE_DE("importe"));
+    } else if (!strcmp(tipo, "bombona")) {
+        nvs_set_d(h, NVS_T_BOMBONA, nvs_get_d(h, NVS_T_BOMBONA) + IMPORTE_DE("precio"));
+    } else if (!strcmp(tipo, "mantenimiento")) {
+        nvs_set_d(h, NVS_T_MANTEN, nvs_get_d(h, NVS_T_MANTEN) + IMPORTE_DE("coste"));
+    } else if (!strcmp(tipo, "parada")) {
+        uint32_t np = 0;
+        nvs_get_u32(h, NVS_T_PARADAS, &np);
+        nvs_set_u32(h, NVS_T_PARADAS, np + 1);
+    }
+    #undef IMPORTE_DE
+
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+static void totales_borrar(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_erase_key(h, NVS_T_LITROS);  nvs_erase_key(h, NVS_T_COMBUS);
+    nvs_erase_key(h, NVS_T_PEAJE);   nvs_erase_key(h, NVS_T_BOMBONA);
+    nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
+    nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
 /* ── Las operaciones ──────────────────────────────────────────────────────── */
 
 static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
@@ -184,10 +283,98 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
+    totales_borrar();
+    {   /* El epoch del inicio, para contar los dias al cerrar. Se guarda en vez
+         * de deducirlo del nombre de la carpeta: ahi solo esta la fecha, y un
+         * viaje de una noche saldria como "0 dias". */
+        nvs_handle_t h;
+        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+            nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
+            nvs_commit(h);
+            nvs_close(h);
+        }
+    }
     estado_set(carpeta, id);
     ESP_LOGI(TAG, "VIAJE ABIERTO: %s", carpeta);
     httpd_resp_sendstr(req, carpeta);
     return ESP_OK;
+}
+
+/* resumen.txt: lo que uno quiere saber al volver, en castellano llano y no en
+ * columnas. Los CSV ya estan ahi para las cuentas finas. */
+static void escribir_resumen(const char *carpeta)
+{
+    nvs_handle_t h;
+    double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0;
+    uint32_t paradas = 0;
+    uint64_t inicio = 0;
+    uint8_t varias = 0;
+    char moneda[8] = "EUR";
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        litros  = nvs_get_d(h, NVS_T_LITROS);
+        combus  = nvs_get_d(h, NVS_T_COMBUS);
+        peaje   = nvs_get_d(h, NVS_T_PEAJE);
+        bombona = nvs_get_d(h, NVS_T_BOMBONA);
+        manten  = nvs_get_d(h, NVS_T_MANTEN);
+        nvs_get_u32(h, NVS_T_PARADAS, &paradas);
+        nvs_get_u64(h, NVS_T_INICIO, &inicio);
+        nvs_get_u8(h, NVS_T_VARIAS, &varias);
+        size_t n = sizeof(moneda);
+        nvs_get_str(h, NVS_T_MONEDA, moneda, &n);
+        nvs_close(h);
+    }
+
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/resumen.txt", carpeta);
+    FILE *f = fopen(ruta, "w");
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return; }
+
+    time_t now = time(NULL);
+    struct tm tm_l;
+    localtime_r(&now, &tm_l);
+    char cuando[20];
+    strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M", &tm_l);
+
+    fprintf(f, "RESUMEN DEL VIAJE\n");
+    fprintf(f, "=================\n\n");
+    fprintf(f, "Cerrado el %s\n", cuando);
+    if (inicio > 1000000000ULL) {
+        /* Dias de calendario, no periodos de 24 h: salir un viernes y volver el
+         * domingo son tres dias de viaje, aunque no sean 72 horas. */
+        long dias = (long)((now / 86400) - ((time_t)inicio / 86400)) + 1;
+        fprintf(f, "Duracion: %ld dia%s\n", dias, dias == 1 ? "" : "s");
+    }
+    fprintf(f, "\nGASTOS (%s)\n", moneda);
+    fprintf(f, "  Combustible ... %8.2f   (%.1f litros)\n", combus, litros);
+    fprintf(f, "  Peajes ........ %8.2f\n", peaje);
+    fprintf(f, "  Gas ........... %8.2f\n", bombona);
+    fprintf(f, "  Mantenimiento . %8.2f\n", manten);
+    fprintf(f, "  ----------------------\n");
+    fprintf(f, "  TOTAL ......... %8.2f\n", combus + peaje + bombona + manten);
+    if (varias) {
+        /* Sumar euros con francos da un numero que parece bueno y no lo es. */
+        fprintf(f, "\n  OJO: hubo mas de una moneda en este viaje.\n");
+        fprintf(f, "  Los totales estan SUMADOS SIN CONVERTIR y no valen.\n");
+        fprintf(f, "  Mira los csv de cada tipo, que llevan su moneda.\n");
+    }
+    if (litros > 0.01 && combus > 0.01) {
+        fprintf(f, "\n  Precio medio del litro: %.3f %s\n", combus / litros, moneda);
+    }
+    fprintf(f, "\nParadas anotadas: %lu\n", (unsigned long)paradas);
+
+    trip_computer_t t;
+    trip_computer_get(&t);
+    fprintf(f, "\nENERGIA\n");
+    fprintf(f, "  Cargados ...... %8.0f Wh\n", t.wh_charged);
+    fprintf(f, "  Gastados ...... %8.0f Wh\n", t.wh_discharged);
+    fprintf(f, "  De la placa ... %8.0f Wh   (%.1f h de sol)\n",
+            t.wh_solar, (double)t.solar_seconds / 3600.0);
+
+    /* Sin kilometros: esta pantalla no tiene GPS ni cuentakilometros. Se dice en
+     * el propio fichero en vez de omitirlo, para que no parezca que el viaje fue
+     * de 0 km. */
+    fprintf(f, "\nKilometros: no disponibles (la P4 aun no tiene GPS).\n");
+    fclose(f);
 }
 
 static esp_err_t op_fin(httpd_req_t *req, uint32_t id)
@@ -209,22 +396,7 @@ static esp_err_t op_fin(httpd_req_t *req, uint32_t id)
         return ESP_OK;
     }
     diario(carpeta, "fin", "");
-    /* resumen.txt con los totales es la fase 4 del diseño; de momento se deja
-     * la marca de cerrado, que es lo que distingue un viaje terminado de uno
-     * cortado a lo bruto. */
-    char ruta[RUTA_MAX];
-    snprintf(ruta, sizeof(ruta), "%s/resumen.txt", carpeta);
-    FILE *f = fopen(ruta, "w");
-    if (f) {
-        time_t now = time(NULL);
-        struct tm tm_l;
-        localtime_r(&now, &tm_l);
-        char cuando[20];
-        strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M", &tm_l);
-        fprintf(f, "Viaje cerrado el %s\n", cuando);
-        fprintf(f, "Totales pendientes (fase 4 del diseno).\n");
-        fclose(f);
-    }
+    escribir_resumen(carpeta);
     camera_sd_bus_unlock();
 
     estado_set(NULL, id);
@@ -337,11 +509,117 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     diario_en(carpeta, cuando, jt->valuestring, detalle);
     csv_por_tipo(carpeta, jt->valuestring, jd, cuando);
     camera_sd_bus_unlock();
+    totales_sumar(jt->valuestring, jd);
 
     estado_set(carpeta, id);
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
     httpd_resp_sendstr(req, "ok");
     return ESP_OK;
+}
+
+/* ── Telemetria y contadores mientras dura el viaje ───────────────────────── */
+
+/* Cada 5 min una fila de telemetria; cada hora una de contadores. Cinco minutos
+ * dan 288 filas al dia, que es lo mismo que ya usa el historico del frigo y
+ * pinta una grafica decente sin llenar la tarjeta. */
+#define TELEMETRIA_MIN   5
+#define CONTADORES_MIN  60
+
+static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
+{
+    char ruta[RUTA_MAX];
+    char dia[12];
+    strftime(dia, sizeof(dia), "%Y-%m-%d", tm_l);
+    snprintf(ruta, sizeof(ruta), "%s/telemetria_%s.csv", carpeta, dia);
+
+    struct stat st;
+    bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
+
+    FILE *f = fopen(ruta, "a");
+    if (!f) return;
+    if (nuevo) fprintf(f, "hora,soc,bateria_v,solar_w,frigo_c,exterior_c,fan_pct,agua_limpia,agua_grises\n");
+
+    dashboard_snapshot_t d;
+    dashboard_state_snapshot(&d);
+    frigo_state_t fr;
+    frigo_get_state_copy(&fr);
+    ne185_data_t ne;
+    ne185_get(&ne);
+
+    char hora[9];
+    strftime(hora, sizeof(hora), "%H:%M:%S", tm_l);
+    fprintf(f, "%s,", hora);
+    if (d.bat_has) fprintf(f, "%u.%u,%u.%02u,", d.soc_deci / 10, d.soc_deci % 10,
+                           d.bat_v_centi / 100, d.bat_v_centi % 100);
+    else           fprintf(f, ",,");
+    if (d.solar_has) fprintf(f, "%u,", d.pv_w); else fprintf(f, ",");
+    fprintf(f, "%.1f,%.1f,%u,", fr.T_Congelador, fr.T_Exterior, fr.fan_percent);
+    if (ne.fresh) fprintf(f, "%u,%u\n", ne.s1, ne.r1); else fprintf(f, ",\n");
+    fclose(f);
+}
+
+static void fila_contadores(const char *carpeta, const struct tm *tm_l)
+{
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/contadores.csv", carpeta);
+
+    struct stat st;
+    bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
+
+    FILE *f = fopen(ruta, "a");
+    if (!f) return;
+    /* Sin kilometros: la P4 no tiene GPS ni cuentakilometros todavia. Cuando lo
+     * tenga, la columna se añade AQUI y al final, para no descolocar lo ya
+     * escrito de viajes anteriores. */
+    if (nuevo) fprintf(f, "fecha_hora,horas_activo,wh_cargados,wh_gastados,wh_solar,horas_sol\n");
+
+    trip_computer_t t;
+    trip_computer_get(&t);
+    char cuando[20];
+    strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", tm_l);
+    fprintf(f, "%s,%.2f,%.0f,%.0f,%.0f,%.2f\n", cuando,
+            (double)t.seconds_running / 3600.0, t.wh_charged, t.wh_discharged,
+            t.wh_solar, (double)t.solar_seconds / 3600.0);
+    fclose(f);
+}
+
+/* Corre desde un esp_timer, no desde la tarea del portal: la telemetria tiene
+ * que seguir cayendo aunque nadie toque el portal en todo el viaje. */
+static void tick_viaje_cb(void *arg)
+{
+    (void)arg;
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+
+    time_t now = time(NULL);
+    if (now < 1000000000L) return;          /* sin hora buena no se apunta nada */
+    struct tm tm_l;
+    localtime_r(&now, &tm_l);
+
+    static int64_t ultima_tel = 0, ultimo_cont = 0;
+    int64_t ahora_us = esp_timer_get_time();
+
+    bool toca_tel  = (ultima_tel  == 0) || (ahora_us - ultima_tel  >= (int64_t)TELEMETRIA_MIN * 60 * 1000000LL);
+    bool toca_cont = (ultimo_cont == 0) || (ahora_us - ultimo_cont >= (int64_t)CONTADORES_MIN * 60 * 1000000LL);
+    if (!toca_tel && !toca_cont) return;
+
+    if (!camera_sd_bus_lock(3000)) return;   /* ya se apuntara al siguiente */
+    if (toca_tel)  { fila_telemetria(carpeta, &tm_l); ultima_tel  = ahora_us; }
+    if (toca_cont) { fila_contadores(carpeta, &tm_l); ultimo_cont = ahora_us; }
+    camera_sd_bus_unlock();
+}
+
+void viaje_telemetria_start(void)
+{
+    static esp_timer_handle_t t;
+    const esp_timer_create_args_t args = { .callback = tick_viaje_cb, .name = "viaje_tick" };
+    if (esp_timer_create(&args, &t) == ESP_OK) {
+        /* Se despierta cada minuto y el propio callback decide si toca escribir.
+         * Mas simple que dos timers, y el coste de mirar el reloj es nulo. */
+        esp_timer_start_periodic(t, 60 * 1000000ULL);
+        ESP_LOGI(TAG, "telemetria del viaje armada (cada %d min, contadores cada %d)",
+                 TELEMETRIA_MIN, CONTADORES_MIN);
+    }
 }
 
 /* ── El handler ───────────────────────────────────────────────────────────── */

@@ -5,3 +5,8 @@
 
 /* POST /api/viaje — Basic Auth ESTRICTA (escribe en la tarjeta). */
 esp_err_t handle_api_viaje(httpd_req_t *req);
+
+/* Arranca el timer que, MIENTRAS HAYA VIAJE ABIERTO, va dejando en su carpeta
+ * una fila de telemetria cada 5 min y una de contadores cada hora. Llamar una
+ * vez al iniciar; no hace nada mientras no haya viaje. */
+void viaje_telemetria_start(void);
