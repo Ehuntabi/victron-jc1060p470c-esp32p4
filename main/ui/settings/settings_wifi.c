@@ -58,6 +58,7 @@ static void ap_switch_cb(lv_event_t *e);
 /* Namespace NVS donde vive la configuracion Wi-Fi. */
 #define WIFI_NAMESPACE "wifi"
 static void wifi_save_cb(lv_event_t *e);
+static lv_obj_t *s_wifi_estado = NULL;   /* respuesta del boton Guardar */
 void password_toggle_btn_event_cb(lv_event_t *e);
 
 static void ap_switch_cb(lv_event_t *e)
@@ -223,6 +224,16 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_font(lbl_save, &lv_font_montserrat_24_es, 0);
     lv_label_set_text(lbl_save, "Guardar red");
     lv_obj_center(lbl_save);
+
+    /* Respuesta del boton. Sin esto lo pulsabas, se guardaba, se reiniciaba el
+     * AP... y en pantalla no pasaba nada visible: la unica constancia quedaba en
+     * el log, que el usuario no ve. */
+    s_wifi_estado = lv_label_create(card1);
+    lv_label_set_text(s_wifi_estado, "");
+    lv_obj_set_style_text_font(s_wifi_estado, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0x4CD964), 0);
+    lv_obj_set_width(s_wifi_estado, lv_pct(100));
+    lv_label_set_long_mode(s_wifi_estado, LV_LABEL_LONG_WRAP);
 
 
     /* === Card 2: Pagina inicial del portal + Reactivar (mitad ancho, dcho) ===
@@ -391,6 +402,10 @@ static void wifi_save_cb(lv_event_t *e)
      * pasado nada. */
     if (ssid == NULL || ssid[0] == '\0') {
         ESP_LOGW(TAG_SETTINGS, "SSID vacio: no se guarda");
+        if (s_wifi_estado) {
+            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_label_set_text(s_wifi_estado, "El nombre de la red no puede estar vacio");
+        }
         return;
     }
 
@@ -406,9 +421,17 @@ static void wifi_save_cb(lv_event_t *e)
     nvs_close(h);
     if (err != ESP_OK) {
         ESP_LOGW(TAG_SETTINGS, "Wi-Fi config no persistio: %s", esp_err_to_name(err));
+        if (s_wifi_estado) {
+            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_label_set_text(s_wifi_estado, "No se pudo guardar");
+        }
         return;
     }
     ESP_LOGI(TAG_SETTINGS, "Wi-Fi guardado: SSID='%s' -> reaplicando AP", ssid);
+    if (s_wifi_estado) {
+        lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0x4CD964), 0);
+        lv_label_set_text_fmt(s_wifi_estado, "Guardado. Reconectando como \"%s\"...", ssid);
+    }
     config_server_request_wifi_apply();
 }
 
