@@ -6,6 +6,7 @@
 /* Fuera de la guarda: sim_overview_restaurar_reales() tiene que compilar y
  * ejecutarse justo cuando el simulador esta APAGADO. */
 #include <dirent.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -191,8 +192,23 @@ static bool sim_existe(const char *p) { struct stat st; return stat(p, &st) == 0
  * no volver a hacerlo, machacaria la copia buena con la inventada). */
 static bool sim_apartar(const char *path)
 {
-    if (!sim_existe(path)) return true;          /* no hay nada que apartar */
     char bak[80];
+    if (!sim_existe(path)) {
+        /* No habia registro del dia (arranque temprano, o dia recien
+         * empezado). Antes se devolvia true y se escribia el inventado con el
+         * nombre bueno SIN dejar rastro: al apagar el simulador no habia ningun
+         * ".real" que devolver, y el dia inventado se quedaba en el historico
+         * para siempre pareciendo real. Paso el 22-ago-2026 y se descubrio
+         * mirando la tarjeta, no el codigo.
+         *
+         * La marca vacia dice "este csv me lo he inventado yo", y es lo que
+         * permite a sim_overview_restaurar_reales() barrerlo despues. */
+        snprintf(bak, sizeof(bak), "%s.sim", path);
+        FILE *m = fopen(bak, "w");
+        if (m) { fclose(m); ESP_LOGW(TAG, "marcado como inventado: %s", bak); }
+        else   { ESP_LOGW(TAG, "no puedo marcar %s (quedara sin rastro)", bak); }
+        return true;
+    }
     snprintf(bak, sizeof(bak), "%s.real", path);
     if (sim_existe(bak)) {
         ESP_LOGW(TAG, "ya habia copia de %s: no toco nada", path);
@@ -356,20 +372,29 @@ static void restaurar_dir(const char *dir)
     DIR *d = opendir(dir);
     if (!d) return;                      /* la carpeta no existe: nada que hacer */
 
+    /* Dos rastros posibles, segun hubiera o no registro que apartar:
+     *   <csv>.real -> el bueno estaba ahi: se devuelve encima del inventado.
+     *   <csv>.sim  -> no habia bueno: el inventado sobra y se va entero. */
     struct dirent *ent;
     while ((ent = readdir(d)) != NULL) {
         size_t n = strlen(ent->d_name);
-        if (n <= 5 || strcmp(ent->d_name + n - 5, ".real") != 0) continue;
+        bool es_real = (n > 5 && strcmp(ent->d_name + n - 5, ".real") == 0);
+        bool es_sim  = (n > 4 && strcmp(ent->d_name + n - 4, ".sim")  == 0);
+        if (!es_real && !es_sim) continue;
 
-        char real[128], bueno[128];
-        snprintf(real, sizeof(real), "%s/%s", dir, ent->d_name);
-        snprintf(bueno, sizeof(bueno), "%.*s", (int)(strlen(real) - 5), real);
+        char marca[128], bueno[128];
+        snprintf(marca, sizeof(marca), "%s/%s", dir, ent->d_name);
+        snprintf(bueno, sizeof(bueno), "%.*s",
+                 (int)(strlen(marca) - (es_real ? 5 : 4)), marca);
 
-        unlink(bueno);                   /* el csv inventado */
-        if (rename(real, bueno) == 0) {
+        unlink(bueno);                   /* el csv inventado, en ambos casos */
+        if (es_sim) {
+            unlink(marca);
+            ESP_LOGW(TAG, "borrado el registro inventado: %s", bueno);
+        } else if (rename(marca, bueno) == 0) {
             ESP_LOGW(TAG, "registro real devuelto a su sitio: %s", bueno);
         } else {
-            ESP_LOGE(TAG, "NO se pudo devolver %s -> %s", real, bueno);
+            ESP_LOGE(TAG, "NO se pudo devolver %s -> %s", marca, bueno);
         }
     }
     closedir(d);
