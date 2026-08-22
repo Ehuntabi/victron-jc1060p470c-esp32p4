@@ -157,9 +157,11 @@ static void night_mode_timer_cb(void *arg)
         }
     }
 
+    const char *motivo = "?";
     if (ausente_is_active()) {
         /* Modo ausente: precedencia MAXIMA -> pantalla apagada y se mantiene asi. */
         target = 0;
+        motivo = "ausente";
     } else if (ui->screensaver.active) {
         if (night_win) {
             /* En reposo dentro de la franja nocturna la pantalla debe estar
@@ -169,6 +171,7 @@ static void night_mode_timer_cb(void *arg)
              * apagado porque ambos salen si active==true). El toque la despierta
              * via screensaver_wake (restaura porque active==true). */
             target = 0;
+            motivo = "reposo+noche";
         } else {
             /* Fuera de la noche, el salvapantallas gestiona su propio brillo. */
             if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
@@ -187,10 +190,16 @@ static void night_mode_timer_cb(void *arg)
              * toque no reencenderia (bug pantalla negra irrecuperable). De noche
              * mantenemos brillo manual; el auto-brillo sigue sin aplicar. */
             target = ui->brightness;
+            motivo = "franja nocturna (manual)";
         } else if (s_auto_brightness && camera_get_luma(&luma)) {
             target = luma_to_brightness(luma);
+            /* El dato clave del diagnostico: que luz dice ver la camara. */
+            static char aut[48];
+            snprintf(aut, sizeof(aut), "AUTO camara luma=%u", (unsigned)luma);
+            motivo = aut;
         } else {
             target = ui->brightness;
+            motivo = "manual (Ajustes)";
         }
     }
 
@@ -198,6 +207,10 @@ static void night_mode_timer_cb(void *arg)
         if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
         return;
     }
+    /* De donde sale el brillo. Sin esto la pantalla se atenuaba sola y no habia
+     * forma de saber quien mandaba: el auto-brillo de la camara, el modo noche,
+     * el salvapantallas o el ajuste manual. Diagnostico del 22-ago-2026. */
+    ESP_LOGI(TAG, "brillo %d%% -> %d%% (%s)", s_last_target, target, motivo);
     s_last_target = target;
     bsp_display_brightness_set(target);
     if (s_bright_mutex) xSemaphoreGive(s_bright_mutex);
