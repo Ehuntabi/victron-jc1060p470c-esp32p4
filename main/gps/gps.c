@@ -262,6 +262,11 @@ static void gps_task(void *arg)
 void gps_get(gps_data_t *out)
 {
     if (!out) return;
+    /* La UI se construye ANTES que gps_init() (fase 1 contra fase 2 del
+     * arranque) y su temporizador de 1 s puede preguntar cuando el cerrojo
+     * todavia no existe. Hoy no llega a pasar, pero depender de que la SD tarde
+     * lo justo es una bomba de relojeria: xSemaphoreTake(NULL) revienta. */
+    if (!s_mtx) { *out = (gps_data_t){0}; return; }
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     *out = s_d;
     out->segundos_sin_dato = s_ultimo_us
@@ -274,7 +279,7 @@ void gps_crudo_get(int i, char *out, size_t n)
 {
     if (!out || n == 0) return;
     out[0] = 0;
-    if (i < 0 || i >= GPS_CRUDO_N) return;
+    if (i < 0 || i >= GPS_CRUDO_N || !s_mtx) return;
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     /* s_crudo_next apunta al hueco que se escribira; el mas antiguo esta ahi. */
     snprintf(out, n, "%s", s_crudo[(s_crudo_next + i) % GPS_CRUDO_N]);
