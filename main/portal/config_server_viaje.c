@@ -13,6 +13,14 @@
  * reinventar confirmaciones y reintentos.
  *
  * Auth ESTRICTA: esto escribe en la tarjeta.
+ *
+ * Operaciones: inicio | fin | registro | descartar.
+ *
+ * "descartar" (23-ago-2026) APARTA el viaje abierto en vez de cerrarlo: su
+ * carpeta pasa a DESCARTADO_<nombre> y deja de contar. Existe porque la 3.5"
+ * puede encontrarse con que aqui hay un viaje abierto que ella no conoce, y el
+ * unico aparato que puede cerrarlo es ella -- esta P4 vive en la parte de
+ * atras de la autocaravana y no se conduce desde alli.
  */
 #include "config_server_internal.h"
 #include "config_server_auth.h"
@@ -57,6 +65,8 @@ static const char *TAG = "viaje_srv";
  * otro: la lista de descargas tiene que decidir el estado de cada viaje con un
  * stat(), sin abrir y parsear nada. */
 #define MARCA_INCOMPLETO "INCOMPLETO.txt"
+/* Delante del nombre de la carpeta de un viaje apartado. */
+#define MARCA_DESCARTADO "DESCARTADO_"
 
 /* El destino cabe en 20 caracteres (lo limita la 3.5"); la fecha son 10 y la
  * barra 1. Con 64 sobra y no hay que pensar en desbordes al componer rutas. */
@@ -477,6 +487,65 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     return ESP_OK;
 }
 
+/* APARTAR el viaje abierto, sin cerrarlo como bueno.
+ *
+ * Para cuando se empezo un viaje por error o de prueba: la carpeta pasa a
+ * llamarse DESCARTADO_<nombre> y deja de contar como viaje. NO se borra --
+ * un viaje entero perdido por un dedazo no se recupera, y renombrar cuesta lo
+ * mismo. Quien quiera el hueco de la tarjeta, que lo borre a mano.
+ *
+ * Lo pide la 3.5" desde la cabina: cuando va a empezar un viaje y esta pantalla
+ * responde 409, ofrece guardarlo o apartarlo ahi mismo. La P4 vive en la parte
+ * de atras y levantarse del asiento del conductor para pulsar un boton no es
+ * una opcion. */
+static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
+{
+    (void)j;
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) {
+        /* Mismo criterio que op_fin: casi siempre es un reintento de algo que
+         * ya se aplico, y un error dejaria al satelite atascado. */
+        ESP_LOGW(TAG, "descartar sin viaje abierto: lo doy por hecho");
+        httpd_resp_sendstr(req, "no habia viaje abierto");
+        return ESP_OK;
+    }
+
+    const char *nombre = strrchr(carpeta, '/');
+    nombre = nombre ? nombre + 1 : carpeta;
+
+    if (!camera_sd_bus_lock(3000)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_sendstr(req, "tarjeta ocupada");
+        return ESP_OK;
+    }
+
+    char destino[RUTA_MAX + 32];
+    snprintf(destino, sizeof(destino), VIAJES_DIR "/" MARCA_DESCARTADO "%s", nombre);
+    /* rename() falla si el destino ya existe, y con dos pruebas del mismo dia
+     * eso pasa a la primera. Se numera en vez de dar error. */
+    struct stat st;
+    for (int k = 2; k < 100 && stat(destino, &st) == 0; k++) {
+        snprintf(destino, sizeof(destino), VIAJES_DIR "/" MARCA_DESCARTADO "%s_%d",
+                 nombre, k);
+    }
+
+    diario(carpeta, "descartado", "");
+    int r = rename(carpeta, destino);
+    camera_sd_bus_unlock();
+
+    if (r != 0) {
+        ESP_LOGE(TAG, "no puedo apartar %s -> %s", carpeta, destino);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "no puedo apartar la carpeta");
+        return ESP_OK;
+    }
+
+    estado_set(NULL, id);
+    ESP_LOGW(TAG, "VIAJE DESCARTADO: %s -> %s", carpeta, destino);
+    httpd_resp_sendstr(req, destino);
+    return ESP_OK;
+}
+
 /* Una fila al CSV del tipo. Se escribe ADEMAS del diario porque sirven para
  * cosas distintas: eventos.csv se lee para saber que paso, y estos para hacer
  * cuentas en una hoja de calculo.
@@ -768,9 +837,11 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     esp_err_t ret;
     if      (!strcmp(jop->valuestring, "inicio")) ret = op_inicio(req, j, id);
     else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, j, id);
-    else if (!strcmp(jop->valuestring, "registro")) ret = op_registro(req, j, id); else {
+    else if (!strcmp(jop->valuestring, "registro")) ret = op_registro(req, j, id);
+    else if (!strcmp(jop->valuestring, "descartar")) ret = op_descartar(req, j, id);
+    else {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "op? (inicio|fin|registro)");
+        httpd_resp_sendstr(req, "op? (inicio|fin|registro|descartar)");
         ret = ESP_OK;
     }
 
