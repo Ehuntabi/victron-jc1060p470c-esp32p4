@@ -279,6 +279,9 @@ diagnosticar.</p>
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
 <tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr>
+<tr style="background:#fff8e1;"><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr>
+<tr style="background:#fff8e1;"><td>2</td><td>UART2 TX</td><td><strong>GPS NEO-M9N</strong> (JP1 pin 9) — reservado, hoy sin usar</td></tr>
+<tr style="background:#fff8e1;"><td>3</td><td>UART2 RX</td><td><strong>GPS NEO-M9N</strong> (JP1) — 38400 8N1</td></tr>
 <tr style="background:#fff8e1;"><td>4</td><td>1-Wire</td><td><strong>DS18B20 frigo</strong> (JP1 pin 13, pullup 4.7 kΩ; 1 kΩ si cable ~2 m)</td></tr>
 <tr style="background:#fff8e1;"><td>5</td><td>LEDC PWM</td><td><strong>PWM Ventilador frigo</strong> (JP1 pin 15, 18 kHz)</td></tr>
 <tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
@@ -291,16 +294,14 @@ diagnosticar.</p>
 <tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr>
 <tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
-<tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
-<tr><td>2</td><td>UART2 TX</td><td><strong>GPS NEO-M9N</strong> (JP1 pin 9) — reservado, hoy sin usar</td></tr>
-<tr><td>3</td><td>UART2 RX</td><td><strong>GPS NEO-M9N</strong> (JP1) — 38400 8N1</td></tr>
-<tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
-<tr><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr>
+<tr style="background:#fff8e1;"><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
+<tr style="background:#fff8e1;"><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
 <tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr>
 <tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
 <tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
 </table>
+<p class="small"><span style="background:#fff8e1;padding:1px 6px;border:1px solid #e6d9a8;">Resaltados</span> = los que a&ntilde;ade <strong>este proyecto</strong> con cableado externo (frigo, rel&eacute; solar, NE185 y GPS). El resto es hardware propio de la placa Guition.</p>
 <p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 20, 32, 45 y 46 — el 2 y el 3 los ocupa ya el GPS).</p>
 
 </div><!--/sec-->
@@ -419,6 +420,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li><strong>Modo excedente solar</strong> del frigo — relé piloto GPIO 1 (firmware listo; pendiente cablear el relé físico al frigo)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
 compilado y flasheado; UART1 GPIO 26/27, conector J4; conectado y funcionando — control de luces y bomba operativo)</li>
+<li><strong>GPS u-blox NEO-M9N</strong> — UART2 GPIO 3 (RX) / GPIO 2 (TX) en JP1, 38400 8N1 &mdash; lectura NMEA, indicador en la barra inferior, p&aacute;gina Ajustes &rarr; GPS y puesta en hora autom&aacute;tica del reloj</li>
 <li><strong>Cámara OV02C10</strong> (MIPI-CSI): auto-brillo del display + captura de foto/snapshot JPEG (ver sección 19)</li>
 </ul>
 </div>
