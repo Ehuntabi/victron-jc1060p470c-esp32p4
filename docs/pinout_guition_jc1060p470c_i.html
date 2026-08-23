@@ -245,6 +245,13 @@ M9. Los u-blox M8 anteriores venian a 9600, asi que probar a 9600 y no ver nada 
 tipico con estos modulos. El firmware solo ESCUCHA (NMEA); no manda comandos UBX, porque
 cambian entre versiones del firmware del propio modulo.</p>
 
+<div class="nota"><strong>Ojo con el pin 9 si hay hardware viejo montado.</strong>
+El GPIO 2 lo uso en su dia el medidor <strong>PZEM</strong>, que se retiro del firmware.
+Sus esquemas siguen en <code>docs/stripboard_pzem.pdf</code> y
+<code>docs/wiring_pzem.pdf</code>: describen un divisor resistivo conectado a ese mismo
+pin 9. Si ese divisor sigue soldado en la placa, hay que quitarlo antes de llevar el GPS
+ahi. El GPS FUNCIONA solo con el RX (GPIO 3); el TX es una reserva y hoy no se usa.</div>
+
 <p class="small">Se comprueba el <strong>checksum</strong> de cada trama: con la velocidad
 equivocada o con ruido en el cable llegarian lineas que parecen NMEA con numeros creibles
 dentro, y una posicion inventada es peor que no tener posicion. Software en
