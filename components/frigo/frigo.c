@@ -145,6 +145,15 @@ static void nvs_save_task(void *arg)
             nvs_set_u8(h, NVS_KEY_SOL_ON,  s_sol_on_pct);
             nvs_set_u8(h, NVS_KEY_SOL_OFF, s_sol_off_pct);
             xSemaphoreGive(s_mutex);
+        } else {
+            /* Se iba SIN ESCRIBIR NADA y sin decirlo: el ajuste que el usuario
+             * acababa de tocar se perdia en silencio y solo se notaba al
+             * siguiente arranque, cuando volvia al valor de antes. Improbable
+             * (la lectura de sondas no retiene este cerrojo), pero mientras no
+             * se demuestre lo contrario esto es lo unico que explicaria que los
+             * umbrales del frigo volvieran solos. */
+            ESP_LOGE(TAG, "NO se pudo guardar en NVS: cerrojo ocupado. "
+                          "El ajuste que acabas de cambiar se ha PERDIDO.");
         }
         nvs_commit(h);
         nvs_close(h);
