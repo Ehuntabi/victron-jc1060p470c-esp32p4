@@ -110,8 +110,23 @@ static bool night_hour_in_window(int now_h, uint8_t start_h, uint8_t end_h)
     return now_h >= start_h || now_h < end_h;
 }
 
-/* Auto-brillo por luminosidad de la camara. TODO(loop): toggle en Settings. */
-static bool s_auto_brightness = true;
+/* Auto-brillo por luminosidad de la camara: APAGADO (23-ago-2026).
+ *
+ * Estaba encendido y bajaba la pantalla al 15 % nada mas arrancar. Se midio con
+ * el log de brillo y hacia lo que se le pidio -- la camara veia luma 13 de 255 y
+ * el mapeo de abajo daba 15 % -- pero el resultado no vale: "siempre baja mucho
+ * la pantalla" (usuario, tras un dia usandolo).
+ *
+ * El problema de fondo es que la camara es MAL SENSOR DE LUZ AMBIENTE. Esta para
+ * ver, no para medir: apunta a donde apunta, y ademas su ISP autoexpone, con lo
+ * que compensa la oscuridad y la medida deja de representar la luz que hay donde
+ * esta la pantalla. Ese mapeo se calibro ademas cuando la camara llevaba
+ * ganancia fija, que ya no.
+ *
+ * El brillo pasa a ser el de Ajustes mas el modo nocturno, que es predecible.
+ * Para recuperarlo: poner esto a true (y probablemente subir MINB, que a 12 deja
+ * la pantalla casi apagada). */
+static bool s_auto_brightness = false;
 
 /* Mapea luminosidad ambiente (0-255) a brillo de pantalla (%). Suelo de
  * seguridad para que la pantalla nunca quede ilegible, y cuantizado a pasos de
