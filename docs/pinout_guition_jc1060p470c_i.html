@@ -417,7 +417,7 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 <li>RTC RX8025T (backup CR1220 + NVS)</li>
 <li>Audio ES8311 + NS4150</li>
 <li>LDO interno PHY MIPI-DSI</li>
-<li><strong>Modo excedente solar</strong> del frigo — relé piloto GPIO 1 (firmware listo; pendiente cablear el relé físico al frigo)</li>
+<li><strong>Modo excedente solar</strong> del frigo — relé piloto en GPIO 1 (JP1 pin 7)</li>
 <li><strong>NE185 RS-485</strong> via MAX485 onboard (componente <code>main/ne185/</code>
 compilado y flasheado; UART1 GPIO 26/27, conector J4; conectado y funcionando — control de luces y bomba operativo)</li>
 <li><strong>GPS u-blox NEO-M9N</strong> — UART2 GPIO 3 (RX) / GPIO 2 (TX) en JP1, 38400 8N1 &mdash; lectura NMEA, indicador en la barra inferior, p&aacute;gina Ajustes &rarr; GPS y puesta en hora autom&aacute;tica del reloj</li>
