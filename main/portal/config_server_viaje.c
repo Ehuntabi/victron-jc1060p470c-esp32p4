@@ -43,6 +43,10 @@
 static const char *TAG = "viaje_srv";
 
 #define VIAJES_DIR      "/sdcard/viajes"
+/* Donde van los apuntes que NO son de un viaje: el historial del vehiculo.
+ * Repostajes de camino al taller, la ITV, una bombona... cosas que le pasan a
+ * la autocaravana, no a un viaje concreto. */
+#define VEHICULO_DIR    "/sdcard/vehiculo"
 #define NVS_NS          "viaje_p4"
 #define NVS_CARPETA     "carpeta"     /* ruta del viaje abierto, ausente si no hay */
 #define NVS_LAST_ID     "last_id"     /* ultimo id aplicado (idempotencia) */
@@ -611,17 +615,18 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
+    /* Sin viaje abierto el apunte NO se rechaza: es de una salida puntual y va
+     * al historial del vehiculo.
+     *
+     * Antes esto era un 409 "no hay viaje abierto", pensado para cuando el
+     * inicio del viaje seguia en la cola del satelite por delante de este
+     * apunte. Con el cuaderno reorganizado por SALIDAS ya no vale: una salida
+     * puntual no tiene viaje y nunca lo va a tener, asi que el 409 dejaba a la
+     * cola reintentando el mismo apunte para siempre (viaje_cola.c reintenta
+     * los 409 a proposito) y detras se atascaba todo lo demas. */
     char carpeta[CARPETA_MAX];
-    if (!viaje_abierto(carpeta, sizeof(carpeta))) {
-        /* 409 y no 200: el satelite no debe darlo por guardado. Pero tampoco
-         * es un apunte invalido que haya que tirar -- puede que el inicio del
-         * viaje siga en su cola por delante de este. Su repartidor reintenta
-         * los 409 (ver viaje_cola.c). */
-        ESP_LOGW(TAG, "registro '%s' sin viaje abierto", jt->valuestring);
-        httpd_resp_set_status(req, "409 Conflict");
-        httpd_resp_sendstr(req, "no hay viaje abierto");
-        return ESP_OK;
-    }
+    bool en_viaje = viaje_abierto(carpeta, sizeof(carpeta));
+    if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
 
     /* Cuando ocurrio. */
     const cJSON *jts = cJSON_GetObjectItem(j, "ts");
@@ -647,11 +652,18 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_sendstr(req, "tarjeta ocupada");
         return ESP_OK;
     }
+    if (!en_viaje) mkdir(VEHICULO_DIR, 0777);
     diario_en(carpeta, cuando, jt->valuestring, detalle);
     csv_por_tipo(carpeta, jt->valuestring, jd, cuando);
     camera_sd_bus_unlock();
-    totales_sumar(jt->valuestring, jd);
-    {   nvs_handle_t h;
+
+    /* Los totales y el contador de apuntes son DEL VIAJE: un repostaje del
+     * historial del vehiculo no cuenta en el resumen de ningun viaje, y
+     * sumarlo al contador haria que el viaje siguiente pareciese completo con
+     * un apunte de menos. */
+    if (en_viaje) {
+        totales_sumar(jt->valuestring, jd);
+        nvs_handle_t h;
         if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
             uint32_t n = 0;
             nvs_get_u32(h, NVS_T_APLIC, &n);
@@ -661,7 +673,10 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
     }
 
-    estado_set(carpeta, id);
+    /* NULL y no 'carpeta' si no hay viaje: estado_set guarda cual es el viaje
+     * ABIERTO, y el historial del vehiculo no lo es. Pasarlo abriria un viaje
+     * fantasma en /sdcard/vehiculo. El id si se guarda: es la idempotencia. */
+    estado_set(en_viaje ? carpeta : NULL, id);
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
     httpd_resp_sendstr(req, "ok");
     return ESP_OK;
