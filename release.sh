@@ -125,4 +125,11 @@ LISTO EN LOCAL. Para publicar, ejecuta cuando quieras:
 ────────────────────────────────────────────────────────────────────────────
 
 Unico .bin de cada tipo en $RELDIR (firmware full + app-bin para OTA).
+
+⚠️  EL .bin "full" ES PARA UNA PLACA VIRGEN, NO PARA ACTUALIZAR.
+    merge_bin rellena con 0xFF los huecos entre particiones, y en uno de esos
+    huecos esta la NVS: grabarlo desde el principio BORRA TODOS LOS AJUSTES
+    guardados (umbrales del frigo, red Wi-Fi, claves Victron, calibraciones...)
+    y todo vuelve a los valores de fabrica del programa.
+    Para actualizar: "idf.py -p PUERTO flash" o el app-bin por OTA.
 EOF

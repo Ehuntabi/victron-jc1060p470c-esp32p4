@@ -17,9 +17,19 @@
 static const char *TAG = "FRIGO";
 
 #define NVS_NS           "frigo"
+
+/* Lo pone load_nvs y lo consume la escritura de despues: no se puede escribir
+ * dentro de load_nvs porque abre la NVS en solo lectura. */
+static bool s_migrar_umbrales;
 #define NVS_KEY_ASSIGN   "assign"
 #define NVS_KEY_TMIN     "tmin"
 #define NVS_KEY_TMAX     "tmax"
+/* Version de los umbrales guardados. Sirve para que un cambio del valor por
+ * DEFECTO llegue a los aparatos que ya tienen los suyos escritos: sin esto, lo
+ * guardado gana siempre y el cambio no se notaria en la unica placa que
+ * importa, la que esta montada. Se sube al cambiar los defectos. */
+#define NVS_KEY_UMBRAL_V "umbral_v"
+#define UMBRAL_VERSION   2
 #define NVS_KEY_FANMIN   "fanmin"
 #define NVS_KEY_SOL_EN   "sol_en"
 #define NVS_KEY_SOL_ON   "sol_on"
@@ -37,8 +47,11 @@ static frigo_state_t      s_state = {
     .T_Aletas     = -127.0f,
     .T_Congelador = -127.0f,
     .T_Exterior   = -127.0f,
-    .T_min        = 40,
-    .T_max        = 50,
+    /* 45/55 desde el 23-ago-2026 (antes 40/50, y 35/45 en las primeras
+     * versiones). El ventilador arranca a 45 grados de aleta y llega al maximo
+     * a 55. Peticion del usuario sobre su frigo trivalente Dometic. */
+    .T_min        = 45,
+    .T_max        = 55,
     .fan_min_pct  = FRIGO_FAN_MIN_DUTY_PCT,
     .assignment   = {0, 1, 2},
 };
@@ -93,8 +106,20 @@ static void nvs_load(void)
     if (nvs_get_blob(h, NVS_KEY_ROLEADDR, s_state.role_addr, &rlen) != ESP_OK)
         memset(s_state.role_addr, 0, sizeof(s_state.role_addr));
     uint8_t v;
-    if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
-    if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
+    uint8_t umbral_v = 0;
+    nvs_get_u8(h, NVS_KEY_UMBRAL_V, &umbral_v);
+    if (umbral_v >= UMBRAL_VERSION) {
+        /* Al dia: manda lo guardado, que puede ser un ajuste del usuario. */
+        if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
+        if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
+    } else {
+        /* Umbrales de una version anterior: se dejan los nuevos por defecto y
+         * se marcan como migrados. Ocurre UNA vez; a partir de ahi, lo que
+         * ponga el usuario en Ajustes se respeta. */
+        s_migrar_umbrales = true;
+        ESP_LOGW(TAG, "umbrales antiguos en NVS -> paso a los nuevos por "
+                      "defecto %d/%d", s_state.T_min, s_state.T_max);
+    }
     if (nvs_get_u8(h, NVS_KEY_FANMIN, &v) == ESP_OK) s_state.fan_min_pct = v;
     uint8_t sv;
     if (nvs_get_u8(h, NVS_KEY_SOL_EN,  &sv) == ESP_OK) s_sol_en      = sv ? true : false;
@@ -112,6 +137,7 @@ static void nvs_save_task(void *arg)
             nvs_set_blob(h, NVS_KEY_ASSIGN, s_state.assignment, FRIGO_MAX_SENSORS);
             nvs_set_blob(h, NVS_KEY_ROLEADDR, s_state.role_addr,
                          sizeof(s_state.role_addr));
+            nvs_set_u8(h, NVS_KEY_UMBRAL_V, UMBRAL_VERSION);
             nvs_set_u8(h, NVS_KEY_TMIN, s_state.T_min);
             nvs_set_u8(h, NVS_KEY_TMAX, s_state.T_max);
             nvs_set_u8(h, NVS_KEY_FANMIN, s_state.fan_min_pct);
@@ -502,6 +528,10 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
     }
 
     nvs_load();
+    /* Si venia de una version con otros umbrales, se persisten los nuevos ya:
+     * asi la migracion ocurre una sola vez y a partir de ahi manda lo que el
+     * usuario ponga en Ajustes. */
+    if (s_migrar_umbrales) { s_migrar_umbrales = false; nvs_save(); }
 
     /* Rele piloto del modo excedente solar: salida, apagado al arrancar. */
     gpio_config_t sol_cfg = {
