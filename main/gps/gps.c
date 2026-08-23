@@ -138,6 +138,13 @@ static void poner_en_hora(const char *hhmmss, const char *ddmmyy)
                  + hh * 3600 + mi * 60 + ss;
     if (epoch < 1700000000L) return;          /* fecha absurda: no me la creo */
 
+    /* Guardar lo que dice el GPS, para poder enseñarlo. Va aqui y no en el
+     * parseo porque aqui ya se ha validado que la fecha tiene sentido. */
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    snprintf(s_d.fecha, sizeof(s_d.fecha), "%02d-%02d-%04d", dd, mo, 2000 + yy);
+    snprintf(s_d.hora,  sizeof(s_d.hora),  "%02d:%02d:%02d", hh, mi, ss);
+    xSemaphoreGive(s_mtx);
+
     /* Solo si hace falta: la primera vez, o cada RESYNC_S, o si el reloj se ha
      * ido mas de 2 s. Reescribir el RTC cada segundo no aporta nada. */
     static int64_t ultima_sinc_us;

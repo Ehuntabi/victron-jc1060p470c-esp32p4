@@ -108,6 +108,7 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 <li>microSD slot 0 con SDMMC IOMUX dedicado.</li>
 <li>Codec audio ES8311 + amplificador NS4150.</li>
 <li><strong>GPIO 1</strong> (JP1) = relé piloto del <strong>modo excedente solar</strong> del frigo.</li>
+<li><strong>GPS u-blox NEO-M9N en UART2</strong> (GPIO 3 RX / GPIO 2 TX, conector JP1), 38400 baudios.</li>
 <li><strong>RS-485 onboard via MAX485 (U8) en UART1, conector J4 — para hablar con el derivador NE185</strong>.</li>
 <li>Frigo trivalente: sensores <strong>DS18B20</strong> en <strong>GPIO 4</strong> (JP1 pin 13) y <strong>ventilador PWM</strong> en <strong>GPIO 5</strong> (JP1 pin 15).</li>
 </ul>
@@ -226,7 +227,31 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 
 </div><!--/sec-->
 <div class="sec">
-<h2>11. LDO internos del ESP32-P4</h2>
+<h2>11. GPS u-blox NEO-M9N (UART2)</h2>
+
+<div class="nota"><strong>Anadido el 23-ago-2026.</strong> El modulo se conecta al
+<strong>JP1</strong>, que es donde quedaban pines libres. UART2 era el unico puerto serie
+sin usar: UART0 es la consola de depuracion y UART1 el NE185 por RS-485.</div>
+
+<table>
+<tr><th>Funcion</th><th>Pin P4</th><th>Conector</th><th>Notas</th></tr>
+<tr><td>UART2 RX</td><td>GPIO 3</td><td>JP1</td><td>Recibe del <strong>TX del modulo</strong></td></tr>
+<tr><td>UART2 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Hacia el RX del modulo. Hoy NO se usa: solo haria falta para configurarlo por UBX. Se reserva para que otro periferico no lo ocupe</td></tr>
+<tr><td>Alimentacion</td><td>3,3 V y GND</td><td>JP1</td><td>El NEO-M9N es de 3,3 V, igual que el P4: <strong>no hace falta adaptar niveles</strong></td></tr>
+</table>
+
+<p><strong>38400 baudios 8N1</strong>, y no es un numero al azar: es el de fabrica de la serie
+M9. Los u-blox M8 anteriores venian a 9600, asi que probar a 9600 y no ver nada es el error
+tipico con estos modulos. El firmware solo ESCUCHA (NMEA); no manda comandos UBX, porque
+cambian entre versiones del firmware del propio modulo.</p>
+
+<p class="small">Se comprueba el <strong>checksum</strong> de cada trama: con la velocidad
+equivocada o con ruido en el cable llegarian lineas que parecen NMEA con numeros creibles
+dentro, y una posicion inventada es peor que no tener posicion. Software en
+<code>main/gps/gps.c</code>; pantalla en Ajustes &rarr; GPS, con las tramas en crudo para
+diagnosticar.</p>
+
+<h2>12. LDO internos del ESP32-P4</h2>
 <table>
 <tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr>
 <tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr>
@@ -235,17 +260,17 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 
 </div><!--/sec-->
 <div class="sec">
-<h2>12. Buses compartidos / consideraciones</h2>
+<h2>13. Buses compartidos / consideraciones</h2>
 <ul>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
-<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 sin usar; GPIO 1 (JP1 pin 7) = relé excedente solar, GPIO 2 (pin 9) libre.</li>
+<li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 <strong>GPS NEO-M9N</strong> (GPIO 3 RX / GPIO 2 TX &rarr; JP1). GPIO 1 (JP1 pin 7) = relé excedente solar.</li>
 <li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
 </ul>
 
 </div><!--/sec-->
 <div class="sec">
-<h2>13. Mapa global de pines GPIO</h2>
+<h2>14. Mapa global de pines GPIO</h2>
 <table>
 <tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
 <tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr>
@@ -262,6 +287,8 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
 <tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
 <tr><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
+<tr><td>2</td><td>UART2 TX</td><td><strong>GPS NEO-M9N</strong> (JP1 pin 9) — reservado, hoy sin usar</td></tr>
+<tr><td>3</td><td>UART2 RX</td><td><strong>GPS NEO-M9N</strong> (JP1) — 38400 8N1</td></tr>
 <tr><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
 <tr><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr>
 <tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
@@ -269,7 +296,7 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
 <tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
 </table>
-<p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 2, 3, 20, 32, 45, 46).</p>
+<p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 20, 32, 45 y 46 — el 2 y el 3 los ocupa ya el GPS).</p>
 
 </div><!--/sec-->
 <div class="sec">

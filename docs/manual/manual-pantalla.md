@@ -24,6 +24,7 @@ Está siempre, en todas las pantallas. De izquierda a derecha:
 | **Bluetooth** | En verde: está escuchando a los aparatos Victron |
 | **Altavoz** | Toca aquí para el sonido y los avisos |
 | **Wi-Fi** | Verde: la página web está lista. Azul: la red está encendida pero la web se ha dormido (se despierta sola al conectarte). Gris: el Wi-Fi está apagado. Toca aquí para encenderlo o apagarlo |
+| **GPS** | Verde: hay posición. Naranja: está buscando satélites, dale un par de minutos. Gris: no llega nada del módulo. Este **no se toca**, solo informa |
 | **Casa / engranaje** | Vuelve al inicio o entra en los ajustes |
 | **Exterior** | La temperatura de fuera |
 
@@ -103,7 +104,31 @@ o si has aparcado a la sombra.
 
 ![Menú de ajustes](../screenshots/13_ajustes.jpg)
 
-Siete apartados. Vamos uno a uno.
+Ocho apartados. Vamos uno a uno.
+
+### GPS
+
+Dice dónde estás y, sobre todo, **pone la pantalla en hora sola**. Arriba, el
+estado con su color y cuántos satélites ve; debajo, la posición y la hora que da
+el GPS, que es exacta.
+
+Los tres estados son los mismos que el icono de abajo, y cada uno te dice qué
+hacer:
+
+| | Qué pasa | Qué hacer |
+|---|---|---|
+| 🟢 **Posición fijada** | Todo bien | Nada |
+| 🟠 **Buscando satélites** | El módulo funciona, aún sin posición | Esperar uno o dos minutos. Bajo techo puede no llegar a fijar |
+| 🔴 **Sin señal del módulo** | No llega nada por el cable | Revisar la conexión. Esperar no sirve de nada |
+
+Abajo salen las **tramas en crudo**: lo que manda el módulo tal cual. No hay que
+entenderlas — sirven para distinguir de un vistazo si el problema es el cable
+(no aparece nada), la conexión (salen ilegibles) o simplemente que aún está
+buscando (salen bien pero sin datos).
+
+> **La hora se pone sola.** Con posición fijada, la pantalla ajusta su reloj con
+> el del GPS y lo repasa cada seis horas. Eso también arregla la hora de la
+> pantalla pequeña de la cabina, que no tiene reloj propio y coge la de aquí.
 
 ### Wi-Fi
 

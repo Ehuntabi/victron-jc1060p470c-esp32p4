@@ -59,6 +59,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Cámara** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, JPEG por HW). Comparte el I²C (SDA=7 / SCL=8); sin pines reset/pwdn dedicados |
 | **NE185 (autocaravana)** | RS-485 con el cuadro Nordelettronica NE185 vía MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, conector J4 (DE/RE automático) |
+| **GPS** | u-blox **NEO-M9N** por **UART2 RX=GPIO 3 / TX=GPIO 2** (conector JP1), 38400 8N1. Solo se escucha NMEA; pone el reloj en hora solo |
 
 > Pinout detallado con diagrama del JP1 (pines color-coded) y del CN2 en [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 
@@ -196,6 +197,10 @@ idf.py -p /dev/ttyACM0 flash monitor
 - **RTC RX8025T** ✅ — soporta pérdida de pila con backup en NVS.
 - **Cámara OV02C10** ✅ — MIPI-CSI con ISP por hardware. Comparte GDMA con la SD: captura a demanda, nunca streaming continuo.
 - **NE185 (RS-485)** ✅ — MAX485 en UART1, en uso como maestro del cuadro.
+- **GPS NEO-M9N** ⏳ — código listo y grabado (23-ago-2026), **módulo por conectar**:
+  RX al GPIO 3, TX al GPIO 2, 3,3 V y GND, todo en el JP1. En cuanto hable, la
+  pantalla se pone en hora sola. Indicador en la barra inferior y página propia
+  en Ajustes → GPS con las tramas en crudo.
 - **DS18B20** ✅ — bus 1-Wire en GPIO 4 (JP1 pin 13). Pullup 4.7 kΩ a 3.3 V externo. El bus necesita resets de warm-up antes de enumerar.
 - **Ventilador** — PWM 18 kHz en GPIO 5 (JP1 pin 15).
 
@@ -227,6 +232,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **Audio** | ES8311 codec + NS4150 amp (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
 | **Camera** | OmniVision **OV02C10** (MIPI-CSI 2 lanes, RAW10 1928x1092, ~37 fps, HW JPEG). Shares I²C (SDA=7 / SCL=8); no dedicated reset/pwdn pins |
 | **NE185 (camper)** | RS-485 to the Nordelettronica NE185 panel via MAX485 (U8), **UART1 TX=GPIO 26 / RX=GPIO 27**, 38400 8N1, J4 connector (automatic DE/RE) |
+| **GPS** | u-blox **NEO-M9N** on **UART2 RX=GPIO 3 / TX=GPIO 2** (JP1 header), 38400 8N1. NMEA listen-only; sets the clock by itself |
 
 > Detailed pinout with colour-coded JP1 and CN2 diagrams in [`docs/pinout_guition_jc1060p470c_i.pdf`](docs/pinout_guition_jc1060p470c_i.pdf).
 

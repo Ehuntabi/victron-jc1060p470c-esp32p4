@@ -26,6 +26,13 @@ typedef struct {
     double   lon;              /* grados decimales, + este */
     float    altitud_m;
     uint32_t segundos_sin_dato;   /* 0 si acaba de llegar algo */
+
+    /* Fecha y hora UTC tal y como las da el modulo, ya formateadas. Se guardan
+     * ademas de usarlas para poner el reloj en hora: verlas en pantalla es lo
+     * que confirma de un vistazo que el dato es bueno. Vacias si aun no ha
+     * llegado una trama RMC valida. */
+    char     fecha[11];           /* "DD-MM-AAAA" */
+    char     hora[9];             /* "HH:MM:SS" UTC */
 } gps_data_t;
 
 /* Arranca el UART y la tarea de lectura. Una vez, al iniciar. */

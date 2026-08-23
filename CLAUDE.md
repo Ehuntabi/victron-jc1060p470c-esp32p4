@@ -14,6 +14,8 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.6.6**
 - Pines I2S: MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9
 - Ventilador frigo PWM en GPIO5 (JP1 pin 15)
 - Bus 1-Wire DS18B20 en GPIO4 (JP1 pin 13, pullup 4.7K a 3.3V)
+- GPS u-blox NEO-M9N en UART2: RX=GPIO3, TX=GPIO2 (JP1), 38400 8N1. Ojo, 38400
+  es el de fabrica de la serie M9; los M8 venian a 9600. Solo se escucha NMEA
 
 ## Stack
 - ESP-IDF v5.4.4
