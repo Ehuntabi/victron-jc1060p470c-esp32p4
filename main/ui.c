@@ -1,5 +1,6 @@
 /* ui.c */
 #include "ui.h"
+#include "gps/gps.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "freertos/FreeRTOS.h"
@@ -49,6 +50,7 @@
 
 static int64_t s_last_ble_data_us = 0;
 static void ble_indicator_timer_cb(lv_timer_t *t);
+static void gps_indicator_timer_cb(lv_timer_t *t);
 
 /* Estado de 'wifi/enabled' cacheado en RAM para el icono de la barra. -1 = aun
  * sin leer. Ver el porque de la cache (y de por que hay que avisarla a mano) en
@@ -443,6 +445,23 @@ void ui_init(void) {
     lv_obj_set_style_text_align(ui->lbl_wifi, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(ui->lbl_wifi, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ui->lbl_wifi, wifi_btn_event_cb, LV_EVENT_CLICKED, ui);
+    /* Icono GPS — mismo tamano y forma que el de Wi-Fi, justo al lado.
+     *
+     * NO es pulsable, a diferencia del de Wi-Fi: es un indicador y nada mas. En
+     * un tactil dentro de un vehiculo en marcha, cualquier cosa que reaccione al
+     * roce acaba activandose sin querer (ya paso con el selector de orientacion
+     * del nivel en la 3.5"). */
+    ui->lbl_gps = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_gps, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_bg_opa(ui->lbl_gps, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_gps, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_gps, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_gps, 4, 0);
+    lv_label_set_text(ui->lbl_gps, LV_SYMBOL_GPS);
+    lv_obj_set_size(ui->lbl_gps, 44, 38);
+    lv_obj_set_style_text_align(ui->lbl_gps, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(ui->lbl_gps, lv_color_hex(0x666666), 0);
+
     /* Color inicial segun NVS */
     {
         nvs_handle_t h;
@@ -567,6 +586,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
     lv_timer_create(clock_timer_cb, 30000, ui);
     lv_timer_create(ble_indicator_timer_cb, 1000, ui);
+    lv_timer_create(gps_indicator_timer_cb, 1000, ui);
     s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
                                            IDLE_TO_LIVE_TIMEOUT_MS, ui);
     clock_timer_cb(NULL);
@@ -1274,6 +1294,31 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
         lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
     }
+}
+
+/* Icono del GPS: TRES estados, no dos.
+ *
+ *   gris     no llega nada del modulo -> mirar el cable
+ *   naranja  habla, pero todavia sin posicion -> esta buscando, hay que esperar
+ *   verde    posicion valida
+ *
+ * Separar "no esta" de "buscando" es lo util: recien encendido y bajo techo, un
+ * GPS puede tardar minutos en fijar. Con solo dos estados, esos minutos y un
+ * cable suelto se verian igual, y se acabaria desmontando el salpicadero para
+ * nada. */
+static void gps_indicator_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_gps) return;
+
+    gps_data_t g;
+    gps_get(&g);
+
+    uint32_t color;
+    if      (!g.hay_datos) color = 0x666666;   /* gris */
+    else if (!g.hay_fix)   color = 0xFF9800;   /* naranja */
+    else                   color = 0x4CD964;   /* verde */
+    lv_obj_set_style_text_color(ui->lbl_gps, lv_color_hex(color), 0);
 }
 
 /* Pone en la casilla de Ajustes el SSID que de verdad usa el AP, que es el

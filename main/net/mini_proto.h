@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-#define MINI_PROTO_VERSION   3
+#define MINI_PROTO_VERSION   4
 #define MINI_PROTO_UDP_PORT  4242
 #define MINI_NO_DATA_I16     INT16_MIN   /* -32768 = sin sensor / sin dato */
 #define MINI_NO_DATA_I32     INT32_MIN
@@ -39,8 +39,8 @@ extern "C" {
 #define MINI_EPOCH_VALIDO    1609459200L
 
 /* Payload broadcast 7" -> mini. Tamaño fijo, sin punteros, packed.
- * Total: 36 bytes (sizeof(struct mini_msg), verificado con el compilador).
- * Eran 32 hasta la versión 3, que añadió epoch_local. */
+ * Total: 38 bytes (sizeof(struct mini_msg), verificado con el compilador).
+ * Eran 32 hasta la v3 (que añadió epoch_local) y 36 hasta la v4 (gps_estado). */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
     uint8_t  _pad0;               /* alignment */
@@ -92,6 +92,19 @@ struct __attribute__((packed)) mini_msg {
      *
      * uint32 sin signo llega hasta 2106. */
     uint32_t epoch_local;
+
+    /* Estado del GPS de la P4, para que el satélite pueda pintar su indicador.
+     * TRES estados y no un sí/no, porque cuesta el mismo byte y la diferencia
+     * importa: "no llega nada" manda a mirar el cable, y "buscando" solo pide
+     * esperar — un GPS recién encendido tarda un par de minutos. Con un
+     * booleano los dos casos se verían igual.
+     *
+     * NO se manda la posición (decisión del usuario, 23-ago-2026): el satélite
+     * solo enseña si hay GPS. Si algún día se quiere que sus apuntes lleven el
+     * sitio donde ocurrieron, habrá que subir el protocolo OTRA VEZ y regrabar
+     * las dos pantallas. */
+    uint8_t  gps_estado;          /* 0=sin datos, 1=buscando, 2=posición fijada */
+    uint8_t  _pad3;
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };

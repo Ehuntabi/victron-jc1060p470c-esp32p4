@@ -16,6 +16,7 @@
 #include "data/dashboard_state.h"
 #include "portal/config_server.h"
 #include "portal/config_server_viaje.h"
+#include "gps/gps.h"
 #include "frigo.h"
 #include "battery_history.h"
 #include "log_cleanup.h"
@@ -523,6 +524,12 @@ static void init_sd_rtc_frigo(void)
 
     /* Refresco inmediato del label de la hora — sin esperar al timer de 30s */
     ui_refresh_clock();
+
+    /* GPS: despues del RTC y de la TZ a proposito. En cuanto tenga posicion
+     * pone el reloj en hora, y para escribir el RTC en hora LOCAL necesita la
+     * TZ ya configurada; si arrancara antes, la primera puesta en hora se iria
+     * las horas del huso. */
+    gps_init();
 
     esp_err_t frigo_err = frigo_init(frigo_update_cb);
     if (frigo_err != ESP_OK)

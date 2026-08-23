@@ -142,6 +142,8 @@ void apply_brightness_for_now(ui_state_t *ui)
 void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron);
 /* Pagina "Acerca de": vive en settings_about.c. */
 void create_about_settings_page(ui_state_t *ui, lv_obj_t *page_about);
+/* Pagina "GPS": vive en settings_gps.c. */
+void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page_gps);
 static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page);
 
 /* ── Lazy populate de sub-paginas Settings ────────────────────────
@@ -168,6 +170,7 @@ static void populate_keys(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_logs(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page);
 static void populate_about(settings_page_ctx_t *ctx, lv_obj_t *page);
+static void populate_gps(settings_page_ctx_t *ctx, lv_obj_t *page);
 
 /* ── Scrollbar visible en cualquier pagina de Settings ────────── */
 /* Aplica scrollbar AUTO (visible cuando hay overflow) con estilo claro
@@ -589,6 +592,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_autocaravana = lv_menu_page_create(menu, "AUTOCARAVANA");
     /* Sin LV_SYMBOL_LIST en el titulo del page: el header del menu usa
      * fuente Inter aliased que no tiene el glyph y se ve como rectangulo. */
+    lv_obj_t *page_gps   = lv_menu_page_create(menu, "GPS");
     lv_obj_t *page_about = lv_menu_page_create(menu, "ACERCA DE Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
@@ -663,6 +667,9 @@ void ui_settings_panel_init(ui_state_t *ui,
         lv_obj_set_style_bg_color(lv_obj_get_child(page_autocaravana, i),
                                   lv_color_hex(0x2E2E38), 0);
     }
+    settings_menu_add_entry(ui, main_page, menu, page_gps,
+        "GPS",           "Posicion, satelites y puesta en hora",
+        LV_SYMBOL_GPS,        0x4CD964, populate_gps);
     settings_menu_add_entry(ui, main_page, menu, page_about,
         "Acerca de",     "Sistema, uptime, IP y reinicio",
         LV_SYMBOL_LIST,       0x90A4AE, populate_about);
@@ -1208,6 +1215,10 @@ static void populate_sound(settings_page_ctx_t *ctx, lv_obj_t *page) {
 }
 static void populate_about(settings_page_ctx_t *ctx, lv_obj_t *page) {
     create_about_settings_page(ctx->ui, page);
+}
+
+static void populate_gps(settings_page_ctx_t *ctx, lv_obj_t *page) {
+    create_gps_settings_page(ctx->ui, page);
 }
 
 static settings_page_ctx_t *settings_menu_add_entry(

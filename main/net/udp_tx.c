@@ -10,6 +10,7 @@
  */
 #include "udp_tx.h"
 #include "mini_proto.h"
+#include "gps/gps.h"
 #include "../data/dashboard_state.h"
 #include "frigo.h"
 #include "../ne185/ne185.h"
@@ -140,6 +141,14 @@ static void build_msg(mini_msg_t *out)
                                       + tm_local.tm_sec);
     } else {
         out->epoch_local = 0;
+    }
+
+    /* Estado del GPS. Los tres estados salen de gps.c: si no llegan tramas el
+     * modulo no esta, si llegan sin posicion esta buscando. */
+    {
+        gps_data_t g;
+        gps_get(&g);
+        out->gps_estado = !g.hay_datos ? 0 : (g.hay_fix ? 2 : 1);
     }
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
