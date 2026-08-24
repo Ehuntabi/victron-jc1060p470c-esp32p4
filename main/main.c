@@ -37,6 +37,7 @@
 #include "log_capture/log_capture.h"
 #include "data/energy_today.h"
 #include "data/trip_computer.h"
+#include "data/bombonas.h"
 #include "data/solar_daily.h"
 #include "ui/settings/settings_panel.h"
 #include "ne185/ne185.h"
@@ -588,6 +589,7 @@ static void init_telemetry(void)
     alerts_init();
     energy_today_init();
     trip_computer_init();
+    bombonas_init();      /* registro de cambios de bombona (Ajustes -> Autocaravana) */
     /* Produccion solar dia a dia (compara temporadas: placa de 125 W vs la de
      * 250/300 W prevista). Despues del montaje de SD: lee su historico de ahi. */
     solar_daily_init();

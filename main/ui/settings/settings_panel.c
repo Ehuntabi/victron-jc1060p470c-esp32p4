@@ -67,6 +67,8 @@ void password_toggle_btn_event_cb(lv_event_t *e);
 /* Energia del viaje: vive en trip_manager.c. */
 void create_trip_card(lv_obj_t *cont);
 void trip_label_refresh(void);
+void create_bombona_card(lv_obj_t *cont);
+void bombona_label_refresh(void);
 static void backup_export_cb(lv_event_t *e);
 static void backup_import_cb(lv_event_t *e);
 static void sd_trip_timer_cb(lv_timer_t *t);
@@ -263,6 +265,10 @@ static void sd_trip_timer_cb(lv_timer_t *t)
     (void)t;
     ui_state_t *ui = t ? (ui_state_t *)t->user_data : NULL;
     trip_label_refresh();
+    /* Los dias que lleva puesta la bombona cambian una vez al dia, pero la
+     * etiqueta se recalcula aqui igual: la funcion sale sola si la tarjeta no
+     * esta visible, asi que no cuesta nada y evita otro timer. */
+    bombona_label_refresh();
 
     /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
     if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
@@ -518,10 +524,12 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
 {
     (void)ctx;
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
-     * (anadidas en el init). Orden: Modo ausente, Energia del viaje, Auto-encendido.
+     * (anadidas en el init). Orden: Modo ausente, Energia del viaje, Bombonas,
+     * Auto-encendido.
      * El timer que refresca el trip se crea en el init. */
     create_ausente_card(page);
     create_trip_card(page);
+    create_bombona_card(page);
     create_autostart_card(page);
 }
 
