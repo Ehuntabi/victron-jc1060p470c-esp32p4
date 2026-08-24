@@ -476,10 +476,19 @@ static bool escribir_resumen(const char *carpeta)
     fprintf(f, "  De la placa ... %8.0f Wh   (%.1f h de sol)\n",
             t.wh_solar, (double)t.solar_seconds / 3600.0);
 
-    /* Sin kilometros: esta pantalla no tiene GPS ni cuentakilometros. Se dice en
-     * el propio fichero en vez de omitirlo, para que no parezca que el viaje fue
-     * de 0 km. */
-    fprintf(f, "\nKilometros: no disponibles (la P4 aun no tiene GPS).\n");
+    /* Kilometros por GPS desde el 24-ago-2026 (NEO-M9N montado y con fix). Si el
+     * viaje entero fue sin posicion se DICE, en vez de escribir un "0.0 km" que
+     * se leeria como que no te moviste. */
+    if (t.km >= 0.1) {
+        fprintf(f, "\nRecorrido: %.1f km\n", t.km);
+        if (t.km > 0.5 && (combus + peaje) > 0.01) {
+            fprintf(f, "  Combustible y peajes: %.3f %s por km\n",
+                    (combus + peaje) / t.km, moneda);
+        }
+    } else {
+        fprintf(f, "\nRecorrido: no se ha podido medir. El GPS no llego a tener\n"
+                   "posicion durante el viaje (antena tapada o pantalla apagada).\n");
+    }
     /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
      * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. */
     return fclose(f) == 0;
@@ -849,18 +858,23 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
 
     FILE *f = fopen(ruta, "a");
     if (!f) return;
-    /* Sin kilometros: la P4 no tiene GPS ni cuentakilometros todavia. Cuando lo
-     * tenga, la columna se añade AQUI y al final, para no descolocar lo ya
-     * escrito de viajes anteriores. */
-    if (nuevo) fprintf(f, "fecha_hora,horas_activo,wh_cargados,wh_gastados,wh_solar,horas_sol\n");
+    /* "km" va LA ULTIMA, como dejo dicho la version anterior: asi los ficheros
+     * de viajes ya cerrados se siguen leyendo igual y quien tenga un analizador
+     * hecho no tiene que tocarlo.
+     *
+     * Ojo con el unico caso raro: un viaje que estuviera ABIERTO justo al
+     * actualizar ya tiene su cabecera escrita sin la columna, y las filas
+     * nuevas llevaran un campo de mas. Se asume: no se reescribe una cabecera a
+     * mitad de fichero, que seria peor. */
+    if (nuevo) fprintf(f, "fecha_hora,horas_activo,wh_cargados,wh_gastados,wh_solar,horas_sol,km\n");
 
     trip_computer_t t;
     trip_computer_get(&t);
     char cuando[20];
     strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", tm_l);
-    fprintf(f, "%s,%.2f,%.0f,%.0f,%.0f,%.2f\n", cuando,
+    fprintf(f, "%s,%.2f,%.0f,%.0f,%.0f,%.2f,%.1f\n", cuando,
             (double)t.seconds_running / 3600.0, t.wh_charged, t.wh_discharged,
-            t.wh_solar, (double)t.solar_seconds / 3600.0);
+            t.wh_solar, (double)t.solar_seconds / 3600.0, t.km);
     fclose(f);
 }
 

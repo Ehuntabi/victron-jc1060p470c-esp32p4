@@ -18,6 +18,7 @@
 #include "settings_panel.h"
 #include "settings_common.h"
 #include "gps/gps.h"
+#include "data/trip_computer.h"
 
 #include <stdio.h>
 #include <lvgl.h>
@@ -104,13 +105,23 @@ static void refresco_cb(lv_timer_t *t)
     lv_obj_set_style_text_color(s_estado, lv_color_hex(col), 0);
     lv_obj_set_style_text_color(s_sats, lv_color_hex(col), 0);
 
+    /* El recorrido del viaje se enseña AQUI y no en la tarjeta de energia: es un
+     * dato del GPS, y este es el sitio al que se viene a comprobar que el GPS
+     * hace lo suyo. Ver el contador subir mientras se conduce es lo unico que
+     * confirma el odometro sin esperar al resumen del viaje. */
+    trip_computer_t tc;      /* 't' ya es el lv_timer_t del callback */
+    trip_computer_get(&tc);
     if (g.hay_fix) {
         /* Seis decimales son ~11 cm. Con menos, dos plazas de aparcamiento
          * contiguas saldrian en el mismo sitio. */
-        lv_label_set_text_fmt(s_pos, "Latitud    %.6f\nLongitud   %.6f\nAltitud    %.0f m",
-                              g.lat, g.lon, (double)g.altitud_m);
+        lv_label_set_text_fmt(s_pos,
+                              "Latitud    %.6f\nLongitud   %.6f\nAltitud    %.0f m\n"
+                              "Recorrido  %.1f km  (este viaje)",
+                              g.lat, g.lon, (double)g.altitud_m, tc.km);
     } else {
-        lv_label_set_text(s_pos, "Latitud    --\nLongitud   --\nAltitud    --");
+        lv_label_set_text_fmt(s_pos,
+                              "Latitud    --\nLongitud   --\nAltitud    --\n"
+                              "Recorrido  %.1f km  (este viaje)", tc.km);
     }
 
     if (g.hora[0]) lv_label_set_text_fmt(s_hora, "%s  UTC\n%s", g.hora, g.fecha);
@@ -176,7 +187,11 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* ── Posicion y hora, repartiendose el ancho ─────────────────── */
     lv_obj_t *fila = lv_obj_create(page);
     lv_obj_remove_style_all(fila);
-    lv_obj_set_size(fila, lv_pct(100), 150);
+    /* 190 y no 150: con la linea del recorrido son CUATRO renglones de font 24
+     * con 8 de interlineado (140 px) mas el hueco del titulito. A 150 la ultima
+     * linea quedaba cortada por abajo -- y la tarjeta no hace scroll, asi que no
+     * se veia que faltaba nada. */
+    lv_obj_set_size(fila, lv_pct(100), 190);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 12, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);

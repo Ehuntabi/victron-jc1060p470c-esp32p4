@@ -17,6 +17,7 @@ typedef struct {
     double ah_solar;          /* carga aportada por la placa solar (A*h) */
     int64_t solar_seconds;    /* tiempo con la placa cargando (corriente > 0) */
     int64_t seconds_running;  /* tiempo "activo" (con sample en intervalo) */
+    double  km;               /* distancia recorrida segun el GPS */
     bool    active;           /* hay un viaje en curso (ver trip_computer_is_active) */
 } trip_computer_t;
 
@@ -30,6 +31,18 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi);
  * salida hacia la bateria. Se acumula aparte de la carga neta del shunt
  * (no es un subconjunto exacto: parte puede ir directa al consumo). */
 void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
+
+/* Hook del GPS: suma la distancia entre esta posicion y la anterior.
+ *
+ * Se le llama con lo que haya, tenga fix o no, y el filtrado se hace aqui
+ * dentro (asi el criterio vive en un solo sitio). Descarta:
+ *  - sin fix o con pocos satelites: la posicion baila decenas de metros;
+ *  - saltos por debajo del ruido: un receptor PARADO deriva, y sin este filtro
+ *    una noche de camping sumaria kilometros que nadie ha recorrido;
+ *  - saltos imposibles y reenganches tras perder la senal: se re-ancla en el
+ *    punto nuevo SIN contar la linea recta, que no es por donde se fue.
+ * Por eso el total peca por defecto: prefiere quedarse corto a inventar. */
+void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon);
 
 /* Guarda los contadores en NVS ahora mismo (normalmente se hace cada 5 min).
  * Antes de sacar la tarjeta o apagar. */

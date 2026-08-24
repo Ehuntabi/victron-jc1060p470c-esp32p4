@@ -85,6 +85,17 @@ static void frigo_solar_feed_cb(void *arg)
     frigo_solar_feed(snap.soc_deci, snap.pv_w, ne.shore, fresh);
 }
 
+/* ── Odómetro del viaje: alimenta el contador de km con el GPS ────
+ * Cada 5 s. Es un compromiso: mas a menudo no mide mejor (el ruido del
+ * receptor domina en distancias cortas) y mas espaciado empieza a cortar las
+ * curvas en linea recta. Los umbrales de filtrado viven en trip_computer.c. */
+static void gps_odometro_cb(void *arg)
+{
+    gps_data_t g;
+    gps_get(&g);
+    trip_computer_on_gps(g.hay_fix, g.satelites, g.lat, g.lon);
+}
+
 /* ── Backup periódico de hora a NVS ──────────────────────────── */
 static void rtc_backup_timer_cb(void *arg)
 {
@@ -638,6 +649,18 @@ static void init_periodic_timers(void)
     esp_err_t timer_err = esp_timer_create(&heap_log_timer_args, &heap_log_timer);
     if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(heap_log_timer, HEAP_LOG_INTERVAL_US);
     if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer heap_log no arranco: %s", esp_err_to_name(timer_err));
+
+    /* --- Odometro del viaje por GPS, cada 5 s --- */
+    static esp_timer_handle_t gps_odo_timer;
+    const esp_timer_create_args_t gps_odo_args = {
+        .callback        = &gps_odometro_cb,
+        .arg             = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name            = "gps_odo",
+    };
+    timer_err = esp_timer_create(&gps_odo_args, &gps_odo_timer);
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(gps_odo_timer, 5ULL * 1000000ULL);
+    if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer gps_odo no arranco: %s", esp_err_to_name(timer_err));
 
     /* Backup horario de la hora del sistema en NVS */
     static esp_timer_handle_t rtc_backup_timer;
