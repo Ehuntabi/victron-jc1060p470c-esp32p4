@@ -2,13 +2,13 @@
 #
 # release.sh — prepara un release de "Joint SPL 145 Control".
 #
-# Uso:  ./release.sh X.Y.Z  ["mensaje del tag"]
+# Uso:  ./release.sh X.Y  ["mensaje del tag"]
 #   ej: ./release.sh 1.0.1
 #       ./release.sh 1.1.0 "Añade gráfico de consumo"
 #
 # Qué hace (TODO en local, no publica nada):
 #   1. Comprueba que no hay cambios sin commitear.
-#   2. Crea el tag anotado vX.Y.Z sobre el commit actual.
+#   2. Crea el tag anotado vX.Y sobre el commit actual.
 #   3. Build LIMPIO forzando la regeneración de la versión/fecha (esquiva el
 #      gotcha de ESP-IDF por el que el About mostraba una versión/fecha vieja).
 #   4. Genera la imagen fusionada lista para el release.
@@ -32,12 +32,17 @@ RELDIR="$HOME/joint-releases"
 # ── 0) argumentos ────────────────────────────────────────────────────────────
 VER_IN="${1:-}"
 if [ -z "$VER_IN" ]; then
-  echo "Uso: ./release.sh X.Y.Z [\"mensaje del tag\"]   (ej: ./release.sh 1.0.1)"
+  echo "Uso: ./release.sh X.Y [\"mensaje del tag\"]   (ej: ./release.sh 1.12)"
   exit 1
 fi
 VER="${VER_IN#v}"                                   # quita una 'v' inicial si la hay
-if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo "ERROR: '$VER_IN' no tiene el formato X.Y.Z (ej: 1.0.1)."
+# DOS numeros, no tres (24-ago-2026, decision del usuario). Con tres se acabo
+# gastando un numero por commit: 81 etiquetas en seis semanas y 19 en un solo
+# dia. Con dos, una version es una TANDA de trabajo, no un cambio suelto.
+# Las etiquetas viejas de tres numeros siguen siendo validas y legibles.
+if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+$'; then
+  echo "ERROR: '$VER_IN' no tiene el formato X.Y (ej: 1.12)."
+  echo "       Desde el 24-ago-2026 las versiones llevan DOS numeros, no tres."
   exit 1
 fi
 TAG="v$VER"
@@ -141,7 +146,9 @@ else
     if [ -f NOTAS.md ]; then
       echo "[i] NOTAS.md habla de otra version, lo ignoro y uso el historial"
     fi
-    ANTERIOR=$(git describe --tags --abbrev=0 --match "v*.*.*" "$TAG^" 2>/dev/null || true)
+    # "v*.*" vale para los dos formatos: el comodin abarca tambien el punto,
+    # asi que encuentra igual v1.12 que las viejas v1.11.18.
+    ANTERIOR=$(git describe --tags --abbrev=0 --match "v*.*" "$TAG^" 2>/dev/null || true)
     {
       if [ -n "$ANTERIOR" ]; then
         echo "Cambios desde $ANTERIOR:"

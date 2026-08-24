@@ -13,10 +13,15 @@ set(EXTRA_C_FLAGS "-Wl,--defsym=hal_disable_nan_tsf=0")
 # Version del firmware (About). ESP-IDF por defecto hace `git describe --tags`
 # SIN filtro -> coge el tag mas reciente, y los tags `sdkconfig-known-good-*`
 # rompian el About mostrando "sdkconfig-dev". Fijamos PROJECT_VER contando SOLO
-# tags de version v* -> queda "v1.0.0-N-g<hash>" (el formateador lo muestra como
-# "v1.0.0-dev"). Inmune a cualquier tag que no sea v*.
+# tags de version v* -> queda "v1.12-N-g<hash>" (el formateador lo muestra como
+# "v1.12-dev"). Inmune a cualquier tag que no sea v*.
+#
+# El patron es "v*.*" y NO "v*.*.*": desde el 24-ago-2026 las versiones llevan
+# DOS numeros (v1.12), no tres. El comodin de git abarca tambien el punto, asi
+# que "v*.*" encuentra igual las nuevas que las viejas de tres numeros, y las
+# `sdkconfig-known-good-*` siguen fuera porque no empiezan por v.
 execute_process(
-    COMMAND git describe --always --tags --dirty --match "v*.*.*"
+    COMMAND git describe --always --tags --dirty --match "v*.*"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     OUTPUT_VARIABLE PROJECT_VER
     OUTPUT_STRIP_TRAILING_WHITESPACE
