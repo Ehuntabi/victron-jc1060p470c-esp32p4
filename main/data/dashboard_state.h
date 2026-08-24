@@ -35,6 +35,7 @@ typedef struct {
     bool     solar_fresh;  /* PV recibido en los ultimos 30 s */
 
     bool     dcdc_has;
+    bool     dcdc_fresh;   /* tension recibida en los ultimos 30 s */
     uint16_t dc_in_v_centi;
     uint16_t dc_out_v_centi;
     uint8_t  dc_state;

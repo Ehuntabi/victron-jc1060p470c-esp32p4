@@ -51,7 +51,14 @@ static void build_msg(mini_msg_t *out)
     /* Batería + DC/DC desde dashboard_state */
     dashboard_snapshot_t snap;
     dashboard_state_snapshot(&snap);
-    if (snap.bat_has) {
+    /* bat_fresh y dcdc_fresh, NO bat_has/dcdc_has: "has" solo dice que ALGUNA
+     * VEZ hubo dato. Si el SmartShunt deja de hablar -- se apaga, se va el BLE,
+     * se queda sin pila -- con "has" se seguiria mandando el ultimo porcentaje
+     * como si fuera de ahora, y el satelite lo pintaria tan tranquilo. Con
+     * "fresh" se manda el sentinela de "no hay dato" a los 30 s y la 3,5" lo
+     * ensena apagado, que es la verdad. Las aguas ya lo hacian bien (cd.fresh).
+     * Visto auditando el 24-ago-2026. */
+    if (snap.bat_fresh) {
         out->shunt_soc_deci      = (int16_t)snap.soc_deci;
         out->shunt_voltage_centi = (int16_t)snap.bat_v_centi;
         out->shunt_current_milli = snap.bat_i_milli;
@@ -64,7 +71,7 @@ static void build_msg(mini_msg_t *out)
         out->aux_value_raw       = 0;
         out->aux_input           = MINI_NO_DATA_U8;
     }
-    if (snap.dcdc_has) {
+    if (snap.dcdc_fresh) {
         out->dcdc_v_in_centi  = (int16_t)snap.dc_in_v_centi;
         out->dcdc_v_out_centi = (int16_t)snap.dc_out_v_centi;
         out->dcdc_state       = snap.dc_state;

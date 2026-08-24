@@ -29,6 +29,7 @@ static struct {
     uint8_t  solar_err;
 
     bool     dcdc_has;
+    uint32_t dcdc_ms;
     uint16_t dc_in_v_centi;
     uint16_t dc_out_v_centi;
     uint8_t  dc_state;
@@ -98,6 +99,7 @@ void dashboard_state_on_record(const victron_data_t *data)
         case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
             const victron_record_dcdc_converter_t *d = &data->record.dcdc;
             s.dcdc_has = true;
+            s.dcdc_ms = (uint32_t)(esp_timer_get_time() / 1000);
             s.dc_in_v_centi = d->input_voltage_centi;
             s.dc_out_v_centi = d->output_voltage_centi;
             s.dc_state = d->device_state;
@@ -107,6 +109,7 @@ void dashboard_state_on_record(const victron_data_t *data)
         case VICTRON_BLE_RECORD_ORION_XS: {
             const victron_record_orion_xs_t *o = &data->record.orion;
             s.dcdc_has = true;
+            s.dcdc_ms = (uint32_t)(esp_timer_get_time() / 1000);
             s.dc_in_v_centi = o->input_voltage_centi;
             s.dc_out_v_centi = o->output_voltage_centi;
             s.dc_state = o->device_state;
@@ -138,6 +141,7 @@ void dashboard_state_snapshot(dashboard_snapshot_t *out)
     out->pv_w        = s.pv_w;
     out->bat_fresh   = s.bat_has   && ((uint32_t)(now - s.bat_ms)   < 30000u);
     out->solar_fresh = s.solar_has && ((uint32_t)(now - s.solar_ms) < 30000u);
+    out->dcdc_fresh  = s.dcdc_has  && ((uint32_t)(now - s.dcdc_ms)  < 30000u);
     unlock();
 }
 
