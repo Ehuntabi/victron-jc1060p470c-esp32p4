@@ -19,23 +19,30 @@ static void bh_reset_for_new_day(void);
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
 #define BH_LOG_DIR "/sdcard/bateria"
-/* 5 min y no 1 (24-ago-2026). Este era el que mas escribia de todo el aparato:
+/* 10 min y no 1 (24-ago-2026). Este era el que mas escribia de todo el aparato:
  * muestrea cada 10 s, asi que en cada vuelco SIEMPRE tenia algo pendiente y
  * abria el fichero 1.440 veces al dia, el 77% del total. Los demas escritores
  * salen sin escribir cuando no hay nada nuevo, este no.
  *
  * No es cuestion de desgaste -- el volumen es ridiculo -- sino de exposicion:
  * cada apertura es una ventana en la que un corte de corriente pilla la FAT a
- * medias. A 5 min hay cinco veces menos ventanas, y ademas queda con el mismo
- * criterio que la telemetria del viaje y la ruta.
+ * medias. A 10 min hay diez veces menos ventanas, y ademas queda con el mismo
+ * criterio que el ne185_vlog, que ya volcaba cada 10.
  *
- * Cabe de sobra: el snapshot admite BH_FLUSH_SNAPSHOT_MAX (128) puntos por
- * vuelco y a 10 s de muestreo 5 min son 30. Quedan ~21 min de margen antes de
- * que el propio codigo empiece a avisar de backlog.
+ * El TOPE esta en el snapshot: BH_FLUSH_SNAPSHOT_MAX (128) puntos por fuente y
+ * vuelco, que a 10 s de muestreo son 21 minutos. A 10 min se usan 60, la mitad,
+ * y eso deja sitio para UN vuelco saltado -- que pasa de verdad: si la camara
+ * tiene el bus, aqui se espera 200 ms y si no se consigue se deja para la
+ * proxima. A 15 min (90 puntos) un solo salto ya desbordaria el tope: no se
+ * pierde nada, pero el historico se queda atras y tarda varios ciclos en
+ * ponerse al dia. Por eso se para en 10 y no se sigue subiendo: el grueso ya
+ * esta cogido (de 1 a 5 min se quitaron 1.150 aperturas al dia; de 5 a 10, 144
+ * mas) y lo que queda no compensa gastar RAM INTERNA -- la escasa, no la
+ * PSRAM -- en doblar ese buffer, que hoy son 14 KB.
  *
- * Lo que se paga: un corte brusco se lleva hasta 5 min de historico en vez de
+ * Lo que se paga: un corte brusco se lleva hasta 10 min de historico en vez de
  * 1. El grafico de 24 h vive en RAM y se pierde igual de todos modos. */
-#define BH_FLUSH_INTERVAL_MS 300000
+#define BH_FLUSH_INTERVAL_MS 600000
 
 typedef struct {
     bh_point_t points[BH_POINTS];
@@ -60,7 +67,11 @@ typedef struct {
     bool       has_latest;
 } bh_buffer_t;
 
-/* Alojado en PSRAM en init() — 552 KB no caben en internal RAM */
+/* Alojado en PSRAM en init(). Son ~945 KB (8640 puntos x 28 bytes x 4 fuentes),
+ * ni de lejos caben en la RAM interna.
+ * OJO: aqui ponia 552 KB, que era el tamano de cuando el punto tenia 16 bytes;
+ * al anadirle centi_volts y pv_watts crecio y el comentario se quedo con la
+ * cifra vieja (visto el 24-ago-2026). */
 static bh_buffer_t *s_bufs = NULL;
 /* Mutex para proteger s_bufs entre el sample_timer (esp_timer task) y los
  * accesos desde LVGL task (update_latest, get_series, flush). */
@@ -70,7 +81,8 @@ static SemaphoreHandle_t s_bufs_mutex = NULL;
 static esp_timer_handle_t s_sample_timer = NULL;
 static esp_timer_handle_t s_bh_flush_timer = NULL;
 static bool s_bh_dir_ok = false;
-/* Serializa flushes concurrentes (timer 60s vs boton Reiniciar de settings_panel)
+/* Serializa flushes concurrentes (el timer periodico vs el boton Reiniciar de
+ * settings_panel)
  * para que solo uno use el snapshot estatico s_flush_snapshot[] a la vez
  * (mismo patron que s_flush_mutex de datalogger.c). */
 static SemaphoreHandle_t s_flush_mutex = NULL;
@@ -85,7 +97,12 @@ static int32_t s_last_flushed_ts[BH_SRC_COUNT] = {0};
 static int s_last_local_day = -1;
 
 /* Snapshot por flush para evitar mantener BH_LOCK durante la I/O a SD.
- * Capacidad por fuente generosa frente a las 6 muestras tipicas (60 s / 10 s). */
+ *
+ * 128 puntos por fuente son 21 min a 10 s de muestreo. Con el vuelco cada 10 min
+ * lo normal son 60, o sea la mitad: queda sitio para UN vuelco saltado (pasa
+ * cuando la camara tiene cogido el bus de la SD). Si se sube mas el intervalo,
+ * este es el numero que hay que mirar ANTES: desbordarlo no pierde datos, pero
+ * el historico se queda atras y tarda varios ciclos en ponerse al dia. */
 #define BH_FLUSH_SNAPSHOT_MAX  128
 typedef struct {
     bh_point_t pts[BH_FLUSH_SNAPSHOT_MAX];
