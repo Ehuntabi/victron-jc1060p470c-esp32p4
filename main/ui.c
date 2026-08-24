@@ -617,7 +617,7 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     /* Snapshot global para el dashboard del portal web. */
     dashboard_state_on_record(d);
-    /* Trip computer: integra cargas/descargas del BMV/Lynx. */
+    /* Energia del viaje: integra cargas/descargas del BMV/Lynx. */
     if (d->type == VICTRON_BLE_RECORD_BATTERY_MONITOR) {
         const victron_record_battery_monitor_t *b = &d->record.battery;
         trip_computer_on_battery(b->battery_current_milli, b->battery_voltage_centi);

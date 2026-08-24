@@ -414,7 +414,7 @@ static const char DASHBOARD_HTML[] =
         "<div class='sub'>PV: <span id='epv'>--</span> kWh</div>"
         "<div class='sub'>Cargas: <span id='eld'>--</span> kWh</div>"
       "</div>"
-      "<div class='card en'><h2>Trip computer</h2>"
+      "<div class='card en'><h2>Energia del viaje</h2>"
         "<div class='sub'>Activo: <span id='th'>--</span>h <span id='tm'>--</span>m</div>"
         "<div class='sub'>Cargado: <span id='tc'>--</span> kWh (<span id='tca'>--</span> Ah)</div>"
         "<div class='sub'>Consumido: <span id='td'>--</span> kWh (<span id='tda'>--</span> Ah)</div>"

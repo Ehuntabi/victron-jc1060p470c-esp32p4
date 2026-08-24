@@ -63,8 +63,8 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                const char *default_pass,
                                uint8_t ap_enabled);
 void password_toggle_btn_event_cb(lv_event_t *e);
-/* Trip computer + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
-/* Trip computer: vive en trip_manager.c. */
+/* Energia del viaje + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
+/* Energia del viaje: vive en trip_manager.c. */
 void create_trip_card(lv_obj_t *cont);
 void trip_label_refresh(void);
 static void backup_export_cb(lv_event_t *e);
@@ -256,7 +256,7 @@ static void autostart_switch_cb(lv_event_t *e)
 }
 
 /* Pagina "Tarjeta SD": carrusel de capturas + visor de imagenes de la SD. */
-/* Refresco del Trip computer (card reubicada en Tarjeta SD): solo si esta
+/* Refresco del Energia del viaje (card reubicada en Tarjeta SD): solo si esta
  * visible, para no gastar cada segundo cuando no se mira. */
 static void sd_trip_timer_cb(lv_timer_t *t)
 {
@@ -393,7 +393,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
 
-    /* (La card "Trip computer" se movio al submenu Autocaravana:
+    /* (La card "Energia del viaje" se movio al submenu Autocaravana:
      *  ver create_trip_card / populate_autocaravana.) */
 
     /* === Card 4: Backup/Restore configuracion === */
@@ -518,7 +518,7 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
 {
     (void)ctx;
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
-     * (anadidas en el init). Orden: Modo ausente, Trip computer, Auto-encendido.
+     * (anadidas en el init). Orden: Modo ausente, Energia del viaje, Auto-encendido.
      * El timer que refresca el trip se crea en el init. */
     create_ausente_card(page);
     create_trip_card(page);
@@ -689,7 +689,7 @@ void ui_settings_panel_init(ui_state_t *ui,
      * construye al navegar por primera vez. */
     ui_frigo_panel_init(ui);
 
-    /* Timer 1 s: refresca el Trip computer y el espacio libre de la SD (cada
+    /* Timer 1 s: refresca el Energia del viaje y el espacio libre de la SD (cada
      * card solo cuando esta visible). Antes se creaba al abrir la pagina SD. */
     lv_timer_create(sd_trip_timer_cb, 1000, ui);
 

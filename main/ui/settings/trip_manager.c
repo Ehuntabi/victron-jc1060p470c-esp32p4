@@ -1,4 +1,4 @@
-/* Trip computer: tarjeta de Ajustes (Autocaravana) con la energia del viaje.
+/* Energia del viaje: tarjeta de Ajustes (Autocaravana) con la energia del viaje.
  *
  * OJO, cambio de fondo el 24-ago-2026: esta tarjeta YA NO abre ni cierra
  * viajes. Los viajes se declaran en el cuaderno de la pantalla de la cabina, y
@@ -28,7 +28,7 @@
 
 static lv_obj_t *s_trip_label = NULL;
 
-/* ── Trip computer: refresco periodico y reset ─────────────────── */
+/* ── Energia del viaje: refresco periodico y reset ─────────────────── */
 void trip_label_refresh(void)
 {
     if (!s_trip_label || !lv_obj_is_visible(s_trip_label)) return;
@@ -90,7 +90,7 @@ static void do_trip_reset_action(void)
 static void trip_reset_btn_cb(lv_event_t *e)
 {
     (void)e;
-    ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Trip computer",
+    ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Energía del viaje",
         "Poner los contadores a cero?\n\n"
         "Normalmente no hace falta: se ponen solos al\n"
         "empezar un viaje en la pantalla de la cabina.",
@@ -135,7 +135,7 @@ static void trip_finish_btn_cb(lv_event_t *e)
 
 void create_trip_card(lv_obj_t *cont)
 {
-    /* Trip computer: contadores reseteables del viaje. */
+    /* Energia del viaje: contadores reseteables del viaje. */
     lv_obj_t *card_trip = lv_obj_create(cont);
     lv_obj_set_width(card_trip, lv_pct(100));
     lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
@@ -161,7 +161,7 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_t *trip_title = lv_label_create(trip_head);
     lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
-    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
+    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Energía del viaje");
 
     /* Dos botones sueltos: poner los contadores a cero (normalmente lo hace
      * solo el inicio de viaje de la cabina) y soltar la tarjeta. */

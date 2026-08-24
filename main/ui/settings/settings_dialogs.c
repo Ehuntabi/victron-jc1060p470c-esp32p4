@@ -1,5 +1,5 @@
 /* Dialogo modal generico (confirmacion / aviso) que usan varias paginas de
- * Ajustes: Trip computer, Reiniciar, etc.
+ * Ajustes: Energia del viaje, Reiniciar, etc.
  *
  * Sale de settings_panel.c dentro del troceo por paginas (ver
  * settings_common.h). Es el mismo codigo movido de sitio, sin cambios de
