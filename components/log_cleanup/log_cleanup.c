@@ -11,7 +11,17 @@
 
 static const char *TAG = "log_cleanup";
 
-static const char *DIRS[] = { "/sdcard/frigo", "/sdcard/bateria" };
+/* Carpetas de LOGS DIARIOS (ficheros AAAA-MM-DD.csv). Solo entran aqui las que
+ * son datos regenerables y con ese nombre: parse_csv_date() exige el formato
+ * exacto, asi que meter una carpeta con otro patron no borraria nada.
+ *
+ * NO estan ni /sdcard/viajes ni /sdcard/vehiculo ni /sdcard/config_backup, y no
+ * es un olvido: eso es lo que el usuario quiere conservar.
+ *
+ * ne185v se anadio el 24-ago-2026 auditando: escribe una linea por minuto en
+ * /sdcard/ne185v/AAAA-MM-DD.csv desde que se activo el registro de voltajes, y
+ * no lo limpiaba nadie. */
+static const char *DIRS[] = { "/sdcard/frigo", "/sdcard/bateria", "/sdcard/ne185v" };
 #define NUM_DIRS (sizeof(DIRS)/sizeof(DIRS[0]))
 
 /* Parsea YYYY-MM-DD.csv y devuelve epoch a las 00:00 de ese dia, o 0 si no parsea */
