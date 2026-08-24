@@ -204,12 +204,25 @@ static void procesar(char *linea)
     }
 }
 
+/* Cada cuanto se cuenta como va la cosa MIENTRAS NO HAY POSICION. Diez
+ * segundos: lo bastante seguido para enchufar el cable y ver el resultado sin
+ * esperar, y se calla solo en cuanto hay fix. */
+#define GPS_INFORME_US  (10 * 1000000LL)
+
 static void gps_task(void *arg)
 {
     (void)arg;
     uint8_t buf[256];
     char linea[LINEA_MAX];
     size_t largo = 0;
+
+    /* Sin esto, la unica forma de saber si el GPS esta bien conectado era salir
+     * a la calle y esperar a que fijara: si no llegaba nada, el programa no
+     * decia ni mu. Ahora se ve al momento si el modulo habla, aunque no vea un
+     * satelite -- que es lo normal bajo techo: el NEO-M9N manda sus tramas
+     * igual, con los campos vacios. */
+    uint32_t tramas = 0, tramas_antes = 0;
+    int64_t  informe_us = 0;
 
     while (1) {
         int leidos = uart_read_bytes(GPS_UART_NUM, buf, sizeof(buf),
@@ -232,6 +245,7 @@ static void gps_task(void *arg)
                     s_d.hay_datos = true;
                     xSemaphoreGive(s_mtx);
 
+                    tramas++;
                     char copia[LINEA_MAX];
                     memcpy(copia, linea, largo + 1);
                     procesar(copia);
@@ -253,7 +267,37 @@ static void gps_task(void *arg)
             s_d.hay_fix   = false;
             s_d.satelites = 0;
         }
+        bool fix  = s_d.hay_fix;
+        uint8_t sats = s_d.satelites;
+        /* La ultima trama tal cual llego, para el parte de abajo. Se copia
+         * dentro del cerrojo: el anillo lo escribe este mismo bucle, pero lo
+         * lee tambien la pantalla. */
+        char ultima[LINEA_MAX];
+        ultima[0] = 0;
+        if (tramas) {
+            int prev = (s_crudo_next - 1 + GPS_CRUDO_N) % GPS_CRUDO_N;
+            snprintf(ultima, sizeof(ultima), "%s", s_crudo[prev]);
+        }
         xSemaphoreGive(s_mtx);
+
+        /* El parte, mientras no haya posicion. */
+        if (!fix && ahora_us - informe_us > GPS_INFORME_US) {
+            informe_us = ahora_us;
+            if (tramas == tramas_antes) {
+                ESP_LOGW(TAG, "NO llega NADA por el UART%d. Mira: TX del GPS al "
+                              "GPIO%d y RX al GPIO%d (van CRUZADOS), alimentacion "
+                              "de 3,3 V, y que el modulo sea de 38400 baudios",
+                         GPS_UART_NUM, GPS_UART_RX, GPS_UART_TX);
+            } else {
+                /* Con una trama de muestra: es lo que de verdad se mira cuando
+                 * algo no cuadra -- si llega basura, se ve aqui. */
+                ESP_LOGI(TAG, "hablando: %lu tramas, %u satelites a la vista, "
+                              "todavia SIN posicion (bajo techo es lo normal). "
+                              "Ultima: %s",
+                         (unsigned long)(tramas - tramas_antes), sats, ultima);
+            }
+            tramas_antes = tramas;
+        }
     }
 }
 
