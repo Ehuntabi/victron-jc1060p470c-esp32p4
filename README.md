@@ -122,8 +122,26 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Datos: **nivel de agua limpia** (0-4/4) y **grises** (lleno/vacío), luz interior/exterior, bomba, presencia de **230 V (shore)**, tensión de batería de **servicio** y de **motor**, y "fresco" (trama válida < 30 s).
 - Controlable desde la UI (Overview) y por `POST /control`. Encendido automático de cargas al despertar (configurable, NVS).
 
-#### Display satélite "mini" (UDP)
-- Broadcast **UDP** (1 Hz) desde el AP del 7" a un segundo display **ESP32-C6 de 1,47"** (`192.168.4.255:4242`). Payload compacto (32 bytes, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador) y aguas del NE185. Protocolo compartido en `main/net/mini_proto.h` (debe ir **byte a byte idéntico** en ambos firmwares). Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
+#### Display satélite de cabina (UDP + HTTP)
+- El satélite es la **3,5" de la cabina** (`~/joint/35cabina`). El **C6 de 1,47" está retirado** desde el 20-ago-2026.
+- Broadcast **UDP** (1 Hz) desde el AP del 7" (`192.168.4.255:4242`). Payload compacto (**38 bytes, versión 4**, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador), aguas del NE185, `epoch_local` (el reloj, que el satélite no tiene) y `gps_estado`. Protocolo compartido en `main/net/mini_proto.h`, **byte a byte idéntico** en los dos firmwares. Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
+- **Solo se manda lo FRESCO** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), no lo que hubo alguna vez: si el SmartShunt deja de hablar, a los 30 s se manda el centinela de "no hay dato" y el satélite lo enseña apagado. Mandar el último valor conocido sería un dato viejo con pinta de actual, que es peor que no tener dato.
+- **La vuelta va por HTTP**, no por UDP: el satélite le manda a la P4 los apuntes del cuaderno con `POST /api/viaje` (ver abajo). Por TCP se sabe con certeza que han llegado.
+
+#### Cuaderno de viaje (`POST /api/viaje`)
+- La 3,5" de la cabina abre y cierra viajes y le manda los apuntes; la P4 es la dueña de los datos: crea `/sdcard/viajes/AAAA-MM-DD_Destino/`, escribe el diario, un **CSV por tipo** (`repostajes.csv`, `paradas.csv`, `pernoctas.csv`, `aguas.csv`, `itvs.csv`…) y, al cerrar, un `resumen.txt` en castellano llano.
+- **Totales del viaje**: combustible y litros, peajes, gas, mantenimiento (con la ITV dentro), **aguas** y **alojamiento** (precio por noche × noches, más los servicios que se paguen aparte). Si aparece más de una moneda, el resumen **avisa** en vez de dar un total que parece bueno y no lo es.
+- Los apuntes **sin viaje** (una salida puntual: repostar, ITV, taller) van al historial del vehículo en `/sdcard/vehiculo`, no a un viaje.
+- **Cuenta los apuntes aplicados** y los compara con los que dice el satélite haber generado: si falta alguno, el viaje se marca **INCOMPLETO** al descargarlo, en vez de dárte­lo por bueno.
+- La telemetría del viaje (cada 5 min) escribe **solo lecturas frescas**: con el SmartShunt apagado deja el hueco vacío en vez de repetir el último porcentaje hora tras hora. Un hueco se entiende; una lectura inventada se cree.
+- Un apunte que no quepa se **rechaza entero con 413** y se dice por el log. Antes se recortaba en silencio: el JSON quedaba a medias, no parseaba, se devolvía *400 json inválido* y el satélite lo descartaba por malo — un dato perdido disfrazado de dato inválido.
+
+#### GPS (NEO-M9N)
+- Solo escucha NMEA a 38400 (lo de fábrica en la serie M9; los M8 venían a 9600, y probar a 9600 y no ver nada es el despiste clásico). No se le manda nada por UBX.
+- **Pone el reloj en hora solo**, y únicamente con trama válida (`A`): el módulo da una hora aproximada de su reloj interno antes de fijar, y usarla sería empeorar la que ya tiene el RTC.
+- **Pantalla propia en Ajustes → GPS**, con los tres estados diciendo QUÉ HACER: rojo *"sin señal del módulo"* (con el recordatorio de que RX/TX van cruzados), ámbar *"buscando satélites"* con los que ve, verde *"posición fijada"* con latitud, longitud y altitud. Debajo, las **últimas tramas en crudo** para diagnosticar.
+- **El icono de la barra se toca y lleva a esa página.** Un indicador que avisa de que algo va mal y no lleva a donde se mira obliga a buscarlo por los menús.
+- Mientras no hay posición, el log cuenta cada 10 s cuántas tramas llegan, cuántos satélites se ven y una trama de muestra; si no llega **nada**, recuerda que los cables van cruzados, que la alimentación es de 3,3 V y que son 38400 baudios. Se calla solo en cuanto fija.
 
 #### Datalogger y persistencia
 - **Frigo**: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`.
@@ -151,7 +169,10 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 #### Portal web
 - AP `VictronConfig` automático al arrancar.
-- **Auto-off del servidor HTTP a los 15 min** sin clientes nuevos (ahorro). El **AP sigue emitiendo siempre**, porque el display "mini" recibe su telemetría por UDP sobre esa red. El portal se reactiva solo en cuanto un cliente se asocia, así que no hay que reiniciar nada; si el móvil ya estaba asociado, hay un botón *Reactivar portal web* en Ajustes → Wi-Fi.
+- **Auto-off del servidor HTTP a los 15 min, pero solo si NO hay nadie asociado** (ahorro). El **AP sigue emitiendo siempre**.
+  - Antes hacían falta **dos** clientes para mantenerlo vivo, porque el satélite viejo (el C6) estaba siempre asociado y solo *recibía* UDP. Con la 3,5" esa cuenta dejó de valer: ese satélite **habla por HTTP** para entregar los apuntes, y con el servidor apagado no podía. Como el auto-off solo se rearmaba con peticiones HTTP o con un cliente nuevo —y el satélite ya estaba asociado—, **la cola no se vaciaba nunca**: "N sin enviar" fijo en la cabina y `Connection reset by peer` al entregar, hasta reiniciar la P4 (24-ago-2026).
+  - El ahorro se conserva: la 3,5" se apaga con el contacto, así que con el vehículo parado no queda nadie asociado y el portal se apaga igual.
+  - Si el móvil ya estaba asociado y aun así no responde, hay un botón *Reactivar portal web* en Ajustes → Wi-Fi.
 - **Seguridad — dos niveles** (`check_basic_auth` / `check_basic_auth_strict` en `config_server_auth.c`):
   - *Abierto*: todo lo demás. Basta con estar en el Wi-Fi. Como el P4 solo levanta Soft-AP, cualquier cliente HTTP ha pasado antes por la clave WPA2, que es aleatoria y se regenera sola si es débil. Exigir además usuario y clave HTTP era una segunda puerta con la misma llave, y dejaba a la app fuera (sondea `/api/state` a 1 Hz y se comía 401 tras 401).
   - *Estricto — `/ota`, `/save` y `/keys`*: siempre piden usuario y contraseña. Son los que **reescriben el firmware** o **entregan las claves AES de los Victron**; sin esto, prestar el Wi-Fi a un invitado equivalía a darle control total. La app **no usa ninguno de los tres**, así que no le afecta; el navegador las pide una vez y las recuerda. Se consultan en Ajustes → Wi-Fi.
@@ -295,8 +316,11 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Data: **fresh water level** (0-4/4) and **grey water** (full/empty), interior/exterior light, pump, presence of **230 V (shore)**, **service** and **engine** battery voltage, and "fresh" (valid frame < 30 s).
 - Controllable from the UI (Overview) and via `POST /control`. Automatic load switch-on on wake (configurable, NVS).
 
-#### "Mini" satellite display (UDP)
-- **UDP** broadcast (1 Hz) from the 7" AP to a second **1.47" ESP32-C6** display (`192.168.4.255:4242`). Compact payload (32 bytes, CRC32) with battery SoC/V/A, shunt aux channel (starter/motor battery), fridge (temperature + fan) and NE185 water levels. Shared protocol in `main/net/mini_proto.h` (must be **byte-for-byte identical** in both firmwares). It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
+#### Cabin satellite display (UDP + HTTP)
+- The satellite is the **3.5" cabin display** (`~/joint/35cabina`). The **1.47" C6 was retired** on 2026-08-20.
+- **UDP** broadcast (1 Hz) from the 7" AP (`192.168.4.255:4242`). Compact payload (**38 bytes, version 4**, CRC32) with battery SoC/V/A, shunt aux channel (starter battery), fridge (temperature + fan), NE185 water levels, `epoch_local` (the clock the satellite doesn't have) and `gps_estado`. Shared protocol in `main/net/mini_proto.h`, **byte-for-byte identical** in both firmwares. It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
+- **Only FRESH data is sent** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), never "we had it once": if the SmartShunt goes quiet, after 30 s the no-data sentinel is sent and the satellite greys it out. Sending the last known value would be stale data wearing a current-data face, which is worse than no data at all.
+- **The return path is HTTP**, not UDP: the satellite posts trip notes to the P4 with `POST /api/viaje` (see below). Over TCP you know for certain they arrived.
 
 #### Datalogger and persistence
 - **Frigo**: 200-entry RAM ring + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`.
@@ -324,7 +348,10 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 #### Web portal
 - `VictronConfig` AP starts automatically on boot.
-- **HTTP server auto-off after 15 min** with no new clients (power saving). The **AP itself never stops**, because the "mini" display receives its telemetry over UDP on that network. The portal comes back on its own as soon as a client associates, so nothing needs restarting; if the phone was already associated there is a *Reactivar portal web* button in Settings → Wi-Fi.
+- **HTTP server auto-off after 15 min, but only when nobody is associated** (power saving). The **AP itself never stops**.
+  - It used to require **two** clients to stay alive, because the old satellite (the C6) was always associated and only *received* UDP. That no longer holds with the 3.5": this satellite **speaks HTTP** to deliver trip notes, and with the server off it couldn't. Since auto-off was only re-armed by HTTP requests or by a *new* client — and the satellite was already associated — **the queue never drained**: a permanent "N sin enviar" in the cabin and `Connection reset by peer` on delivery, until the P4 was rebooted (2026-08-24).
+  - Power saving is preserved: the 3.5" powers off with the ignition, so with the vehicle parked nobody is associated and the portal shuts down as before.
+  - If the phone was already associated and it still doesn't answer, there is a *Reactivar portal web* button in Settings → Wi-Fi.
 - **Security — two tiers** (`check_basic_auth` / `check_basic_auth_strict` in `config_server_auth.c`):
   - *Open*: everything else. Being on the Wi-Fi is enough. Since the P4 only ever brings up a Soft-AP, every HTTP client has already passed the WPA2 key, which is random and regenerated automatically if weak. Demanding an HTTP user/password on top was a second door with the same key, and it locked the app out (it polls `/api/state` at 1 Hz and collected 401 after 401).
   - *Strict — `/ota`, `/save` and `/keys`*: always prompt for user and password. These are the ones that **rewrite the firmware** or **hand over the Victron AES keys**; without this, lending someone the Wi-Fi key amounted to giving them full control. The app **uses none of the three**, so it is unaffected; a browser asks once and remembers. Look them up in Settings → Wi-Fi.
