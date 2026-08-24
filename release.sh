@@ -103,22 +103,49 @@ if [ "$EMB" != "$TAG" ]; then
   echo "AVISO: no coinciden. Revisa 'git describe --tags' (¿hay commits por encima del tag?)."
 fi
 
-# ── 6) siguientes pasos (a mano, cuando quieras publicar) ────────────────────
+# ── 6) PUBLICAR: subir código, tag y Release ────────────────────────────────
+#
+# Esto lo hacía el humano copiando y pegando los comandos que el script
+# imprimía... y por eso la última Release publicada era la v1.5.5 con 74 tags
+# creados: el repo enseñaba como "Latest" una versión de hacía tres semanas
+# mientras el aparato llevaba otra (visto el 24-ago-2026). Un paso que depende
+# de que alguien se acuerde no es un paso del proceso, es una intención.
+#
+# Las notas salen del MENSAJE DEL TAG, que ya se escribe al crearlo. Si hay un
+# NOTAS.md al lado, manda ese.
+RAMA="$(git branch --show-current)"
+echo "[..] subiendo código y tag"
+git push origin "$RAMA" "$TAG"
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "AVISO: no está 'gh', así que la Release NO se ha publicado."
+  echo "       Instálalo o publícala a mano:"
+  echo "       gh release create $TAG -R $REPO --title \"Joint SPL 145 Control $TAG\" \\"
+  echo "          --notes-file NOTAS.md \"$RELDIR/$OUT\""
+elif gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+  echo "[ok] la Release $TAG ya existe, no la toco"
+else
+  if [ -f NOTAS.md ]; then
+    NOTAS=(--notes-file NOTAS.md)
+  else
+    # El mensaje del tag, sin la cabecera que git le pone.
+    git tag -l --format='%(contents)' "$TAG" > /tmp/notas-$TAG.md
+    NOTAS=(--notes-file "/tmp/notas-$TAG.md")
+  fi
+  echo "[..] publicando la Release en GitHub"
+  gh release create "$TAG" -R "$REPO" \
+     --title "Joint SPL 145 Control $TAG" \
+     "${NOTAS[@]}" \
+     "$RELDIR/$OUT" "$RELDIR/joint-spl-145-control-$TAG-app.bin" \
+    && echo "[ok] Release $TAG publicada con el firmware completo y el app-bin de OTA"
+fi
+
+# ── 7) lo que queda por hacer a mano ────────────────────────────────────────
 cat <<EOF
 
 ────────────────────────────────────────────────────────────────────────────
-LISTO EN LOCAL. Para publicar, ejecuta cuando quieras:
+PUBLICADO: código, tag y Release de $TAG. Solo queda grabar:
 
-  # 1) subir código + tag
-  git push origin main $(git branch --show-current) $TAG
-
-  # 2) crear la Release en GitHub (escribe antes las notas en un fichero .md)
-  gh release create $TAG -R $REPO \\
-     --title "Joint SPL 145 Control $TAG" \\
-     --notes-file NOTAS.md \\
-     "$RELDIR/$OUT"
-
-  # 3) grabar en la placa
   idf.py -p /dev/ttyACM0 flash
 
   # OTA por el portal Wi-Fi: sube $RELDIR/joint-spl-145-control-$TAG-app.bin
