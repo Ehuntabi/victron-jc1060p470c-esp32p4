@@ -41,6 +41,9 @@ void ui_settings_panel_go_to_main(void);
 int  ui_settings_panel_page_count(void);
 void ui_settings_panel_show_page(int idx);
 
+/* Abre la pagina de GPS de los ajustes. La llama el icono de GPS de la barra. */
+void ui_settings_panel_show_gps(void);
+
 /* Mostrar el diálogo modal "Cambio en Wi-Fi — requiere reiniciar".
  * El caller ya debe haber guardado el nuevo estado en NVS antes de llamar.
  * El botón Cancelar revierte el NVS al opuesto y sincroniza el checkbox

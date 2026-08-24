@@ -161,6 +161,11 @@ typedef struct settings_page_ctx_s settings_page_ctx_t;
 #define SETTINGS_PAGE_CTX_MAX 12
 static settings_page_ctx_t s_page_ctxs[SETTINGS_PAGE_CTX_MAX];
 static size_t s_page_ctx_count = 0;
+/* Cual de las paginas registradas es la del GPS. Se apunta al darla de alta y
+ * NO se escribe el numero a mano: el indice es el orden de registro, asi que
+ * meter una seccion nueva por el medio lo cambiaria y el icono del GPS acabaria
+ * abriendo otra cosa. */
+static int s_page_gps_idx = -1;
 
 /* Forward decls de los populate wrappers (defs cerca de settings_menu_add_entry). */
 static void populate_wifi(settings_page_ctx_t *ctx, lv_obj_t *page);
@@ -670,6 +675,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     settings_menu_add_entry(ui, main_page, menu, page_gps,
         "GPS",           "Posicion, satelites y puesta en hora",
         LV_SYMBOL_GPS,        0x4CD964, populate_gps);
+    s_page_gps_idx = (int)s_page_ctx_count - 1;
     settings_menu_add_entry(ui, main_page, menu, page_about,
         "Acerca de",     "Sistema, uptime, IP y reinicio",
         LV_SYMBOL_LIST,       0x90A4AE, populate_about);
@@ -1256,6 +1262,14 @@ static settings_page_ctx_t *settings_menu_add_entry(
 int ui_settings_panel_page_count(void)
 {
     return (int)s_page_ctx_count;
+}
+
+/* Abre directamente la pagina del GPS. La usa el icono de la barra: si el GPS
+ * no va, lo primero que uno hace es tocarlo, y hasta ahora eso no llevaba a
+ * ninguna parte -- habia que ir a Ajustes y buscarla. */
+void ui_settings_panel_show_gps(void)
+{
+    ui_settings_panel_show_page(s_page_gps_idx);
 }
 
 void ui_settings_panel_show_page(int idx)

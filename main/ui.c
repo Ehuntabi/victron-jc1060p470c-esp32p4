@@ -230,6 +230,19 @@ static bool obj_is_descendant(const lv_obj_t *obj, const lv_obj_t *parent)
     return false;
 }
 
+/* Tocar el icono de GPS lleva a Ajustes -> GPS.
+ *
+ * Un indicador que avisa de que algo va mal y no lleva a donde se mira obliga a
+ * buscarlo por los menus. Aqui el camino es el propio icono: se toca y sale la
+ * pagina con los satelites, la posicion y que hacer si no fija. */
+static void gps_icon_clicked_cb(lv_event_t *e)
+{
+    ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
+    if (!ui || !ui->tabview || ui->tab_settings_index == UINT16_MAX) return;
+    lv_tabview_set_act(ui->tabview, ui->tab_settings_index, LV_ANIM_ON);
+    ui_settings_panel_show_gps();
+}
+
 void ui_init(void) {
     ui_state_t *ui = &g_ui;
 
@@ -459,6 +472,9 @@ void ui_init(void) {
     lv_obj_set_style_radius(ui->lbl_gps, 4, 0);
     lv_label_set_text(ui->lbl_gps, LV_SYMBOL_GPS);
     lv_obj_set_size(ui->lbl_gps, 44, 38);
+    /* Las etiquetas de LVGL no reciben clics si no se les pone la bandera. */
+    lv_obj_add_flag(ui->lbl_gps, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ui->lbl_gps, gps_icon_clicked_cb, LV_EVENT_CLICKED, ui);
     lv_obj_set_style_text_align(ui->lbl_gps, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(ui->lbl_gps, lv_color_hex(0x666666), 0);
 
