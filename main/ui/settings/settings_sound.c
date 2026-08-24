@@ -133,8 +133,15 @@ void create_ausente_card(lv_obj_t *cont)
     lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card_aus, 1, 0);
     lv_obj_set_style_radius(card_aus, 12, 0);
-    lv_obj_set_style_pad_all(card_aus, 16, 0);
-    lv_obj_set_style_pad_gap(card_aus, 8, 0);
+    /* Relleno vertical 8 y separacion 4, IGUAL que las tarjetas vecinas
+     * (Energia del viaje, Bombonas). Esta usaba 16 y 8, o sea que era la mas
+     * alta de la pagina sin motivo. Entre esto y el texto de una sola linea se
+     * recuperan unos 48 px, que es lo que hacia falta para que las cuatro
+     * tarjetas de Autocaravana quepan en pantalla (24-ago-2026). El relleno
+     * horizontal se queda en 16, que ese no estorba. */
+    lv_obj_set_style_pad_hor(card_aus, 16, 0);
+    lv_obj_set_style_pad_ver(card_aus, 8, 0);
+    lv_obj_set_style_pad_gap(card_aus, 4, 0);
     lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
 
@@ -160,10 +167,16 @@ void create_ausente_card(lv_obj_t *cont)
     lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(aus_hint, lv_color_hex(0xAAAAAA), 0);
     lv_obj_set_width(aus_hint, lv_pct(100));
-    lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_WRAP);
+    /* UNA sola linea (peticion del usuario, 24-ago-2026). Antes eran dos, con
+      * un salto de linea a mano. El texto se acorto para que quepa: la tarjeta
+      * ocupa el ancho entero (~960 px utiles) y a font 20 eso son unos 95
+      * caracteres; los dos renglones de antes sumaban 120. LONG_DOT y no WRAP
+      * para que, si algun dia crece, se corte en vez de volver a partirse en
+      * dos -- que es justo lo que se venia a quitar. */
+    lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_DOT);
     lv_label_set_text(aus_hint,
-                      "Apaga la pantalla y vigila por movimiento. Se activa tras 10 s.\n"
-                      "Para salir: 4 toques en la esquina superior izquierda.");
+                      "Apaga la pantalla y vigila (arranca en 10 s). "
+                      "Salir: 4 toques arriba a la izquierda.");
 }
 
 void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)

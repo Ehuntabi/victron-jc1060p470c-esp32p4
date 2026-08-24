@@ -44,6 +44,11 @@ bool bombonas_deshacer(void);
  * apuntado todavia (o el reloj no esta en hora). */
 int bombonas_dias_actual(void);
 
+/* true si la bombona actual lleva MAS dias que la media de las anteriores, o
+ * sea que por estadistica puede estar al caer. false si no hay media todavia
+ * (hacen falta dos cambios) o si aun no ha llegado. */
+bool bombonas_pasada(void);
+
 /* Duracion media en dias de las bombonas YA terminadas, o -1 si aun no hay
  * ninguna terminada (hacen falta dos cambios para saber cuanto duro una). */
 float bombonas_media_dias(void);

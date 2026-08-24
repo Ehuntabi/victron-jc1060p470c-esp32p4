@@ -28,6 +28,7 @@
 #include "cJSON.h"
 #include "data/dashboard_state.h"
 #include "data/trip_computer.h"
+#include "data/bombonas.h"
 #include "gps/gps.h"
 #include "frigo.h"
 #include "ne185/ne185.h"
@@ -481,6 +482,41 @@ static bool escribir_resumen(const char *carpeta)
     fprintf(f, "  Gastados ...... %8.0f Wh\n", t.wh_discharged);
     fprintf(f, "  De la placa ... %8.0f Wh   (%.1f h de sol)\n",
             t.wh_solar, (double)t.solar_seconds / 3600.0);
+
+    /* La bombona, en el resumen: al volver de viaje es cuando uno se pregunta
+     * si le dio de si. Se dice ademas si se cambio DURANTE este viaje, que es
+     * el dato que de verdad se olvida. */
+    {
+        bombonas_t bo;
+        bombonas_get(&bo);
+        if (bo.n > 0) {
+            fprintf(f, "\nBOMBONA\n");
+            int dias = bombonas_dias_actual();
+            char puesta[24];
+            time_t tb = (time_t)bo.cambios[bo.n - 1];
+            struct tm tmb;
+            localtime_r(&tb, &tmb);
+            strftime(puesta, sizeof(puesta), "%d/%m/%Y", &tmb);
+            if (dias >= 0) fprintf(f, "  Puesta el %s (lleva %d dias)\n", puesta, dias);
+            else           fprintf(f, "  Puesta el %s\n", puesta);
+
+            /* Cambios caidos entre el inicio del viaje y ahora. */
+            int durante = 0;
+            for (int i = 0; i < bo.n; i++) {
+                if (inicio && bo.cambios[i] >= (uint32_t)inicio) durante++;
+            }
+            if (durante > 0)
+                fprintf(f, "  Cambiada %d ve%s durante este viaje\n",
+                        durante, durante == 1 ? "z" : "ces");
+
+            float med = bombonas_media_dias();
+            if (med > 0.0f) {
+                fprintf(f, "  Duran %.0f dias de media\n", (double)med);
+                if (bombonas_pasada())
+                    fprintf(f, "  OJO: la actual ya dura mas que las anteriores.\n");
+            }
+        }
+    }
 
     /* Kilometros por GPS desde el 24-ago-2026 (NEO-M9N montado y con fix). Si el
      * viaje entero fue sin posicion se DICE, en vez de escribir un "0.0 km" que

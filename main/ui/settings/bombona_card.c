@@ -65,12 +65,23 @@ void bombona_label_refresh(void)
     if (media > 0.0f) {
         n += snprintf(buf + n, sizeof(buf) - n,
                       "\nDuran %.0f dias de media", (double)media);
-        if (u) snprintf(buf + n, sizeof(buf) - n, "   (ultimas: %s)", ultimas);
+        if (u) n += snprintf(buf + n, sizeof(buf) - n, "   (ultimas: %s)", ultimas);
+        /* El aviso: lleva mas de lo que duran normalmente. No es una prediccion
+         * fina -- una de invierno gasta mas que una de verano -- pero es la
+         * unica senal que hay, y sirve para no quedarse sin gas de sorpresa. */
+        if (bombonas_pasada()) {
+            snprintf(buf + n, sizeof(buf) - n,
+                     "\nYa dura mas que las anteriores: puede estar al caer.");
+        }
     } else {
         snprintf(buf + n, sizeof(buf) - n,
                  "\nHace falta un cambio mas para saber cuanto dura una.");
     }
     lv_label_set_text(s_lbl, buf);
+    /* En ambar cuando se ha pasado, en gris el resto del tiempo. El color lo
+     * ves de reojo; el texto hay que leerlo. */
+    lv_obj_set_style_text_color(s_lbl,
+        lv_color_hex(bombonas_pasada() ? 0xFFA726 : 0xDDDDDD), 0);
 }
 
 static void do_cambio(void)

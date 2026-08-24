@@ -147,6 +147,14 @@ int bombonas_dias_actual(void)
     return (int)(((uint32_t)ahora - b.cambios[b.n - 1]) / 86400);
 }
 
+bool bombonas_pasada(void)
+{
+    float media = bombonas_media_dias();
+    int dias = bombonas_dias_actual();
+    if (media <= 0.0f || dias < 0) return false;   /* sin base para decir nada */
+    return (float)dias > media;
+}
+
 float bombonas_media_dias(void)
 {
     bombonas_t b;
