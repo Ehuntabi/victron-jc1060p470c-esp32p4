@@ -773,10 +773,15 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     char hora[9];
     strftime(hora, sizeof(hora), "%H:%M:%S", tm_l);
     fprintf(f, "%s,", hora);
-    if (d.bat_has) fprintf(f, "%u.%u,%u.%02u,", d.soc_deci / 10, d.soc_deci % 10,
-                           d.bat_v_centi / 100, d.bat_v_centi % 100);
-    else           fprintf(f, ",,");
-    if (d.solar_has) fprintf(f, "%u,", d.pv_w); else fprintf(f, ",");
+    /* bat_fresh y solar_fresh, NO bat_has/solar_has. Esto se escribe cada 5
+     * minutos EN EL FICHERO DEL VIAJE, y "has" solo dice que alguna vez hubo
+     * dato: con el SmartShunt apagado, el CSV se llenaria del ultimo porcentaje
+     * repetido hora tras hora. Un hueco vacio se entiende; una lectura
+     * inventada se cree, y encima meses despues (auditoria del 24-ago-2026). */
+    if (d.bat_fresh) fprintf(f, "%u.%u,%u.%02u,", d.soc_deci / 10, d.soc_deci % 10,
+                             d.bat_v_centi / 100, d.bat_v_centi % 100);
+    else             fprintf(f, ",,");
+    if (d.solar_fresh) fprintf(f, "%u,", d.pv_w); else fprintf(f, ",");
     fprintf(f, "%.1f,%.1f,%u,", fr.T_Congelador, fr.T_Exterior, fr.fan_percent);
     if (ne.fresh) fprintf(f, "%u,%u\n", ne.s1, ne.r1); else fprintf(f, ",\n");
     fclose(f);
