@@ -693,6 +693,11 @@ static void init_camera_and_solar_feed(void)
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
+    /* La camara solo captura si alguien necesita la imagen: la vigilancia, o el
+     * auto-brillo. Con el auto-brillo apagado (que es lo que hay hoy) se queda
+     * en reposo en vez de coger un fotograma cada 2 s para nadie. Si algun dia
+     * se vuelve a poner s_auto_brightness a true, esto lo reactiva solo. */
+    camera_set_luma_wanted(s_auto_brightness);
 
     /* Feed periodico de telemetria (Victron SoC/PV + NE185 shore/fresh)
      * al modo excedente solar del frigo. */

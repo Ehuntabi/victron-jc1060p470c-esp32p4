@@ -82,6 +82,21 @@ bool camera_get_luma(uint8_t *out_luma)
 static uint8_t      *s_thumb[2]   = { NULL, NULL };   /* RGB888, 3 bytes/px */
 static ppa_client_handle_t s_ppa  = NULL;
 static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
+/* Sube con cada miniatura publicada. Sirve para esperar a que haya una NUEVA:
+ * la foto del portal se genera a partir de la ultima miniatura, no captura por
+ * su cuenta, asi que con la camara en reposo habria que despertarla y aguardar
+ * -- si no, se serviria una foto vieja como si fuera de ahora. */
+static volatile uint32_t s_thumb_seq = 0;
+/* Alguien ha pedido una foto y la camara esta en reposo: un fotograma y a
+ * dormir otra vez. */
+static volatile bool s_frame_pedido = false;
+/* Quien necesita la imagen. Declaradas AQUI y no mas abajo porque
+ * camera_snapshot_jpeg() las mira para decidir si tiene que despertar la
+ * camara, y esa funcion viene antes en el fichero. */
+static volatile bool s_surveillance = false;
+/* Ver camera_set_luma_wanted(). Arranca en false: si nadie lo pide, no se
+ * captura. */
+static volatile bool s_luma_wanted  = false;
 
 /* Pixel RGB565 (2 bytes, little endian) del frame del ISP. */
 static inline uint16_t rgb565_px(const uint8_t *p, uint32_t bytes, uint32_t stride, int x, int y)
@@ -360,6 +375,28 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
  * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
 {
+    /* Con la camara EN REPOSO (ni vigilancia ni auto-brillo) la ultima
+     * miniatura puede ser de hace horas, y esto sirve fotos: hay que despertarla
+     * y esperar a que publique una nueva. Sin esto, el portal enseñaria una foto
+     * vieja con toda la naturalidad.
+     *
+     * Solo se espera en reposo: en vigilancia quien llama a esto es la propia
+     * tarea de captura, y esperarse a si misma seria un abrazo mortal. */
+    if (!s_surveillance && !s_luma_wanted) {
+        uint32_t seq0 = s_thumb_seq;
+        s_frame_pedido = true;
+        /* Hasta 4 s: el ciclo son 2 s de reposo mas la captura y su calentamiento. */
+        for (int i = 0; i < 80 && s_thumb_seq == seq0; i++) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        if (s_thumb_seq == seq0) {
+            ESP_LOGW(TAG, "la camara no ha dado un fotograma nuevo a tiempo; "
+                          "NO sirvo una foto vieja");
+            s_frame_pedido = false;
+            return false;
+        }
+    }
+
     if (s_jpeg_mutex) xSemaphoreTake(s_jpeg_mutex, portMAX_DELAY);
     bool ok = false;
 
@@ -595,7 +632,6 @@ static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
 #define CAM_WARMUP_MS      25    /* ~30 fps durante la rafaga */
 static volatile int s_warmup = CAM_WARMUP_FRAMES;   /* tambien al arrancar */
 
-static volatile bool s_surveillance = false;
 static volatile bool s_mot_reset    = false;
 static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
 
@@ -797,6 +833,13 @@ static void vig_sd_drain_task(void *arg)
     }
 }
 
+void camera_set_luma_wanted(bool on)
+{
+    s_luma_wanted = on;
+    ESP_LOGI(TAG, "luminosidad ambiente %s", on ? "PEDIDA (se captura)"
+                                                : "no la pide nadie (camara en reposo)");
+}
+
 void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
@@ -943,6 +986,29 @@ static void camera_stream_task(void *arg)
         if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) esp_task_wdt_reset();
         bool surv = s_surveillance;
 
+        /* NADIE NECESITA LA IMAGEN -> no se captura.
+         *
+         * Hasta el 24-ago-2026 se cogia un fotograma cada 2 s pasara lo que
+         * pasara, para alimentar el auto-brillo... que esta DESACTIVADO en
+         * main.c (s_auto_brightness = false, con su comentario explicando por
+         * que). O sea: la camara y su DMA trabajando 24 h al dia, en un
+         * vehiculo que va con baterias, para un dato que no lee nadie -- y
+         * peleandose de paso con la SD, que es el conflicto conocido.
+         *
+         * Sin DQBUF los buffers del driver se llenan y el GDMA se para solo por
+         * contrapresion (ver la nota de abajo), que es justo el estado en
+         * reposo que interesa. Al volver a hacer falta, se recalibra la
+         * exposicion como en el arranque, porque el primer buffer que salga
+         * sera viejo. */
+        if (!surv && !s_luma_wanted && !s_frame_pedido) {
+            if (s_luma_valid) {
+                s_luma_valid = false;      /* que nadie use una lectura vieja */
+                s_warmup = CAM_WARMUP_FRAMES;
+            }
+            vTaskDelay(pdMS_TO_TICKS(CAM_IDLE_MS));
+            continue;
+        }
+
         /* NOTA: el GDMA de la camara solo se reactiva al QBUF (que libera un buffer);
          * mientras tenemos un buffer fuera (DQBUF->proceso) el GDMA esta PARADO por
          * contrapresion. Por eso NO tomamos el bus aqui: DQBUF, proceso, debayer y el
@@ -977,6 +1043,8 @@ static void camera_stream_task(void *arg)
                 int back = (s_thumb_act == 0) ? 1 : 0;
                 if (downscale_rgb(buf[b.index], b.bytesused, s_thumb[back])) {
                     s_thumb_act = back;   /* publicar */
+                    s_thumb_seq++;
+                    s_frame_pedido = false;   /* si alguien lo pidio, ya lo tiene */
                 }
             }
 

@@ -62,6 +62,11 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
  * satura con la camara+C6). Se ven por HTTP en /vigilancia. Lo llama el modo ausente. */
 void camera_set_surveillance(bool on);
 
+/* Dice si alguien necesita la LUMINOSIDAD del ambiente (el auto-brillo). Con
+ * esto en false y sin vigilancia, la camara deja de capturar: se ahorra el
+ * fotograma cada 2 s y el bus queda libre para la SD. */
+void camera_set_luma_wanted(bool on);
+
 /* Anillo de capturas de vigilancia en RAM (servido por el HTTP /vigilancia). */
 #include <time.h>
 /* Lista las capturas (mas nueva primero). Rellena ids/ts/lens hasta max -> count. */
