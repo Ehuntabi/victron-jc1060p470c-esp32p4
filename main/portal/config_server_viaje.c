@@ -59,6 +59,7 @@ static const char *TAG = "viaje_srv";
 #define NVS_T_PEAJE     "t_peaje"
 #define NVS_T_BOMBONA   "t_bombona"
 #define NVS_T_MANTEN    "t_manten"
+#define NVS_T_AGUA      "t_agua"     /* vaciados y llenados de agua */
 #define NVS_T_PARADAS   "t_paradas"
 #define NVS_T_MONEDA    "t_moneda"    /* la primera vista */
 #define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
@@ -233,6 +234,23 @@ static void totales_sumar(const char *tipo, const cJSON *datos)
         nvs_set_d(h, NVS_T_BOMBONA, nvs_get_d(h, NVS_T_BOMBONA) + IMPORTE_DE("precio"));
     } else if (!strcmp(tipo, "mantenimiento")) {
         nvs_set_d(h, NVS_T_MANTEN, nvs_get_d(h, NVS_T_MANTEN) + IMPORTE_DE("coste"));
+    } else if (!strcmp(tipo, "itv")) {
+        /* Va al saco del mantenimiento y no a uno propio: es un gasto del
+         * vehiculo, sale una vez al ano y una linea suya en el resumen estaria
+         * a cero en todos los viajes menos uno. */
+        nvs_set_d(h, NVS_T_MANTEN, nvs_get_d(h, NVS_T_MANTEN) + IMPORTE_DE("precio"));
+    } else if (!strcmp(tipo, "agua")) {
+        /* Los TRES importes al mismo total: en el resumen interesa lo que se ha
+         * ido en aguas, y el desglose de cual fue el vaciado y cual el llenado
+         * ya esta en aguas.csv. */
+        /* De uno en uno y NO en la misma suma: IMPORTE_DE asigna a 'ji', y tres
+         * asignaciones a la misma variable dentro de una expresion no tienen
+         * orden definido (el compilador lo para en seco: -Wsequence-point). */
+        double t = nvs_get_d(h, NVS_T_AGUA);
+        t += IMPORTE_DE("precio_grises");
+        t += IMPORTE_DE("precio_wc");
+        t += IMPORTE_DE("precio_agua");
+        nvs_set_d(h, NVS_T_AGUA, t);
     } else if (!strcmp(tipo, "parada")) {
         uint32_t np = 0;
         nvs_get_u32(h, NVS_T_PARADAS, &np);
@@ -251,6 +269,7 @@ static void totales_borrar(void)
     nvs_erase_key(h, NVS_T_LITROS);  nvs_erase_key(h, NVS_T_COMBUS);
     nvs_erase_key(h, NVS_T_PEAJE);   nvs_erase_key(h, NVS_T_BOMBONA);
     nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
+    nvs_erase_key(h, NVS_T_AGUA);
     nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
     nvs_commit(h);
     nvs_close(h);
@@ -335,7 +354,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
 static void escribir_resumen(const char *carpeta)
 {
     nvs_handle_t h;
-    double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0;
+    double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0, agua = 0;
     uint32_t paradas = 0;
     uint64_t inicio = 0;
     uint8_t varias = 0;
@@ -346,6 +365,7 @@ static void escribir_resumen(const char *carpeta)
         peaje   = nvs_get_d(h, NVS_T_PEAJE);
         bombona = nvs_get_d(h, NVS_T_BOMBONA);
         manten  = nvs_get_d(h, NVS_T_MANTEN);
+        agua    = nvs_get_d(h, NVS_T_AGUA);
         nvs_get_u32(h, NVS_T_PARADAS, &paradas);
         nvs_get_u64(h, NVS_T_INICIO, &inicio);
         nvs_get_u8(h, NVS_T_VARIAS, &varias);
@@ -379,8 +399,10 @@ static void escribir_resumen(const char *carpeta)
     fprintf(f, "  Peajes ........ %8.2f\n", peaje);
     fprintf(f, "  Gas ........... %8.2f\n", bombona);
     fprintf(f, "  Mantenimiento . %8.2f\n", manten);
+    fprintf(f, "  Aguas ......... %8.2f\n", agua);
     fprintf(f, "  ----------------------\n");
-    fprintf(f, "  TOTAL ......... %8.2f\n", combus + peaje + bombona + manten);
+    fprintf(f, "  TOTAL ......... %8.2f\n",
+            combus + peaje + bombona + manten + agua);
     if (varias) {
         /* Sumar euros con francos da un numero que parece bueno y no lo es. */
         fprintf(f, "\n  OJO: hubo mas de una moneda en este viaje.\n");
