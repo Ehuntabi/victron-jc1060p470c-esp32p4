@@ -4,6 +4,7 @@
 #include "camera.h"          /* camera_sd_bus_lock: serializar el barrido con la camara */
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>        /* rmdir: borrar la carpeta de una sesion de vigilancia */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -107,12 +108,88 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
     return hits;
 }
 
+/* ── Fotos de vigilancia ──────────────────────────────────────────────────
+ *
+ * No son ficheros diarios sino CARPETAS DE SESION: cada vez que se activa el
+ * modo ausente se crea "/sdcard/vigilancia/AAAAMMDD_HHMMSS/" con hasta 300
+ * .jpg dentro (unos 60-120 KB cada uno, o sea hasta ~35 MB por sesion). El tope
+ * es POR SESION y las sesiones no tienen limite: nada las borraba nunca, y la
+ * tarjeta acabaria llena -- y con ella el cuaderno de viaje (auditoria del
+ * 24-ago-2026; retencion elegida por el usuario: 60 dias, la misma que el
+ * resto).
+ *
+ * Son pruebas de un allanamiento, asi que 60 dias y no menos: si a los dos
+ * meses no las has mirado, ya no las vas a mirar. */
+#define VIG_DIR "/sdcard/vigilancia"
+
+static time_t parse_sesion_date(const char *nombre)
+{
+    int y = 0, mo = 0, d = 0, hh = 0, mi = 0, ss = 0, n = 0;
+    if (sscanf(nombre, "%4d%2d%2d_%2d%2d%2d%n", &y, &mo, &d, &hh, &mi, &ss, &n) != 6)
+        return 0;
+    if (n == 0 || nombre[n] != '\0') return 0;   /* el nombre es EXACTAMENTE eso */
+    if (y < 2024 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return 0;
+    struct tm tm = {0};
+    tm.tm_year = y - 1900; tm.tm_mon = mo - 1; tm.tm_mday = d;
+    tm.tm_hour = hh; tm.tm_min = mi; tm.tm_sec = ss;
+    return mktime(&tm);
+}
+
+static int borrar_sesiones_vigilancia(int max_days)
+{
+    time_t now = time(NULL);
+    if (now < 1700000000) return 0;          /* sin fecha fiable no se borra nada */
+    int effective_max = (max_days < 2) ? 2 : max_days;
+    time_t cutoff = now - (time_t)effective_max * 86400;
+
+    if (!camera_sd_bus_lock(2000)) {
+        ESP_LOGW(TAG, "vigilancia: tarjeta ocupada, lo dejo para la proxima");
+        return 0;
+    }
+    DIR *dp = opendir(VIG_DIR);
+    if (!dp) { camera_sd_bus_unlock(); return 0; }
+
+    int borradas = 0;
+    struct dirent *ent;
+    while ((ent = readdir(dp)) != NULL) {
+        time_t fecha = parse_sesion_date(ent->d_name);
+        if (fecha == 0 || fecha >= cutoff) continue;
+
+        char sesion[128];
+        snprintf(sesion, sizeof(sesion), "%s/%s", VIG_DIR, ent->d_name);
+
+        /* Una carpeta no se borra con contenido: primero los .jpg. */
+        DIR *sd = opendir(sesion);
+        if (sd) {
+            struct dirent *f;
+            while ((f = readdir(sd)) != NULL) {
+                if (f->d_name[0] == '.') continue;
+                char ruta[256];
+                snprintf(ruta, sizeof(ruta), "%s/%s", sesion, f->d_name);
+                remove(ruta);
+            }
+            closedir(sd);
+        }
+        if (rmdir(sesion) == 0) {
+            borradas++;
+            ESP_LOGI(TAG, "vigilancia: borrada la sesion %s (mas de %d dias)",
+                     ent->d_name, effective_max);
+        } else {
+            ESP_LOGW(TAG, "vigilancia: no he podido borrar %s", sesion);
+        }
+    }
+    closedir(dp);
+    camera_sd_bus_unlock();
+    return borradas;
+}
+
 int log_cleanup_run_now(int max_days_keep)
 {
     int total = 0;
     for (size_t i = 0; i < NUM_DIRS; ++i) {
         total += process_dir(DIRS[i], max_days_keep, false, false);
     }
+    total += borrar_sesiones_vigilancia(max_days_keep);
     if (total > 0) ESP_LOGI(TAG, "Borrados %d ficheros antiguos", total);
     return total;
 }
