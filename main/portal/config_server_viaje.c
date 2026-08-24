@@ -60,6 +60,7 @@ static const char *TAG = "viaje_srv";
 #define NVS_T_BOMBONA   "t_bombona"
 #define NVS_T_MANTEN    "t_manten"
 #define NVS_T_AGUA      "t_agua"     /* vaciados y llenados de agua */
+#define NVS_T_ALOJA     "t_aloja"    /* noches pagadas: areas y campings */
 #define NVS_T_PARADAS   "t_paradas"
 #define NVS_T_MONEDA    "t_moneda"    /* la primera vista */
 #define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
@@ -255,6 +256,22 @@ static void totales_sumar(const char *tipo, const cJSON *datos)
         uint32_t np = 0;
         nvs_get_u32(h, NVS_T_PARADAS, &np);
         nvs_set_u32(h, NVS_T_PARADAS, np + 1);
+    } else if (!strcmp(tipo, "pernocta")) {
+        /* Cuenta como parada -- lo es -- y ademas paga. */
+        uint32_t np = 0;
+        nvs_get_u32(h, NVS_T_PARADAS, &np);
+        nvs_set_u32(h, NVS_T_PARADAS, np + 1);
+
+        /* El precio que manda el satelite es POR NOCHE (o por 24 h), que es lo
+         * que se anuncia a la entrada. Lo que cuesta la estancia hay que
+         * multiplicarlo aqui. */
+        double precio = IMPORTE_DE("precio");
+        const cJSON *jn = cJSON_GetObjectItem(datos, "noches");
+        double noches = cJSON_IsNumber(jn) ? jn->valuedouble : 1.0;
+        /* Llegar y marcharse el mismo dia son cero noches de calendario, pero
+         * el area se cobra igual: por debajo de una no se baja. */
+        if (noches < 1.0) noches = 1.0;
+        nvs_set_d(h, NVS_T_ALOJA, nvs_get_d(h, NVS_T_ALOJA) + precio * noches);
     }
     #undef IMPORTE_DE
 
@@ -269,7 +286,7 @@ static void totales_borrar(void)
     nvs_erase_key(h, NVS_T_LITROS);  nvs_erase_key(h, NVS_T_COMBUS);
     nvs_erase_key(h, NVS_T_PEAJE);   nvs_erase_key(h, NVS_T_BOMBONA);
     nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
-    nvs_erase_key(h, NVS_T_AGUA);
+    nvs_erase_key(h, NVS_T_AGUA);   nvs_erase_key(h, NVS_T_ALOJA);
     nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
     nvs_commit(h);
     nvs_close(h);
@@ -355,6 +372,7 @@ static void escribir_resumen(const char *carpeta)
 {
     nvs_handle_t h;
     double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0, agua = 0;
+    double aloja = 0;
     uint32_t paradas = 0;
     uint64_t inicio = 0;
     uint8_t varias = 0;
@@ -366,6 +384,7 @@ static void escribir_resumen(const char *carpeta)
         bombona = nvs_get_d(h, NVS_T_BOMBONA);
         manten  = nvs_get_d(h, NVS_T_MANTEN);
         agua    = nvs_get_d(h, NVS_T_AGUA);
+        aloja   = nvs_get_d(h, NVS_T_ALOJA);
         nvs_get_u32(h, NVS_T_PARADAS, &paradas);
         nvs_get_u64(h, NVS_T_INICIO, &inicio);
         nvs_get_u8(h, NVS_T_VARIAS, &varias);
@@ -400,9 +419,10 @@ static void escribir_resumen(const char *carpeta)
     fprintf(f, "  Gas ........... %8.2f\n", bombona);
     fprintf(f, "  Mantenimiento . %8.2f\n", manten);
     fprintf(f, "  Aguas ......... %8.2f\n", agua);
+    fprintf(f, "  Alojamiento ... %8.2f\n", aloja);
     fprintf(f, "  ----------------------\n");
     fprintf(f, "  TOTAL ......... %8.2f\n",
-            combus + peaje + bombona + manten + agua);
+            combus + peaje + bombona + manten + agua + aloja);
     if (varias) {
         /* Sumar euros con francos da un numero que parece bueno y no lo es. */
         fprintf(f, "\n  OJO: hubo mas de una moneda en este viaje.\n");
