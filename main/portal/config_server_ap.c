@@ -172,23 +172,34 @@ static void cfg_lifecycle_task(void *arg)
 
         case CFG_JOB_STOP_HTTP: {
             if (!config_server_is_running()) break;   /* ya parado */
-            /* El mini C6 esta SIEMPRE asociado al AP (recibe la telemetria UDP por
-             * broadcast), asi que "hay algun cliente" contaria SIEMPRE al mini y el
-             * portal no se apagaria nunca (testigo verde fijo, se pierde el ahorro).
-             * Mantenemos el portal vivo solo si hay ALGUN cliente ADEMAS del mini (el
-             * movil con la app): es decir, >= 2 STAs asociados. Si lo apagaramos con el
-             * movil aun asociado, este no genera un nuevo STA_CONNECTED y el portal no
-             * volveria a arrancar solo -> "conectado pero sin datos". La actividad HTTP
-             * tambien lo mantiene vivo aparte, via ap_off_timer_kick en cada peticion. */
+            /* CON ALGUIEN ASOCIADO NO SE PARA. Un solo cliente basta.
+             *
+             * Antes hacian falta DOS: el satelite viejo (el C6) estaba siempre
+             * asociado y solo RECIBIA telemetria UDP, asi que contarlo habria
+             * dejado el portal encendido para siempre. Se exigia un segundo
+             * cliente -- el movil con la app -- para mantenerlo vivo.
+             *
+             * Esa cuenta dejo de valer con la 3,5" (24-ago-2026): ese satelite
+             * SI habla por HTTP, le manda a la P4 los apuntes del cuaderno. Con
+             * el servidor apagado no puede entregarlos, y como el auto-off solo
+             * se rearma con peticiones HTTP o con un STA_CONNECTED nuevo -- y el
+             * satelite ya esta asociado -- la cola NO SE VACIA NUNCA. Sintoma:
+             * "2 sin enviar" fijo en la pantalla de la cabina, telemetria
+             * llegando con normalidad y "Connection reset by peer" al entregar.
+             * Solo se arreglaba reiniciando la P4.
+             *
+             * El ahorro se conserva igual: la 3,5" se apaga con el contacto, asi
+             * que con el vehiculo parado no queda nadie asociado y el portal se
+             * apaga a los 15 min como siempre. */
             wifi_sta_list_t stas = { 0 };
             esp_err_t err = esp_wifi_ap_get_sta_list(&stas);
-            if (err != ESP_OK || stas.num >= 2) {
+            if (err != ESP_OK || stas.num >= 1) {
                 /* err != ESP_OK: no pudimos consultar (glitch del RPC a la C6) -> por
                  * seguridad asumimos que puede haber alguien y seguimos vivos. */
                 ap_off_timer_kick();
                 break;
             }
-            ESP_LOGI(TAG, "Auto-off: sin clientes (solo el mini), parando HTTP server");
+            ESP_LOGI(TAG, "Auto-off: nadie asociado, parando HTTP server");
             cfg_http_stop();
             /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
             break;
