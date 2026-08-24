@@ -363,17 +363,34 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
 
     char dir[160], nombre[128];
     snprintf(dir, sizeof(dir), "/sdcard/viajes/%s", v);
+
+    /* Los tres stat de aqui tocan la tarjeta, asi que van BAJO EL CERROJO como
+     * todo lo demas de este fichero. Estaban sueltos (24-ago-2026): si la camara
+     * estaba con su GDMA justo en ese instante, es la receta del "DMA timeout
+     * 0x107" y la SD pillada -- el mismo fallo de julio, en el unico sitio del
+     * fichero donde se habia colado. Se hace un solo lock para los tres en vez
+     * de tres seguidos: son operaciones de microsegundos y asi la camara no se
+     * mete entre medias. */
     struct stat st;
-    if (stat(dir, &st) != 0) {
+    bool existe, incompleto, cerrado;
+    char marca[200];
+    if (!camera_sd_bus_lock(3000)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        httpd_resp_sendstr(req, "La tarjeta esta ocupada. Prueba otra vez en unos segundos.");
+        return ESP_OK;
+    }
+    existe = (stat(dir, &st) == 0);
+    snprintf(marca, sizeof(marca), "%s/INCOMPLETO.txt", dir);
+    incompleto = existe && (stat(marca, &st) == 0);
+    snprintf(marca, sizeof(marca), "%s/resumen.txt", dir);
+    cerrado = existe && (stat(marca, &st) == 0);
+    camera_sd_bus_unlock();
+
+    if (!existe) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "ese viaje no existe");
         return ESP_FAIL;
     }
-
-    char marca[200];
-    snprintf(marca, sizeof(marca), "%s/INCOMPLETO.txt", dir);
-    bool incompleto = (stat(marca, &st) == 0);
-    snprintf(marca, sizeof(marca), "%s/resumen.txt", dir);
-    bool cerrado = (stat(marca, &st) == 0);
 
     if (!cerrado) {
         httpd_resp_set_status(req, "409 Conflict");
