@@ -173,14 +173,15 @@ static bool diario_en(const char *carpeta, const char *cuando,
  * el fin llega por la cola pero su hora real la lleva dentro el propio evento
  * de cierre del satelite... que hoy no la manda, asi que de momento es la de
  * recepcion. Se afina en la fase 4, junto con el resumen). */
-static void diario(const char *carpeta, const char *que, const char *detalle)
+/* Devuelve si la linea ha entrado; ver la nota de diario_en(). */
+static bool diario(const char *carpeta, const char *que, const char *detalle)
 {
     time_t now = time(NULL);
     struct tm tm_l;
     localtime_r(&now, &tm_l);
     char cuando[20];
     strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", &tm_l);
-    diario_en(carpeta, cuando, que, detalle);
+    return diario_en(carpeta, cuando, que, detalle);
 }
 
 /* ── Totales del viaje ────────────────────────────────────────────────────── */
@@ -390,7 +391,10 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
 
 /* resumen.txt: lo que uno quiere saber al volver, en castellano llano y no en
  * columnas. Los CSV ya estan ahi para las cuentas finas. */
-static void escribir_resumen(const char *carpeta)
+/* Devuelve si el resumen ha llegado a la tarjeta. Cerrar un viaje SIN resumen y
+ * contestar que si es dejar al usuario con un viaje que cree cerrado y sin las
+ * cuentas -- y sin enterarse hasta que lo descargue meses despues. */
+static bool escribir_resumen(const char *carpeta)
 {
     nvs_handle_t h;
     double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0, agua = 0;
@@ -418,7 +422,7 @@ static void escribir_resumen(const char *carpeta)
     char ruta[RUTA_MAX];
     snprintf(ruta, sizeof(ruta), "%s/resumen.txt", carpeta);
     FILE *f = fopen(ruta, "w");
-    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return; }
+    if (!f) { ESP_LOGE(TAG, "no puedo escribir %s", ruta); return false; }
 
     time_t now = time(NULL);
     struct tm tm_l;
@@ -468,7 +472,9 @@ static void escribir_resumen(const char *carpeta)
      * el propio fichero en vez de omitirlo, para que no parezca que el viaje fue
      * de 0 km. */
     fprintf(f, "\nKilometros: no disponibles (la P4 aun no tiene GPS).\n");
-    fclose(f);
+    /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
+     * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. */
+    return fclose(f) == 0;
 }
 
 /* Compara lo que dice el satelite que genero con lo que esta P4 ha aplicado.
@@ -532,9 +538,9 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_sendstr(req, "tarjeta ocupada");
         return ESP_OK;
     }
-    diario(carpeta, "fin", "");
+    bool escrito = diario(carpeta, "fin", "");
     uint32_t faltan = comprobar_completo(j, carpeta);
-    escribir_resumen(carpeta);
+    escrito = escribir_resumen(carpeta) && escrito;
     if (faltan) {
         FILE *rf; char rr[RUTA_MAX];
         snprintf(rr, sizeof(rr), "%s/resumen.txt", carpeta);
@@ -548,6 +554,19 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
     }
     camera_sd_bus_unlock();
+
+    if (!escrito) {
+        /* El viaje NO se cierra: sin resumen no esta cerrado del todo, y
+         * cerrarlo aqui dejaria al usuario creyendo que si. 507 es 5xx, asi que
+         * el satelite reintentara el fin; mientras tanto el viaje sigue abierto
+         * en la P4 y, si se empieza otro, sale la pantalla de "la P4 tiene un
+         * viaje abierto" para decidir. */
+        ESP_LOGE(TAG, "NO he podido escribir el cierre de %s: la tarjeta esta "
+                      "llena o falla. El viaje sigue ABIERTO", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido escribir el cierre");
+        return ESP_OK;
+    }
 
     estado_set(NULL, id);
     ESP_LOGI(TAG, "VIAJE CERRADO: %s", carpeta);
