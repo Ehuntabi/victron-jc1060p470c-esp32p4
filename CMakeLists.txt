@@ -26,6 +26,19 @@ if(NOT PROJECT_VER)
     set(PROJECT_VER "v?")
 endif()
 
+# Y que se VUELVA A CALCULAR cuando cambie el git. Sin esto la version se congela
+# en la del ultimo `idf.py reconfigure`: se compila y se graba, pero el About
+# sigue enseñando la de hace veinte commits. Miente con autoridad -- creerias
+# tener instalada la version publicada (visto el 24-ago-2026: la P4 decia v1.10.0
+# llevando once commits por encima de esa etiqueta).
+#
+# `index` cambia al hacer commit y `HEAD` al cambiar de rama o de tag. Ojo: un
+# fichero tocado y SIN anadir no dispara el reconfigure, asi que el sufijo
+# `-dirty` puede tardar en aparecer.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_LIST_DIR}/.git/HEAD"
+             "${CMAKE_CURRENT_LIST_DIR}/.git/index")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Con -O2, el analisis de GCC saca -Wstringop-truncation / -Wformat-truncation en

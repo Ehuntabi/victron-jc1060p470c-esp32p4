@@ -852,9 +852,28 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 {
     REQUIRE_AUTH_STRICT(req);
 
-    /* 1 KB: el cuerpo mas grande de la fase 1 son unos 90 bytes. Los registros
-     * de la fase 3 llevaran mas campos, pero siguen siendo cuatro numeros. */
+    /* 1 KB. El comentario de antes decia "unos 90 bytes, cuatro numeros": eso era
+     * la fase 1. Hoy el cuerpo mas grande es la PERNOCTA -- sitio, horas,
+     * noches, precio, seis servicios con su importe, valoracion, pegas e
+     * inclinacion -- y son 693 bytes MEDIDOS.
+     *
+     * Va atado a CUERPO_MAX de viaje_cola.c en el satelite (896): el satelite no
+     * puede mandar mas de eso, asi que con 1024 aqui sobra margen. SI ALGUN DIA
+     * SE SUBE ALLI, HAY QUE SUBIRLO AQUI TAMBIEN.
+     *
+     * Y si aun asi llega algo mas grande, se rechaza ENTERO y se dice. Antes se
+     * recortaba en silencio: el JSON quedaba cortado a medias, cJSON no lo
+     * parseaba, se devolvia "400 json invalido" y el satelite lo tomaba por un
+     * apunte invalido y lo DESCARTABA. O sea, un dato perdido en silencio
+     * disfrazado de dato malo. */
     char body[1024];
+    if ((int)req->content_len >= (int)sizeof(body)) {
+        ESP_LOGE(TAG, "apunte de %d bytes: NO CABE en %d, se rechaza entero",
+                 (int)req->content_len, (int)sizeof(body));
+        httpd_resp_set_status(req, "413 Payload Too Large");
+        httpd_resp_sendstr(req, "apunte demasiado largo");
+        return ESP_OK;
+    }
     int total = req->content_len < (int)sizeof(body) - 1
               ? req->content_len : (int)sizeof(body) - 1;
     int got = 0;
