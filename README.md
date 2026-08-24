@@ -111,7 +111,9 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 #### Cámara y modo vigilancia (autocaravana)
 - Sensor **OmniVision OV02C10** por MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), driver propio portado del kernel Linux; **ISP por hardware** del ESP32-P4 (revelado del RAW con perfil IPA, no bypass) y **JPEG por hardware**. Comparte el bus I²C (SDA=7/SCL=8) con touch/RTC; sin pines dedicados.
-- Captura **a demanda** (1 frame cada ~2 s), no streaming continuo — así el DMA de la cámara no bloquea la SD. En uso normal sirve para **auto-brillo** (mide la luz ambiente).
+- **Solo captura si alguien necesita la imagen**: vigilancia encendida, o el auto-brillo pidiendo la luz ambiente (`camera_set_luma_wanted`). En reposo no hace DQBUF, los buffers del driver se llenan y **el GDMA se para solo por contrapresión** — que es justo lo que deja libre la SD. Nunca streaming continuo.
+  - Hasta el 24-ago-2026 cogía un fotograma **cada 2 s pasara lo que pasara**, para alimentar un auto-brillo que está DESACTIVADO en `main.c` desde hace tiempo: la cámara y su DMA trabajando 24 h al día, en un vehículo con baterías, para un dato que no leía nadie.
+  - **La foto del portal no captura**: monta el JPEG con la última miniatura publicada. Por eso, con la cámara en reposo, `camera_snapshot_jpeg()` la despierta, espera un fotograma NUEVO (hasta 4 s) y, si no llega, **devuelve fallo en vez de servir una foto vieja**.
 - `GET /snapshot`: última imagen en JPEG (recortada 960x528, calidad 78, ~80-150 KB).
 - **Modo ausente / vigilancia**: se activa desde *Ajustes → Autocaravana* o con `GET /ausente?on` (cuenta atrás de 10 s y apaga la pantalla). Detección de movimiento por rejilla de luminancia 32x18; al detectar guarda una foto JPEG en **`/sdcard/vigilancia`**, así que **las fotos se conservan al reiniciar** (tope de 300 por sesión, anti-runaway). Galería en `GET /vigilancia` (y `/vigilancia/<id>` para cada foto); descarga completa en `GET /data/vigilancia.tar`. Se sale con **4 toques en cualquier esquina** (dentro de 3 s) o `GET /ausente?off`. *(Vídeo H.264: pendiente.)*
 - **Cerrojo cámara↔SD** (`camera_sd_bus_lock`): cámara y SDMMC comparten GDMA; los escritores de SD (datalogger) serializan su E/S con este mutex para no provocar reinicios por INT_WDT.
@@ -151,6 +153,11 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Flush a SD periódico de frigo y batería; flush adicional antes de cualquier reset programado.
 - Backup horario del epoch del sistema en NVS (`rtc_backup/epoch`).
 
+#### Qué se borra solo de la tarjeta
+- **Logs diarios a 60 días** (`log_cleanup.c`): `/sdcard/frigo`, `/sdcard/bateria` y `/sdcard/ne185v` (este último escribe una línea por minuto y no lo limpiaba nadie hasta el 24-ago-2026). Solo borra ficheros con el nombre exacto `AAAA-MM-DD.csv`, y **nunca hoy ni ayer** aunque se le pida menos retención, para no chocar con una escritura en curso. Si el reloj no tiene fecha fiable, **aborta** en vez de borrar a ciegas.
+- **Fotos de vigilancia a 60 días**: son carpetas de sesión `/sdcard/vigilancia/AAAAMMDD_HHMMSS/` con hasta 300 JPEG dentro — unos 60-120 KB cada uno, o sea **hasta ~35 MB por sesión**. El tope de 300 es POR SESIÓN y las sesiones no tienen límite: nada las borraba, y al llenarse la tarjeta se lleva por delante el cuaderno de viaje. Retención elegida por el usuario; son pruebas de un allanamiento y por eso 60 días y no menos.
+- **NO se toca nunca**: `/sdcard/viajes`, `/sdcard/vehiculo` ni `/sdcard/config_backup`. Eso es justo lo que hay que conservar.
+
 #### RTC y hora
 - Zona horaria Europe/Madrid por defecto (CET/CEST), aplicada desde NVS al arrancar y preservada en el backup de configuración.
 - El RTC almacena hora local; `mktime` la interpreta con la TZ activa.
@@ -163,7 +170,8 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Hardware (IDF): TWDT 10 s + INT_WDT 500 ms, ambos con panic + reset al disparar.
 - Software (`/main/watchdog.c`): task monitor adicional que comprueba salud de LVGL cada 3 s; si el lock falla 3 veces consecutivas fuerza un reset controlado. También vigila por heartbeat las tareas de app (>10 s sin latido → reset). Grace period de 30 s al boot.
 - **A propósito NO hace flush a SD antes de ese reset**: si el cuelgue lo causa el propio subsistema SD/FAT (mutex retenido por una tarea muerta), el flush haría deadlock y el reset nunca ocurriría. Se prefiere perder el último bloque de muestras a no reiniciar.
-- Contador de resets por TWDT/INT_WDT/panic **y por watchdog SW** en NVS, visible en Settings → About junto al motivo del último reinicio. Un reset forzado por el monitor SW aparece como `Watchdog SW (UI congelada)` o `Watchdog SW (tarea muda)`, no como un genérico "Software".
+- **El motivo se traduce entero**: además de los de siempre, el P4 informa de USB (el reinicio de grabar por cable), JTAG, error de efuse, bajón de tensión y **bloqueo de CPU** (doble excepción). Hasta el 24-ago-2026 esos cinco salían como "Unknown" — el de bloqueo de CPU es un cuelgue de los gordos disfrazado de "no se sabe", y encima **no contaba** en el contador: la placa se reiniciaba sola sin dejar rastro.
+- Contador de resets por TWDT/INT_WDT/panic/bloqueo de CPU **y por watchdog SW** en NVS, visible en Settings → About junto al motivo del último reinicio. Un reset forzado por el monitor SW aparece como `Watchdog SW (UI congelada)` o `Watchdog SW (tarea muda)`, no como un genérico "Software".
 - **v1.4.4**: todo acceso a la SD se serializa con la cámara vía `camera_sd_bus_lock()` para evitar contención SDMMC → INT_WDT (recurrente en versiones previas). Los flushes periódicos de `datalogger`, `battery_history` y `ne185_vlog` tenían un `stat()` de comprobación de cabecera que se colaba FUERA de ese cerrojo — arreglado.
 - **v1.5.2**: la actualización OTA se reiniciaba a medias con cualquier versión, por contención de caché entre núcleos durante la escritura de flash (`spi_flash_op_block_func` bloqueando al núcleo que no escribe; si se alarga por carga concurrente, el TWDT lo detecta como colgado). `CONFIG_SPIRAM_XIP_FROM_PSRAM` mueve la ejecución del firmware a PSRAM para que ese bloqueo no le quite el código a ningún núcleo, más el margen del TWDT subido a 10 s.
 
@@ -305,7 +313,9 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 #### Camera & surveillance mode (camper)
 - **OmniVision OV02C10** sensor over MIPI-CSI (2 lanes, RAW10 1928x1092, ~37 fps), custom driver ported from the Linux kernel; **hardware ISP** on the ESP32-P4 (RAW development with an IPA profile, not bypassed) and **hardware JPEG**. Shares the I²C bus (SDA=7/SCL=8) with touch/RTC; no dedicated pins.
-- **On-demand** capture (1 frame every ~2 s), not continuous streaming — so the camera DMA doesn't block the SD. In normal use it drives **auto-brightness** (measures ambient light).
+- **It only captures when someone needs the image**: surveillance on, or auto-brightness asking for the ambient light (`camera_set_luma_wanted`). While idle it doesn't DQBUF, the driver buffers fill and **the GDMA stops on its own through backpressure** — which is exactly what frees the SD. Never continuous streaming.
+  - Until 2026-08-24 it grabbed a frame **every 2 s no matter what**, to feed an auto-brightness that has been DISABLED in `main.c` for a long time: the camera and its DMA working 24/7, in a battery-powered vehicle, for a value nobody read.
+  - **The portal snapshot doesn't capture**: it encodes the last published thumbnail. So with the camera idle, `camera_snapshot_jpeg()` wakes it, waits for a NEW frame (up to 4 s) and, if none arrives, **fails instead of serving a stale photo**.
 - `GET /snapshot`: latest image as JPEG (cropped 960x528, quality 78, ~80-150 KB).
 - **Away / surveillance mode**: enabled from *Settings → Motorhome* or via `GET /ausente?on` (10 s countdown, then the screen turns off). Motion detection via a 32x18 luminance grid; on a hit it stores a JPEG under **`/sdcard/vigilancia`**, so **photos survive a reboot** (capped at 300 per session as a runaway guard). Gallery at `GET /vigilancia` (and `/vigilancia/<id>` per photo); full download at `GET /data/vigilancia.tar`. Exit with **4 taps in any corner** (within 3 s) or `GET /ausente?off`. *(H.264 video: pending.)*
 - **Camera↔SD lock** (`camera_sd_bus_lock`): camera and SDMMC share GDMA; SD writers (datalogger) serialize their I/O with this mutex to avoid INT_WDT resets.
@@ -329,6 +339,11 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - **Trip computer** (`main/trip_computer.c`): user-resettable kWh and Ah charged/discharged + active hours. NVS persistence every 5 min.
 - Periodic SD flush of frigo and battery logs; extra flush before any scheduled reset.
 - Hourly NVS backup of the system epoch (`rtc_backup/epoch`).
+
+#### What gets deleted from the card automatically
+- **Daily logs after 60 days** (`log_cleanup.c`): `/sdcard/frigo`, `/sdcard/bateria` and `/sdcard/ne185v` (the latter writes one line per minute and nothing cleaned it until 2026-08-24). Only files named exactly `YYYY-MM-DD.csv`, and **never today or yesterday** even if asked for a shorter retention, so it can't race an in-flight write. If the clock has no trustworthy date it **aborts** instead of deleting blindly.
+- **Surveillance photos after 60 days**: session folders `/sdcard/vigilancia/YYYYMMDD_HHMMSS/` holding up to 300 JPEGs — 60-120 KB each, i.e. **up to ~35 MB per session**. The 300 cap is PER SESSION and sessions were unbounded: nothing ever deleted them, and a full card takes the trip notebook down with it.
+- **Never touched**: `/sdcard/viajes`, `/sdcard/vehiculo` or `/sdcard/config_backup`. That's exactly what must be kept.
 
 #### RTC and time
 - Europe/Madrid timezone by default (CET/CEST), applied from NVS at boot and preserved in the configuration backup.
