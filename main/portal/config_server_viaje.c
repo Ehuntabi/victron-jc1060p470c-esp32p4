@@ -28,6 +28,7 @@
 #include "cJSON.h"
 #include "data/dashboard_state.h"
 #include "data/trip_computer.h"
+#include "gps/gps.h"
 #include "frigo.h"
 #include "ne185/ne185.h"
 #include "esp_timer.h"
@@ -41,6 +42,11 @@
 #include <dirent.h>
 
 static const char *TAG = "viaje_srv";
+
+/* Definida abajo, con el resto de la telemetria del viaje. Se declara aqui
+ * porque el cierre del viaje (op_fin) tiene que bajar a la tarjeta los puntos
+ * de ruta que aun estan en RAM antes de dar el viaje por terminado. */
+static bool ruta_volcar(const char *carpeta);
 
 #define VIAJES_DIR      "/sdcard/viajes"
 /* Donde van los apuntes que NO son de un viaje: el historial del vehiculo.
@@ -556,6 +562,10 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
     bool escrito = diario(carpeta, "fin", "");
+    /* Lo que quede de ruta en memoria, a la tarjeta ANTES de cerrar. No condiciona
+     * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
+     * y dejar el viaje abierto por eso seria peor que el mal que evita. */
+    if (!ruta_volcar(carpeta)) ESP_LOGW(TAG, "quedan puntos de ruta sin escribir");
     uint32_t faltan = comprobar_completo(j, carpeta);
     escrito = escribir_resumen(carpeta) && escrito;
     if (faltan) {
@@ -809,6 +819,15 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
  * pinta una grafica decente sin llenar la tarjeta. */
 #define TELEMETRIA_MIN   5
 #define CONTADORES_MIN  60
+/* La ruta se apunta mucho mas a menudo que la telemetria porque son cosas
+ * distintas: la telemetria describe un ESTADO que cambia despacio (bateria,
+ * temperaturas), y la ruta describe un CAMINO. A 5 min y 100 km/h habria 8 km
+ * entre punto y punto: el mapa saldria cortando las curvas y los pueblos, mas
+ * una cuerda floja que un recorrido. */
+#define RUTA_SEG        30
+/* Metros que hay que haberse movido para apuntar otro punto. Parado no se
+ * apunta NADA: si no, una noche de camping deja 2.800 filas identicas. */
+#define RUTA_SALTO_KM   0.02
 
 static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
 {
@@ -878,6 +897,85 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     fclose(f);
 }
 
+/* Los puntos de la ruta se juntan en RAM y bajan a la tarjeta de golpe.
+ *
+ * Cada apertura de un fichero en FAT reescribe ademas la tabla de asignacion y
+ * la entrada del directorio, SIEMPRE en los mismos sectores. Escribir un punto
+ * cada 30 s serian unas mil aperturas en un dia de carretera, y encima seria el
+ * unico sitio del proyecto que va a pelo: el datalogger y el historico de
+ * bateria acumulan y vuelcan una vez por minuto, y el ne185_vlog aguanta hasta
+ * diez. Con el buffer, un dia de carretera son ~100 aperturas en vez de ~1000.
+ *
+ * Lo que se arriesga a cambio: un corte de corriente a lo bruto se lleva los
+ * puntos que aun no han bajado, como mucho los ultimos RUTA_BUFFER_N. Es la
+ * misma apuesta que ya hace la telemetria, y perder cinco minutos de traza no
+ * estropea el recorrido. */
+#define RUTA_BUFFER_N   10      /* 10 x 30 s = 5 min de traza en RAM (~320 bytes) */
+
+typedef struct {
+    char   cuando[20];
+    double lat, lon;
+    float  alt;
+    double km;
+} ruta_punto_t;
+
+static ruta_punto_t s_ruta[RUTA_BUFFER_N];
+static int          s_ruta_n;
+
+/* Baja a la tarjeta lo que haya pendiente. El caller tiene que traer ya tomado
+ * el cerrojo de la SD. Devuelve si ha quedado todo escrito. */
+static bool ruta_volcar(const char *carpeta)
+{
+    if (s_ruta_n == 0) return true;
+
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/ruta.csv", carpeta);
+    struct stat st;
+    bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
+
+    FILE *f = fopen(ruta, "a");
+    if (!f) return false;                  /* se reintenta en el siguiente tick */
+    if (nuevo) fprintf(f, "fecha_hora,latitud,longitud,altitud_m,km\n");
+    for (int i = 0; i < s_ruta_n; i++) {
+        /* Seis decimales son ~11 cm: de sobra, y no engorda el fichero. */
+        fprintf(f, "%s,%.6f,%.6f,%.0f,%.2f\n", s_ruta[i].cuando,
+                s_ruta[i].lat, s_ruta[i].lon, (double)s_ruta[i].alt, s_ruta[i].km);
+    }
+    if (fclose(f) != 0) return false;      /* tarjeta llena: NO se tiran los puntos */
+    s_ruta_n = 0;
+    return true;
+}
+
+/* Anota un punto de la ruta EN MEMORIA. Vuelca cuando se llena el buffer.
+ *
+ * NO decide por su cuenta si el vehiculo se mueve: se fia de los kilometros que
+ * ya lleva contados trip_computer, que es quien tiene los filtros (satelites
+ * minimos, deriva estando parado, saltos imposibles, re-anclaje al salir de un
+ * tunel). Repetir aqui ese criterio seria tener dos versiones de la verdad que
+ * acabarian discrepando. */
+static void fila_ruta(const char *carpeta, const struct tm *tm_l)
+{
+    static double km_ultimo = -1.0;
+
+    gps_data_t g;
+    gps_get(&g);
+    if (!g.hay_fix) return;
+
+    trip_computer_t t;
+    trip_computer_get(&t);
+    if (t.km < km_ultimo) km_ultimo = -1.0;   /* viaje nuevo: el contador se reseteo */
+    /* Primer punto del viaje: se apunta siempre, que es de donde saliste. */
+    if (km_ultimo >= 0.0 && (t.km - km_ultimo) < RUTA_SALTO_KM) return;
+    km_ultimo = t.km;
+
+    if (s_ruta_n < RUTA_BUFFER_N) {
+        ruta_punto_t *p = &s_ruta[s_ruta_n++];
+        strftime(p->cuando, sizeof(p->cuando), "%Y-%m-%d %H:%M:%S", tm_l);
+        p->lat = g.lat; p->lon = g.lon; p->alt = g.altitud_m; p->km = t.km;
+    }
+    if (s_ruta_n >= RUTA_BUFFER_N) ruta_volcar(carpeta);
+}
+
 /* Corre desde un esp_timer, no desde la tarea del portal: la telemetria tiene
  * que seguir cayendo aunque nadie toque el portal en todo el viaje. */
 static void tick_viaje_cb(void *arg)
@@ -891,16 +989,28 @@ static void tick_viaje_cb(void *arg)
     struct tm tm_l;
     localtime_r(&now, &tm_l);
 
-    static int64_t ultima_tel = 0, ultimo_cont = 0;
+    static int64_t ultima_tel = 0, ultimo_cont = 0, ultima_ruta = 0;
     int64_t ahora_us = esp_timer_get_time();
 
     bool toca_tel  = (ultima_tel  == 0) || (ahora_us - ultima_tel  >= (int64_t)TELEMETRIA_MIN * 60 * 1000000LL);
     bool toca_cont = (ultimo_cont == 0) || (ahora_us - ultimo_cont >= (int64_t)CONTADORES_MIN * 60 * 1000000LL);
-    if (!toca_tel && !toca_cont) return;
+    bool toca_ruta = (ultima_ruta == 0) || (ahora_us - ultima_ruta >= (int64_t)RUTA_SEG * 1000000LL);
+    if (!toca_tel && !toca_cont && !toca_ruta) return;
 
     if (!camera_sd_bus_lock(3000)) return;   /* ya se apuntara al siguiente */
     if (toca_tel)  { fila_telemetria(carpeta, &tm_l); ultima_tel  = ahora_us; }
     if (toca_cont) { fila_contadores(carpeta, &tm_l); ultimo_cont = ahora_us; }
+    /* El reloj de la ruta se adelanta toque o no: si estas parado, fila_ruta no
+     * apunta nada y no hay por que volver a preguntarlo antes de 30 s. */
+    if (toca_ruta) { fila_ruta(carpeta, &tm_l);       ultima_ruta = ahora_us; }
+    /* Y se vuelca con la telemetria aunque el buffer no este lleno: asi un
+     * trayecto corto no se queda esperando en RAM a que arranques otra vez, y
+     * lo que se puede perder en un corte esta acotado a los mismos 5 minutos
+     * que ya arriesga la telemetria. Va aqui dentro para aprovechar el cerrojo
+     * que ya esta tomado. */
+    if (toca_tel && !ruta_volcar(carpeta)) {
+        ESP_LOGW(TAG, "ruta.csv no se ha podido volcar; los puntos siguen en RAM");
+    }
     camera_sd_bus_unlock();
 }
 
@@ -909,11 +1019,13 @@ void viaje_telemetria_start(void)
     static esp_timer_handle_t t;
     const esp_timer_create_args_t args = { .callback = tick_viaje_cb, .name = "viaje_tick" };
     if (esp_timer_create(&args, &t) == ESP_OK) {
-        /* Se despierta cada minuto y el propio callback decide si toca escribir.
-         * Mas simple que dos timers, y el coste de mirar el reloj es nulo. */
-        esp_timer_start_periodic(t, 60 * 1000000ULL);
-        ESP_LOGI(TAG, "telemetria del viaje armada (cada %d min, contadores cada %d)",
-                 TELEMETRIA_MIN, CONTADORES_MIN);
+        /* Se despierta cada 30 s -- el paso mas corto, el de la ruta -- y el
+         * propio callback decide que toca. Antes era cada minuto; se bajo al
+         * anadir ruta.csv. Los otros dos siguen igual porque no miran el tick
+         * sino el tiempo transcurrido. */
+        esp_timer_start_periodic(t, (uint64_t)RUTA_SEG * 1000000ULL);
+        ESP_LOGI(TAG, "telemetria del viaje armada (cada %d min, contadores cada %d, ruta cada %d s)",
+                 TELEMETRIA_MIN, CONTADORES_MIN, RUTA_SEG);
     }
 }
 
