@@ -142,6 +142,19 @@ static const char *reason_to_str(esp_reset_reason_t r)
         case ESP_RST_DEEPSLEEP: return "Deep sleep wake";
         case ESP_RST_BROWNOUT:  return "Brown-out";
         case ESP_RST_SDIO:      return "SDIO";
+        /* Los cinco de abajo SI los da el P4 (esp_system/port/soc/esp32p4) y
+         * hasta el 24-ago-2026 salian todos como "Unknown". Dos molestan de
+         * verdad:
+         *   - USB: es el reset de grabar por el cable. Aparecia como "Unknown"
+         *     y daba mala espina sin motivo.
+         *   - BLOQUEO DE CPU: es una doble excepcion, o sea un cuelgue de los
+         *     gordos, y se disfrazaba de "no se sabe". Peor: tampoco contaba
+         *     como cuelgue (ver watchdog_init), asi que no dejaba rastro. */
+        case ESP_RST_USB:        return "USB (cable de grabar)";
+        case ESP_RST_JTAG:       return "JTAG";
+        case ESP_RST_EFUSE:      return "Error de efuse";
+        case ESP_RST_PWR_GLITCH: return "Bajon de tension";
+        case ESP_RST_CPU_LOCKUP: return "Bloqueo de CPU (doble excepcion)";
         case ESP_RST_UNKNOWN:   /* fall-through */
         default:                return "Unknown";
     }
@@ -201,9 +214,13 @@ esp_err_t watchdog_init(void)
 
     /* Si el ultimo reset fue por watchdog/panic (sintomas de cuelgue),
      * incrementamos el contador para diagnostico posterior. */
+    /* CPU_LOCKUP cuenta como cuelgue: es una doble excepcion, la peor forma de
+     * colgarse, y faltaba en esta lista -- se reiniciaba la placa sin dejar
+     * rastro en el contador. */
     bool is_wdt_reset = (r == ESP_RST_TASK_WDT ||
                          r == ESP_RST_INT_WDT ||
                          r == ESP_RST_WDT     ||
+                         r == ESP_RST_CPU_LOCKUP ||
                          r == ESP_RST_PANIC);
 
     s_reset_count = wd_load_counter_nvs();
