@@ -1,6 +1,11 @@
 # Joint SPL 145 Control (ex-VictronSolarDisplay) - Guition JC1060P470C_I
 
-Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4 · Último tag: **v1.6.6**
+Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
+
+> El último tag NO se escribe aquí: se consulta con `git describe --tags --match "v*.*.*"`.
+> Antes había un número fijo y llevaba doce versiones mintiendo (decía v1.6.6 estando
+> en la v1.11.18, visto el 24-ago-2026). Un dato que hay que acordarse de actualizar
+> a mano acaba engañando al que lo lea.
 
 > Antes de cualquier trabajo de código no trivial aplicar
 > [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
@@ -115,8 +120,12 @@ fallo igual, que es justo lo que pasó el 21-ago-2026.
 - components/config_storage/: persistencia general (Wi-Fi, screensaver, etc.)
 
 ## Pendientes activos
-1. **Ninguno del satélite 3.5"** — cerrado el 22-ago-2026: se vio con datos del
-   simulador y se ajustó la estética (`~/joint/35cabina`, tag `v1.0.1`).
+1. **Ninguno del satélite 3.5"** — el cuaderno de viaje está cerrado y en uso
+   (`~/joint/35cabina`). Su versión, también con `git describe` en ese repo.
+
+   Al día 24-ago-2026: los apuntes sueltos ya se envían y se suman en el
+   `resumen.txt`, la energía del viaje la abre y la cierra el propio viaje, y
+   la P4 guarda además los kilómetros y el recorrido (`ruta.csv`) por GPS.
 
    **Sobre el simulador**, que se usa para las capturas: además de inventar lo
    que se ve en pantalla, **escribe un día entero inventado** en
