@@ -125,12 +125,37 @@ if ! command -v gh >/dev/null 2>&1; then
 elif gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   echo "[ok] la Release $TAG ya existe, no la toco"
 else
-  if [ -f NOTAS.md ]; then
+  # Las notas SALEN DEL HISTORIAL, no de un fichero a mano.
+  #
+  # Aqui habia un "si existe NOTAS.md, usalo". NOTAS.md se escribio para la
+  # v1.5.5 y nadie volvio a tocarlo, asi que las CUARENTA releases siguientes se
+  # publicaron con el texto de la v1.5.5 (visto el 24-ago-2026). Un fichero que
+  # hay que acordarse de actualizar acaba mintiendo; el log no.
+  #
+  # NOTAS.md sigue valiendo como texto a medida, pero SOLO si su primera linea
+  # nombra esta version. Si habla de otra, se ignora y se avisa.
+  NOTAS_TMP="/tmp/notas-$TAG.md"
+  if [ -f NOTAS.md ] && head -1 NOTAS.md | grep -qF "$TAG"; then
     NOTAS=(--notes-file NOTAS.md)
   else
-    # El mensaje del tag, sin la cabecera que git le pone.
-    git tag -l --format='%(contents)' "$TAG" > /tmp/notas-$TAG.md
-    NOTAS=(--notes-file "/tmp/notas-$TAG.md")
+    if [ -f NOTAS.md ]; then
+      echo "[i] NOTAS.md habla de otra version, lo ignoro y uso el historial"
+    fi
+    ANTERIOR=$(git describe --tags --abbrev=0 --match "v*.*.*" "$TAG^" 2>/dev/null || true)
+    {
+      if [ -n "$ANTERIOR" ]; then
+        echo "Cambios desde $ANTERIOR:"
+        echo
+        git log --no-merges --format='- %s' "$ANTERIOR..$TAG"
+      else
+        echo "Primera version publicada."
+      fi
+      echo
+      echo "---"
+      echo "Firmware completo: SOLO para una placa virgen (borra los ajustes guardados)."
+      echo "Para actualizar: \`idf.py flash\` por cable, o el app-bin por Wi-Fi en /ota."
+    } > "$NOTAS_TMP"
+    NOTAS=(--notes-file "$NOTAS_TMP")
   fi
   echo "[..] publicando la Release en GitHub"
   gh release create "$TAG" -R "$REPO" \
