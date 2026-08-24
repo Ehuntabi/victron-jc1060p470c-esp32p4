@@ -19,7 +19,23 @@ static void bh_reset_for_new_day(void);
 static const char *TAG = "bathist";
 #define NVS_NS "bathist"
 #define BH_LOG_DIR "/sdcard/bateria"
-#define BH_FLUSH_INTERVAL_MS 60000
+/* 5 min y no 1 (24-ago-2026). Este era el que mas escribia de todo el aparato:
+ * muestrea cada 10 s, asi que en cada vuelco SIEMPRE tenia algo pendiente y
+ * abria el fichero 1.440 veces al dia, el 77% del total. Los demas escritores
+ * salen sin escribir cuando no hay nada nuevo, este no.
+ *
+ * No es cuestion de desgaste -- el volumen es ridiculo -- sino de exposicion:
+ * cada apertura es una ventana en la que un corte de corriente pilla la FAT a
+ * medias. A 5 min hay cinco veces menos ventanas, y ademas queda con el mismo
+ * criterio que la telemetria del viaje y la ruta.
+ *
+ * Cabe de sobra: el snapshot admite BH_FLUSH_SNAPSHOT_MAX (128) puntos por
+ * vuelco y a 10 s de muestreo 5 min son 30. Quedan ~21 min de margen antes de
+ * que el propio codigo empiece a avisar de backlog.
+ *
+ * Lo que se paga: un corte brusco se lleva hasta 5 min de historico en vez de
+ * 1. El grafico de 24 h vive en RAM y se pierde igual de todos modos. */
+#define BH_FLUSH_INTERVAL_MS 300000
 
 typedef struct {
     bh_point_t points[BH_POINTS];
