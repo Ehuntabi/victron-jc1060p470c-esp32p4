@@ -184,6 +184,14 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
 static bool vig_sd_name_safe(const char *s)
 {
     if (strstr(s, "..")) return false;
+    /* Ni un ".." en todo el nombre. El filtro de abajo deja pasar el punto y una
+     * barra -- hacen falta para "sesion/AAAAMMDD_HHMMSS_001.jpg" -- y con eso
+     * solo, un nombre como "../algo.jpg" pasaba y se salia de la carpeta: la
+     * ruta acababa siendo /sdcard/algo.jpg. Se lee cualquier .jpg de la tarjeta,
+     * y esto lo puede pedir cualquiera que este en el Wi-Fi (auditoria del
+     * 24-ago-2026). */
+    if (strstr(s, "..")) return false;
+
     int slashes = 0;
     for (const char *p = s; *p; p++) {
         if (*p == '/') { if (++slashes > 1) return false; continue; }
