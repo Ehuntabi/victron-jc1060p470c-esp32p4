@@ -146,7 +146,11 @@ static void destino_seguro(const char *in, char *out, size_t n)
 
 /* Una linea al diario del viaje. eventos.csv es el que se lee para saber QUE
  * paso; los csv por tipo (fase 3) son para hacer cuentas. */
-static void diario_en(const char *carpeta, const char *cuando,
+/* Devuelve si la linea ha llegado a la tarjeta. Antes no devolvia nada y el
+ * apunte se contestaba con 200 igualmente: con la tarjeta llena o fallando, el
+ * satelite borraba el apunte de su cola creyendolo guardado. Perdido en
+ * silencio, y ademas confirmado (auditoria del 24-ago-2026). */
+static bool diario_en(const char *carpeta, const char *cuando,
                       const char *que, const char *detalle)
 {
     char ruta[RUTA_MAX];
@@ -157,11 +161,12 @@ static void diario_en(const char *carpeta, const char *cuando,
     if (stat(ruta, &st) == 0 && st.st_size > 0) nuevo = false;
 
     FILE *f = fopen(ruta, "a");
-    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return; }
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return false; }
     if (nuevo) fprintf(f, "fecha_hora,evento,detalle\n");
 
     fprintf(f, "%s,%s,%s\n", cuando, que, detalle ? detalle : "");
     fclose(f);
+    return true;
 }
 
 /* Inicio y fin los fecha la P4: ocurren con ella delante (el inicio la exige, y
@@ -620,7 +625,8 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
  * cambiado los campos, se escribe una cabecera nueva en vez de meter los
  * valores bajo las columnas de antes. Cuesta leer ~200 bytes por apunte, y los
  * apuntes son unos pocos al dia. */
-static void csv_por_tipo(const char *carpeta, const char *tipo,
+/* Devuelve si la fila ha llegado a la tarjeta; ver la nota de diario_en(). */
+static bool csv_por_tipo(const char *carpeta, const char *tipo,
                          const cJSON *datos, const char *cuando)
 {
     char ruta[RUTA_MAX];
@@ -647,7 +653,7 @@ static void csv_por_tipo(const char *carpeta, const char *tipo,
     }
 
     f = fopen(ruta, "a");
-    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return; }
+    if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return false; }
     if (poner_cab) fprintf(f, "%s\n", cab);
 
     fprintf(f, "%s", cuando);
@@ -658,6 +664,7 @@ static void csv_por_tipo(const char *carpeta, const char *tipo,
     }
     fprintf(f, "\n");
     fclose(f);
+    return true;
 }
 
 /* El sello de tiempo lo pone el SATELITE, en el momento en que ocurrio, y no
@@ -712,9 +719,23 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
     if (!en_viaje) mkdir(VEHICULO_DIR, 0777);
-    diario_en(carpeta, cuando, jt->valuestring, detalle);
-    csv_por_tipo(carpeta, jt->valuestring, jd, cuando);
+    bool escrito = diario_en(carpeta, cuando, jt->valuestring, detalle);
+    escrito = csv_por_tipo(carpeta, jt->valuestring, jd, cuando) && escrito;
     camera_sd_bus_unlock();
+
+    if (!escrito) {
+        /* 507 y no 200: es 5xx, asi que el satelite NO lo descarta y lo vuelve
+         * a intentar. Tampoco se cuenta ni se suma a los totales ni se marca el
+         * id como aplicado, para que el reintento entre de verdad. Puede
+         * repetir una linea en el diario si una de las dos escrituras si entro;
+         * repetir una linea es mucho menos grave que perder el apunte. */
+        ESP_LOGE(TAG, "NO he podido escribir el apunte '%s' en %s: la tarjeta "
+                      "esta llena o falla. Devuelvo 507 para que lo reintente",
+                 jt->valuestring, carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido escribir en la tarjeta");
+        return ESP_OK;
+    }
 
     /* Los totales y el contador de apuntes son DEL VIAJE: un repostaje del
      * historial del vehiculo no cuenta en el resumen de ningun viaje, y
