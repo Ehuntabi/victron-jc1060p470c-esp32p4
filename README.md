@@ -89,7 +89,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 #### Settings
 Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, separadores entre sub-bloques:
 - **Historial en gráficos** (púrpura): chart 24 h de batería y de temperaturas frigo. Swipe izquierda/derecha **navega por fecha** en los logs guardados en SD (header muestra la fecha seleccionada).
-- **Wi-Fi** (naranja): SSID, contraseña y switch on/off que se aplica **en caliente**, sin reiniciar la placa. (Cambiar SSID o contraseña sí necesita apagar y encender el switch para que entre.) Ojo: con el AP apagado el display satélite "mini" se queda sin telemetría.
+- **Wi-Fi** (naranja): SSID, contraseña y switch on/off que se aplica **en caliente**, sin reiniciar la placa. (Cambiar SSID o contraseña sí necesita apagar y encender el switch para que entre.) Ojo: con el AP apagado, la pantalla de la cabina se queda sin telemetría.
 - **Pantalla** (cyan): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
 - **Tarjeta SD** (azul): carrusel de capturas y visor de imágenes de la SD.
 - **Sonido y alertas** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
@@ -125,7 +125,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Controlable desde la UI (Overview) y por `POST /control`. Encendido automático de cargas al despertar (configurable, NVS).
 
 #### Display satélite de cabina (UDP + HTTP)
-- El satélite es la **3,5" de la cabina** (`~/joint/35cabina`). El **C6 de 1,47" está retirado** desde el 20-ago-2026.
+- El satélite es la **3,5" de la cabina** (`~/joint/35cabina`).
 - Broadcast **UDP** (1 Hz) desde el AP del 7" (`192.168.4.255:4242`). Payload compacto (**38 bytes, versión 4**, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador), aguas del NE185, `epoch_local` (el reloj, que el satélite no tiene) y `gps_estado`. Protocolo compartido en `main/net/mini_proto.h`, **byte a byte idéntico** en los dos firmwares. Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
 - **Solo se manda lo FRESCO** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), no lo que hubo alguna vez: si el SmartShunt deja de hablar, a los 30 s se manda el centinela de "no hay dato" y el satélite lo enseña apagado. Mandar el último valor conocido sería un dato viejo con pinta de actual, que es peor que no tener dato.
 - **La vuelta va por HTTP**, no por UDP: el satélite le manda a la P4 los apuntes del cuaderno con `POST /api/viaje` (ver abajo). Por TCP se sabe con certeza que han llegado.
@@ -291,7 +291,7 @@ Ported by **[Ehuntabi](https://github.com/Ehuntabi)**.
 #### Settings
 Pages with role-coloured cards, scrollbar visible on overflow, separators between sub-blocks:
 - **Chart history** (purple): 24 h battery + frigo temperature charts. Swipe left/right **navigates by date** across SD logs (header shows the active day).
-- **Wi-Fi** (orange): SSID, password and an on/off switch applied **live**, with no board restart. (Changing SSID or password does need the switch toggled off and on to take effect.) Note: with the AP off, the "mini" satellite display gets no telemetry.
+- **Wi-Fi** (orange): SSID, password and an on/off switch applied **live**, with no board restart. (Changing SSID or password does need the switch toggled off and on to take effect.) Note: with the AP off, the cabin display gets no telemetry.
 - **Display** (cyan): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
 - **SD card** (blue): screenshot carousel and SD image viewer.
 - **Sound & alerts** (red): volume, mute switch, SoC and freezer temperature thresholds.
@@ -327,7 +327,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Controllable from the UI (Overview) and via `POST /control`. Automatic load switch-on on wake (configurable, NVS).
 
 #### Cabin satellite display (UDP + HTTP)
-- The satellite is the **3.5" cabin display** (`~/joint/35cabina`). The **1.47" C6 was retired** on 2026-08-20.
+- The satellite is the **3.5" cabin display** (`~/joint/35cabina`).
 - **UDP** broadcast (1 Hz) from the 7" AP (`192.168.4.255:4242`). Compact payload (**38 bytes, version 4**, CRC32) with battery SoC/V/A, shunt aux channel (starter battery), fridge (temperature + fan), NE185 water levels, `epoch_local` (the clock the satellite doesn't have) and `gps_estado`. Shared protocol in `main/net/mini_proto.h`, **byte-for-byte identical** in both firmwares. It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
 - **Only FRESH data is sent** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), never "we had it once": if the SmartShunt goes quiet, after 30 s the no-data sentinel is sent and the satellite greys it out. Sending the last known value would be stale data wearing a current-data face, which is worse than no data at all.
 - **The return path is HTTP**, not UDP: the satellite posts trip notes to the P4 with `POST /api/viaje` (see below). Over TCP you know for certain they arrived.
