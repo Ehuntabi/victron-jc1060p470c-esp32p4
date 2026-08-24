@@ -271,7 +271,24 @@ static void totales_sumar(const char *tipo, const cJSON *datos)
         /* Llegar y marcharse el mismo dia son cero noches de calendario, pero
          * el area se cobra igual: por debajo de una no se baja. */
         if (noches < 1.0) noches = 1.0;
-        nvs_set_d(h, NVS_T_ALOJA, nvs_get_d(h, NVS_T_ALOJA) + precio * noches);
+
+        /* Y lo que se pago por los servicios, que en un area se cobran aparte:
+         * el agua 1 euro, la luz 2. Van al mismo saco que la noche -- es lo que
+         * costo dormir ahi -- pero el DESGLOSE queda entero en pernoctas.csv,
+         * que es donde se mira para decidir si volver.
+         *
+         * De uno en uno y no en la misma suma: IMPORTE_DE asigna a 'ji' (ver la
+         * nota de las aguas). */
+        double extras = 0;
+        extras += IMPORTE_DE("precio_agua");
+        extras += IMPORTE_DE("precio_grises");
+        extras += IMPORTE_DE("precio_wc");
+        extras += IMPORTE_DE("precio_luz");
+        extras += IMPORTE_DE("precio_duchas");
+        extras += IMPORTE_DE("precio_basura");
+
+        nvs_set_d(h, NVS_T_ALOJA,
+                  nvs_get_d(h, NVS_T_ALOJA) + precio * noches + extras);
     }
     #undef IMPORTE_DE
 
