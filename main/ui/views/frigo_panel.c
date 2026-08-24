@@ -319,7 +319,7 @@ static void buscar_sondas_cb(lv_event_t *e)
 
 /* Aviso de que el conjunto de sondas ha cambiado. Se crea desde el hilo de LVGL
  * (lo llama ui_frigo_panel_update, que corre bajo lvgl_port_lock). Mismo aspecto
- * que ui_show_new_trip_dialog: no se usa lv_msgbox en ningun sitio del repo. */
+ * que el resto de dialogos: no se usa lv_msgbox en ningun sitio del repo. */
 static lv_obj_t *s_aviso_sondas_modal = NULL;
 
 static void aviso_sondas_cerrar_cb(lv_event_t *e)

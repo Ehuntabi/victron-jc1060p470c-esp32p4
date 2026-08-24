@@ -32,23 +32,24 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi);
 void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
 
 /* Guarda los contadores en NVS ahora mismo (normalmente se hace cada 5 min).
- * Al finalizar un viaje, antes de sacar la tarjeta o apagar. */
+ * Antes de sacar la tarjeta o apagar. */
 void trip_computer_flush(void);
 
-/* Reset manual de todos los contadores: EMPIEZA un viaje nuevo (queda activo).
- * Guarda inmediatamente en NVS. */
+/* Pone todos los contadores a cero y deja el viaje abierto. Guarda en NVS.
+ *
+ * Lo llama el INICIO DE VIAJE del cuaderno de la cabina (/api/viaje), no el
+ * usuario: el apartado ENERGIA del resumen.txt sale de estos contadores, y si
+ * solo se pusieran a cero a mano el resumen acabaria contando energia de
+ * viajes anteriores como si fuera de este. En Ajustes queda el mismo boton
+ * como puesta a cero suelta, para cuando se quiera medir algo aparte. */
 void trip_computer_reset(void);
 
-/* Marca el viaje como TERMINADO (y guarda los contadores). A partir de aqui el
- * aviso de arranque vuelve a ofrecer empezar uno nuevo. Es la contraparte de
- * trip_computer_reset: el viaje lo abre y lo cierra el usuario a mano. */
+/* Marca el viaje como TERMINADO y guarda los contadores. Contraparte de
+ * trip_computer_reset: lo llama el fin de viaje, despues de escribir el
+ * resumen (que es quien lee estos numeros). */
 void trip_computer_end(void);
 
-/* Marca el viaje como en curso sin tocar los contadores ("Seguir viaje"). */
-void trip_computer_mark_active(void);
-
-/* true si hay un viaje abierto. Lo consulta el arranque para NO sacar el aviso
- * de "Nuevo viaje?" en cada reinicio: un reset de la placa no termina un viaje. */
+/* true si hay un viaje abierto en los contadores. */
 bool trip_computer_is_active(void);
 
 /* Copia el snapshot actual a out. Thread-safe (mutex interno). */

@@ -364,6 +364,14 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     totales_borrar();
+    /* Contadores de energia a cero: el apartado ENERGIA del resumen.txt sale de
+     * aqui. Hasta el 24-ago-2026 solo se ponian a cero con el boton de
+     * Ajustes -> Autocaravana, en la pantalla de atras, asi que un viaje en el
+     * que no se hubiera pulsado escribia en SU resumen la energia acumulada
+     * desde vete a saber cuando -- a veces de tres viajes antes -- y con toda
+     * la pinta de ser suya. El viaje se declara en la cabina; los contadores
+     * se enteran aqui. */
+    trip_computer_reset();
     {   /* Numeracion nueva: ver el comentario de la idempotencia en el handler. */
         nvs_handle_t h;
         if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
@@ -569,6 +577,10 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     estado_set(NULL, id);
+    /* La energia ya esta volcada en el resumen de arriba. Se guarda en NVS y se
+     * cierra, para que los contadores no sigan sumando a cuenta de un viaje que
+     * ya termino. */
+    trip_computer_end();
     ESP_LOGI(TAG, "VIAJE CERRADO: %s", carpeta);
     httpd_resp_sendstr(req, carpeta);
     return ESP_OK;

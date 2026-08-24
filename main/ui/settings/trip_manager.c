@@ -1,9 +1,15 @@
-/* Trip computer: tarjeta de Ajustes (Autocaravana), refresco periodico,
- * reset/finalizar y el aviso de arranque "Nuevo viaje?".
+/* Trip computer: tarjeta de Ajustes (Autocaravana) con la energia del viaje.
  *
- * Sale de settings_panel.c dentro del troceo por paginas (ver
- * settings_common.h). Es el mismo codigo movido de sitio, sin cambios de
- * comportamiento.
+ * OJO, cambio de fondo el 24-ago-2026: esta tarjeta YA NO abre ni cierra
+ * viajes. Los viajes se declaran en el cuaderno de la pantalla de la cabina, y
+ * es ese inicio el que pone los contadores a cero (/api/viaje -> op_inicio).
+ * Antes habia aqui un "Inicio"/"Finalizar" y un aviso al arrancar, o sea un
+ * segundo viaje en paralelo que nadie sincronizaba: si no te acordabas de
+ * pulsarlo, el resumen.txt del viaje se llevaba la energia del anterior.
+ *
+ * Lo que queda: mirar los numeros, ponerlos a cero suelto si hace falta, y
+ * soltar la tarjeta para poder sacarla (que no tiene nada que ver con el
+ * viaje, pero es el unico sitio donde estaba).
  */
 #include "settings_panel.h"
 #include "settings_common.h"
@@ -34,8 +40,9 @@ void trip_label_refresh(void)
         localtime_r((time_t *)&t.reset_epoch, &tm_l);
         strftime(start_str, sizeof(start_str), "%d/%m %H:%M", &tm_l);
     }
-    /* Tiempo de viaje = reloj transcurrido desde el ultimo "Nuevo viaje"
-     * (siempre avanza, aunque no llegue telemetria del BMV). */
+    /* Tiempo de viaje = reloj transcurrido desde la puesta a cero, que
+     * normalmente es el inicio del viaje declarado en la cabina (siempre
+     * avanza, aunque no llegue telemetria del BMV). */
     int64_t elapsed = 0;
     if (t.reset_epoch > 0) {
         time_t now = time(NULL);
@@ -84,28 +91,33 @@ static void trip_reset_btn_cb(lv_event_t *e)
 {
     (void)e;
     ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Trip computer",
-        "Empezar un viaje nuevo?\nLos contadores vuelven a cero.",
-        "Empezar", do_trip_reset_action);
+        "Poner los contadores a cero?\n\n"
+        "Normalmente no hace falta: se ponen solos al\n"
+        "empezar un viaje en la pantalla de la cabina.",
+        "Poner a cero", do_trip_reset_action);
 }
 
-/* Cierre de viaje: se vuelca a la tarjeta TODO lo que hay pendiente en memoria y
- * se desmonta, para poder sacarla sin corromper nada. Despues ya no se escribe
- * mas hasta reiniciar; el aviso final lo deja claro. */
-static void do_trip_finish_action(void)
+/* Soltar la tarjeta: se vuelca TODO lo que hay pendiente en memoria y se
+ * desmonta, para poder sacarla sin corromper nada. Despues ya no se escribe mas
+ * hasta reiniciar; el aviso final lo deja claro.
+ *
+ * No cierra el viaje -- eso lo hace el cuaderno de la cabina. Aqui solo se
+ * guardan los contadores (flush) por si se corta la corriente. */
+static void do_soltar_tarjeta_action(void)
 {
-    ESP_LOGI(TAG_SETTINGS, "Finalizar viaje: volcando todo a la tarjeta");
+    ESP_LOGI(TAG_SETTINGS, "Soltar tarjeta: volcando todo");
     battery_history_flush();     /* historico de corriente/tension/panel */
     solar_daily_flush();         /* dia de produccion en curso */
     ne185_vlog_flush();          /* comparativa de voltaje NE185 (hasta 10 min en RAM) */
-    trip_computer_end();         /* guarda los contadores Y cierra el viaje */
+    trip_computer_flush();       /* contadores a NVS (el viaje lo cierra la cabina) */
 
     const esp_err_t err = datalogger_close_sd();   /* incluye su propio flush */
     if (err == ESP_OK) {
-        ui_show_info_dialog(LV_SYMBOL_SD_CARD "  Viaje finalizado",
+        ui_show_info_dialog(LV_SYMBOL_SD_CARD "  Tarjeta suelta",
             "Todo guardado.\n\nYa puedes sacar la tarjeta.\n\n"
             "Para volver a registrar, reinicia la pantalla.");
     } else {
-        ui_show_info_dialog(LV_SYMBOL_WARNING "  Viaje finalizado",
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  Tarjeta ocupada",
             "Se ha guardado todo lo pendiente, pero la tarjeta\n"
             "no se ha podido soltar (puede estar ocupada).\n\n"
             "Espera unos segundos y vuelve a intentarlo.");
@@ -115,10 +127,10 @@ static void do_trip_finish_action(void)
 static void trip_finish_btn_cb(lv_event_t *e)
 {
     (void)e;
-    ui_show_confirm_dialog(LV_SYMBOL_SD_CARD "  Finalizar viaje",
+    ui_show_confirm_dialog(LV_SYMBOL_SD_CARD "  Soltar tarjeta",
         "Se guarda todo y se suelta la tarjeta\npara poder sacarla.\n\n"
         "Despues no se registra nada mas\nhasta reiniciar la pantalla.",
-        "Finalizar", do_trip_finish_action);
+        "Soltar", do_soltar_tarjeta_action);
 }
 
 void create_trip_card(lv_obj_t *cont)
@@ -151,8 +163,8 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Trip computer");
 
-    /* Dos botones: empezar viaje (pone a cero) y finalizarlo (guarda y suelta
-     * la tarjeta). Van juntos porque son las dos acciones del viaje. */
+    /* Dos botones sueltos: poner los contadores a cero (normalmente lo hace
+     * solo el inicio de viaje de la cabina) y soltar la tarjeta. */
     lv_obj_t *trip_btns = lv_obj_create(trip_head);
     lv_obj_remove_style_all(trip_btns);
     lv_obj_set_size(trip_btns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -161,21 +173,21 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_set_style_pad_column(trip_btns, 8, 0);
 
     lv_obj_t *btn_trip_rst = lv_btn_create(trip_btns);
-    lv_obj_set_size(btn_trip_rst, 140, 44);
+    lv_obj_set_size(btn_trip_rst, 190, 44);
     lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0x00897B), 0);
     lv_obj_set_style_radius(btn_trip_rst, 8, 0);
     lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
-    lv_label_set_text(lbl_trip_rst, "Inicio");
+    lv_label_set_text(lbl_trip_rst, "Poner a cero");
     lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_trip_rst);
     lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *btn_trip_fin = lv_btn_create(trip_btns);
-    lv_obj_set_size(btn_trip_fin, 150, 44);
-    lv_obj_set_style_bg_color(btn_trip_fin, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_size(btn_trip_fin, 190, 44);
+    lv_obj_set_style_bg_color(btn_trip_fin, lv_color_hex(0x5D4037), 0);
     lv_obj_set_style_radius(btn_trip_fin, 8, 0);
     lv_obj_t *lbl_trip_fin = lv_label_create(btn_trip_fin);
-    lv_label_set_text(lbl_trip_fin, "Finalizar");
+    lv_label_set_text(lbl_trip_fin, "Soltar tarjeta");
     lv_obj_set_style_text_font(lbl_trip_fin, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_trip_fin);
     lv_obj_add_event_cb(btn_trip_fin, trip_finish_btn_cb, LV_EVENT_CLICKED, NULL);
@@ -187,103 +199,4 @@ void create_trip_card(lv_obj_t *cont)
     /* LONG_DOT en vez de WRAP por riesgo WDT al construir. */
     lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
     trip_label_refresh();
-}
-
-/* ── Aviso de arranque "Nuevo viaje?" ─────────────────────────────
- * Misma estetica que ui_show_confirm_dialog, pero con dos botones
- * explicitos: "Seguir viaje" (no toca nada) y "Nuevo viaje" (resetea).
- * No reutiliza ui_show_confirm_dialog porque ese detecta el boton por el
- * texto "Cancelar"; aqui queremos etiquetas propias. */
-static lv_obj_t *s_newtrip_modal = NULL;
-
-static void newtrip_close(void)
-{
-    if (s_newtrip_modal) { lv_obj_del(s_newtrip_modal); s_newtrip_modal = NULL; }
-}
-
-static void newtrip_keep_cb(lv_event_t *e)
-{
-    (void)e;
-    /* "Seguir viaje" tambien abre el viaje: si no, el aviso volveria a salir en
-     * el siguiente arranque preguntando lo mismo. */
-    trip_computer_mark_active();
-    newtrip_close();
-}
-
-static void newtrip_reset_cb(lv_event_t *e)
-{
-    (void)e;
-    trip_computer_reset();
-    trip_label_refresh();   /* seguro aunque la card aun no exista (chequea s_trip_label) */
-    newtrip_close();
-}
-
-void ui_show_new_trip_dialog(void)
-{
-    if (s_newtrip_modal) return;
-
-    /* Fondo modal a pantalla completa (identico al resto de dialogos). */
-    lv_obj_t *modal = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
-    lv_obj_set_style_border_width(modal, 0, 0);
-    lv_obj_set_style_radius(modal, 0, 0);
-    lv_obj_set_style_pad_all(modal, 0, 0);
-    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
-    s_newtrip_modal = modal;
-
-    lv_obj_t *dlg = lv_obj_create(modal);
-    lv_obj_set_size(dlg, 600, 280);
-    lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
-    lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0x00C851), 0);  /* verde: viaje */
-    lv_obj_set_style_border_width(dlg, 2, 0);
-    lv_obj_set_style_radius(dlg, 16, 0);
-    lv_obj_set_style_pad_all(dlg, 24, 0);
-    lv_obj_set_layout(dlg, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *title = lv_label_create(dlg);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(title, LV_SYMBOL_REFRESH "  Nuevo viaje");
-
-    lv_obj_t *msg = lv_label_create(dlg);
-    lv_obj_set_style_text_font(msg, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(msg, lv_color_white(), 0);
-    lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(msg, lv_pct(100));
-    lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(msg, "Empezar un viaje nuevo?\nSe pondran a cero los contadores del viaje.");
-
-    lv_obj_t *row_btns = lv_obj_create(dlg);
-    lv_obj_remove_style_all(row_btns);
-    lv_obj_set_size(row_btns, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_btns, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *btn_keep = lv_btn_create(row_btns);
-    lv_obj_set_size(btn_keep, 240, 60);
-    lv_obj_set_style_bg_color(btn_keep, lv_color_hex(0x444444), 0);
-    lv_obj_set_style_radius(btn_keep, 12, 0);
-    lv_obj_t *lk = lv_label_create(btn_keep);
-    lv_label_set_text(lk, "Seguir viaje");
-    lv_obj_set_style_text_font(lk, &lv_font_montserrat_24_es, 0);
-    lv_obj_center(lk);
-    lv_obj_add_event_cb(btn_keep, newtrip_keep_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *btn_new = lv_btn_create(row_btns);
-    lv_obj_set_size(btn_new, 240, 60);
-    lv_obj_set_style_bg_color(btn_new, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_radius(btn_new, 12, 0);
-    lv_obj_t *ln = lv_label_create(btn_new);
-    lv_label_set_text(ln, LV_SYMBOL_REFRESH "  Nuevo viaje");
-    lv_obj_set_style_text_font(ln, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(ln, lv_color_hex(0x0A0A0A), 0);  /* texto oscuro sobre verde */
-    lv_obj_center(ln);
-    lv_obj_add_event_cb(btn_new, newtrip_reset_cb, LV_EVENT_CLICKED, NULL);
 }

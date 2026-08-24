@@ -93,7 +93,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - **Pantalla** (cyan): card combinada **Brillo pantalla + Salvapantallas**; card **Modo nocturno** en una línea (switch + Inicio/Fin + brillo nocturno, brillo aplicado automáticamente entre las horas configuradas según RTC); **Pantalla de bienvenida** (logo furgo o sin splash).
 - **Tarjeta SD** (azul): carrusel de capturas y visor de imágenes de la SD.
 - **Sonido y alertas** (rojo): volumen, switch silenciar avisos, umbrales SoC y temperatura del frigorífico.
-- **Autocaravana** (rosa): agrupa lo propio del vehículo — **Opciones Frigo** (sensores DS18B20, control PWM del ventilador según T_Aletas, umbrales y aprovechamiento de excedente solar), **Victron Keys** (MAC + clave AES por dispositivo, hasta 8), **Modo ausente**, **Trip computer** (kWh/Ah cargados/consumidos y horas, reseteable) y **Auto-encendido** de luz interior + bomba al arrancar.
+- **Autocaravana** (rosa): agrupa lo propio del vehículo — **Opciones Frigo** (sensores DS18B20, control PWM del ventilador según T_Aletas, umbrales y aprovechamiento de excedente solar), **Victron Keys** (MAC + clave AES por dispositivo, hasta 8), **Modo ausente**, **Trip computer** (kWh/Ah cargados/consumidos y horas del viaje en curso) y **Auto-encendido** de luz interior + bomba al arrancar.
 - **Acerca de** (gris): uptime, RAM libre, IP del AP, chip, versión IDF, **Backup configuración** (exportar/importar a `/sdcard/config_backup.json`), **Último reset** + contador de resets por watchdog/panic, botón Reboot con confirmación.
 
 #### Barra inferior
@@ -149,7 +149,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - **Frigo**: buffer circular RAM 200 entradas + CSV diario en `/sdcard/frigo/YYYY-MM-DD.csv`.
 - **Batería**: 24 h en PSRAM (552 KB) con muestreo cada 10 s y `avg/max/min` por intervalo. CSV diario en `/sdcard/bateria/YYYY-MM-DD.csv` (5 columnas).
 - **kWh acumulados del día** (`/main/energy_today.c`): integra V·I·Δt desde BMV; prefiere `yield_today_centikwh` del SmartSolar para PV. Reset automático a medianoche. Persistencia NVS cada 5 min.
-- **Trip computer** (`/main/trip_computer.c`): contadores reseteables manualmente — kWh y Ah cargados/consumidos, horas activas. Persistencia NVS cada 5 min.
+- **Trip computer** (`main/data/trip_computer.c`): kWh y Ah cargados/consumidos, horas activas y aporte solar. Persistencia NVS cada 5 min. **Los pone a cero el inicio de viaje del cuaderno de la cabina** (`/api/viaje`), y el fin de viaje los cierra tras volcarlos al apartado ENERGIA del `resumen.txt` — así ese apartado es del viaje y no de una mezcla. En Ajustes queda un *Poner a cero* suelto para medir algo aparte. Hasta el 24-ago-2026 solo se reseteaban a mano y el resumen podía arrastrar la energía de viajes anteriores.
 - Flush a SD periódico de frigo y batería; flush adicional antes de cualquier reset programado.
 - Backup horario del epoch del sistema en NVS (`rtc_backup/epoch`).
 
@@ -295,7 +295,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - **Display** (cyan): combined **Brightness + Screensaver** card; single-line **Night mode** card (switch + start/end + night brightness, auto-applied within the time window by RTC); **Splash screen** (camper logo or none).
 - **SD card** (blue): screenshot carousel and SD image viewer.
 - **Sound & alerts** (red): volume, mute switch, SoC and freezer temperature thresholds.
-- **Motorhome** (pink): groups everything vehicle-specific — **Fridge options** (DS18B20 sensors, PWM fan based on T_Fins, thresholds and solar-surplus usage), **Victron Keys** (MAC + AES key per device, up to 8), **Away mode**, **Trip computer** (user-resettable kWh/Ah charged/discharged and active hours) and **Auto switch-on** of the interior light + pump at wake.
+- **Motorhome** (pink): groups everything vehicle-specific — **Fridge options** (DS18B20 sensors, PWM fan based on T_Fins, thresholds and solar-surplus usage), **Victron Keys** (MAC + AES key per device, up to 8), **Away mode**, **Trip computer** (kWh/Ah charged/discharged and hours for the current trip) and **Auto switch-on** of the interior light + pump at wake.
 - **About** (gray): uptime, free RAM, AP IP, chip, IDF version, **Configuration backup** (export/import to `/sdcard/config_backup.json`), **Last reset** + WDT/panic reset counter, Reboot button.
 
 #### Bottom bar
@@ -336,7 +336,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - **Frigo**: 200-entry RAM ring + daily CSV at `/sdcard/frigo/YYYY-MM-DD.csv`.
 - **Battery**: 24 h in PSRAM (552 KB) sampled every 10 s with avg/max/min per bin. Daily CSV at `/sdcard/bateria/YYYY-MM-DD.csv` (5 columns).
 - **Today’s kWh accumulator** (`main/energy_today.c`): integrates V·I·Δt from BMV; prefers `yield_today_centikwh` from SmartSolar for PV. Auto-reset at midnight. NVS persistence every 5 min.
-- **Trip computer** (`main/trip_computer.c`): user-resettable kWh and Ah charged/discharged + active hours. NVS persistence every 5 min.
+- **Trip computer** (`main/data/trip_computer.c`): kWh and Ah charged/discharged, active hours and solar contribution. NVS persistence every 5 min. **Zeroed by the cabin notebook's trip start** (`/api/viaje`) and closed by the trip end, after they are written into the `resumen.txt` ENERGIA section — so that section belongs to that trip only. A standalone *Poner a cero* remains in Settings. Until 2026-08-24 they were reset by hand only, so a summary could carry energy from previous trips.
 - Periodic SD flush of frigo and battery logs; extra flush before any scheduled reset.
 - Hourly NVS backup of the system epoch (`rtc_backup/epoch`).
 

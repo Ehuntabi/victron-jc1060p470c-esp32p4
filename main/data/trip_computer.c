@@ -234,8 +234,7 @@ static void trip_set_active(bool on)
     ESP_LOGI(TAG, "Viaje %s", on ? "en curso" : "terminado");
 }
 
-void trip_computer_end(void)         { trip_set_active(false); }
-void trip_computer_mark_active(void) { trip_set_active(true); }
+void trip_computer_end(void) { trip_set_active(false); }
 
 bool trip_computer_is_active(void)
 {

@@ -38,7 +38,7 @@
 #include "data/energy_today.h"
 #include "data/trip_computer.h"
 #include "data/solar_daily.h"
-#include "ui/settings/settings_panel.h"   /* ui_show_new_trip_dialog: aviso de arranque */
+#include "ui/settings/settings_panel.h"
 #include "ne185/ne185.h"
 #include "ne185_vlog.h"
 #include "net/udp_tx.h"
@@ -675,13 +675,10 @@ static void finish_boot_splash(void)
 {
     if (lvgl_port_lock(0)) {
         splash_hide();
-        /* Aviso emergente de arranque: ofrecer empezar un viaje nuevo (reset del
-         * trip computer). SOLO si no hay un viaje ya abierto: un reinicio de la
-         * placa (OTA, corte de tension, watchdog) no termina un viaje, y salir en
-         * cada arranque obligaba a contestarlo a ciegas con el riesgo de poner los
-         * contadores a cero sin querer. El viaje lo abre y lo cierra el usuario
-         * (Ajustes -> Empezar viaje / Finalizar viaje). */
-        if (!trip_computer_is_active()) ui_show_new_trip_dialog();
+        /* Aqui salia el aviso "Nuevo viaje?" (24-ago-2026: retirado). Era un
+         * SEGUNDO viaje, en paralelo al del cuaderno de la cabina, y preguntaba
+         * por el en la pantalla de atras. Ahora los contadores los abre y los
+         * cierra el viaje de verdad, por /api/viaje. */
         lvgl_port_unlock();
     }
 }
