@@ -196,6 +196,38 @@ static void procesar(char *linea)
             s_d.altitud_m = (float)atof(c[9]);
         }
         xSemaphoreGive(s_mtx);
+    } else if (!strcmp(tipo, "GSV") && n >= 4) {
+        /* GSV: satelites a la vista, de cuatro en cuatro por trama. Cada bloque
+         * son 4 campos (prn, elevacion, azimut, C/N0) y el C/N0 es el ultimo.
+         *
+         * Vienen VARIAS tramas por constelacion (GP, GL, GA, GB) y varias por
+         * cada una. Se acumula en un temporal y solo se publica al cerrar la
+         * ronda -- si se publicara trama a trama, el numero bailaria sin parar.
+         * La ronda se cierra cuando llega la ultima trama del grupo (campo 2 ==
+         * campo 1) de la ULTIMA constelacion; como no se sabe cual es, se cierra
+         * por tiempo: 1,2 s sin GSV = ronda terminada. */
+        static uint32_t suma = 0, cuantos = 0, mejor = 0;
+        static int64_t ultima_gsv = 0;
+        int64_t ahora = esp_timer_get_time();
+
+        if (ultima_gsv && (ahora - ultima_gsv) > 1200000LL) {
+            /* Ronda anterior cerrada: publicar y empezar de cero. */
+            xSemaphoreTake(s_mtx, portMAX_DELAY);
+            s_d.snr_mejor   = (uint8_t)mejor;
+            s_d.snr_medio   = cuantos ? (uint8_t)(suma / cuantos) : 0;
+            s_d.snr_cuantos = (uint8_t)(cuantos > 255 ? 255 : cuantos);
+            xSemaphoreGive(s_mtx);
+            suma = cuantos = mejor = 0;
+        }
+        ultima_gsv = ahora;
+
+        for (int i = 7; i < n; i += 4) {          /* 7 = C/N0 del primer bloque */
+            if (!c[i] || !*c[i]) continue;        /* vacio = satelite sin medir */
+            int v = atoi(c[i]);
+            if (v <= 0 || v > 99) continue;
+            suma += (uint32_t)v; cuantos++;
+            if ((uint32_t)v > mejor) mejor = (uint32_t)v;
+        }
     } else if (!strcmp(tipo, "RMC") && n >= 10) {
         /* Campo 2 = 'A' valido, 'V' aviso. La hora solo se cree si es 'A':
          * el modulo da hora aproximada desde su reloj interno antes de tener
@@ -266,6 +298,7 @@ static void gps_task(void *arg)
             s_d.hay_datos = false;
             s_d.hay_fix   = false;
             s_d.satelites = 0;
+            s_d.snr_mejor = s_d.snr_medio = s_d.snr_cuantos = 0;
         }
         bool fix  = s_d.hay_fix;
         uint8_t sats = s_d.satelites;

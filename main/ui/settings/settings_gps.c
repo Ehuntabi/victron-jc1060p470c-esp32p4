@@ -111,17 +111,32 @@ static void refresco_cb(lv_timer_t *t)
      * confirma el odometro sin esperar al resumen del viaje. */
     trip_computer_t tc;      /* 't' ya es el lv_timer_t del callback */
     trip_computer_get(&tc);
+    /* La POTENCIA es lo que se viene a mirar cuando se prueba un sitio nuevo
+     * (dentro de un cajon, bajo una claraboya): por debajo de 30 dB-Hz no se
+     * fija posicion, a 40 o mas va sobrado. Se da la del mejor satelite Y la
+     * media a proposito: uno recien asomado por el horizonte da 20 y hunde la
+     * media sin que pase nada malo, asi que la media sola engana.
+     * Para medir cuanto tapa un sitio: se mira fuera, se mira dentro, y la
+     * resta es la perdida. */
+    char pot[72];
+    if (g.snr_cuantos > 0) {
+        snprintf(pot, sizeof(pot), "Senal      %u dB-Hz el mejor, %u de media (%u sat.)",
+                 (unsigned)g.snr_mejor, (unsigned)g.snr_medio, (unsigned)g.snr_cuantos);
+    } else {
+        snprintf(pot, sizeof(pot), "Senal      -- (ningun satelite a la vista)");
+    }
+
     if (g.hay_fix) {
         /* Seis decimales son ~11 cm. Con menos, dos plazas de aparcamiento
          * contiguas saldrian en el mismo sitio. */
         lv_label_set_text_fmt(s_pos,
                               "Latitud    %.6f\nLongitud   %.6f\nAltitud    %.0f m\n"
-                              "Recorrido  %.1f km  (este viaje)",
-                              g.lat, g.lon, (double)g.altitud_m, tc.km);
+                              "%s\nRecorrido  %.1f km  (este viaje)",
+                              g.lat, g.lon, (double)g.altitud_m, pot, tc.km);
     } else {
         lv_label_set_text_fmt(s_pos,
                               "Latitud    --\nLongitud   --\nAltitud    --\n"
-                              "Recorrido  %.1f km  (este viaje)", tc.km);
+                              "%s\nRecorrido  %.1f km  (este viaje)", pot, tc.km);
     }
 
     if (g.hora[0]) lv_label_set_text_fmt(s_hora, "%s  UTC\n%s", g.hora, g.fecha);
@@ -191,7 +206,10 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * con 8 de interlineado (140 px) mas el hueco del titulito. A 150 la ultima
      * linea quedaba cortada por abajo -- y la tarjeta no hace scroll, asi que no
      * se veia que faltaba nada. */
-    lv_obj_set_size(fila, lv_pct(100), 190);
+    /* 230 y no 190: con la linea de potencia son CINCO renglones de font 24 con
+     * 8 de interlineado. La tarjeta no hace scroll, asi que si no cabe se corta
+     * por abajo sin avisar (ya paso al anadir el recorrido). */
+    lv_obj_set_size(fila, lv_pct(100), 230);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 12, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);

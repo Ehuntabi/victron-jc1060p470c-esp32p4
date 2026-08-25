@@ -27,6 +27,18 @@ typedef struct {
     float    altitud_m;
     uint32_t segundos_sin_dato;   /* 0 si acaba de llegar algo */
 
+    /* Potencia de la señal, en dB-Hz (lo que el NMEA llama C/N0). Es EL numero
+     * para saber si un sitio tapa: por debajo de 30 no se fija posicion, a 40
+     * o mas se va sobrado. Sirve para medir cuanto cuesta meter el modulo en
+     * un cajon: se mira fuera, se mira dentro, y la resta es la perdida.
+     *
+     * Ojo: son satelites A LA VISTA, no los usados para la posicion. Un
+     * satelite recien asomado por el horizonte da 20 y baja la media sin que
+     * eso signifique nada malo; por eso se da tambien el mejor. */
+    uint8_t  snr_mejor;           /* el mas fuerte, 0 si no hay ninguno */
+    uint8_t  snr_medio;           /* media de los que reportan potencia */
+    uint8_t  snr_cuantos;         /* cuantos satelites entraron en la media */
+
     /* Fecha y hora UTC tal y como las da el modulo, ya formateadas. Se guardan
      * ademas de usarlas para poner el reloj en hora: verlas en pantalla es lo
      * que confirma de un vistazo que el dato es bueno. Vacias si aun no ha
