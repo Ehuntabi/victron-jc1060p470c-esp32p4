@@ -57,6 +57,27 @@ static bool lock(void)
 }
 static void unlock(void) { if (s.mtx) xSemaphoreGive(s.mtx); }
 
+/* Deteccion "motor en marcha" para el filtro anti-baile del nivel de agua
+ * limpia del NE185 (ne185_set_motor_running() / filter_clean_level() en
+ * ne185.c). Se usa la bateria MOTOR (entrada del DC-DC/Orion) y no la de
+ * habitaculo porque el solar carga la de habitaculo sin que el vehiculo se
+ * mueva - daria falsos positivos un dia soleado en el camping. Histeresis
+ * 13.3V entra / 12.8V sale (mismo umbral de entrada que ya usa el indicador
+ * "Alternador" en view_default_battery.c) para no oscilar en el umbral.
+ * Sistema 12V; si algun dia hay variante 24V, replicar el rango dual de
+ * view_default_battery.c:352-355. */
+static bool s_motor_running = false;
+static void update_motor_running(uint16_t vin_centi)
+{
+    if (!s_motor_running && vin_centi >= 1330) {
+        s_motor_running = true;
+        ne185_set_motor_running(true);
+    } else if (s_motor_running && vin_centi > 0 && vin_centi < 1280) {
+        s_motor_running = false;
+        ne185_set_motor_running(false);
+    }
+}
+
 void dashboard_state_on_record(const victron_data_t *data)
 {
     if (!data) return;
@@ -104,6 +125,7 @@ void dashboard_state_on_record(const victron_data_t *data)
             s.dc_out_v_centi = d->output_voltage_centi;
             s.dc_state = d->device_state;
             s.dc_err = d->charger_error;
+            update_motor_running(s.dc_in_v_centi);
             break;
         }
         case VICTRON_BLE_RECORD_ORION_XS: {
@@ -114,6 +136,7 @@ void dashboard_state_on_record(const victron_data_t *data)
             s.dc_out_v_centi = o->output_voltage_centi;
             s.dc_state = o->device_state;
             s.dc_err = o->charger_error;
+            update_motor_running(s.dc_in_v_centi);
             break;
         }
         default: break;

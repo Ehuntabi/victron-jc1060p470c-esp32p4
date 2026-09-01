@@ -114,6 +114,51 @@ static uint32_t now_ms(void)
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
 }
 
+/* Filtro anti-"baile" del nivel de agua limpia (s1): el sensor del NE185 no
+ * amortigua nada, y con el liquido en movimiento (curvas, frenadas) cada
+ * trama puede traer un cuarto distinto. Se guarda un "candidato" y solo se
+ * vuelca al valor mostrado cuando lleva estable la ventana activa: corta
+ * parado (se asienta casi al instante), muy larga con el motor en marcha
+ * (se queda fijo en el ultimo valor bueno mientras el vehiculo se mueve,
+ * igual que el indicador de combustible de un coche). s_motor_running lo
+ * alimenta dashboard_state.c con la tension de la bateria motor via DC-DC
+ * (el solar no la toca, a diferencia de la de habitaculo). */
+#define FILT_WINDOW_STOPPED_MS  2000    /* parado */
+#define FILT_WINDOW_MOVING_MS   60000   /* motor en marcha */
+
+static volatile bool s_motor_running       = false;
+static uint8_t       s_filt_committed      = 0xFF; /* valor mostrado (s1) */
+static uint8_t       s_filt_candidate      = 0xFF;
+static uint32_t      s_filt_candidate_since = 0;
+
+/* raw: 0..4 valido, o 0xFF si esta trama no trae dato util (frame nativo
+ * degradado / combo de nibble invalido) - en ese caso se mantiene el ultimo
+ * valor mostrado sin tocar el cronometro del candidato. Solo hay un llamador
+ * (parse_frame, siempre desde rs485_task) por lo que no necesita mutex propio. */
+static uint8_t filter_clean_level(uint8_t raw)
+{
+    if (raw > 4) return s_filt_committed;
+
+    uint32_t now = now_ms();
+    if (raw != s_filt_candidate) {
+        s_filt_candidate       = raw;
+        s_filt_candidate_since = now;
+    }
+    if (s_filt_committed == 0xFF) {
+        /* Primer dato valido tras arrancar: mostrarlo ya, sin esperar. */
+        s_filt_committed = raw;
+    } else if ((now - s_filt_candidate_since) >=
+               (s_motor_running ? FILT_WINDOW_MOVING_MS : FILT_WINDOW_STOPPED_MS)) {
+        s_filt_committed = s_filt_candidate;
+    }
+    return s_filt_committed;
+}
+
+void ne185_set_motor_running(bool running)
+{
+    s_motor_running = running;
+}
+
 /* Checksum REAL del NE185 (descubierto 2026-06-24 por sniff limpio del poll
  * del NE187, con NE187 conectado como master y ESP en sniff):
  *   b[19] = (suma de b[5..18]) & 0xFF
@@ -189,9 +234,11 @@ static void parse_frame(const uint8_t *b)
     tmp.battery2_raw = b[13];
 
     if (is_native_ne185) {
-        /* Frame nativo NE185 (sin NE187): no contiene tanks - dejar
-         * los valores actuales (preservar). Marcar como "sin dato". */
-        tmp.s1 = 0xFF;
+        /* Frame nativo NE185 (sin NE187): no contiene tanks - esta trama no
+         * trae dato util. filter_clean_level() mantiene el ultimo valor
+         * mostrado en vez de marcarlo "sin dato" (evitaba que este frame
+         * degradado hiciera parpadear s1 sin motivo). */
+        tmp.s1 = filter_clean_level(0xFF);
         tmp.r1 = 0xFF;
     } else {
         /* Tanque LIMPIO (clean): nibble bajo de byte 5
@@ -201,16 +248,19 @@ static void parse_frame(const uint8_t *b)
          *   0x7 = 3/4
          *   0xF = 4/4 (lleno)
          *   otro = 0xFF (combo invalido / sin datos)
-         */
+         * Se pasa por filter_clean_level() para amortiguar el "baile" del
+         * sensor con el liquido en movimiento (ver comentario mas arriba). */
         uint8_t raw_clean = b[5] & 0x0F;
+        uint8_t s1_raw;
         switch (raw_clean) {
-            case 0x0: tmp.s1 = 0;    break;
-            case 0x1: tmp.s1 = 1;    break;
-            case 0x3: tmp.s1 = 2;    break;
-            case 0x7: tmp.s1 = 3;    break;
-            case 0xF: tmp.s1 = 4;    break;
-            default:  tmp.s1 = 0xFF; break;
+            case 0x0: s1_raw = 0;    break;
+            case 0x1: s1_raw = 1;    break;
+            case 0x3: s1_raw = 2;    break;
+            case 0x7: s1_raw = 3;    break;
+            case 0xF: s1_raw = 4;    break;
+            default:  s1_raw = 0xFF; break;
         }
+        tmp.s1 = filter_clean_level(s1_raw);
 
         /* Tanque GRISES R1: byte 7. Confirmado 2026-06-23 con test diferencial
          * (puente JP7 pin1<->pin2 = FULL): b7=0x00 vacio, b7=0x01 lleno. Doble

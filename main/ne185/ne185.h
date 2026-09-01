@@ -90,6 +90,13 @@ bool ne185_sim_inject_raw(const uint8_t *frame20);
 void ne185_set_autostart(bool enabled);
 bool ne185_get_autostart(void);
 
+/* Informa si el motor esta en marcha (deducido fuera de aqui a partir de la
+ * tension de la bateria motor via DC-DC, con histeresis). Se usa para
+ * amortiguar el "baile" del nivel de agua limpia (s1) con el liquido en
+ * movimiento: parado el filtro reacciona casi al instante, en marcha se
+ * vuelve muy pausado. Ver dashboard_state.c. */
+void ne185_set_motor_running(bool running);
+
 #ifdef __cplusplus
 }
 #endif
