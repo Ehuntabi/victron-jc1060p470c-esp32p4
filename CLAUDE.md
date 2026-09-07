@@ -2,14 +2,12 @@
 
 Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 
-> El último tag NO se escribe aquí: se consulta con `git describe --tags --match "v*.*.*"`.
-> Antes había un número fijo y llevaba doce versiones mintiendo (decía v1.6.6 estando
-> en la v1.11.18, visto el 24-ago-2026). Un dato que hay que acordarse de actualizar
-> a mano acaba engañando al que lo lea.
-
-> Antes de cualquier trabajo de código no trivial aplicar
-> [`andrej-karpathy-skills:karpathy-guidelines`](https://github.com/multica-ai/andrej-karpathy-skills):
-> Think Before Coding · Simplicity First · Surgical Changes · Goal-Driven Execution.
+> El último tag NO se escribe aquí: se consulta con `git describe --tags --match "v*.*"`
+> (un solo punto: los tags son `vX.Y`, no `vX.Y.Z` — el mismo patrón que usa
+> `CMakeLists.txt` para la versión embebida). Antes había un número fijo y llevaba
+> doce versiones mintiendo (decía v1.6.6 estando en la v1.11.18, visto el
+> 24-ago-2026). Un dato que hay que acordarse de actualizar a mano acaba
+> engañando al que lo lea.
 
 ## Hardware
 - ESP32-P4 (principal) + ESP32-C6 vía SDIO (Wi-Fi/BT con esp_hosted)
@@ -43,6 +41,10 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
   en cada push/PR via `espressif/esp-idf-ci-action@v1` (docker
   `espressif/idf:v5.4.4`, target `esp32p4`). Solo pilla errores de
   COMPILACION, no sustituye probar en la placa.
+- Job `mini_proto_sync` (07-sep-2026): compara byte a byte
+  `main/net/mini_proto.h` contra la copia de `Ehuntabi/35cabina` (protocolo
+  UDP compartido) y falla si difieren. 35cabina tiene el mismo job en su
+  propio repo.
 
 ## Versionado / releases
 - La version que se ve en Ajustes -> Acerca de sale SOLA de `git describe`
