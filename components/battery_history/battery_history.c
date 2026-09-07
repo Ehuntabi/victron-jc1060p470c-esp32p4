@@ -8,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include <time.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -261,7 +262,7 @@ static void sample_timer_cb(void *arg)
     BH_UNLOCK();
 }
 
-/* Persistencia NVS deshabilitada: el buffer es ~552 KB total y NVS no puede
+/* Persistencia NVS deshabilitada: el buffer es ~945 KB total y NVS no puede
  * con eso cada 15 min. Los datos sobreviven en SD vía bh_flush_to_sd_impl. */
 
 
@@ -468,9 +469,24 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     return true;
 }
 
+/* Misma razon que datalogger.c: fopen/fprintf/fclose no tienen timeout
+ * propio, y la tarea de esp_timer es compartida por todo el firmware. El
+ * timer solo notifica; la tarea dedicada es la unica que toca la SD de
+ * verdad. battery_history_flush() (llamada directa) sigue siendo sincrona.
+ * Detectado auditando el 07-sep-2026. */
+static TaskHandle_t s_bh_flush_task_handle = NULL;
+
+static void bh_flush_task(void *arg)
+{
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        bh_flush_to_sd_impl();
+    }
+}
+
 static void bh_flush_timer_cb(void *arg)
 {
-    bh_flush_to_sd_impl();
+    if (s_bh_flush_task_handle) xTaskNotifyGive(s_bh_flush_task_handle);
 }
 
 esp_err_t battery_history_init(void)
@@ -491,7 +507,7 @@ esp_err_t battery_history_init(void)
             return ESP_ERR_NO_MEM;
         }
     }
-    /* Alocar buffer en PSRAM (552 KB) */
+    /* Alocar buffer en PSRAM (~945 KB) */
     if (!s_bufs) {
         s_bufs = heap_caps_calloc(BH_SRC_COUNT, sizeof(bh_buffer_t),
                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -511,6 +527,10 @@ esp_err_t battery_history_init(void)
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_sample_timer, (uint64_t)BH_SAMPLE_MS * 1000ULL));
 
     /* Flush a SD cada 60s */
+    if (xTaskCreate(bh_flush_task, "bh_flush_task", 3072, NULL,
+                     tskIDLE_PRIORITY + 2, &s_bh_flush_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
+    }
     const esp_timer_create_args_t flush_args = {
         .callback = bh_flush_timer_cb,
         .name = "bh_flush",

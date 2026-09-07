@@ -130,7 +130,14 @@ static double metros_entre(double lat1, double lon1, double lat2, double lon2)
 
 void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon)
 {
-    if (!s_mtx) trip_computer_init();
+    /* Si aun no ha corrido trip_computer_init() (desde main.c, al arrancar),
+     * saltarse esta actualizacion en vez de reintentar el init aqui: dos
+     * tareas llamando a la vez re-ejecutarian trip_computer_init() (NVS +
+     * escritura) en paralelo sin proteccion -- una carrera de verdad, no solo
+     * de crear el mutex. Mismo patron que ya usan trip_computer_flush() y
+     * trip_computer_end() unas lineas mas abajo. Detectado auditando el
+     * 07-sep-2026. */
+    if (!s_mtx) return;
     time_t now = time(NULL);
 
     /* Sin posicion de fiar no hay ancla: al recuperarla se empieza de nuevo en
@@ -176,7 +183,7 @@ void trip_computer_init(void)
 
 void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
 {
-    if (!s_mtx) trip_computer_init();
+    if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
     bool do_save = false;
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
@@ -222,7 +229,7 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
 
 void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi)
 {
-    if (!s_mtx) trip_computer_init();
+    if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     if (now < 1000000000L) {
@@ -259,7 +266,7 @@ void trip_computer_flush(void)
 
 void trip_computer_reset(void)
 {
-    if (!s_mtx) trip_computer_init();
+    if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     s.reset_epoch = (now >= 1000000000L) ? now : 0;
@@ -285,7 +292,7 @@ void trip_computer_reset(void)
 /* Cambia el flag de viaje abierto/cerrado y persiste, sin tocar los contadores. */
 static void trip_set_active(bool on)
 {
-    if (!s_mtx) trip_computer_init();
+    if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     s.active = on;
     trip_snap_t snap = trip_snapshot_locked();
@@ -298,7 +305,7 @@ void trip_computer_end(void) { trip_set_active(false); }
 
 bool trip_computer_is_active(void)
 {
-    if (!s_mtx) trip_computer_init();
+    if (!s_mtx) return false;   /* ver el comentario en trip_computer_on_gps() */
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     const bool a = s.active;
     xSemaphoreGive(s_mtx);

@@ -57,18 +57,6 @@ esp_err_t save_wifi_config(const char *ssid,
                            const char *pass,
                            uint8_t enabled_out);
 
-// Relay tab configuration persistence
-esp_err_t load_relay_config(bool *enabled_out,
-                            uint8_t *count_out,
-                            uint8_t *pins_out,
-                            char (*labels_out)[20],
-                            size_t max_pins);
-
-esp_err_t save_relay_config(bool enabled,
-                            const uint8_t *pins,
-                            const char (*labels)[20],
-                            uint8_t count);
-
 // Victron BLE debug flag persistence (NVS namespace: "debug")
 esp_err_t load_victron_debug(bool *enabled_out);
 esp_err_t save_victron_debug(bool enabled);

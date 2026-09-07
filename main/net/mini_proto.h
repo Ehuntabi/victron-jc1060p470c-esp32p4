@@ -22,6 +22,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,20 +63,24 @@ struct __attribute__((packed)) mini_msg {
     uint8_t  frigo_fan_pct;       /* 0..100. >0 implica compresor/vent ON */
     uint8_t  _pad2;
 
-    /* Aguas (NE185 RS-485, niveles 0..3). MINI_NO_DATA_U8 si !fresh. */
+    /* Aguas (NE185 RS-485, niveles 0..4). MINI_NO_DATA_U8 si !fresh. */
     uint8_t  water_clean;         /* s1 limpia */
     uint8_t  water_gray;          /* r1 grises */
 
     /* Canal auxiliar del SmartShunt (mismo campo "aux" que victron_records.h:
      * crudo, la unidad depende de aux_input). MINI_NO_DATA_U8 en aux_input si
-     * no hay shunt (bat_has=false). Ver ui_format_aux_value() en el 7" para
+     * el dato no esta fresco (bat_fresh=false, no bat_has -- ver el comentario
+     * de build_msg() en udp_tx.c). Ver ui_format_aux_value() en el 7" para
      * el mismo criterio de formato. */
     uint16_t aux_value_raw;       /* V*100 (aux_input 0/1) o Kelvin*100 (2) */
     uint8_t  aux_input;           /* 0=voltage2(arranque), 1=mid-point, 2=temp */
 
     /* Exterior. Sin sensor todavía en el 7" -> se envía MINI_NO_DATA_I16. */
     int16_t  exterior_temp_centi;
-    uint8_t  screensaver;         /* 1 = el 7"(P4) está en salvapantallas → el mini atenúa su pantalla */
+    /* 1 = el 7"(P4) está en salvapantallas. La P4 lo manda (udp_tx.c) pero el
+     * satelite (35cabina) todavia no lo lee -- no tiene salvapantallas propio
+     * (Fase 0, ver lv_port.c). Confirmado muerto en recepcion el 07-sep-2026. */
+    uint8_t  screensaver;
 
     /* Reloj para el satélite, que no tiene ninguno: se apaga con el contacto y
      * al encender no sabe ni qué día es. Segundos desde 1970 YA DESPLAZADOS a
@@ -110,6 +115,20 @@ struct __attribute__((packed)) mini_msg {
 };
 
 typedef struct mini_msg mini_msg_t;
+
+/* El comentario de arriba ("Total: 38 bytes... verificado con el compilador")
+ * no era una asercion real, solo lo decia: nada impedia que un campo nuevo
+ * cambiara el tamano sin que nadie se enterase hasta que la P4 y el satelite
+ * empezaran a rechazarse los paquetes en produccion. Con esto, si algun dia
+ * dejan de cuadrar, el build de LOS DOS proyectos falla en el sitio exacto,
+ * no en el monitor serie semanas despues. Detectado auditando el 07-sep-2026. */
+_Static_assert(sizeof(mini_msg_t) == 38,
+               "mini_msg_t cambio de tamano: sube MINI_PROTO_VERSION y "
+               "actualiza este numero (y el comentario de mas arriba)");
+_Static_assert(offsetof(mini_msg_t, crc32) == 34,
+               "el CRC32 ya no esta al final de la struct: build_msg() en "
+               "udp_tx.c y la comprobacion en udp_rx.c asumen los bytes "
+               "[0..crc32) como el area protegida");
 
 #ifdef __cplusplus
 }

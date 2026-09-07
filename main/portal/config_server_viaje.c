@@ -56,7 +56,11 @@ static bool ruta_volcar(const char *carpeta);
 #define VEHICULO_DIR    "/sdcard/vehiculo"
 #define NVS_NS          "viaje_p4"
 #define NVS_CARPETA     "carpeta"     /* ruta del viaje abierto, ausente si no hay */
-#define NVS_LAST_ID     "last_id"     /* ultimo id aplicado (idempotencia) */
+#define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
+#define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
+#define IDS_RING_N      16            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
+                                        * satelite): cubre eventos abiertos a la vez que se
+                                        * cierran en cualquier orden. Ver id_ya_aplicado(). */
 /* Totales del viaje, acumulados SEGUN LLEGAN los apuntes en vez de sumando los
  * CSV al cerrar. Dos motivos: parsear CSV en el P4 seria bastante codigo para
  * algo que se puede ir sumando, y si el viaje se corta a lo bruto (bateria,
@@ -98,15 +102,39 @@ static bool viaje_abierto(char *out, size_t n)
     return e == ESP_OK && out[0];
 }
 
-static uint32_t last_id_get(void)
+/* Ids aplicados recientemente, en anillo -- no solo el mayor visto.
+ *
+ * Antes se guardaba un unico "ultimo id" y se rechazaba cualquier
+ * id <= ese maximo. Pero el satelite reserva el id AL ABRIR el evento, no al
+ * mandarlo (ver el comentario de salida_evento_abrir() en el satelite), y con
+ * varios eventos abiertos a la vez (hasta SALIDA_EVENTOS_MAX) pueden cerrarse
+ * y llegar en cualquier orden: un id mas bajo que otro ya aplicado puede
+ * seguir siendo NUEVO de verdad. Con el maximo se descartaba como duplicado y
+ * la parada se perdia. Detectado auditando el 07-sep-2026. */
+static bool id_ya_aplicado(uint32_t id)
 {
     nvs_handle_t h;
-    uint32_t v = 0;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u32(h, NVS_LAST_ID, &v);
-        nvs_close(h);
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    uint32_t ring[IDS_RING_N] = {0};
+    size_t len = sizeof(ring);
+    nvs_get_blob(h, NVS_IDS_RING, ring, &len);
+    nvs_close(h);
+    for (int i = 0; i < IDS_RING_N; i++) {
+        if (ring[i] == id) return true;
     }
-    return v;
+    return false;
+}
+
+/* Vacia el anillo. Se llama al abrir viaje (ver op_inicio): la numeracion
+ * empieza de cero en cada viaje, y sin esto un id bajo del viaje nuevo podia
+ * coincidir con uno que quedara aun en el anillo del viaje anterior. Usa el
+ * handle YA ABIERTO de quien llama, sin comitear -- eso lo hace quien llama,
+ * junto con lo demas que vaya a tocar en el mismo NVS. */
+static void ids_ring_limpiar(nvs_handle_t h)
+{
+    uint32_t ring[IDS_RING_N] = {0};
+    nvs_set_blob(h, NVS_IDS_RING, ring, sizeof(ring));
+    nvs_set_u8(h, NVS_IDS_CURSOR, 0);
 }
 
 static void estado_set(const char *carpeta, uint32_t id)
@@ -115,7 +143,17 @@ static void estado_set(const char *carpeta, uint32_t id)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     if (carpeta) nvs_set_str(h, NVS_CARPETA, carpeta);
     else         nvs_set_str(h, NVS_CARPETA, "");
-    nvs_set_u32(h, NVS_LAST_ID, id);
+
+    uint32_t ring[IDS_RING_N] = {0};
+    size_t len = sizeof(ring);
+    nvs_get_blob(h, NVS_IDS_RING, ring, &len);
+    uint8_t cursor = 0;
+    nvs_get_u8(h, NVS_IDS_CURSOR, &cursor);
+    if (cursor >= IDS_RING_N) cursor = 0;
+    ring[cursor] = id;
+    nvs_set_blob(h, NVS_IDS_RING, ring, sizeof(ring));
+    nvs_set_u8(h, NVS_IDS_CURSOR, (uint8_t)((cursor + 1) % IDS_RING_N));
+
     nvs_commit(h);
     nvs_close(h);
 }
@@ -172,8 +210,11 @@ static bool diario_en(const char *carpeta, const char *cuando,
     if (nuevo) fprintf(f, "fecha_hora,evento,detalle\n");
 
     fprintf(f, "%s,%s,%s\n", cuando, que, detalle ? detalle : "");
-    fclose(f);
-    return true;
+    /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
+     * hasta aqui todo eran fprintf a un buffer que puede no haber bajado.
+     * Mismo motivo que escribir_resumen() -- antes solo se comprobaba el
+     * fopen, y un disco lleno a mitad de escritura devolvia 200 igual. */
+    return fclose(f) == 0;
 }
 
 /* Inicio y fin los fecha la P4: ocurren con ella delante (el inicio la exige, y
@@ -379,10 +420,13 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * la pinta de ser suya. El viaje se declara en la cabina; los contadores
      * se enteran aqui. */
     trip_computer_reset();
-    {   /* Numeracion nueva: ver el comentario de la idempotencia en el handler. */
+    {   /* Numeracion nueva: ver el comentario de la idempotencia en el handler
+         * y el de id_ya_aplicado() -- se vacia el anillo entero, no solo se
+         * pone a 0 un maximo, para que no queden ids sueltos del viaje
+         * anterior que puedan chocar con ids bajos de este. */
         nvs_handle_t h;
         if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
-            nvs_set_u32(h, NVS_LAST_ID, 0);
+            ids_ring_limpiar(h);
             nvs_commit(h);
             nvs_close(h);
         }
@@ -749,8 +793,9 @@ static bool csv_por_tipo(const char *carpeta, const char *tipo,
         else                         fprintf(f, ",");
     }
     fprintf(f, "\n");
-    fclose(f);
-    return true;
+    /* Mismo motivo que diario_en(): fclose es quien de verdad delata un
+     * disco lleno, los fprintf de arriba solo llenan un buffer. */
+    return fclose(f) == 0;
 }
 
 /* El sello de tiempo lo pone el SATELITE, en el momento en que ocurrio, y no
@@ -1139,7 +1184,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * verdad no cuela igualmente -- op_inicio devuelve 409 si ya hay uno
      * abierto. Detectado auditando el 22-ago-2026. */
     bool es_inicio = !strcmp(jop->valuestring, "inicio");
-    if (!es_inicio && id != 0 && id <= last_id_get()) {
+    if (!es_inicio && id != 0 && id_ya_aplicado(id)) {
         ESP_LOGI(TAG, "id %lu ya aplicado, lo descarto", (unsigned long)id);
         cJSON_Delete(j);
         httpd_resp_sendstr(req, "duplicado");

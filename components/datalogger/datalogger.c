@@ -361,13 +361,38 @@ static void flush_pending_to_sd_impl(void)
     if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
 }
 
+/* La tarea de esp_timer es COMPARTIDA por todo el firmware (heap log, GPS,
+ * RTC, modo noche, feed solar del frigo...). fopen/fprintf/fclose no tienen
+ * timeout propio: si la SD se queda colgada a nivel hardware (no solo
+ * contencion con la camara, que si tiene su timeout de 200ms arriba), esa
+ * llamada bloquea sin limite y con ella TODOS esos timers, no solo este
+ * flush. Por eso el timer periodico solo NOTIFICA a esta tarea dedicada, que
+ * es la unica que de verdad toca la SD -- si se atasca, se atasca sola.
+ * datalogger_flush() (llamada directa, p.ej. al desmontar) sigue siendo
+ * sincrona a proposito: quien la llama necesita saber que ya termino antes
+ * de seguir. Detectado auditando el 07-sep-2026. */
+static TaskHandle_t s_flush_task_handle = NULL;
+
+static void flush_task(void *arg)
+{
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        flush_pending_to_sd_impl();
+    }
+}
+
 static void flush_timer_cb(void *arg)
 {
-    flush_pending_to_sd_impl();
+    if (s_flush_task_handle) xTaskNotifyGive(s_flush_task_handle);
 }
 
 static void start_flush_timer(void)
 {
+    if (xTaskCreate(flush_task, "dl_flush_task", 3072, NULL,
+                     tskIDLE_PRIORITY + 2, &s_flush_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
+        return;
+    }
     const esp_timer_create_args_t args = { .callback = flush_timer_cb, .name = "dl_flush" };
     if (esp_timer_create(&args, &s_flush_timer) == ESP_OK) {
         esp_timer_start_periodic(s_flush_timer, (uint64_t)FLUSH_INTERVAL_MS * 1000ULL);

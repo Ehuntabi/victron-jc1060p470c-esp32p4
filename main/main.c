@@ -559,9 +559,15 @@ static void init_sd_rtc_frigo(void)
     gps_init();
 
     esp_err_t frigo_err = frigo_init(frigo_update_cb);
-    if (frigo_err != ESP_OK)
+    if (frigo_err != ESP_OK) {
         ESP_LOGW(TAG, "frigo_init failed: %s", esp_err_to_name(frigo_err));
-    frigo_set_heartbeat_cb(frigo_heartbeat);
+    } else {
+        /* Solo si la tarea arranco de verdad: registrar el heartbeat con
+         * frigo_init() fallado no vigilaba nada util, pero tampoco es donde
+         * debe decidirse -- el contrato correcto es "solo late lo que existe".
+         * Detectado auditando el 07-sep-2026. */
+        frigo_set_heartbeat_cb(frigo_heartbeat);
+    }
 
     /* Crear el mutex de dashboard_state antes de arrancar httpd/BLE/sim,
      * que son los que acceden al estado concurrentemente. */

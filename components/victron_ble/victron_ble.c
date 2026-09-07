@@ -70,7 +70,14 @@ static inline int32_t sign_extend(uint32_t value, uint8_t bits)
 /*  Device Configuration Lookup                                               */
 /* -------------------------------------------------------------------------- */
 
-static const victron_device_config_t* find_device_config_by_mac(const uint8_t mac[6])
+/* Copia el dispositivo encontrado a *out en vez de devolver un puntero al
+ * array compartido: un puntero seguiria vivo despues de soltar el mutex, y
+ * victron_ble_reload_device_config() puede reescribir device_configs[] desde
+ * otra tarea justo en ese hueco -- el caller acabaria leyendo una AES key a
+ * medio escribir, o de un dispositivo que ya no es el que busco. Los ~67
+ * bytes del struct salen mas baratos que el riesgo. Detectado auditando el
+ * 07-sep-2026. */
+static bool find_device_config_by_mac(const uint8_t mac[6], victron_device_config_t *out)
 {
     // Format the MAC address as string for comparison (BLE addresses are stored in reverse order)
     char mac_str[18];
@@ -79,19 +86,20 @@ static const victron_device_config_t* find_device_config_by_mac(const uint8_t ma
 
     // Search for matching device configuration (bajo mutex: el reload puede
     // reescribir device_configs/device_count desde otra task a la vez).
-    const victron_device_config_t *found = NULL;
+    bool found = false;
     if (device_config_mutex) xSemaphoreTake(device_config_mutex, portMAX_DELAY);
     for (int i = 0; i < device_count; i++) {
         if (device_configs[i].enabled &&
             strcasecmp(device_configs[i].mac_address, mac_str) == 0) {
-            found = &device_configs[i];
+            if (out) *out = device_configs[i];
+            found = true;
             break;
         }
     }
     if (device_config_mutex) xSemaphoreGive(device_config_mutex);
 
     if (found) {
-        VDBG("Found device config for MAC %s: '%s'", mac_str, found->device_name);
+        VDBG("Found device config for MAC %s: '%s'", mac_str, out ? out->device_name : "?");
     } else {
         VDBG("No device config found for MAC %s", mac_str);
     }
@@ -285,7 +293,7 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     uint16_t early_vid = (fields.mfg_data_len >= 2 && fields.mfg_data)
         ? (uint16_t)(fields.mfg_data[0] | (fields.mfg_data[1] << 8)) : 0xFFFF;
     bool is_victron = (early_vid == VICTRON_MANUFACTURER_ID);
-    bool mac_known  = (find_device_config_by_mac(event->disc.addr.val) != NULL);
+    bool mac_known  = find_device_config_by_mac(event->disc.addr.val, NULL);
 
     if (is_victron) s_adv_victron++;
 
@@ -340,14 +348,16 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         }
     }
 
-    // Look up device configuration by MAC address
-    const victron_device_config_t* device_config = find_device_config_by_mac(event->disc.addr.val);
+    // Look up device configuration by MAC address (copia local, no puntero
+    // al array compartido -- ver el comentario de find_device_config_by_mac)
+    victron_device_config_t device_config_copy;
+    bool device_found = find_device_config_by_mac(event->disc.addr.val, &device_config_copy);
     const uint8_t* device_aes_key = NULL;
-    
-    if (device_config != NULL) {
-        device_aes_key = device_config->aes_key;
-        VDBG("Using device-specific AES key for %s (MAC: %s)", 
-             device_config->device_name, device_config->mac_address);
+
+    if (device_found) {
+        device_aes_key = device_config_copy.aes_key;
+        VDBG("Using device-specific AES key for %s (MAC: %s)",
+             device_config_copy.device_name, device_config_copy.mac_address);
     } else {
         // Fallback to legacy single key for backward compatibility
         device_aes_key = legacy_aes_key;
@@ -373,7 +383,7 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, fields.mfg_data, fields.mfg_data_len, ESP_LOG_INFO);
 
     // Check if we should ignore unknown devices
-    if (device_config == NULL && device_count > 0) {
+    if (!device_found && device_count > 0) {
         // If we have configured devices, ignore packets from unknown MACs
         // Bajado a LOGD: en operacion normal cada advertisement de un Victron
         // ajeno (device_count>0) disparaba este WARN en el hot path NimBLE.

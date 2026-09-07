@@ -295,10 +295,10 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
      * necesita por HTTP. Se insertan dentro del objeto raiz: retroceder sobre el
      * '}' final y volver a cerrarlo tras los dos objetos nuevos. */
     if (n > 0 && (size_t)n < maxlen && buf[n - 1] == '}') {
-        n--;
+        int base = n - 1;   /* por si este segundo append no cupiera */
         ne185_data_t cd; ne185_get(&cd);
         frigo_state_t fs; frigo_get_state_copy(&fs);
-        n += snprintf(buf + n, maxlen - n,
+        int added = snprintf(buf + base, maxlen - (size_t)base,
             ",\"camper\":{\"luz_int\":%s,\"luz_ext\":%s,\"bomba\":%s,\"shore\":%s,"
             "\"tank_limpia\":%u,\"tank_grises\":%u,\"bat_servicio_v\":%.2f,\"fresh\":%s}"
             ",\"frigo\":{\"temp_c\":%.1f,\"temp_aletas_c\":%.1f,\"temp_exterior_c\":%.1f,"
@@ -309,6 +309,19 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
             fs.T_Congelador, fs.T_Aletas, fs.T_Exterior,
             (unsigned)fs.fan_percent, (unsigned)fs.mode,
             (unsigned)fs.T_min, (unsigned)fs.T_max);
+        /* snprintf devuelve lo que HABRIA escrito sin el limite: si no cupo,
+         * "added" puede superar el hueco real y n quedaria por encima de
+         * maxlen -- el chequeo final de abajo lo detectaria y tirar TODO el
+         * JSON (bateria/solar/dcdc incluidos) por culpa solo de camper/frigo.
+         * Mejor quedarse con lo que ya cupo (cierra el '}' que se habia
+         * quitado) que devolver "{}" entero. Detectado auditando el
+         * 07-sep-2026. */
+        if (added > 0 && (size_t)added < maxlen - (size_t)base) {
+            n = base + added;
+        } else {
+            buf[base] = '}';
+            n = base + 1;
+        }
     }
     return (n > 0 && (size_t)n < maxlen) ? (size_t)n : 0;
 }

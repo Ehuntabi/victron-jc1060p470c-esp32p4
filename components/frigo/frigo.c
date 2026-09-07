@@ -570,7 +570,17 @@ esp_err_t frigo_init(frigo_update_cb_t cb)
     fan_pwm_init();
     fan_set_percent(0);
 
-    xTaskCreate(frigo_task, "frigo", 8192, NULL, 5, NULL);
+    /* Si esto falla (sin heap para la pila de 8 KB) la tarea no arranca, y
+     * antes frigo_init() devolvia ESP_OK igualmente: main.c registraba el
+     * heartbeat en un vacio (nada lo iba a llamar nunca). Con la tarea
+     * inexistente el watchdog no lo detecta como cuelgue (nunca late = no se
+     * vigila, ver watchdog.c), pero devolver el fallo de verdad es lo
+     * correcto -- que quien llama sepa que el frigo no esta operativo.
+     * Detectado auditando el 07-sep-2026. */
+    if (xTaskCreate(frigo_task, "frigo", 8192, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea frigo");
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
