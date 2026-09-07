@@ -30,6 +30,7 @@ static const char *TAG = "sim_overview";
 
 #include "ne185/ne185.h"
 #include "frigo.h"
+#include "gps/gps.h"
 #include "ui.h"
 #include "victron_records.h"
 
@@ -156,6 +157,12 @@ static void sim_task(void *arg) {
         float t_ext = 22.0f + tri(0.0f, 6.0f, t, 90000);
         uint8_t fan = (uint8_t)tri(0.0f, 100.0f, t, 18000);
         frigo_sim_inject(t_aletas, t_cong, t_ext, fan);
+
+        /* === GPS: fix fijado, 9 satelites, en Zumaia (mismo sitio que las
+         *   capturas de viaje del README). No hay heredado real que oscilar
+         *   (el modulo no manda posicion) asi que, igual que el resto de este
+         *   frame, se deja fijo. */
+        gps_sim_inject(true, 9, 43.2969, -2.2542, 12.0f, 42, 34);
 
         vTaskDelay(pdMS_TO_TICKS(SIM_TICK_MS));
     }

@@ -56,6 +56,7 @@ static SemaphoreHandle_t s_mtx;
 static gps_data_t        s_d;
 static int64_t           s_ultimo_us;
 static uint32_t          s_sincs;
+static volatile bool     s_sim_mode;   /* ver gps_sim_inject() */
 
 /* Anillo con las ultimas tramas, para la pantalla de diagnostico. */
 static char s_crudo[GPS_CRUDO_N][LINEA_MAX];
@@ -294,7 +295,8 @@ static void gps_task(void *arg)
          * esto la pantalla se quedaria con el ultimo fix bueno para siempre y
          * pareceria que hay posicion con el cable desenchufado. */
         xSemaphoreTake(s_mtx, portMAX_DELAY);
-        if (s_ultimo_us && (ahora_us - s_ultimo_us) > (int64_t)SIN_DATO_S * 1000000LL) {
+        if (!s_sim_mode && s_ultimo_us &&
+            (ahora_us - s_ultimo_us) > (int64_t)SIN_DATO_S * 1000000LL) {
             s_d.hay_datos = false;
             s_d.hay_fix   = false;
             s_d.satelites = 0;
@@ -364,6 +366,25 @@ void gps_crudo_get(int i, char *out, size_t n)
 }
 
 uint32_t gps_sincronizaciones(void) { return s_sincs; }
+
+void gps_sim_inject(bool hay_fix, uint8_t satelites, double lat, double lon,
+                    float altitud_m, uint8_t snr_mejor, uint8_t snr_medio)
+{
+    if (!s_mtx) return;
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    s_sim_mode      = true;
+    s_d.hay_datos   = true;
+    s_d.hay_fix     = hay_fix;
+    s_d.satelites   = satelites;
+    s_d.lat         = lat;
+    s_d.lon         = lon;
+    s_d.altitud_m   = altitud_m;
+    s_d.snr_mejor   = snr_mejor;
+    s_d.snr_medio   = snr_medio;
+    s_d.snr_cuantos = satelites;
+    s_ultimo_us     = esp_timer_get_time();   /* evita que la caducidad lo borre */
+    xSemaphoreGive(s_mtx);
+}
 
 void gps_init(void)
 {

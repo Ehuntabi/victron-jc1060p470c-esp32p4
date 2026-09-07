@@ -63,6 +63,13 @@ void gps_crudo_get(int i, char *out, size_t n);
  * Lo enseña el menu: 0 significa que todavia no ha podido. */
 uint32_t gps_sincronizaciones(void);
 
+/* Solo para sim_overview.c: inyecta un estado fijo (mismo patron que
+ * frigo_sim_inject/ne185_sim_inject). Marca modo simulacion para que
+ * gps_task() no lo borre a los 5s por caducidad -- sin modulo real
+ * enchufado, nunca llegaria una trama de verdad que lo renovara. */
+void gps_sim_inject(bool hay_fix, uint8_t satelites, double lat, double lon,
+                    float altitud_m, uint8_t snr_mejor, uint8_t snr_medio);
+
 #ifdef __cplusplus
 }
 #endif

@@ -638,7 +638,9 @@ static void init_audio_ble(void)
 
     /* Modo simulacion: inyecta datos ficticios para previsualizar Overview.
      * DESACTIVADO en produccion (doble seguro, como el tour): descomentar la
-     * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo. */
+     * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo.
+     * Se activo brevemente el 07-sep-2026 en la P4 de reserva para las
+     * pruebas de banco con la 35cabina; desactivado otra vez el mismo dia. */
     /* sim_overview_start(); */
 }
 
