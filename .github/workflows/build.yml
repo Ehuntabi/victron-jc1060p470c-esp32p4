@@ -17,3 +17,25 @@ jobs:
           esp_idf_version: v5.4.4
           target: esp32p4
           path: '.'
+
+  # mini_proto.h se mantiene sincronizado A MANO entre este repo y 35cabina
+  # (protocolo UDP compartido, ver la cabecera del fichero). Sin esto, editar
+  # solo una copia no falla hasta que los dos aparatos se rechazan los
+  # paquetes en produccion, semanas despues. Detectado auditando el
+  # 07-sep-2026.
+  mini_proto_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout victron
+        uses: actions/checkout@v4
+        with:
+          path: victron
+
+      - name: Checkout 35cabina
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/35cabina
+          path: 35cabina
+
+      - name: Comparar mini_proto.h entre los dos proyectos
+        run: diff victron/main/net/mini_proto.h 35cabina/main/net/mini_proto.h
