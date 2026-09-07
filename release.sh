@@ -3,17 +3,20 @@
 # release.sh — prepara un release de "Joint SPL 145 Control".
 #
 # Uso:  ./release.sh X.Y  ["mensaje del tag"]
-#   ej: ./release.sh 1.0.1
-#       ./release.sh 1.1.0 "Añade gráfico de consumo"
+#   ej: ./release.sh 1.12
+#       ./release.sh 1.13 "Añade gráfico de consumo"
 #
-# Qué hace (TODO en local, no publica nada):
+# Qué hace (SÍ publica: sube código+tag y crea la Release en GitHub):
 #   1. Comprueba que no hay cambios sin commitear.
 #   2. Crea el tag anotado vX.Y sobre el commit actual.
 #   3. Build LIMPIO forzando la regeneración de la versión/fecha (esquiva el
 #      gotcha de ESP-IDF por el que el About mostraba una versión/fecha vieja).
 #   4. Genera la imagen fusionada lista para el release.
 #   5. Verifica que la versión embebida coincide con el tag.
-#   6. Te imprime los comandos de PUSH, de crear la Release y de flashear.
+#   6. Sube código y tag, y publica la Release en GitHub con el binario (esto
+#      antes había que copiarlo y pegarlo a mano -- por eso la última Release
+#      publicada llevaba tres semanas de retraso sobre el tag real, visto el
+#      24-ago-2026, ver el comentario del paso 6 mas abajo).
 #
 # La versión que se ve en la pantalla (Ajustes → Acerca de) sale sola de este
 # tag: no hay que editar ningún número en el código.
