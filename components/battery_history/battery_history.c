@@ -97,6 +97,13 @@ static int32_t s_last_flushed_ts[BH_SRC_COUNT] = {0};
  * cerrar el dia en SD + reiniciar el ring. -1 = aun sin hora sincronizada. */
 static int s_last_local_day = -1;
 
+/* Tarea dedicada para toda la I/O de SD de este componente (flush periodico Y
+ * cierre de dia natural): fopen/fprintf/fclose no tienen timeout propio, y la
+ * tarea de esp_timer es compartida por todo el firmware. Detectado auditando
+ * el 07-sep-2026 -- ver el comentario de bh_flush_task mas abajo. */
+static TaskHandle_t s_bh_flush_task_handle = NULL;
+static time_t       s_pending_rollover_yest = 0;   /* 0 = nada pendiente, protegido con BH_LOCK */
+
 /* Snapshot por flush para evitar mantener BH_LOCK durante la I/O a SD.
  *
  * 128 puntos por fuente son 21 min a 10 s de muestreo. Con el vuelco cada 10 min
@@ -217,12 +224,13 @@ static void sample_timer_cb(void *arg)
         int day_id = (lt.tm_year + 1900) * 366 + lt.tm_yday;
         if (s_last_local_day >= 0 && day_id != s_last_local_day) {
             time_t yest = now_w - lt.tm_hour * 3600 - lt.tm_min * 60 - lt.tm_sec - 1;
-            /* Solo reiniciar el ring si el volcado de ayer tuvo exito; si fallo,
-             * NO borrar: los datos quedan en el ring y el flush de 60s los
-             * reintegra en el proximo ciclo. */
-            if (bh_flush_to_sd_dated(yest)) {
-                bh_reset_for_new_day();
-            }
+            /* El volcado de verdad (y el reinicio del ring si tuvo exito) lo
+             * hace bh_flush_task: aqui solo se marca el aviso y se notifica,
+             * no se toca la SD desde esta tarea compartida. */
+            BH_LOCK();
+            s_pending_rollover_yest = yest;
+            BH_UNLOCK();
+            if (s_bh_flush_task_handle) xTaskNotifyGive(s_bh_flush_task_handle);
         }
         s_last_local_day = day_id;
     }
@@ -474,12 +482,22 @@ static bool bh_flush_to_sd_dated(time_t file_date)
  * timer solo notifica; la tarea dedicada es la unica que toca la SD de
  * verdad. battery_history_flush() (llamada directa) sigue siendo sincrona.
  * Detectado auditando el 07-sep-2026. */
-static TaskHandle_t s_bh_flush_task_handle = NULL;
-
 static void bh_flush_task(void *arg)
 {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        BH_LOCK();
+        time_t yest = s_pending_rollover_yest;
+        s_pending_rollover_yest = 0;
+        BH_UNLOCK();
+        if (yest != 0) {
+            /* Solo reiniciar el ring si el volcado de ayer tuvo exito; si
+             * fallo, NO borrar: los datos quedan en el ring y el flush
+             * normal de abajo los reintegra. */
+            if (bh_flush_to_sd_dated(yest)) bh_reset_for_new_day();
+        }
+
         bh_flush_to_sd_impl();
     }
 }
@@ -526,7 +544,7 @@ esp_err_t battery_history_init(void)
     ESP_ERROR_CHECK(esp_timer_create(&sample_args, &s_sample_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_sample_timer, (uint64_t)BH_SAMPLE_MS * 1000ULL));
 
-    /* Flush a SD cada 60s */
+    /* Flush a SD cada 10 min (BH_FLUSH_INTERVAL_MS) */
     if (xTaskCreate(bh_flush_task, "bh_flush_task", 3072, NULL,
                      tskIDLE_PRIORITY + 2, &s_bh_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");

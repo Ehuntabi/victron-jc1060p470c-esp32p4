@@ -8,8 +8,11 @@
  *  - Lee la causa del último reset y, si fue por TWDT/INT_WDT/panic, incrementa
  *    el contador persistido en NVS (namespace "wd").
  *  - Crea una task monitor que cada N s comprueba salud de LVGL: si el lock
- *    falla N veces seguidas (UI congelada), hace flush a SD y fuerza reset
- *    controlado para que el chip vuelva a un estado limpio.
+ *    falla N veces seguidas (UI congelada), fuerza un reset controlado para
+ *    que el chip vuelva a un estado limpio -- SIN flush a SD a propósito (ver
+ *    el comentario en watchdog.c: si el cuelgue lo causa el propio
+ *    subsistema de SD/FAT, intentar volcar ahí podría colgar también el
+ *    reset).
  */
 esp_err_t watchdog_init(void);
 

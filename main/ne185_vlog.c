@@ -23,6 +23,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -178,6 +179,25 @@ static void flush_to_sd(void)
     }
 }
 
+/* flush_to_sd() hace I/O de SD real. sample_timer_cb corre en la tarea
+ * COMPARTIDA de esp_timer (junto con heap log, GPS, RTC, modo noche...);
+ * muestrear en RAM es barato y se queda ahi, pero el flush periodico se
+ * notifica a esta tarea dedicada -- si la SD se cuelga a nivel hardware, se
+ * atasca sola, sin llevarse por delante el resto de timers del firmware.
+ * ne185_vlog_flush() (llamada directa) sigue siendo sincrona. Mismo arreglo
+ * que datalogger.c/battery_history.c/config_server_viaje.c. Detectado
+ * auditando el 07-sep-2026. */
+static TaskHandle_t s_vlog_flush_task_handle;
+
+static void vlog_flush_task(void *arg)
+{
+    (void)arg;
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        flush_to_sd();
+    }
+}
+
 static void sample_timer_cb(void *arg)
 {
     (void)arg;
@@ -212,7 +232,7 @@ static void sample_timer_cb(void *arg)
 
     if (++s_since_flush >= FLUSH_EVERY) {
         s_since_flush = 0;
-        flush_to_sd();
+        if (s_vlog_flush_task_handle) xTaskNotifyGive(s_vlog_flush_task_handle);
     }
 }
 
@@ -233,6 +253,11 @@ esp_err_t ne185_vlog_init(void)
     }
 
     sd_mkdir(LOG_DIR, 0775, 3000);   /* si la SD no esta lista todavia, falla sin ruido */
+
+    if (xTaskCreate(vlog_flush_task, "ne185_vlog_flush", 3072, NULL,
+                     tskIDLE_PRIORITY + 2, &s_vlog_flush_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
+    }
 
     const esp_timer_create_args_t args = {
         .callback = sample_timer_cb,

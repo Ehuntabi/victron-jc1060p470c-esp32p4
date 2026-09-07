@@ -26,6 +26,14 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+# DECISION EXPLICITA, no un descuido: con QIO elegido, el sdkconfig generado
+# lleva CONFIG_ESPTOOLPY_FLASHMODE="dio" (no "qio"). No es una contradiccion:
+# es upstream, universal y para CUALQUIER target -- ver Kconfig.projbuild de
+# esptool_py en ESP-IDF ("we use esptool.py to flash bootloader in dio mode
+# for QIO/QOUT, bootloader then upgrades itself to quad mode during
+# initialisation"). El arranque es en dio (mas tolerante, funciona con
+# cualquier chip de flash) y el propio bootloader pasa a QIO de verdad
+# despues. Auditado el 07-sep-2026.
 
 # ── PSRAM (32 MB integrada en el módulo) ──────────────────────────────────────
 # HEX/200M, no OCT/80M: el ancho de banda a 200 MHz es el que sostiene el

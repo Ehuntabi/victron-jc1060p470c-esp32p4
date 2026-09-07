@@ -35,6 +35,8 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -616,7 +618,9 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
                 (unsigned long)esperados, (unsigned long)aplicados);
         fprintf(f, "Lo demas es correcto. Este aviso esta para que no des el\n"
                    "viaje por entero al analizarlo.\n");
-        fclose(f);
+        if (fclose(f) != 0) {
+            ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+        }
     }
     ESP_LOGW(TAG, "viaje INCOMPLETO: esperados %lu, aplicados %lu",
              (unsigned long)esperados, (unsigned long)aplicados);
@@ -945,7 +949,7 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     if (d.solar_fresh) fprintf(f, "%u,", d.pv_w); else fprintf(f, ",");
     fprintf(f, "%.1f,%.1f,%u,", fr.T_Congelador, fr.T_Exterior, fr.fan_percent);
     if (ne.fresh) fprintf(f, "%u,%u\n", ne.s1, ne.r1); else fprintf(f, ",\n");
-    fclose(f);
+    if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
 }
 
 static void fila_contadores(const char *carpeta, const struct tm *tm_l)
@@ -975,7 +979,7 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     fprintf(f, "%s,%.2f,%.0f,%.0f,%.0f,%.2f,%.1f\n", cuando,
             (double)t.seconds_running / 3600.0, t.wh_charged, t.wh_discharged,
             t.wh_solar, (double)t.solar_seconds / 3600.0, t.km);
-    fclose(f);
+    if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
 }
 
 /* Los puntos de la ruta se juntan en RAM y bajan a la tarjeta de golpe.
@@ -1095,10 +1099,41 @@ static void tick_viaje_cb(void *arg)
     camera_sd_bus_unlock();
 }
 
+/* tick_viaje_cb hace I/O de SD real (fila_telemetria/fila_contadores/
+ * ruta_volcar, con camera_sd_bus_lock(3000) -- 3s de margen) cada vez que le
+ * toca. La tarea de esp_timer es COMPARTIDA por todo el firmware: una SD
+ * colgada a nivel hardware ahi bloquearia tambien el heap log, GPS, RTC,
+ * modo noche y el feed solar del frigo, no solo esta telemetria. Mismo
+ * arreglo que ya se hizo en datalogger.c y battery_history.c: el timer solo
+ * NOTIFICA a una tarea dedicada, que es la unica que toca la SD de verdad.
+ * Detectado auditando el 07-sep-2026 (se nos habia quedado fuera de aquel
+ * arreglo). */
+static TaskHandle_t s_viaje_tick_task_handle;
+
+static void viaje_tick_task(void *arg)
+{
+    (void)arg;
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        tick_viaje_cb(NULL);
+    }
+}
+
+static void viaje_tick_timer_cb(void *arg)
+{
+    (void)arg;
+    if (s_viaje_tick_task_handle) xTaskNotifyGive(s_viaje_tick_task_handle);
+}
+
 void viaje_telemetria_start(void)
 {
+    if (xTaskCreate(viaje_tick_task, "viaje_tick_task", 3072, NULL,
+                     tskIDLE_PRIORITY + 2, &s_viaje_tick_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea de telemetria del viaje");
+        return;
+    }
     static esp_timer_handle_t t;
-    const esp_timer_create_args_t args = { .callback = tick_viaje_cb, .name = "viaje_tick" };
+    const esp_timer_create_args_t args = { .callback = viaje_tick_timer_cb, .name = "viaje_tick" };
     if (esp_timer_create(&args, &t) == ESP_OK) {
         /* Se despierta cada 30 s -- el paso mas corto, el de la ruta -- y el
          * propio callback decide que toca. Antes era cada minuto; se bajo al

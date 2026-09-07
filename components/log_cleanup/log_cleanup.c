@@ -2,6 +2,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "camera.h"          /* camera_sd_bus_lock: serializar el barrido con la camara */
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>        /* rmdir: borrar la carpeta de una sesion de vigilancia */
@@ -207,20 +209,47 @@ int log_cleanup_files_pending_warning(int max_days_keep)
 static int s_max_days_cached = 60;
 static esp_timer_handle_t s_daily_timer = NULL;
 
+/* process_dir() recorre directorios y borra ficheros (opendir/unlink): I/O de
+ * SD real, sin timeout propio. Los dos timers de aqui corren en la tarea
+ * COMPARTIDA de esp_timer; si la SD se cuelga a nivel hardware durante un
+ * barrido, se lleva por delante tambien el heap log, GPS, RTC, modo noche...
+ * El timer solo notifica a una tarea dedicada. log_cleanup_run_now() (llamada
+ * directa, p.ej. desde un boton de Ajustes) sigue siendo sincrona. Mismo
+ * arreglo que datalogger.c/battery_history.c/ne185_vlog.c/
+ * config_server_viaje.c. Detectado auditando el 07-sep-2026. */
+static TaskHandle_t s_cleanup_task_handle;
+
+static void cleanup_task(void *arg)
+{
+    (void)arg;
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        log_cleanup_run_now(s_max_days_cached);
+    }
+}
+
 static void daily_cleanup_cb(void *arg)
 {
-    log_cleanup_run_now(s_max_days_cached);
+    (void)arg;
+    if (s_cleanup_task_handle) xTaskNotifyGive(s_cleanup_task_handle);
 }
 
 /* Primer barrido tras 5s del boot */
 static void initial_cleanup_cb(void *arg)
 {
-    log_cleanup_run_now(s_max_days_cached);
+    (void)arg;
+    if (s_cleanup_task_handle) xTaskNotifyGive(s_cleanup_task_handle);
 }
 
 void log_cleanup_init(int max_days_keep)
 {
     s_max_days_cached = max_days_keep;
+
+    if (xTaskCreate(cleanup_task, "log_cleanup_task", 3072, NULL,
+                     tskIDLE_PRIORITY + 2, &s_cleanup_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo crear la tarea de limpieza: sin barrido periodico");
+    }
+
     /* Barrido inicial a los 5s */
     esp_timer_handle_t init_t;
     esp_timer_create_args_t a1 = {
