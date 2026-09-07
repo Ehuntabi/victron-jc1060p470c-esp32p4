@@ -28,9 +28,14 @@ CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 
 # ── PSRAM (32 MB integrada en el módulo) ──────────────────────────────────────
+# HEX/200M, no OCT/80M: el ancho de banda a 200 MHz es el que sostiene el
+# refresco de la DSI (1024x600 RGB565, buffers en PSRAM). Corregido tras
+# comprobar que el sdkconfig real llevaba tiempo en HEX/200M mientras estos
+# defaults seguian en OCT/80M -- un reconfigure desde cero se habria hecho
+# con el ancho de banda equivocado. Detectado auditando el 07-sep-2026.
 CONFIG_SPIRAM=y
-CONFIG_SPIRAM_MODE_OCT=y
-CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 # Los buffers LVGL residen en PSRAM (buff_spiram = true en bsp_display_cfg_t)
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
@@ -59,9 +64,7 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # ── DMA2D (acelerador 2D para relleno de framebuffer) ─────────────────────────
 CONFIG_SOC_DMA2D_SUPPORTED=y
 
-# ── BLE + WiFi (heredados del proyecto original) ──────────────────────────────
-CONFIG_BT_ENABLED=y
-CONFIG_BT_BLE_ENABLED=y
+# ── WiFi (heredado del proyecto original) ─────────────────────────────────────
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 
@@ -92,12 +95,6 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
-
-# BLE via VHCI over SDIO (ESP32-C6)
-CONFIG_ESP_ENABLE_BT=y
-CONFIG_ESP_HCI_VHCI=y
-CONFIG_BT_NIMBLE_TRANSPORT_UART=n
-
 
 # Camara MIPI-CSI. El device CSI habilita tambien el ISP.
 CONFIG_ESP_VIDEO_ENABLE_MIPI_CSI_VIDEO_DEVICE=y
