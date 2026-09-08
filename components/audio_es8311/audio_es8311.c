@@ -130,14 +130,20 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     ret = i2s_channel_enable(s_tx_chan);
     if (ret != ESP_OK) { ESP_LOGE(TAG, "i2s_enable: %s", esp_err_to_name(ret)); return ret; }
 
-    /* 2. Configurar PA por GPIO11 / PA_CTRL (NS4150) */
+    /* 2. Configurar PA por GPIO11 / PA_CTRL (NS4150), apagado en reposo.
+     * Antes quedaba a 1 desde el boot: el NS4150 estaba alimentado todo el
+     * rato aunque nunca sonara un jingle, drenaje constante a bateria sin
+     * motivo. play_tones_impl() ya lo enciende al empezar la secuencia y lo
+     * apaga tras una cola de silencio (evita el pop), asi que no hace falta
+     * tenerlo alimentado fuera de una reproduccion. Detectado auditando el
+     * 08-sep-2026. */
     gpio_config_t pa_cfg = {
         .pin_bit_mask = (1ULL << PA_CTRL),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = 0, .pull_down_en = 0, .intr_type = 0,
     };
     gpio_config(&pa_cfg);
-    gpio_set_level(PA_CTRL, 1);
+    gpio_set_level(PA_CTRL, 0);
 
     /* 3. Crear interfaz audio_codec_data (I2S) */
     audio_codec_i2s_cfg_t i2s_data_cfg = {
