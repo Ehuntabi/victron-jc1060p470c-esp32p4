@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -17,6 +18,8 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <time.h>
+
+static const char *TAG = "cfg_srv_vig";
 
 // GET /snapshot -> foto JPEG del ultimo frame de la camara. Requiere auth (expone la
 // camara). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
@@ -120,13 +123,15 @@ static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
             if (cl < 0 || (size_t)cl >= sizeof(combined)) continue;
             vig_sd_list_insert(names, max, &n, &total, combined);
         }
-        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "closedir sesion sin cerrojo SD tras 5s de espera");
         closedir(dsub);
-        camera_sd_bus_unlock();
+        if (got_lock) camera_sd_bus_unlock();
     }
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+    bool got_lock_top = camera_sd_bus_lock_wait(5000);
+    if (!got_lock_top) ESP_LOGW(TAG, "closedir tope sin cerrojo SD tras 5s de espera");
     closedir(dtop);
-    camera_sd_bus_unlock();
+    if (got_lock_top) camera_sd_bus_unlock();
     if (total_out) *total_out = total;
     return n;
 }
@@ -155,16 +160,20 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
         camera_sd_bus_unlock();
         if (r == 0) break;
         if (httpd_resp_send_chunk(req, buf, r) != ESP_OK) {
-            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            bool got_lock = camera_sd_bus_lock_wait(5000);
+            if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
             fclose(f);
-            camera_sd_bus_unlock();
+            if (got_lock) camera_sd_bus_unlock();
             return ESP_FAIL;
         }
         vTaskDelay(1);   /* ceder al GDMA de la camara entre trozos */
     }
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
-    fclose(f);
-    camera_sd_bus_unlock();
+    {
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
+        fclose(f);
+        if (got_lock) camera_sd_bus_unlock();
+    }
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }

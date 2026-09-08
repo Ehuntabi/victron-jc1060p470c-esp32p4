@@ -11,6 +11,8 @@
 #include "esp_wifi.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "mbedtls/base64.h"
@@ -297,28 +299,78 @@ void config_server_get_web_credentials(char *user, size_t ulen,
  * leen en Ajustes -> Wi-Fi de la pantalla). A 0 vuelve a quedar abierto. */
 #define PORTAL_REQUIRE_BASIC_AUTH 1
 
+/* Compara en tiempo CONSTANTE (no strcmp, que sale en cuanto encuentra la
+ * primera diferencia): sobre un AP sin clave de verdad (ver el bloque de
+ * arriba, "cualquiera a veinte metros"), un atacante con acceso a la red
+ * podria en teoria medir el tiempo de respuesta byte a byte para adivinar la
+ * clave sin fuerza bruta a ciegas. Recorre siempre el mismo numero de bytes
+ * (el maximo de las dos cadenas) independientemente de donde este la primera
+ * diferencia. Detectado auditando el 08-sep-2026. */
+static bool auth_equal_ct(const char *a, const char *b)
+{
+    size_t la = strlen(a), lb = strlen(b);
+    size_t max = la > lb ? la : lb;
+    unsigned diff = (unsigned)(la ^ lb);
+    for (size_t i = 0; i < max; i++) {
+        unsigned char ca = i < la ? (unsigned char)a[i] : 0;
+        unsigned char cb = i < lb ? (unsigned char)b[i] : 0;
+        diff |= (unsigned)(ca ^ cb);
+    }
+    return diff == 0;
+}
+
+/* Freno ante intentos repetidos de credenciales. Sin esto, un atacante en el
+ * Wi-Fi (ver el bloque de arriba: el AP no tiene clave de verdad) podia
+ * probar usuario/clave tan rapido como el httpd aguantase peticiones -- nada
+ * lo frenaba salvo el propio rendimiento del chip. Cada fallo suma; tras
+ * FALLOS_LIBRES seguidos, se espera un poco ANTES de contestar 401 (crece con
+ * cada fallo, tope 4s) para que la fuerza bruta se vuelva impracticable sin
+ * bloquear a alguien que se equivoca alguna vez. Un acierto lo resetea a
+ * cero; 5 min de inactividad tambien (para no arrastrar fallos viejos de
+ * hace dias). No es por IP -- un solo cliente en el AP a la vez es el caso
+ * normal, y llevar una tabla por IP en RAM no compensa aqui. */
+#define AUTH_FALLOS_LIBRES   3
+#define AUTH_ESPERA_PASO_MS  500
+#define AUTH_ESPERA_TOPE_MS  4000
+#define AUTH_INACTIVIDAD_US  (300LL * 1000000LL)
+
 /* Comprobacion REAL de credenciales. La usan siempre los endpoints peligrosos.
  * No-static: declarada en config_server_internal.h. */
 esp_err_t check_basic_auth_strict(httpd_req_t *req)
 {
+    static uint32_t s_fallos = 0;
+    static int64_t  s_ultimo_fallo_us = 0;
+
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
     if (err == ESP_OK && s_auth_header[0] != '\0' &&
-        strcmp(auth, s_auth_header) == 0) {
+        auth_equal_ct(auth, s_auth_header)) {
+        s_fallos = 0;
         ap_off_timer_kick();   /* peticion valida -> mantener el HTTP server vivo */
         return ESP_OK;
     }
+
+    int64_t now_us = esp_timer_get_time();
+    if (now_us - s_ultimo_fallo_us > AUTH_INACTIVIDAD_US) s_fallos = 0;
+    s_ultimo_fallo_us = now_us;
+    s_fallos++;
+    if (s_fallos > AUTH_FALLOS_LIBRES) {
+        uint32_t espera = (s_fallos - AUTH_FALLOS_LIBRES) * AUTH_ESPERA_PASO_MS;
+        if (espera > AUTH_ESPERA_TOPE_MS) espera = AUTH_ESPERA_TOPE_MS;
+        vTaskDelay(pdMS_TO_TICKS(espera));
+    }
+
     /* Dejar rastro del 401: sin esto un cliente que no manda credenciales (la
      * app con usuario/clave sin configurar, p.ej.) es INVISIBLE en el log —
      * pasa lo mismo que si no hubiera pedido nada, y se diagnostica a ciegas.
      * NUNCA imprimir la cabecera recibida: log_capture la persistiria en la SD.
      * Throttle de 1 s porque la app repregunta en bucle y esto llenaria el log. */
     static int64_t last_warn_us = 0;
-    int64_t now_us = esp_timer_get_time();
     if (now_us - last_warn_us > 1000000) {
         last_warn_us = now_us;
-        ESP_LOGW(TAG, "401 en %s: %s", req->uri,
+        ESP_LOGW(TAG, "401 en %s (fallos seguidos: %lu): %s", req->uri,
+                 (unsigned long)s_fallos,
                  s_auth_header[0] == '\0' ? "portal cerrado (sin credenciales en NVS)"
                  : err != ESP_OK          ? "el cliente no manda cabecera Authorization"
                                           : "usuario o clave incorrectos");

@@ -157,10 +157,13 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
             }
         }
         /* El fclose SI tiene que ocurrir (dejarlo abierto seria una fuga), asi
-         * que aqui se espera al cerrojo en vez de saltarselo. */
-        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+         * que aqui se espera al cerrojo en vez de saltarselo -- pero acotado:
+         * esto corre en un worker httpd (pocos disponibles), y un bus SD
+         * atascado de verdad no puede colgarlo para siempre. */
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
         fclose(f);
-        camera_sd_bus_unlock();
+        if (got_lock) camera_sd_bus_unlock();
         if (!ok) break;
 
         /* Padding hasta multiplo de 512 */
@@ -174,11 +177,13 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
         }
     }
     /* Mismo criterio que el fclose de arriba: cerrar SI tiene que ocurrir, asi
-     * que se espera al cerrojo en vez de saltarselo. Unico closedir del fichero
-     * que se habia quedado sin proteger -- auditado el 08-sep-2026. */
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+     * que se espera al cerrojo en vez de saltarselo, pero acotado (ver
+     * camera_sd_bus_lock_wait). Unico closedir del fichero que se habia
+     * quedado sin proteger -- auditado el 08-sep-2026. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
     closedir(dp);
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
     return ok;
 }
 
@@ -282,9 +287,10 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
                 prefixes[n] = entries[n].prefix;
                 n++;
             }
-            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            bool got_lock = camera_sd_bus_lock_wait(5000);
+            if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
             closedir(dp);
-            camera_sd_bus_unlock();
+            if (got_lock) camera_sd_bus_unlock();
         }
     }
     if (truncated) {

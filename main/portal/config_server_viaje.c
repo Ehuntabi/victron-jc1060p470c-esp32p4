@@ -1251,10 +1251,29 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     }
     int total = req->content_len < (int)sizeof(body) - 1
               ? req->content_len : (int)sizeof(body) - 1;
+    /* Mismo patron que /save (config_server.c): tope de esperas SEGUIDAS mas
+     * un plazo total absoluto. Antes este bucle no tenia ninguno de los dos
+     * -- un solo timeout de socket ya lo cortaba entero (sin margen ante un
+     * hipo real de Wi-Fi), y a la vez un cliente goteando bytes justo por
+     * debajo del timeout del socket podia tener ocupado indefinidamente al
+     * unico worker del httpd. El cuerpo cabe en VIAJE_BODY_MAX (~1 KB), asi
+     * que 15s de plazo total sobra para cualquier satelite real en la misma
+     * red. Detectado auditando el 08-sep-2026. */
+    const int MAX_ESPERAS = 4;
+    const int64_t plazo_us = 15LL * 1000000LL;
+    const int64_t t0_us = esp_timer_get_time();
+    int esperas = 0;
     int got = 0;
     while (got < total) {
+        if (esp_timer_get_time() - t0_us > plazo_us) {
+            ESP_LOGE(TAG, "/api/viaje: plazo total agotado con %d/%d bytes, se corta", got, total);
+            got = 0;   /* cuerpo a medias: mejor un JSON vacio que uno truncado */
+            break;
+        }
         int r = httpd_req_recv(req, body + got, total - got);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
         if (r <= 0) break;
+        esperas = 0;
         got += r;
     }
     body[got] = 0;

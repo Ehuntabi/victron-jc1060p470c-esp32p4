@@ -663,6 +663,15 @@ void camera_sd_bus_unlock(void)
     if (s_sd_bus) xSemaphoreGive(s_sd_bus);
 }
 
+bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms)
+{
+    int64_t deadline_us = esp_timer_get_time() + (int64_t)total_timeout_ms * 1000;
+    while (!camera_sd_bus_lock(1000)) {
+        if (esp_timer_get_time() >= deadline_us) return false;
+    }
+    return true;
+}
+
 TaskHandle_t camera_stream_task_handle(void)
 {
     return s_cam_stream_task;
@@ -716,15 +725,19 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
     }
 
     /* close() hace transaccion SD real (flush + entrada de dir): SIEMPRE bajo el bus,
-     * reintentando (nunca rendirse) para no solapar la ventana GDMA de la camara -> INT
-     * WDT. La tarea drain no esta suscrita al TWDT, asi que basta ceder con vTaskDelay. */
-    while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+     * a poder ser sin solapar la ventana GDMA de la camara -> INT WDT. Acotado (ver
+     * camera_sd_bus_lock_wait): antes esperaba sin limite, y aunque esto corre en la
+     * tarea drain (no un worker httpd), un bus SD atascado de verdad dejaba el fd sin
+     * cerrar para siempre en vez de solo tarde. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "vig: close sin cerrojo SD tras 5s de espera (%s)", path);
     if (close(fd) != 0) ok = false;   /* el flush/f_sync real a la SD ocurre en close() */
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
     if (!ok) {
-        while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+        got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "vig: unlink sin cerrojo SD tras 5s de espera (%s)", path);
         unlink(path);
-        camera_sd_bus_unlock();
+        if (got_lock) camera_sd_bus_unlock();
     }
 
     if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B, troceada)", path, (unsigned)len);
@@ -784,9 +797,12 @@ static void vig_migrate_legacy_flat_files(void)
         else ESP_LOGW(TAG, "vig: no pude migrar %s", n);
         camera_sd_bus_unlock();
     }
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
-    closedir(d);
-    camera_sd_bus_unlock();
+    {
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "vig: closedir sin cerrojo SD tras 5s de espera");
+        closedir(d);
+        if (got_lock) camera_sd_bus_unlock();
+    }
     if (moved > 0) ESP_LOGI(TAG, "vig: migradas %d fotos sueltas a carpetas por dia", moved);
 }
 
@@ -913,9 +929,21 @@ static void camera_stream_task(void *arg)
         return;
     }
 
+    /* REQBUFS/QUERYBUF/QBUF/STREAMON tocan el driver V4L2 (DMA/canales
+     * compartidos con el bus SD): protegidos con el mismo cerrojo que el
+     * resto de operaciones de camara, aunque sea un setup de una sola vez y
+     * el riesgo real de contencion aqui sea bajo -- este proyecto ya se ha
+     * encontrado varias veces con que "seguro que esto no toca el bus" no lo
+     * era. Best-effort: si no se consigue, se sigue igual (es arranque, no
+     * hay nada que reintentar mas tarde) pero avisando. Detectado auditando
+     * el 08-sep-2026. */
+    bool sd_lock = camera_sd_bus_lock(3000);
+    if (!sd_lock) ESP_LOGW(TAG, "stream: setup V4L2 sin cerrojo SD tras 3s de espera");
+
     struct v4l2_requestbuffers req = { .count = CAM_STREAM_BUFS, .type = type, .memory = V4L2_MEMORY_MMAP };
     if (ioctl(fd, VIDIOC_REQBUFS, &req) != 0) {
         ESP_LOGE(TAG, "stream: REQBUFS falla");
+        if (sd_lock) camera_sd_bus_unlock();
         close(fd);
         vTaskDelete(NULL);
         return;
@@ -924,10 +952,16 @@ static void camera_stream_task(void *arg)
     uint32_t len[CAM_STREAM_BUFS] = {0};
     for (int i = 0; i < CAM_STREAM_BUFS; i++) {
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP, .index = i };
-        if (ioctl(fd, VIDIOC_QUERYBUF, &b) != 0) { cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return; }
+        if (ioctl(fd, VIDIOC_QUERYBUF, &b) != 0) {
+            if (sd_lock) camera_sd_bus_unlock();
+            cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return;
+        }
         buf[i] = mmap(NULL, b.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, b.m.offset);
         len[i] = b.length;
-        if (buf[i] == MAP_FAILED) { cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return; }
+        if (buf[i] == MAP_FAILED) {
+            if (sd_lock) camera_sd_bus_unlock();
+            cam_task_cleanup(fd, buf, len, i); vTaskDelete(NULL); return;
+        }
         ioctl(fd, VIDIOC_QBUF, &b);
     }
     ESP_LOGI(TAG, "stream: modo A DEMANDA (no continuo) para no bloquear la SD");
@@ -944,7 +978,9 @@ static void camera_stream_task(void *arg)
      * access fault). En su lugar: THROTTLE. Con 2 buffers, si consumimos despacio
      * (DQBUF/QBUF + sleep), los buffers se llenan y el GDMA de la camara se PARA solo
      * por contrapresion -> la SD queda libre entre frames. Mismo efecto, sin crash. */
-    if (!cam_stream_start(fd, type)) {
+    bool streamon_ok = cam_stream_start(fd, type);
+    if (sd_lock) camera_sd_bus_unlock();
+    if (!streamon_ok) {
         ESP_LOGE(TAG, "stream: STREAMON falla");
         cam_task_cleanup(fd, buf, len, CAM_STREAM_BUFS);
         vTaskDelete(NULL);

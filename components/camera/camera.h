@@ -33,6 +33,18 @@ bool camera_get_luma(uint8_t *out_luma);
 bool camera_sd_bus_lock(uint32_t timeout_ms);
 void camera_sd_bus_unlock(void);
 
+/* Para un cierre (fclose/closedir/unlink...) que TIENE que ocurrir de todas
+ * formas -- no es una escritura que se pueda simplemente omitir y reintentar
+ * luego, dejarlo sin hacer seria una fuga de fd/handle. El idiom que se
+ * repetia a mano por todo el portal, "while (!camera_sd_bus_lock(1000))
+ * vTaskDelay(1);", esperaba SIN LIMITE: en el contexto de un handler httpd
+ * (pocos workers) un bus SD atascado de verdad podia dejar ese hilo colgado
+ * para siempre, asfixiando el portal entero. Reintenta hasta total_timeout_ms
+ * y devuelve false sin el cerrojo si se agota -- el llamador hace el cierre
+ * igual (mejor sin cerrojo que fuga de fd), solo que avisando. Detectado
+ * auditando el 08-sep-2026. */
+bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms);
+
 /* Handle de la tarea de streaming (NULL si la camara no arranco). Para que
  * operaciones que se sabe que bloquean mucho rato (p.ej. el borrado/escritura
  * de flash de una OTA) puedan desuscribirla temporalmente del Task Watchdog
