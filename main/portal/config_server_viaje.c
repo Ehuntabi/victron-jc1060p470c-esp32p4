@@ -100,6 +100,17 @@ static bool ruta_volcar(const char *carpeta);
 #define CARPETA_MAX     64
 #define RUTA_MAX        (CARPETA_MAX + 32)
 
+/* Tope real que se acepta para destino_seguro() al componer la carpeta: deja
+ * sitio de sobra dentro de CARPETA_MAX para VIAJES_DIR + "/" + fecha
+ * (AAAA-MM-DD) + "_" + destino + el sufijo numerador "_NN" de op_inicio. Si
+ * se truncara el destino no pasa nada (solo estetica); si se truncara el
+ * sufijo numerador, dos intentos de desambiguar una colision colisionarian
+ * a su vez en el MISMO nombre truncado -- la numeracion dejaria de servir
+ * para nada. El destino real lo limita la 3.5" a 20 caracteres; esto solo
+ * es la cota defensiva para cuando ese dato no es de fiar (ver el
+ * comentario de destino_seguro). Detectado auditando el 08-sep-2026. */
+#define DESTINO_MAX     24
+
 /* ── Estado del viaje abierto, en NVS para sobrevivir a reinicios ─────────── */
 
 static bool viaje_abierto(char *out, size_t n)
@@ -396,7 +407,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     char destino[CARPETA_MAX], fecha[12];
-    destino_seguro(jd->valuestring, destino, sizeof(destino));
+    destino_seguro(jd->valuestring, destino, DESTINO_MAX);
     fecha_de_dias((uint32_t)jf->valuedouble, fecha, sizeof(fecha));
 
     char carpeta[CARPETA_MAX];
@@ -426,13 +437,19 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             if (mk == 0 || errno != EEXIST) break;
         }
     }
-    struct stat st;
-    bool hay = (mk == 0) || (stat(carpeta, &st) == 0);
+    /* mk == 0 es la UNICA senal de exito valida: la carpeta la acabamos de
+     * crear nosotros. Antes, si se agotaban los 20 numeros sin encontrar uno
+     * libre, un stat(carpeta,...) de respaldo daba "hay" por bueno porque el
+     * ULTIMO nombre probado (el "_20") tambien existia -- justo el reuso
+     * silencioso de una carpeta ajena que esta numeracion se creo para
+     * evitar, solo que aplazado hasta el intento 20 en vez del primero.
+     * Detectado auditando el 08-sep-2026. */
+    bool hay = (mk == 0);
     if (hay) diario(carpeta, "inicio", destino);
     camera_sd_bus_unlock();
 
     if (!hay) {
-        ESP_LOGE(TAG, "no puedo crear %s", carpeta);
+        ESP_LOGE(TAG, "no puedo crear %s (ni con sufijo numerador, colisiones agotadas)", carpeta);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "no puedo crear la carpeta");
         return ESP_OK;

@@ -171,6 +171,7 @@ void solar_daily_init(void)
     if (!s_sd_ok) ESP_LOGW(TAG, "sin SD: solo se guarda el dia en curso (NVS)");
     /* Dia en curso desde NVS (sobrevive a un reinicio a media tarde). */
     nvs_handle_t h;
+    bool cerrado_pre_init = false;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
         solar_day_t guardado;
         size_t len = sizeof(guardado);
@@ -188,9 +189,19 @@ void solar_daily_init(void)
                 ESP_LOGW(TAG, "dia guardado (%ld) distinto de hoy (%ld): cerrando antes de arrancar",
                          (long)guardado.day_id, (long)s_hoy.day_id);
                 cerrar_dia(&guardado);
+                cerrado_pre_init = true;
             }
         }
         nvs_close(h);
+    }
+    if (cerrado_pre_init) {
+        /* Persistir YA el "hoy" recien reseteado, sobrescribiendo el blob
+         * viejo: si no, hasta el primer guardado periodico (5 min, ver
+         * solar_daily_on_pv) un segundo reinicio releeria el MISMO dia
+         * viejo de NVS y lo volveria a cerrar -> doble contabilizado en
+         * el historico/CSV. Se hace fuera del handle READONLY de arriba
+         * porque guardar_hoy_nvs() necesita abrir en READWRITE. */
+        guardar_hoy_nvs();
     }
     UNLOCK();
 }

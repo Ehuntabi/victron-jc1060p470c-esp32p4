@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/stat.h>
@@ -25,10 +24,16 @@ extern "C" {
  * lineas de un flush, escanear un directorio entero con opendir/readdir)
  * seguir usando camera_sd_bus_lock()/camera_sd_bus_unlock() directamente
  * alrededor, como ya se hace en el resto del proyecto — estos wrappers son
- * para la llamada SUELTA, no sustituyen ese patron. */
+ * para la llamada SUELTA, no sustituyen ese patron.
+ *
+ * Adrede NO hay un sd_fopen(): a diferencia de estos, fopen() devuelve un
+ * FILE* que el llamador va a usar para VARIAS llamadas mas (fread/fwrite/
+ * fclose) fuera de cualquier cerrojo que este wrapper pudiera tomar solo
+ * durante el open — rompia la garantia "estructuralmente imposible" de
+ * arriba sin que se notara al leer la firma. Para abrir un fichero, tomar
+ * camera_sd_bus_lock() a mano alrededor de todo el ciclo de vida del FILE*. */
 
 bool  sd_stat(const char *path, struct stat *st, uint32_t timeout_ms);
-FILE *sd_fopen(const char *path, const char *mode, uint32_t timeout_ms);
 int   sd_mkdir(const char *path, mode_t mode, uint32_t timeout_ms);
 int   sd_unlink(const char *path, uint32_t timeout_ms);
 int   sd_rename(const char *old_path, const char *new_path, uint32_t timeout_ms);

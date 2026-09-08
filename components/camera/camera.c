@@ -859,16 +859,16 @@ void camera_set_surveillance(bool on)
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
-/* Arranca/para el stream RAW10. En modo A DEMANDA se ciclan para que el DMA de la
- * camara NO este siempre activo: el DMA continuo de la camara bloquea el bus DMA de
- * la SD -> timeouts 0x107 en lecturas/escrituras (root cause de "la SD no va con la
- * camara"). Entre frames el stream se para y la SD queda libre. */
+/* Activa el stream (STREAMON). Solo se llama una vez por arranque de la tarea
+ * de camara (nunca se para/rearranca: ver el comentario "UN solo STREAMON"
+ * mas abajo, cerca de donde se invoca). Entre frames se deja que el GDMA se
+ * pare solo por contrapresion (THROTTLE), no parando/rearrancando el stream.
+ * Los buffers ya se han encolado en el llamador (unico caller, mas abajo) al
+ * hacer QUERYBUF+mmap+QBUF de cada uno: encolarlos otra vez aqui era un
+ * VIDIOC_QBUF duplicado sobre indices ya encolados y sin drenar (bug latente,
+ * silencioso porque el ioctl no comprobaba el error de retorno). */
 static bool cam_stream_start(int fd, int type)
 {
-    for (int i = 0; i < CAM_STREAM_BUFS; i++) {
-        struct v4l2_buffer qb = { .type = type, .memory = V4L2_MEMORY_MMAP, .index = i };
-        ioctl(fd, VIDIOC_QBUF, &qb);
-    }
     return ioctl(fd, VIDIOC_STREAMON, &type) == 0;
 }
 

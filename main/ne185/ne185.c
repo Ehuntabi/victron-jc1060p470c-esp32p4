@@ -700,7 +700,15 @@ void ne185_init(void)
 
 void ne185_get(ne185_data_t *out)
 {
-    if (!out || !s_inited) return;
+    if (!out) return;
+    if (!s_inited) {
+        /* Sin esto, un caller antes de ne185_init() (struct local sin
+         * inicializar en su pila) se queda con basura y puede leer
+         * out.fresh=true por azar -> tratar datos NE185 inexistentes
+         * como validos. */
+        memset(out, 0, sizeof(*out));
+        return;
+    }
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MUTEX_TIMEOUT_MS)) != pdTRUE) {
         ESP_LOGE(TAG, "ne185_get: mutex starvation, devolviendo stale");
         memset(out, 0, sizeof(*out));

@@ -150,6 +150,24 @@ esp_err_t rtc_set_time(const struct tm *tm_in)
 {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
 
+    /* Los registros del chip son BCD de 1 byte: un campo fuera de rango
+     * (p.ej. un caller que pase un epoch en milisegundos por error, o un
+     * tm_year de otro siglo) no se detecta al convertir a BCD, se trunca
+     * en silencio y queda una fecha absurda grabada en el RTC. Abortar
+     * antes de tocar el chip si algun campo no es un valor real de calendario. */
+    if (tm_in->tm_year < 100 || tm_in->tm_year > 199 ||   /* 2000-2099 */
+        tm_in->tm_mon  < 0   || tm_in->tm_mon  > 11  ||
+        tm_in->tm_mday < 1   || tm_in->tm_mday > 31  ||
+        tm_in->tm_hour < 0   || tm_in->tm_hour > 23  ||
+        tm_in->tm_min  < 0   || tm_in->tm_min  > 59  ||
+        tm_in->tm_sec  < 0   || tm_in->tm_sec  > 60  ||   /* 60 = segundo bisiesto */
+        tm_in->tm_wday < 0   || tm_in->tm_wday > 6) {
+        ESP_LOGW(TAG, "rtc_set_time: fecha fuera de rango (year=%d mon=%d mday=%d %02d:%02d:%02d wday=%d), no se escribe",
+                 tm_in->tm_year + 1900, tm_in->tm_mon + 1, tm_in->tm_mday,
+                 tm_in->tm_hour, tm_in->tm_min, tm_in->tm_sec, tm_in->tm_wday);
+        return ESP_ERR_INVALID_ARG;
+    }
+
     /* Detener oscilador antes de escribir (RX8025T: CONTROL bit 6 = STOP).
      * Comprobar la lectura: si falla, ctrl quedaria en 0 y al reescribir
      * CONTROL borrariamos los bits de config (AIE/TIE/UIE). Mejor abortar. */

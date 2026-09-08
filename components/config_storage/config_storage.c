@@ -1,6 +1,23 @@
 // config_storage.c
 #include "config_storage.h"
+#include "esp_log.h"
 #include <string.h>
+
+static const char *TAG = "cfgstore";
+
+/* true solo si la clave nunca se ha guardado (primer arranque): toca
+ * inicializarla con el default. Cualquier OTRO error de NVS (flash danada,
+ * particion corrupta...) no es "clave ausente": tratarlo igual sobrescribe
+ * un valor guardado bueno con el default por un fallo que puede ser
+ * transitorio. En ese caso se usa el default solo para esta lectura, sin
+ * tocar lo que haya en NVS. */
+static bool nvs_missing_or_log(esp_err_t err, const char *what)
+{
+    if (err == ESP_ERR_NVS_NOT_FOUND) return true;
+    ESP_LOGW(TAG, "%s: error NVS inesperado (%s), uso el valor por defecto sin sobrescribir lo guardado",
+             what, esp_err_to_name(err));
+    return false;
+}
 
 #define AES_NAMESPACE  "victron"
 #define AES_KEY        "aes_key"
@@ -30,8 +47,10 @@ esp_err_t load_brightness(uint8_t *brightness_out) {
     err = nvs_get_u8(h, BRIGHTNESS_KEY, brightness_out);
     if (err != ESP_OK) {
         *brightness_out = 50; // default value
-        nvs_set_u8(h, BRIGHTNESS_KEY, *brightness_out);
-        nvs_commit(h);
+        if (nvs_missing_or_log(err, "brightness")) {
+            nvs_set_u8(h, BRIGHTNESS_KEY, *brightness_out);
+            nvs_commit(h);
+        }
     }
     nvs_close(h);
     return ESP_OK;
@@ -82,7 +101,7 @@ esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
         size_t dlen = strlen(d) + 1;
         if (*ssid_len >= dlen) memcpy(ssid_out, d, dlen);
         *ssid_len = dlen;
-        nvs_set_str(h, "ssid", ssid_out);
+        if (nvs_missing_or_log(err, "wifi_ssid")) nvs_set_str(h, "ssid", ssid_out);
     }
 
     // Read Password
@@ -91,14 +110,14 @@ esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
         // default empty
         if (*pass_len > 0) pass_out[0] = '\0';
         *pass_len = 1;
-        nvs_set_str(h, "password", pass_out);
+        if (nvs_missing_or_log(err, "wifi_password")) nvs_set_str(h, "password", pass_out);
     }
 
     // Read Enabled flag
     err = nvs_get_u8(h, "enabled", enabled_out);
     if (err != ESP_OK) {
         *enabled_out = 1; // default enabled
-        nvs_set_u8(h, "enabled", *enabled_out);
+        if (nvs_missing_or_log(err, "wifi_enabled")) nvs_set_u8(h, "enabled", *enabled_out);
     }
 
     nvs_commit(h);
@@ -131,14 +150,18 @@ esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t
     bool changed = false;
 
     // Persistir el default solo si la clave no existia (evita escritura +
-    // commit NVS en cada carga, que desgasta flash innecesariamente).
-    if (nvs_get_u8(h, SS_ENABLED_KEY, &en) != ESP_OK) {
+    // commit NVS en cada carga, que desgasta flash innecesariamente) y solo
+    // si de verdad no existia, no ante cualquier error (ver nvs_missing_or_log).
+    esp_err_t e1 = nvs_get_u8(h, SS_ENABLED_KEY, &en);
+    if (e1 != ESP_OK && nvs_missing_or_log(e1, "screensaver_enabled")) {
         nvs_set_u8(h, SS_ENABLED_KEY, en); changed = true;
     }
-    if (nvs_get_u8(h, SS_BRIGHT_KEY, &bright) != ESP_OK) {
+    esp_err_t e2 = nvs_get_u8(h, SS_BRIGHT_KEY, &bright);
+    if (e2 != ESP_OK && nvs_missing_or_log(e2, "screensaver_brightness")) {
         nvs_set_u8(h, SS_BRIGHT_KEY, bright); changed = true;
     }
-    if (nvs_get_u16(h, SS_TIMEOUT_KEY, &tout) != ESP_OK) {
+    esp_err_t e3 = nvs_get_u16(h, SS_TIMEOUT_KEY, &tout);
+    if (e3 != ESP_OK && nvs_missing_or_log(e3, "screensaver_timeout")) {
         nvs_set_u16(h, SS_TIMEOUT_KEY, tout); changed = true;
     }
 
@@ -203,8 +226,10 @@ esp_err_t load_victron_debug(bool *enabled_out)
     esp_err_t tmp = nvs_get_u8(h, VICTRON_DEBUG_KEY, &v);
     if (tmp != ESP_OK) {
         v = 0; // default: debug disabled
-        nvs_set_u8(h, VICTRON_DEBUG_KEY, v);
-        nvs_commit(h);
+        if (nvs_missing_or_log(tmp, "victron_debug")) {
+            nvs_set_u8(h, VICTRON_DEBUG_KEY, v);
+            nvs_commit(h);
+        }
     }
 
     *enabled_out = (v != 0);
@@ -234,8 +259,10 @@ esp_err_t load_autostart_loads(bool *enabled_out)
     esp_err_t tmp = nvs_get_u8(h, AUTOSTART_LOADS_KEY, &v);
     if (tmp != ESP_OK) {
         v = 0; // default: deshabilitado
-        nvs_set_u8(h, AUTOSTART_LOADS_KEY, v);
-        nvs_commit(h);
+        if (nvs_missing_or_log(tmp, "autostart_loads")) {
+            nvs_set_u8(h, AUTOSTART_LOADS_KEY, v);
+            nvs_commit(h);
+        }
     }
 
     *enabled_out = (v != 0);
@@ -274,6 +301,11 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
     uint8_t count = 0;
     esp_err_t tmp = nvs_get_u8(h, VICTRON_DEVICES_COUNT_KEY, &count);
     if (tmp != ESP_OK) {
+        // Solo migrar/inicializar a vacio si de verdad no habia clave
+        // guardada. Un error real de NVS aqui NO debe borrar la lista de
+        // dispositivos configurados (con sus claves AES) via una migracion
+        // o un conteo a 0 escritos por encima de lo que hubiera.
+        bool persist = nvs_missing_or_log(tmp, "victron_devices_count");
         // No devices configured yet, try to migrate from legacy single device
         uint8_t legacy_key[16] = {0};
         if (load_aes_key(legacy_key) == ESP_OK) {
@@ -284,21 +316,25 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
             // leeria fuera de su buffer. El dispositivo migrado se releera mas
             // abajo desde NVS a stored_devices y se copiara a devices_out.
             count = 1;
-            victron_device_config_t migrated[VICTRON_MAX_DEVICES];
-            memset(migrated, 0, sizeof(migrated));
-            strcpy(migrated[0].mac_address, "00:00:00:00:00:00");
-            memcpy(migrated[0].aes_key, legacy_key, 16);
-            strcpy(migrated[0].device_name, "Legacy Device");
-            migrated[0].enabled = true;
+            if (persist) {
+                victron_device_config_t migrated[VICTRON_MAX_DEVICES];
+                memset(migrated, 0, sizeof(migrated));
+                strcpy(migrated[0].mac_address, "00:00:00:00:00:00");
+                memcpy(migrated[0].aes_key, legacy_key, 16);
+                strcpy(migrated[0].device_name, "Legacy Device");
+                migrated[0].enabled = true;
 
-            // Save the migrated data
-            nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
-            nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, migrated, sizeof(migrated));
-            changed = true;
+                // Save the migrated data
+                nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
+                nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, migrated, sizeof(migrated));
+                changed = true;
+            }
         } else {
             count = 0;
-            nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
-            changed = true;
+            if (persist) {
+                nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
+                changed = true;
+            }
         }
     }
 
@@ -314,15 +350,23 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
     size_t blob_size = sizeof(stored_devices);
     tmp = nvs_get_blob(h, VICTRON_DEVICES_DATA_KEY, stored_devices, &blob_size);
     if (tmp != ESP_OK || blob_size != sizeof(stored_devices)) {
-        // Initialize empty devices
+        // blob_size solo queda distinto de sizeof(stored_devices) si la
+        // lectura fue ESP_OK con un tamano viejo/corrupto: en ese caso si
+        // conviene reescribir. Un error real de NVS (no NOT_FOUND) dejaria
+        // blob_size intacto -> nvs_missing_or_log decide si hay que avisar
+        // en vez de sobrescribir el blob guardado con la lista vacia.
+        bool persist = (tmp == ESP_OK) || nvs_missing_or_log(tmp, "victron_devices_data");
+        // Initialize empty devices (solo en RAM si no se va a persistir)
         for (size_t i = 0; i < VICTRON_MAX_DEVICES; ++i) {
             memset(&stored_devices[i], 0, sizeof(victron_device_config_t));
             strcpy(stored_devices[i].mac_address, "00:00:00:00:00:00");
             strcpy(stored_devices[i].device_name, "");
             stored_devices[i].enabled = false;
         }
-        nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, stored_devices, sizeof(stored_devices));
-        changed = true;
+        if (persist) {
+            nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, stored_devices, sizeof(stored_devices));
+            changed = true;
+        }
     }
 
     if (changed) {
@@ -465,8 +509,10 @@ esp_err_t load_ui_view_mode(uint8_t *mode_out)
     err = nvs_get_u8(h, UI_VIEW_MODE_KEY, mode_out);
     if (err != ESP_OK) {
         *mode_out = 1; // Default to UI_VIEW_MODE_DEFAULT_BATTERY (value 1)
-        nvs_set_u8(h, UI_VIEW_MODE_KEY, *mode_out);
-        nvs_commit(h);
+        if (nvs_missing_or_log(err, "ui_view_mode")) {
+            nvs_set_u8(h, UI_VIEW_MODE_KEY, *mode_out);
+            nvs_commit(h);
+        }
     }
     
     nvs_close(h);
@@ -500,7 +546,8 @@ esp_err_t load_splash_mode(uint8_t *mode_out)
     esp_err_t err = nvs_open(BRIGHTNESS_NAMESPACE, NVS_READWRITE, &h);
     if (err != ESP_OK) { *mode_out = 1; return ESP_OK; }
     uint8_t v = 1;
-    if (nvs_get_u8(h, SPLASH_KEY, &v) != ESP_OK) {
+    esp_err_t g = nvs_get_u8(h, SPLASH_KEY, &v);
+    if (g != ESP_OK && nvs_missing_or_log(g, "splash_mode")) {
         nvs_set_u8(h, SPLASH_KEY, v);
         nvs_commit(h);
     }
@@ -574,9 +621,12 @@ esp_err_t load_night_mode(bool *enabled_out,
     if (err != ESP_OK) return err;
 
     uint8_t en = 0, sh = 22, eh = 7;
-    if (nvs_get_u8(h, NIGHT_EN_KEY,    &en)  != ESP_OK) nvs_set_u8(h, NIGHT_EN_KEY,    en);
-    if (nvs_get_u8(h, NIGHT_START_KEY, &sh)  != ESP_OK) nvs_set_u8(h, NIGHT_START_KEY, sh);
-    if (nvs_get_u8(h, NIGHT_END_KEY,   &eh)  != ESP_OK) nvs_set_u8(h, NIGHT_END_KEY,   eh);
+    esp_err_t e1 = nvs_get_u8(h, NIGHT_EN_KEY,    &en);
+    esp_err_t e2 = nvs_get_u8(h, NIGHT_START_KEY, &sh);
+    esp_err_t e3 = nvs_get_u8(h, NIGHT_END_KEY,   &eh);
+    if (e1 != ESP_OK && nvs_missing_or_log(e1, "night_mode_enabled")) nvs_set_u8(h, NIGHT_EN_KEY,    en);
+    if (e2 != ESP_OK && nvs_missing_or_log(e2, "night_mode_start"))   nvs_set_u8(h, NIGHT_START_KEY, sh);
+    if (e3 != ESP_OK && nvs_missing_or_log(e3, "night_mode_end"))     nvs_set_u8(h, NIGHT_END_KEY,   eh);
     nvs_commit(h);
     nvs_close(h);
 
