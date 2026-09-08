@@ -108,6 +108,8 @@ Ocho apartados. Vamos uno a uno.
 
 ### GPS
 
+![GPS](../screenshots/22_gps.jpg)
+
 Dice dónde estás y, sobre todo, **pone la pantalla en hora sola**. Arriba, el
 estado con su color y cuántos satélites ve; debajo, la posición y la hora que da
 el GPS, que es exacta.
@@ -132,7 +134,9 @@ buscando (salen bien pero sin datos).
 
 ### Wi-Fi
 
-![Wi-Fi](../screenshots/16_wifi.jpg)
+*(Sin captura a propósito: esta pantalla enseña la contraseña del portal en
+claro — el propio carrusel de capturas la excluye siempre por el mismo
+motivo.)*
 
 La pantalla **crea su propia red**, no se conecta a la tuya. Te conectas a ella con
 el móvil para bajarte datos o actualizarla.
@@ -216,7 +220,8 @@ Aquí se ajusta el ventilador que refrigera la nevera:
 
 ### Victron Keys
 
-![Victron Keys](../screenshots/21_victron_keys.jpg)
+*(Sin captura a propósito: en cuanto hay algún dispositivo dado de alta, aquí
+se ve su clave AES sin ocultar — mismo motivo que en Wi-Fi.)*
 
 Los aparatos Victron (regulador solar, monitor de batería, cargador…) emiten sus
 datos por Bluetooth **cifrados**. Para leerlos hay que darlos de alta con su
@@ -224,7 +229,7 @@ dirección y su clave, que se sacan de la app oficial de Victron.
 
 ### Acerca de
 
-![Acerca de](../screenshots/22_about.jpg)
+![Acerca de](../screenshots/23_about.jpg)
 
 Versión que lleva, cuánto tiempo lleva encendida, su dirección en la red, y el
 botón de reiniciar.
