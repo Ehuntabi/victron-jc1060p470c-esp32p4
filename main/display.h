@@ -64,12 +64,20 @@
  * funciona, y el header del componente recomienda 50 como default. */
 #define BSP_LCD_MIPI_DPI_CLK_MHZ            (51)
 
-/* Horizontal — fuente: dtsi oficial (HS=24, HBP=136, HFP=160) */
+/* Horizontal. El dtsi oficial dice HS=24, HBP=136, HFP=160 (ver la tabla de
+ * arriba); HS y HFP se usan tal cual, pero HBP esta a 160 en vez de 136 desde
+ * el primer commit de este fichero, sin comentario que explique el porque
+ * -- a diferencia del pixel clock (51 vs 52 MHz, mas abajo), que si lo deja
+ * dicho. No se toca: es el timing con el que la pantalla funciona en
+ * produccion, y cambiarlo a ciegas es mas riesgo que beneficio. */
 #define BSP_LCD_MIPI_HSYNC_PULSE_WIDTH      (24)
 #define BSP_LCD_MIPI_HSYNC_BACK_PORCH       (160)
 #define BSP_LCD_MIPI_HSYNC_FRONT_PORCH      (160)
 
-/* Vertical — fuente: dtsi oficial (VS=2, VBP=21, VFP=12) */
+/* Vertical. Mismo caso que el HBP de arriba: el dtsi oficial dice VS=2,
+ * VBP=21, VFP=12; VBP y VFP se usan tal cual, pero VSYNC_PULSE_WIDTH esta a
+ * 10 en vez de 2, sin explicacion documentada. Tampoco se toca por el mismo
+ * motivo. */
 #define BSP_LCD_MIPI_VSYNC_PULSE_WIDTH      (10)
 #define BSP_LCD_MIPI_VSYNC_BACK_PORCH       (21)
 #define BSP_LCD_MIPI_VSYNC_FRONT_PORCH      (12)

@@ -57,7 +57,7 @@ static const char *charger_error_to_string(uint8_t code)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Shared helpers                                                            */
+/*  Ayudas compartidas                                                        */
 /* -------------------------------------------------------------------------- */
 
 static void format_raw_hex(lv_obj_t *label, const victron_data_t *data)
@@ -87,7 +87,7 @@ static void format_raw_hex(lv_obj_t *label, const victron_data_t *data)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Inverter (0x03)                                                           */
+/*  Inversor (0x03)                                                           */
 /* -------------------------------------------------------------------------- */
 
 static void format_inverter_state(lv_obj_t *label, const victron_data_t *data)
@@ -175,7 +175,7 @@ ui_device_view_t *ui_inverter_view_create(ui_state_t *ui, lv_obj_t *parent)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  DC/DC Converter (0x04)                                                    */
+/*  Convertidor DC/DC (0x04)                                                  */
 /* -------------------------------------------------------------------------- */
 
 static void format_dcdc_state(lv_obj_t *label, const victron_data_t *data)
@@ -345,7 +345,7 @@ ui_device_view_t *ui_smart_lithium_view_create(ui_state_t *ui, lv_obj_t *parent)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Inverter RS (0x06)                                                        */
+/*  Inversor RS (0x06)                                                        */
 /* -------------------------------------------------------------------------- */
 
 static void format_inverter_rs_note(lv_obj_t *label, const victron_data_t *data)
@@ -375,7 +375,7 @@ ui_device_view_t *ui_inverter_rs_view_create(ui_state_t *ui, lv_obj_t *parent)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  AC Charger (0x08)                                                         */
+/*  Cargador AC (0x08)                                                        */
 /* -------------------------------------------------------------------------- */
 
 static void format_ac_charger_state(lv_obj_t *label, const victron_data_t *data)
@@ -999,7 +999,7 @@ ui_device_view_t *ui_ve_bus_view_create(ui_state_t *ui, lv_obj_t *parent)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  DC Energy Meter (0x0D)                                                    */
+/*  Medidor de energia DC (0x0D)                                              */
 /* -------------------------------------------------------------------------- */
 
 static void format_dcem_mode(lv_obj_t *label, const victron_data_t *data)

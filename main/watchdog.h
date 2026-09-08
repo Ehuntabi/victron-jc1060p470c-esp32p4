@@ -5,8 +5,10 @@
 #include "esp_err.h"
 
 /* Inicializa el módulo watchdog:
- *  - Lee la causa del último reset y, si fue por TWDT/INT_WDT/panic, incrementa
- *    el contador persistido en NVS (namespace "wd").
+ *  - Lee la causa del último reset y, si fue por TASK_WDT/INT_WDT/WDT/
+ *    CPU_LOCKUP/panic (o un reset forzado por este mismo monitor), incrementa
+ *    el contador persistido en NVS (namespace "wd"). Ver is_wdt_reset en
+ *    watchdog.c para la lista exacta.
  *  - Crea una task monitor que cada N s comprueba salud de LVGL: si el lock
  *    falla N veces seguidas (UI congelada), fuerza un reset controlado para
  *    que el chip vuelva a un estado limpio -- SIN flush a SD a propósito (ver
