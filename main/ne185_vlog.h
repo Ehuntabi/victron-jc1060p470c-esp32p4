@@ -1,5 +1,7 @@
 #pragma once
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 /* Log de comparacion de voltaje: bytes 12/13 CRUDOS del NE185 junto al voltaje
  * que da el SmartShunt por BLE, para deducir la formula real del NE185.
@@ -17,3 +19,7 @@ esp_err_t ne185_vlog_init(void);
 
 /* Vuelca a la SD lo que quede en RAM. Llamar antes de un reinicio previsto. */
 void ne185_vlog_flush(void);
+
+/* Handle de la tarea de vuelco a SD. Solo para la medicion de
+ * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
+TaskHandle_t ne185_vlog_flush_task_handle(void);

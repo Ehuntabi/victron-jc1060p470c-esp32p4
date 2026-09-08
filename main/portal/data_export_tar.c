@@ -173,7 +173,12 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
             }
         }
     }
+    /* Mismo criterio que el fclose de arriba: cerrar SI tiene que ocurrir, asi
+     * que se espera al cerrojo en vez de saltarselo. Unico closedir del fichero
+     * que se habia quedado sin proteger -- auditado el 08-sep-2026. */
+    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
     closedir(dp);
+    camera_sd_bus_unlock();
     return ok;
 }
 

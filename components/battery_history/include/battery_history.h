@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,6 +34,10 @@ typedef struct {
 } bh_point_t;
 
 esp_err_t battery_history_init(void);
+
+/* Handle de la tarea de vuelco a SD. Solo para la medicion de
+ * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
+TaskHandle_t battery_history_flush_task_handle(void);
 
 /* Latest reading from a source (called from ui_on_panel_data hook).
  * centi_volts: tension de bateria en centivoltios; pasar 0 si la fuente no la

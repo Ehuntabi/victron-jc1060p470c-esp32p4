@@ -1125,9 +1125,26 @@ static void viaje_tick_timer_cb(void *arg)
     if (s_viaje_tick_task_handle) xTaskNotifyGive(s_viaje_tick_task_handle);
 }
 
+TaskHandle_t viaje_tick_task_handle(void)
+{
+    return s_viaje_tick_task_handle;
+}
+
 void viaje_telemetria_start(void)
 {
-    if (xTaskCreate(viaje_tick_task, "viaje_tick_task", 3072, NULL,
+    if (s_viaje_tick_task_handle) {
+        ESP_LOGW(TAG, "viaje_telemetria_start() ya estaba arrancado, ignorado");
+        return;
+    }
+
+    /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
+     * el 08-sep-2026: fopen/fprintf/fclose es de lo mas hambriento de pila de
+     * ESP-IDF. Esta es la mas profunda de las 5 tareas gemelas: escribe
+     * %.6f (coordenadas GPS de ruta.csv) ademas de varios %.1f/%.2f/%.3f/%.0f
+     * mas (resumen.txt) -- el formateo de float en newlib es lo que mas pila
+     * gasta de toda la cadena. Se queda en el tope (6144) en vez de bajar
+     * como las otras. */
+    if (xTaskCreate(viaje_tick_task, "viaje_tick_task", 6144, NULL,
                      tskIDLE_PRIORITY + 2, &s_viaje_tick_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de telemetria del viaje");
         return;

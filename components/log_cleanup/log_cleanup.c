@@ -63,10 +63,11 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
     time_t cutoff_delete = now - (time_t)effective_max * 86400;
     time_t cutoff_warn   = now - (time_t)(effective_max - 1) * 86400;
 
-    /* Timeout corto: los callbacks que llaman aqui (daily_cleanup_cb,
-     * initial_cleanup_cb) corren en la tarea esp_timer compartida; un lock
-     * largo retrasaria TODOS los demas timers del firmware. Si no se
-     * consigue, saltar este ciclo (se reintenta en el siguiente disparo). */
+    /* Timeout corto para no acaparar el bus: daily_cleanup_cb/initial_cleanup_cb
+     * ya no llaman aqui directamente (solo notifican a cleanup_task, su propia
+     * tarea dedicada), pero la camara y el resto de escritores de SD siguen
+     * esperando el mismo cerrojo. Si no se consigue, saltar este ciclo (se
+     * reintenta en el siguiente disparo). */
     if (!camera_sd_bus_lock(200)) {
         return 0;
     }
@@ -241,11 +242,21 @@ static void initial_cleanup_cb(void *arg)
     if (s_cleanup_task_handle) xTaskNotifyGive(s_cleanup_task_handle);
 }
 
+TaskHandle_t log_cleanup_task_handle(void)
+{
+    return s_cleanup_task_handle;
+}
+
 void log_cleanup_init(int max_days_keep)
 {
     s_max_days_cached = max_days_keep;
 
-    if (xTaskCreate(cleanup_task, "log_cleanup_task", 3072, NULL,
+    /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
+     * el 08-sep-2026: la SD (fopen/fprintf/fclose, y aqui ademas recorrer
+     * directorios) es de lo mas hambriento de pila de ESP-IDF. Sin formateo
+     * de float -> 4096 basta, sin llegar al tope de 6144 que necesita
+     * viaje_tick_task (%.6f). */
+    if (xTaskCreate(cleanup_task, "log_cleanup_task", 4096, NULL,
                      tskIDLE_PRIORITY + 2, &s_cleanup_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de limpieza: sin barrido periodico");
     }

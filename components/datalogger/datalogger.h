@@ -2,6 +2,8 @@
 #include "esp_err.h"
 #include "frigo.h"
 #include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define DATALOGGER_MAX_ENTRIES  200
 
@@ -20,6 +22,10 @@ int datalogger_get_count(void);
 const datalogger_entry_t *datalogger_get_entry(int index);
 char *datalogger_get_csv(void);
 void datalogger_flush(void);
+
+/* Handle de la tarea de vuelco a SD. Solo para la medicion de
+ * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
+TaskHandle_t datalogger_flush_task_handle(void);
 
 /* Cierra los ficheros y DESMONTA la tarjeta para poder sacarla sin corromperla.
  * Despues de esto no se escribe mas hasta reiniciar. */

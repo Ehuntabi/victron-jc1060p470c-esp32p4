@@ -1,6 +1,8 @@
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +20,10 @@ int log_cleanup_files_pending_warning(int max_days_keep);
 
 /* Hace un barrido inmediato. Retorna numero de ficheros borrados. */
 int log_cleanup_run_now(int max_days_keep);
+
+/* Handle de la tarea de barrido. Solo para la medicion de
+ * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
+TaskHandle_t log_cleanup_task_handle(void);
 
 #ifdef __cplusplus
 }

@@ -287,9 +287,10 @@ static void flush_pending_to_sd_impl(void)
     struct stat st;
 
     /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
-     * activo (contencion SDMMC -> INT WDT -> reinicio). Timeout corto: este
-     * callback corre en la tarea esp_timer compartida, un lock largo aqui
-     * retrasaria TODOS los demas timers del firmware. Si no se consigue el
+     * activo (contencion SDMMC -> INT WDT -> reinicio). Timeout corto para no
+     * acaparar el bus aunque ya no corre en la tarea esp_timer compartida
+     * (tiene su propia tarea, ver flush_task) -- la camara y el resto de
+     * escritores de SD siguen esperando el mismo cerrojo. Si no se consigue el
      * bus, omitir este flush; los datos quedan en el ring para el siguiente.
      * El stat() de need_header TAMBIEN toca la SD: tiene que ir DESPUES del
      * cerrojo, si no la contencion SDMMC salta igual. */
@@ -388,7 +389,11 @@ static void flush_timer_cb(void *arg)
 
 static void start_flush_timer(void)
 {
-    if (xTaskCreate(flush_task, "dl_flush_task", 3072, NULL,
+    /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
+     * el 08-sep-2026: fopen/fprintf/fclose es de lo mas hambriento de pila de
+     * ESP-IDF. Formateo de float ligero aqui (solo %.1f) -> 4096 basta, sin
+     * llegar al tope de 6144 que necesita viaje_tick_task (%.6f). */
+    if (xTaskCreate(flush_task, "dl_flush_task", 4096, NULL,
                      tskIDLE_PRIORITY + 2, &s_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
         return;
@@ -398,6 +403,11 @@ static void start_flush_timer(void)
         esp_timer_start_periodic(s_flush_timer, (uint64_t)FLUSH_INTERVAL_MS * 1000ULL);
         ESP_LOGI(TAG, "Flush timer iniciado (%d ms)", FLUSH_INTERVAL_MS);
     }
+}
+
+TaskHandle_t datalogger_flush_task_handle(void)
+{
+    return s_flush_task_handle;
 }
 
 esp_err_t datalogger_init(void)

@@ -309,9 +309,11 @@ static bool bh_flush_to_sd_dated(time_t file_date)
     if (s_flush_mutex && xSemaphoreTake(s_flush_mutex, 0) != pdTRUE) {
         return false;
     }
-    /* Comprobar si /sdcard existe (datalogger lo monta). Timeout corto: este
-     * callback corre en la tarea esp_timer compartida, igual que el flush de
-     * mas abajo. */
+    /* Comprobar si /sdcard existe (datalogger lo monta). Timeout corto para
+     * no retener el mutex ni el propio bloqueo mas de la cuenta -- ya no
+     * corre en la tarea esp_timer compartida (ver bh_flush_task), tiene su
+     * propia tarea dedicada, pero el resto de la SD (camara, otros
+     * escritores) sigue compartiendo el mismo bus. */
     struct stat st;
     if (!sd_stat("/sdcard", &st, 200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
@@ -402,9 +404,10 @@ static bool bh_flush_to_sd_dated(time_t file_date)
 
     /* === FASE 2: Escritura sin lock. === */
     /* Cerrojo de bus camara<->SD (evita INT WDT por contencion SDMMC). Timeout
-     * corto: este callback corre en la tarea esp_timer compartida, un lock
-     * largo aqui retrasaria TODOS los demas timers del firmware. Si no se
-     * consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego.
+     * corto para no acaparar el bus: ya no corre en la tarea esp_timer
+     * compartida (tiene su propia tarea, ver bh_flush_task), pero la camara
+     * y el resto de escritores de SD siguen esperando el mismo cerrojo. Si no
+     * se consigue, omitir: el umbral anti-duplicados NO avanza -> se reintenta luego.
      * El stat() de need_header TAMBIEN toca la SD: va DESPUES del cerrojo. */
     if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
@@ -507,6 +510,11 @@ static void bh_flush_timer_cb(void *arg)
     if (s_bh_flush_task_handle) xTaskNotifyGive(s_bh_flush_task_handle);
 }
 
+TaskHandle_t battery_history_flush_task_handle(void)
+{
+    return s_bh_flush_task_handle;
+}
+
 esp_err_t battery_history_init(void)
 {
     /* Crear mutex antes de alocar buffer */
@@ -544,8 +552,13 @@ esp_err_t battery_history_init(void)
     ESP_ERROR_CHECK(esp_timer_create(&sample_args, &s_sample_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_sample_timer, (uint64_t)BH_SAMPLE_MS * 1000ULL));
 
-    /* Flush a SD cada 10 min (BH_FLUSH_INTERVAL_MS) */
-    if (xTaskCreate(bh_flush_task, "bh_flush_task", 3072, NULL,
+    /* Flush a SD cada 10 min (BH_FLUSH_INTERVAL_MS).
+     * 3072 se quedaba corto: bootloop en produccion el 08-sep-2026, un panic
+     * cada ~10 min (el mismo intervalo) siempre en el primer BH_LOCK() de la
+     * tarea, dentro de spinlock_acquire -- desbordamiento de pila corrompiendo
+     * el semaforo, no un fallo del propio semaforo (fopen/fprintf/fclose a SD
+     * es de lo mas hambriento de pila de todo ESP-IDF). Subido a 6144. */
+    if (xTaskCreate(bh_flush_task, "bh_flush_task", 6144, NULL,
                      tskIDLE_PRIORITY + 2, &s_bh_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
     }

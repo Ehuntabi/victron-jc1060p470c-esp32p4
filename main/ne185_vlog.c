@@ -9,8 +9,10 @@
  *
  * Patrones copiados del datalogger (probados en campo):
  *  - buffer en RAM + volcado periodico, para no abrir la SD cada minuto;
- *  - camera_sd_bus_lock() con timeout CORTO: el callback corre en la tarea
- *    esp_timer compartida y un bloqueo largo retrasaria los demas timers;
+ *  - camera_sd_bus_lock() con timeout CORTO: para no acaparar el bus aunque
+ *    ya no corre en la tarea esp_timer compartida (tiene su propia tarea,
+ *    ver vlog_flush_task) -- la camara y el resto de escritores de SD siguen
+ *    esperando el mismo cerrojo;
  *  - si el volcado falla, se conservan las muestras para el siguiente intento.
  */
 #include "ne185_vlog.h"
@@ -242,6 +244,11 @@ void ne185_vlog_flush(void)
     flush_to_sd();
 }
 
+TaskHandle_t ne185_vlog_flush_task_handle(void)
+{
+    return s_vlog_flush_task_handle;
+}
+
 esp_err_t ne185_vlog_init(void)
 {
     if (s_ready) return ESP_OK;
@@ -254,7 +261,11 @@ esp_err_t ne185_vlog_init(void)
 
     sd_mkdir(LOG_DIR, 0775, 3000);   /* si la SD no esta lista todavia, falla sin ruido */
 
-    if (xTaskCreate(vlog_flush_task, "ne185_vlog_flush", 3072, NULL,
+    /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
+     * el 08-sep-2026: fopen/fprintf/fclose es de lo mas hambriento de pila de
+     * ESP-IDF. Sin formateo de float aqui -> 4096 basta, sin llegar al tope
+     * de 6144 que necesita viaje_tick_task (%.6f). */
+    if (xTaskCreate(vlog_flush_task, "ne185_vlog_flush", 4096, NULL,
                      tskIDLE_PRIORITY + 2, &s_vlog_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
     }
