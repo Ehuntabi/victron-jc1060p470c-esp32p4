@@ -305,7 +305,13 @@ static void update_display_elements(ui_default_battery_view_t *bv)
         ui_arc_soc_set(bv->arc_soc,
                        bv->battery_state.soc_deci_percent,
                        bv->battery_state.battery_voltage_cv);
-        if (bv->battery_state.ttg_minutes != 0xFFFFFFFF &&
+        /* El centinela real que manda el dispositivo es 0xFFFF (16 bits): al
+         * copiarlo a ttg_minutes (uint32_t) queda en 0x0000FFFF, que NUNCA es
+         * igual a 0xFFFFFFFF -- esta comprobacion no cazaba nunca el "sin
+         * dato" y enseniaba 45 dias y pico de autonomia falsa. Comparar solo
+         * los 16 bits bajos, como view_overview.c. Detectado auditando el
+         * 08-sep-2026. */
+        if ((uint16_t)bv->battery_state.ttg_minutes != 0xFFFF &&
             bv->battery_state.ttg_minutes > 0) {
             uint32_t ttg = bv->battery_state.ttg_minutes;
             if (ttg >= 60) {

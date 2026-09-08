@@ -39,3 +39,37 @@ jobs:
 
       - name: Comparar mini_proto.h entre los dos proyectos
         run: diff victron/main/net/mini_proto.h 35cabina/main/net/mini_proto.h
+
+  # El limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
+  # (CUERPO_MAX en el satelite tiene que caber siempre en VIAJE_BODY_MAX de
+  # la P4, con margen): si CUERPO_MAX llegara a igualar o superar el buffer
+  # de la P4, esta empezaria a rechazar apuntes validos con 413 en silencio
+  # hasta que alguien lo notara en produccion. Detectado auditando el
+  # 08-sep-2026 (mismo motivo que mini_proto_sync).
+  viaje_body_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout victron
+        uses: actions/checkout@v4
+        with:
+          path: victron
+
+      - name: Checkout 35cabina
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/35cabina
+          path: 35cabina
+
+      - name: Comprobar que CUERPO_MAX (satelite) cabe en VIAJE_BODY_MAX (P4)
+        run: |
+          cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.c)
+          body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
+          echo "CUERPO_MAX (35cabina) = $cuerpo_max"
+          echo "VIAJE_BODY_MAX (victron) = $body_max"
+          if [ -z "$cuerpo_max" ] || [ -z "$body_max" ]; then
+            echo "No se pudo leer alguna de las dos constantes"; exit 1
+          fi
+          if [ "$cuerpo_max" -ge "$body_max" ]; then
+            echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en victron"
+            exit 1
+          fi

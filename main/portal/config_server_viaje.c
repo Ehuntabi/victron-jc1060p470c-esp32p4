@@ -42,6 +42,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <dirent.h>
 
 static const char *TAG = "viaje_srv";
@@ -50,6 +51,13 @@ static const char *TAG = "viaje_srv";
  * porque el cierre del viaje (op_fin) tiene que bajar a la tarjeta los puntos
  * de ruta que aun estan en RAM antes de dar el viaje por terminado. */
 static bool ruta_volcar(const char *carpeta);
+
+/* Atado a CUERPO_MAX de ~/joint/35cabina/main/net/viaje_cola.c (896): el
+ * satelite no puede mandar mas de eso, con esto sobra margen. SI ALGUN DIA SE
+ * SUBE ALLI, HAY QUE SUBIRLO AQUI TAMBIEN -- el job de CI "viaje_body_sync"
+ * (.github/workflows/build.yml) falla si el satelite llega a igualar o
+ * superar esto, para que no dependa de acordarse solo. */
+#define VIAJE_BODY_MAX  1024
 
 #define VIAJES_DIR      "/sdcard/viajes"
 /* Donde van los apuntes que NO son de un viaje: el historial del vehiculo.
@@ -401,6 +409,23 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     mkdir(VIAJES_DIR, 0777);
     int mk = mkdir(carpeta, 0777);
+    /* Colision: ya existe una carpeta fecha_destino (dos viajes distintos al
+     * mismo sitio el mismo dia -- un reintento por respuesta perdida del
+     * MISMO viaje no llega aqui, se corta antes con el 409 de arriba porque
+     * viaje_abierto() seguiria en true). Antes se reusaba sin avisar: el
+     * "inicio" del segundo viaje se mezclaba en el diario del primero, y
+     * cualquier apunte suyo pisaba los ficheros del viaje anterior. Numerar
+     * en vez de reusar. Detectado auditando el 08-sep-2026. */
+    if (mk != 0 && errno == EEXIST) {
+        char base[CARPETA_MAX];
+        strncpy(base, carpeta, sizeof(base) - 1);
+        base[sizeof(base) - 1] = 0;
+        for (int n = 2; n <= 20; n++) {
+            snprintf(carpeta, sizeof(carpeta), "%s_%d", base, n);
+            mk = mkdir(carpeta, 0777);
+            if (mk == 0 || errno != EEXIST) break;
+        }
+    }
     struct stat st;
     bool hay = (mk == 0) || (stat(carpeta, &st) == 0);
     if (hay) diario(carpeta, "inicio", destino);
@@ -1159,6 +1184,14 @@ void viaje_telemetria_start(void)
         esp_timer_start_periodic(t, (uint64_t)RUTA_SEG * 1000000ULL);
         ESP_LOGI(TAG, "telemetria del viaje armada (cada %d min, contadores cada %d, ruta cada %d s)",
                  TELEMETRIA_MIN, CONTADORES_MIN, RUTA_SEG);
+    } else {
+        /* Sin timer la tarea se queda parada para siempre (nadie la
+         * notifica): borrarla y limpiar el handle para que el guard de
+         * arriba no bloquee un reintento futuro con telemetria muerta hasta
+         * el proximo reboot. */
+        ESP_LOGE(TAG, "No se pudo crear el timer de telemetria del viaje");
+        vTaskDelete(s_viaje_tick_task_handle);
+        s_viaje_tick_task_handle = NULL;
     }
 }
 
@@ -1168,21 +1201,18 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 {
     REQUIRE_AUTH_STRICT(req);
 
-    /* 1 KB. El comentario de antes decia "unos 90 bytes, cuatro numeros": eso era
-     * la fase 1. Hoy el cuerpo mas grande es la PERNOCTA -- sitio, horas,
-     * noches, precio, seis servicios con su importe, valoracion, pegas e
-     * inclinacion -- y son 693 bytes MEDIDOS.
-     *
-     * Va atado a CUERPO_MAX de viaje_cola.c en el satelite (896): el satelite no
-     * puede mandar mas de eso, asi que con 1024 aqui sobra margen. SI ALGUN DIA
-     * SE SUBE ALLI, HAY QUE SUBIRLO AQUI TAMBIEN.
+    /* 1 KB (VIAJE_BODY_MAX, definida arriba). El comentario de antes decia
+     * "unos 90 bytes, cuatro numeros": eso era la fase 1. Hoy el cuerpo mas
+     * grande es la PERNOCTA -- sitio, horas, noches, precio, seis servicios
+     * con su importe, valoracion, pegas e inclinacion -- y son 693 bytes
+     * MEDIDOS.
      *
      * Y si aun asi llega algo mas grande, se rechaza ENTERO y se dice. Antes se
      * recortaba en silencio: el JSON quedaba cortado a medias, cJSON no lo
      * parseaba, se devolvia "400 json invalido" y el satelite lo tomaba por un
      * apunte invalido y lo DESCARTABA. O sea, un dato perdido en silencio
      * disfrazado de dato malo. */
-    char body[1024];
+    char body[VIAJE_BODY_MAX];
     if ((int)req->content_len >= (int)sizeof(body)) {
         ESP_LOGE(TAG, "apunte de %d bytes: NO CABE en %d, se rechaza entero",
                  (int)req->content_len, (int)sizeof(body));

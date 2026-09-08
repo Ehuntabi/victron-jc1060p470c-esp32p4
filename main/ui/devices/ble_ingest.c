@@ -4,6 +4,7 @@
 #include "battery_history.h"
 #include "alerts.h"
 #include "data/solar_daily.h"
+#include "esp_timer.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -27,9 +28,21 @@ void ble_ingest_feed_history(const victron_data_t *d)
                 int crit_th = alerts_get_soc_critical();
                 int warn_th = alerts_get_soc_warning();
                 static int s_last_soc = -1;
+                static int64_t s_last_soc_us = 0;
                 static bool s_crit_active = false;
                 static bool s_warn_active = false;
-                if (s_last_soc >= 0) {
+                const int64_t now_us = esp_timer_get_time();
+                /* Frescura: si ha pasado mucho desde la ultima muestra (BLE
+                 * caido y reconectado, arranque...), no evaluar un "cruce"
+                 * comparando contra un valor de otra epoca -- solo fijar la
+                 * base de nuevo. Sin esto, reconectar tras un rato sin enlace
+                 * podia disparar un jingle falso (o callarse uno real)
+                 * comparando dos lecturas sin relacion temporal entre si.
+                 * 60 s de margen: el BLE anuncia cada pocos cientos de ms en
+                 * uso normal. Detectado auditando el 08-sep-2026. */
+                const bool stale_gap = (s_last_soc_us == 0) ||
+                                       (now_us - s_last_soc_us > 60LL * 1000000LL);
+                if (s_last_soc >= 0 && !stale_gap) {
                     /* Cruce a la baja del umbral critico */
                     if (s_last_soc >= crit_th && soc_pct < crit_th && !s_crit_active) {
                         s_crit_active = true;
@@ -48,6 +61,7 @@ void ble_ingest_feed_history(const victron_data_t *d)
                     if (soc_pct >= warn_th + 2) s_warn_active = false;
                 }
                 s_last_soc = soc_pct;
+                s_last_soc_us = now_us;
             }
             break;
         }

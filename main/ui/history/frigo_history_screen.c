@@ -46,6 +46,8 @@
 #include "esp_timer.h"
 #include "chart_common.h"
 
+static const char *TAG_UI = "UI_MODULE";
+
 /* ── Pantalla gráfica temperaturas ─────────────────────────── */
 static lv_obj_t *s_chart_screen = NULL;  /* overlay raíz */
 static lv_obj_t *s_chart      = NULL;     /* widget chart interno */
@@ -92,8 +94,19 @@ static frigo_log_entry_t *s_frigo_buf = NULL;
  * el CSV de la SD en cada tick de pan/zoom (apply_window). -2 = cache vacia. */
 static int s_frigo_loaded_idx = -2;
 static int s_frigo_loaded_n   = 0;
+/* Tarea que lee el CSV de la SD fuera del hilo de LVGL (mismo patron que
+ * bh_loader_task en battery_history_screen.c). Se crea una vez y vive lo que
+ * la aplicacion. Antes frigo_chart_load_day() llamaba a
+ * log_browser_load_frigo() directamente dentro del callback de la flecha o
+ * del gesto de cambio de dia -- congelaba taskLVGL (touch, animaciones, TODO)
+ * el tiempo que tardara la SD en responder. Detectado auditando el
+ * 08-sep-2026. */
+static TaskHandle_t s_frigo_loader_task = NULL;
+static int          s_frigo_req_idx = -1;
 
 static void frigo_chart_load_day(void);
+static void frigo_paint_day(void);
+static void frigo_loader_task(void *arg);
 static void frigo_chart_gesture_cb(lv_event_t *e);
 static void frigo_arrow_cb(lv_event_t *e);
 static void frigo_chart_touch_cb(lv_event_t *e);
@@ -303,6 +316,15 @@ void ui_show_chart_screen(ui_state_t *ui)
     }
     s_frigo_day_idx = -1;
     s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
+    /* Lector de dias historicos en su propia tarea: no toca la SD desde el
+     * hilo de LVGL. Prioridad 3, por debajo de LVGL. */
+    if (!s_frigo_loader_task) {
+        if (xTaskCreate(frigo_loader_task, "frigo_loader", 5120, NULL, 3,
+                        &s_frigo_loader_task) != pdPASS) {
+            s_frigo_loader_task = NULL;
+            ESP_LOGE(TAG_UI, "no se pudo crear frigo_loader: los dias historicos no cargaran");
+        }
+    }
     frigo_chart_load_day();
 
     /* Gestures para navegar entre dias */
@@ -469,6 +491,118 @@ static void frigo_append_ring_tail(frigo_log_entry_t *buf, int *n, int max)
     }
 }
 
+/* Pinta el dia historico que ya esta en s_frigo_buf (o el anillo fusionado si
+ * es HOY). Solo lectura de los buffers: llamar con el cerrojo de LVGL tomado
+ * (desde un callback, o desde frigo_loader_task tras cogerlo) y con
+ * s_frigo_loaded_idx == s_frigo_day_idx. */
+static void frigo_paint_day(void)
+{
+    if (!s_chart || !s_frigo_buf) return;
+    int n = s_frigo_loaded_n;
+    int wa = (int)(s_frigo_win_a * n);
+    int wb = (int)(s_frigo_win_b * n);
+    if (wb <= wa) wb = wa + 1;
+    if (wb > n) wb = n;
+    int wn = wb - wa;
+    /* Mismo tope y downsample que la grafica de bateria (ver
+     * ui_show_battery_history_screen): con varias series, un
+     * lv_chart_set_point_count grande cuelga taskLVGL > 5 s -> WDT. Aqui hay
+     * 5 series y el buffer admite hasta FRIGO_LOG_MAX_ENTRIES (1500); un CSV
+     * real son ~288 lineas (log cada 5 min), asi que hoy no se alcanza, pero
+     * el tope evita que un cambio de cadencia lo reviva. */
+    const int CHART_MAX_PTS = 300;
+    int pts = wn > 0 ? wn : 2;
+    if (pts > CHART_MAX_PTS) pts = CHART_MAX_PTS;
+    if (pts < 2) pts = 2;
+    lv_chart_set_point_count(s_chart, pts);
+    int step = (wn > CHART_MAX_PTS) ? (wn + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
+    float t_min = 9999.0f, t_max = -9999.0f;
+    int idx = 0;
+    for (int i = wa; i < wb && idx < pts; i += step, ++idx) {
+        const frigo_log_entry_t *e = &s_frigo_buf[i];
+        if (!isnan(e->t_aletas))  { if (e->t_aletas  < t_min) t_min = e->t_aletas;  if (e->t_aletas  > t_max) t_max = e->t_aletas; }
+        if (!isnan(e->t_congel))  { if (e->t_congel  < t_min) t_min = e->t_congel;  if (e->t_congel  > t_max) t_max = e->t_congel; }
+        if (!isnan(e->t_exter))   { if (e->t_exter   < t_min) t_min = e->t_exter;   if (e->t_exter   > t_max) t_max = e->t_exter; }
+        lv_chart_set_value_by_id(s_chart, s_ser_aletas, idx,
+            isnan(e->t_aletas) ? LV_CHART_POINT_NONE : (int16_t)e->t_aletas);
+        lv_chart_set_value_by_id(s_chart, s_ser_congelador, idx,
+            isnan(e->t_congel) ? LV_CHART_POINT_NONE : (int16_t)e->t_congel);
+        lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
+            isnan(e->t_exter)  ? LV_CHART_POINT_NONE : (int16_t)e->t_exter);
+        lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_pct);
+        lv_chart_set_value_by_id(s_chart, s_ser_solar, idx,
+            e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
+    }
+    frigo_apply_temp_range(t_min, t_max);
+    update_frigo_xlabels_from_buf(n);
+    if (s_frigo_lbl_date) {
+        if (s_frigo_loaded_idx < 0) {
+            lv_label_set_text(s_frigo_lbl_date, "HOY");
+        } else {
+            char disp[11];
+            fmt_date_ddmmaaaa(s_frigo_dates[s_frigo_loaded_idx], disp, sizeof disp);
+            lv_label_set_text(s_frigo_lbl_date, disp);
+        }
+    }
+    lv_chart_refresh(s_chart);
+}
+
+/* Lee de la SD el dia que pida s_frigo_req_idx y lo pinta. Corre en
+ * frigo_loader_task: nunca se llama a log_browser_load_frigo() desde el hilo
+ * de LVGL, mismo patron que bh_loader_task en battery_history_screen.c. */
+static void frigo_loader_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        int idx = s_frigo_req_idx;
+        while (idx >= -1 && idx < s_frigo_n_dates && idx != s_frigo_loaded_idx) {
+            if (!s_frigo_buf) {
+                s_frigo_buf = heap_caps_malloc(sizeof(frigo_log_entry_t) * FRIGO_LOG_MAX_ENTRIES,
+                                               MALLOC_CAP_SPIRAM);
+                if (!s_frigo_buf) ESP_LOGE(TAG_UI, "sin PSRAM para el historico de frigo");
+            }
+            /* Invalidar la cache ANTES de leer, con el cerrojo tomado: asi
+             * nadie pinta de un buffer a medio sobrescribir. */
+            if (lvgl_port_lock(1000)) {
+                s_frigo_loaded_idx = -2;
+                lvgl_port_unlock();
+            }
+
+            /* HOY (idx<0) tambien sale de la tarjeta: su CSV es lo UNICO que
+             * sobrevive a un reinicio (el datalogger en RAM arranca vacio).
+             * El anillo se le pega despues, en frigo_append_ring_tail. */
+            char date[LOG_BROWSER_DATE_LEN];
+            if (idx < 0) {
+                time_t now = time(NULL);
+                struct tm tm_now;
+                localtime_r(&now, &tm_now);
+                strftime(date, sizeof(date), "%Y-%m-%d", &tm_now);
+            } else {
+                snprintf(date, sizeof(date), "%s", s_frigo_dates[idx]);
+            }
+            char path[64];
+            snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
+            int n = s_frigo_buf ? log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES) : 0;
+            if (idx < 0 && s_frigo_buf) frigo_append_ring_tail(s_frigo_buf, &n, FRIGO_LOG_MAX_ENTRIES);
+
+            if (s_frigo_req_idx != idx) { idx = s_frigo_req_idx; continue; }  /* cambio de dia a mitad */
+
+            if (lvgl_port_lock(1000)) {
+                s_frigo_loaded_n   = n;
+                s_frigo_loaded_idx = idx;
+                /* Puede haberse cerrado la pantalla o cambiado de dia
+                 * mientras se leia: solo pintamos si sigue siendo el dia en
+                 * curso. */
+                if (s_chart && s_frigo_day_idx == idx) frigo_paint_day();
+                lvgl_port_unlock();
+            }
+            idx = s_frigo_req_idx;
+        }
+    }
+}
+
 static void frigo_chart_load_day(void)
 {
     if (!s_chart) return;
@@ -487,7 +621,8 @@ static void frigo_chart_load_day(void)
     if (s_frigo_day_idx < 0 && !frigo_clock_ok) {
         /* Reloj sin hora aun: no hay como nombrar el CSV de hoy ni fecharlo
          * (BOOT+HH:MM:SS en vez de fecha real). Mostrar el anillo entero sin
-         * fusionar con la SD, que es lo unico util sin fecha. */
+         * fusionar con la SD, que es lo unico util sin fecha. Solo RAM, no
+         * toca la SD: se queda sincrono a proposito. */
         int count = datalogger_get_count();
         int base  = frigo_today_base(count);
         int n     = count - base;
@@ -529,85 +664,30 @@ static void frigo_chart_load_day(void)
         update_frigo_xlabels_today(base, n);
         if (s_frigo_lbl_date) lv_label_set_text(s_frigo_lbl_date, "HOY");
         (void)valid;
+        lv_chart_refresh(s_chart);
+        return;
+    }
+
+    if (s_frigo_buf && s_frigo_day_idx == s_frigo_loaded_idx) {
+        frigo_paint_day();   /* el dia ya esta en RAM: solo repintar */
     } else {
-        /* HOY (idx<0, reloj en hora) fusiona el CSV de hoy con la cola del
-         * anillo, igual que hace la bateria (bh_loader_task, mas abajo): el
-         * CSV sobrevive a los reinicios pero solo llega hasta el ultimo
-         * volcado (cada 60 s), y el anillo tiene el minuto en curso pero
-         * arranca vacio en cada arranque. Sin esto, HOY solo ensenaba lo de
-         * despues del ultimo reinicio y el resto del dia solo se veia
-         * navegando a la fecha de hoy como "historico". */
-        char date[LOG_BROWSER_DATE_LEN];
-        if (s_frigo_day_idx < 0) {
-            snprintf(date, sizeof date, "%04d-%02d-%02d",
-                     frigo_lt.tm_year + 1900, frigo_lt.tm_mon + 1, frigo_lt.tm_mday);
-        } else {
-            snprintf(date, sizeof date, "%s", s_frigo_dates[s_frigo_day_idx]);
-        }
-        if (s_frigo_buf == NULL) {
-            s_frigo_buf = heap_caps_malloc(sizeof(frigo_log_entry_t) * FRIGO_LOG_MAX_ENTRIES,
-                                           MALLOC_CAP_SPIRAM);
-            s_frigo_loaded_idx = -2;   /* buffer nuevo: cache invalida */
-        }
-        int n;
-        if (s_frigo_buf && s_frigo_day_idx == s_frigo_loaded_idx) {
-            n = s_frigo_loaded_n;   /* mismo dia ya en s_frigo_buf: no re-leer la SD */
-        } else {
-            char path[64];
-            snprintf(path, sizeof(path), "/sdcard/frigo/%s.csv", date);
-            n = s_frigo_buf ? log_browser_load_frigo(path, s_frigo_buf, FRIGO_LOG_MAX_ENTRIES) : 0;
-            if (s_frigo_day_idx < 0 && s_frigo_buf)
-                frigo_append_ring_tail(s_frigo_buf, &n, FRIGO_LOG_MAX_ENTRIES);
-            s_frigo_loaded_idx = s_frigo_buf ? s_frigo_day_idx : -2;
-            s_frigo_loaded_n   = n;
-        }
-        int wa = (int)(s_frigo_win_a * n);
-        int wb = (int)(s_frigo_win_b * n);
-        if (wb <= wa) wb = wa + 1;
-        if (wb > n) wb = n;
-        int wn = wb - wa;
-        /* Mismo tope y downsample que la grafica de bateria (ver
-         * ui_show_battery_history_screen): con varias series, un
-         * lv_chart_set_point_count grande cuelga taskLVGL > 5 s -> WDT. Aqui hay
-         * 5 series y el buffer admite hasta FRIGO_LOG_MAX_ENTRIES (1500); un CSV
-         * real son ~288 lineas (log cada 5 min), asi que hoy no se alcanza, pero
-         * el tope evita que un cambio de cadencia lo reviva. */
-        const int CHART_MAX_PTS = 300;
-        int pts = wn > 0 ? wn : 2;
-        if (pts > CHART_MAX_PTS) pts = CHART_MAX_PTS;
-        if (pts < 2) pts = 2;
-        lv_chart_set_point_count(s_chart, pts);
-        int step = (wn > CHART_MAX_PTS) ? (wn + CHART_MAX_PTS - 1) / CHART_MAX_PTS : 1;
-        float t_min = 9999.0f, t_max = -9999.0f;
-        int idx = 0;
-        for (int i = wa; i < wb && idx < pts; i += step, ++idx) {
-            const frigo_log_entry_t *e = &s_frigo_buf[i];
-            if (!isnan(e->t_aletas))  { if (e->t_aletas  < t_min) t_min = e->t_aletas;  if (e->t_aletas  > t_max) t_max = e->t_aletas; }
-            if (!isnan(e->t_congel))  { if (e->t_congel  < t_min) t_min = e->t_congel;  if (e->t_congel  > t_max) t_max = e->t_congel; }
-            if (!isnan(e->t_exter))   { if (e->t_exter   < t_min) t_min = e->t_exter;   if (e->t_exter   > t_max) t_max = e->t_exter; }
-            lv_chart_set_value_by_id(s_chart, s_ser_aletas, idx,
-                isnan(e->t_aletas) ? LV_CHART_POINT_NONE : (int16_t)e->t_aletas);
-            lv_chart_set_value_by_id(s_chart, s_ser_congelador, idx,
-                isnan(e->t_congel) ? LV_CHART_POINT_NONE : (int16_t)e->t_congel);
-            lv_chart_set_value_by_id(s_chart, s_ser_exterior, idx,
-                isnan(e->t_exter)  ? LV_CHART_POINT_NONE : (int16_t)e->t_exter);
-            lv_chart_set_value_by_id(s_chart, s_ser_fan, idx, e->fan_pct);
-            lv_chart_set_value_by_id(s_chart, s_ser_solar, idx,
-                e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
-        }
-        frigo_apply_temp_range(t_min, t_max);
-        update_frigo_xlabels_from_buf(n);
+        /* Dia todavia sin leer: se lo pide a frigo_loader_task y se deja la
+         * grafica vacia con un aviso. Aqui NO se toca la SD: estamos dentro
+         * de un callback de LVGL y leer el CSV congelaria la UI hasta que
+         * la tarjeta responda. */
         if (s_frigo_lbl_date) {
             if (s_frigo_day_idx < 0) {
-                lv_label_set_text(s_frigo_lbl_date, "HOY");
+                lv_label_set_text(s_frigo_lbl_date, "HOY ...");
             } else {
                 char disp[11];
-                fmt_date_ddmmaaaa(date, disp, sizeof disp);
-                lv_label_set_text(s_frigo_lbl_date, disp);
+                fmt_date_ddmmaaaa(s_frigo_dates[s_frigo_day_idx], disp, sizeof disp);
+                lv_label_set_text_fmt(s_frigo_lbl_date, "%s ...", disp);
             }
         }
+        s_frigo_req_idx = s_frigo_day_idx;
+        if (s_frigo_loader_task) xTaskNotifyGive(s_frigo_loader_task);
+        lv_chart_refresh(s_chart);
     }
-    lv_chart_refresh(s_chart);
 }
 
 static void frigo_update_zoom_label(void)
@@ -752,7 +832,14 @@ void ui_close_chart_screen(void)
     /* Borrar el overlay raíz, que arrastra al chart y todos sus hijos */
     if (s_chart_screen) { lv_obj_del(s_chart_screen); s_chart_screen = NULL; }
     s_chart = NULL;
-    /* Liberar el buffer de carga de dias guardados (~36KB PSRAM): se reserva
-     * lazy al ver un dia y se re-reserva al volver a abrir. */
-    if (s_frigo_buf) { free(s_frigo_buf); s_frigo_buf = NULL; s_frigo_loaded_idx = -2; }
+    /* El buffer de carga de dias guardados (~36KB PSRAM) YA NO se libera aqui
+     * a proposito: frigo_loader_task puede estar leyendo/escribiendo en el
+     * ahora mismo desde su propia tarea, y un free() aqui seria un
+     * use-after-free en cuanto la lectura en curso siguiera escribiendo en
+     * memoria ya liberada. Se reserva una vez y se reutiliza entre visitas a
+     * la pantalla, mismo patron que s_bh_buf en battery_history_screen.c.
+     * s_frigo_loaded_idx se invalida igualmente al reabrir (ver
+     * ui_show_chart_screen), asi que no hace falta invalidarla aqui.
+     * Detectado auditando el 08-sep-2026, junto con el resto de I/O sincrona
+     * de esta pantalla. */
 }

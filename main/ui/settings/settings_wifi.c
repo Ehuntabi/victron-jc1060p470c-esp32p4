@@ -366,7 +366,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * conectaba, y decir que no hacen falta para nada seria mentir ahora. */
     lv_label_set_text(c4_hint,
                       "Solo para Actualizar (/ota) y Claves Victron. El resto\n"
-                      "de la web y la app no piden nada: basta con el Wi-Fi.");
+                      "de la web y la app no piden nada: basta con el Wi-Fi.\n"
+                      "Ojo: la web es HTTP sin cifrar, protegida solo por la\n"
+                      "clave Wi-Fi de arriba, no por esta.");
 
     /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */

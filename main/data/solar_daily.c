@@ -91,6 +91,30 @@ static bool anadir_csv(const solar_day_t *d)
     return true;
 }
 
+/* Cierra un dia: lo mete en el anillo de historico y lo anade al CSV (o lo
+ * deja pendiente si la SD esta ocupada). Comun a los dos sitios donde un dia
+ * puede terminar: el cambio de dia en caliente (solar_daily_on_pv) y el que
+ * ya habia cambiado ANTES de arrancar (solar_daily_init, ver el comentario
+ * de alli). */
+static void cerrar_dia(const solar_day_t *d)
+{
+    if (d->kwh <= 0.0f || d->day_id <= 0) return;
+    if (s_n_dias < SOLAR_DAILY_MAX_DAYS) {
+        s_dias[s_n_dias++] = *d;
+    } else {
+        memmove(&s_dias[0], &s_dias[1], sizeof(s_dias[0]) * (SOLAR_DAILY_MAX_DAYS - 1));
+        s_dias[SOLAR_DAILY_MAX_DAYS - 1] = *d;
+    }
+    if (!anadir_csv(d)) {
+        s_pend = *d;
+        s_pend_valid = true;
+        ESP_LOGW(TAG, "tarjeta ocupada: el dia queda pendiente de escribir");
+    }
+    ESP_LOGI(TAG, "dia cerrado: %.2f kWh producidos en %.1f h (pico %ld W), "
+             "%.2f kWh consumidos",
+             d->kwh, d->horas, (long)d->pico_w, d->kwh_consumo);
+}
+
 static void cargar_csv(void)
 {
     FILE *f = fopen(CSV_SD, "r");
@@ -154,6 +178,16 @@ void solar_daily_init(void)
             if (guardado.day_id == s_hoy.day_id) {
                 s_hoy = guardado;
                 ESP_LOGI(TAG, "dia en curso recuperado: %.2f kWh", s_hoy.kwh);
+            } else if (guardado.day_id > 0 && guardado.day_id < s_hoy.day_id) {
+                /* El dia guardado ya no es hoy: el reinicio paso por medianoche
+                 * (o el reloj no estaba sincronizado cuando se guardo por
+                 * ultima vez). Antes esto se tiraba sin mas -- el kWh de ese
+                 * dia entero desaparecia del historico sin avisar. Cerrarlo
+                 * de verdad en vez de descartarlo. Detectado auditando el
+                 * 08-sep-2026. */
+                ESP_LOGW(TAG, "dia guardado (%ld) distinto de hoy (%ld): cerrando antes de arrancar",
+                         (long)guardado.day_id, (long)s_hoy.day_id);
+                cerrar_dia(&guardado);
             }
         }
         nvs_close(h);
@@ -175,22 +209,7 @@ void solar_daily_on_pv(int32_t watts)
     /* Cambio de dia: cierra el que acaba y arranca el nuevo. */
     const int32_t id = hoy_id();
     if (id != s_hoy.day_id) {
-        if (s_hoy.kwh > 0.0f && s_hoy.day_id > 0) {
-            if (s_n_dias < SOLAR_DAILY_MAX_DAYS) {
-                s_dias[s_n_dias++] = s_hoy;
-            } else {
-                memmove(&s_dias[0], &s_dias[1], sizeof(s_dias[0]) * (SOLAR_DAILY_MAX_DAYS - 1));
-                s_dias[SOLAR_DAILY_MAX_DAYS - 1] = s_hoy;
-            }
-            if (!anadir_csv(&s_hoy)) {
-                s_pend = s_hoy;
-                s_pend_valid = true;
-                ESP_LOGW(TAG, "tarjeta ocupada: el dia queda pendiente de escribir");
-            }
-            ESP_LOGI(TAG, "dia cerrado: %.2f kWh producidos en %.1f h (pico %ld W), "
-                     "%.2f kWh consumidos",
-                     s_hoy.kwh, s_hoy.horas, (long)s_hoy.pico_w, s_hoy.kwh_consumo);
-        }
+        cerrar_dia(&s_hoy);
         memset(&s_hoy, 0, sizeof(s_hoy));
         s_hoy.day_id = id;
         s_last_us = 0;
