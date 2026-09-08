@@ -21,10 +21,15 @@ static ui_confirm_action_t s_confirm_action = NULL;
 
 static void ui_confirm_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
-    const char *txt = lbl ? lv_label_get_text(lbl) : "";
-    bool ok = (txt && strcmp(txt, "Cancelar") != 0);  /* el izquierdo siempre es Cancelar */
+    /* Cual boton fue: por user_data (NULL=Cancelar, no-NULL=OK), no por el
+     * texto de la etiqueta. Antes comparaba lv_label_get_text() contra
+     * "Cancelar" -- funciona solo mientras nadie cambie ese texto ni pase
+     * "Cancelar" como ok_txt por error; un cambio de wording futuro en
+     * cualquiera de los dos botones invertiria en silencio que boton hace
+     * que cosa (cancelar podria ejecutar la accion, o confirmar no hacer
+     * nada). Mismo patron ya usado en frigo_arrow_cb (frigo_history_screen.c).
+     * Detectado auditando el 08-sep-2026. */
+    bool ok = (lv_event_get_user_data(e) != NULL);
     ui_confirm_action_t action = s_confirm_action;
     if (s_confirm_modal) { lv_obj_del(s_confirm_modal); s_confirm_modal = NULL; }
     s_confirm_action = NULL;
@@ -89,7 +94,7 @@ void ui_show_confirm_dialog(const char *title, const char *msg,
     lv_label_set_text(lc, "Cancelar");
     lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
-    lv_obj_add_event_cb(btn_cancel, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_cancel, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);   /* NULL = cancelar */
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 220, 60);
@@ -99,7 +104,7 @@ void ui_show_confirm_dialog(const char *title, const char *msg,
     lv_label_set_text(lo, ok_txt);
     lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lo);
-    lv_obj_add_event_cb(btn_ok, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_ok, ui_confirm_btn_cb, LV_EVENT_CLICKED, (void *)1);   /* no-NULL = confirmar */
 }
 
 /* Aviso de solo lectura: el mismo modal pero con un unico boton y sin accion.

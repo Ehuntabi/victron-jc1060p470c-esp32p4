@@ -410,6 +410,23 @@ static void wifi_save_cb(lv_event_t *e)
         }
         return;
     }
+    /* WPA2 exige 8-63 caracteres. wifi_ap_init() (config_server_ap.c) lee esta
+     * clave de NVS SIN revalidarla -- confia en que config_server_ensure_ap_
+     * password() ya la dejo buena, pero esa funcion solo corre UNA VEZ al
+     * arrancar, antes de la UI. Sin este chequeo, guardar aqui una clave
+     * corta (o en blanco) desde la pantalla la dejaba tal cual en NVS, y el
+     * siguiente wifi_ap_init() la usaba igual -> AP con WPA2 mal configurado,
+     * probablemente sin arrancar hasta reflashear por USB. Detectado
+     * auditando el 08-sep-2026. */
+    size_t pass_len = pass ? strlen(pass) : 0;
+    if (pass_len < 8) {
+        ESP_LOGW(TAG_SETTINGS, "clave WPA2 de %u caracteres: no se guarda", (unsigned)pass_len);
+        if (s_wifi_estado) {
+            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_label_set_text(s_wifi_estado, "La clave Wi-Fi necesita al menos 8 caracteres (WPA2)");
+        }
+        return;
+    }
 
     nvs_handle_t h;
     esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);

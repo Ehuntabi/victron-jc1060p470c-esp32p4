@@ -68,7 +68,15 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto)
 static void refresco_cb(lv_timer_t *t)
 {
     (void)t;
-    if (!s_estado) return;
+    /* s_estado no se pone a NULL al salir de la pagina (sigue viva, solo
+     * reparentada al storage oculto del lv_menu -- ver lv_menu_set_page en
+     * lv_menu.c). Sin comprobar visibilidad, este timer de 1 Hz seguia
+     * corriendo PARA SIEMPRE tras la primera visita a Ajustes -> GPS, aunque
+     * llevaras horas en otra pantalla: gps_get() y los 6 lv_label_set_text
+     * cada segundo, sin que nadie los viera. Mismo patron ya usado (y
+     * efectivo, comprobado contra lv_menu.c) en sd_trip_timer_cb
+     * (settings_panel.c). Detectado auditando el 08-sep-2026. */
+    if (!s_estado || !lv_obj_is_visible(s_estado)) return;
 
     gps_data_t g;
     gps_get(&g);

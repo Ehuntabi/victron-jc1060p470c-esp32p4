@@ -129,7 +129,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_label_set_text(lc, "Cancelar");
     lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
-    lv_obj_add_event_cb(btn_cancel, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_cancel, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);   /* NULL = cancelar */
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 220, 60);
@@ -139,15 +139,18 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_label_set_text(lo, "Continuar");
     lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lo);
-    lv_obj_add_event_cb(btn_ok, victron_warning_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_ok, victron_warning_btn_cb, LV_EVENT_CLICKED, (void *)1);   /* no-NULL = continuar */
 }
 
 static void victron_warning_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
-    const char *txt = lbl ? lv_label_get_text(lbl) : "";
-    if (txt && strcmp(txt, "Cancelar") == 0) {
+    /* Cual boton fue: por user_data (NULL=Cancelar), no por el texto de la
+     * etiqueta -- un cambio de wording futuro en "Cancelar" invertiria en
+     * silencio cual boton vuelve al menu y cual deja entrar a la seccion
+     * sensible. Mismo motivo que el arreglo de ui_confirm_btn_cb
+     * (settings_dialogs.c). Detectado auditando el 08-sep-2026. */
+    bool cancel = (lv_event_get_user_data(e) == NULL);
+    if (cancel) {
         /* Cerrar el msgbox y volver al menu principal */
         if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
         if (s_settings_menu && s_settings_main_page) {
@@ -524,6 +527,36 @@ void victron_config_update_controls(ui_state_t *ui)
     }
 }
 
+/* MISMA comprobacion que str_is_hex() en config_server.c (POST /save): esa
+ * es static y vive en otro componente, asi que se repite aqui en vez de
+ * exportarla solo para esto. */
+static bool victron_str_is_hex(const char *s, int n)
+{
+    for (int i = 0; i < n; ++i) {
+        char c = s[i];
+        bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/* MAC "XX:XX:XX:XX:XX:XX": 17 caracteres, pero ademas dos puntos en las
+ * posiciones fijas y hex en el resto -- una cadena de 17 caracteres
+ * cualquiera (con longitud correcta pero contenido basura) pasaba antes sin
+ * comprobar nada mas. */
+static bool victron_str_is_mac(const char *s)
+{
+    if (strlen(s) != 17) return false;
+    for (int i = 0; i < 17; ++i) {
+        if (i % 3 == 2) {
+            if (s[i] != ':') return false;
+        } else if (!victron_str_is_hex(&s[i], 1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void victron_config_persist(ui_state_t *ui)
 {
     if (ui == NULL || ui->victron_config.updating) {
@@ -543,24 +576,37 @@ void victron_config_persist(ui_state_t *ui)
             }
         }
 
-        /* MAC address */
+        /* MAC address. Antes solo se comprobaba la longitud (17): una cadena
+         * con esa longitud pero sin los dos puntos en su sitio o con
+         * caracteres no hex se guardaba tal cual, y el emparejamiento BLE
+         * fallaba en silencio sin que nada avisara. Detectado auditando el
+         * 08-sep-2026. */
         if (ui->victron_config.mac_textareas[i]) {
             const char *mac = lv_textarea_get_text(ui->victron_config.mac_textareas[i]);
-            if (mac && strlen(mac) == 17) {
+            if (mac && victron_str_is_mac(mac)) {
                 strncpy(devices[i].mac_address, mac, sizeof(devices[i].mac_address) - 1);
             } else {
+                if (mac && mac[0] != '\0') {
+                    ESP_LOGW(TAG_SETTINGS, "MAC invalida en dispositivo %d ('%s'): se deja sin configurar",
+                             (int)i, mac);
+                }
                 strcpy(devices[i].mac_address, "00:00:00:00:00:00");
             }
         }
 
-        /* AES Key */
+        /* AES Key. Mismo motivo: strtol() sobre un caracter no hex no avisa,
+         * simplemente produce una clave incorrecta (a menudo ceros) que
+         * luego no descifra nunca la BLE del Victron, sin ningun error que
+         * lo explique. Sin el chequeo de formato aqui, se guardaba igual. */
         if (ui->victron_config.key_textareas[i]) {
             const char *hex = lv_textarea_get_text(ui->victron_config.key_textareas[i]);
-            if (hex && strlen(hex) == 32) {
+            if (hex && strlen(hex) == 32 && victron_str_is_hex(hex, 32)) {
                 for (int j = 0; j < 16; ++j) {
                     char tmp[3] = { hex[j * 2], hex[j * 2 + 1], 0 };
                     devices[i].aes_key[j] = (uint8_t)strtol(tmp, NULL, 16);
                 }
+            } else if (hex && hex[0] != '\0') {
+                ESP_LOGW(TAG_SETTINGS, "clave AES invalida en dispositivo %d: se deja sin configurar", (int)i);
             }
         }
 
@@ -593,10 +639,15 @@ static void *s_victron_confirm_ud = NULL;
 
 static void victron_confirm_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
-    const char *txt = lbl ? lv_label_get_text(lbl) : "";
-    bool confirmed = (txt && strstr(txt, "Confirmar") != NULL);
+    /* Cual boton fue: por user_data (NULL=Cancelar), no por si la etiqueta
+     * CONTIENE "Confirmar" -- este es el modal que gatea anadir/quitar/activar
+     * dispositivos Victron, asi que un wording futuro que dejara de incluir
+     * esa palabra en el boton OK habria hecho que "Confirmar" no hiciera nada
+     * (silencioso: el modal se cierra igual, sin ejecutar la accion). Mismo
+     * motivo que el arreglo de ui_confirm_btn_cb (settings_dialogs.c) y
+     * victron_warning_btn_cb, un poco mas arriba en este mismo fichero.
+     * Detectado auditando el 08-sep-2026. */
+    bool confirmed = (lv_event_get_user_data(e) != NULL);
 
     victron_confirm_fn ok = s_victron_confirm_ok;
     victron_confirm_fn cancel = s_victron_confirm_cancel;
@@ -676,7 +727,7 @@ static void victron_show_confirm_modal(const char *msg,
     lv_label_set_text(lc, "Cancelar");
     lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
-    lv_obj_add_event_cb(btn_cancel, victron_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_cancel, victron_confirm_btn_cb, LV_EVENT_CLICKED, NULL);   /* NULL = cancelar */
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 200, 56);
@@ -686,7 +737,7 @@ static void victron_show_confirm_modal(const char *msg,
     lv_label_set_text(lo, "Confirmar");
     lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lo);
-    lv_obj_add_event_cb(btn_ok, victron_confirm_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_ok, victron_confirm_btn_cb, LV_EVENT_CLICKED, (void *)1);   /* no-NULL = confirmar */
 }
 
 /* ── Acciones reales tras confirmación ─────────────────────────────── */

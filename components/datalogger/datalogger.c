@@ -238,6 +238,13 @@ esp_err_t datalogger_close_sd(void)
     esp_err_t err = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
     if (err == ESP_OK) {
         s_card = NULL;
+        /* s_sd_mounted es una bandera APARTE de s_card, y flush_pending_to_sd_impl()
+         * mira esta, no s_card. Sin limpiarla aqui, un desmontaje "seguro" de
+         * verdad dejaba flush_pending_to_sd_impl() creyendo que la tarjeta
+         * seguia montada -- reintentaria fopen() sobre un punto de montaje ya
+         * desregistrado cada 60 s para siempre, en vez de callarse. Detectado
+         * auditando el 08-sep-2026. */
+        s_sd_mounted = false;
         ESP_LOGI(TAG, "tarjeta desmontada: ya se puede sacar");
     } else {
         ESP_LOGW(TAG, "no se pudo desmontar: %s", esp_err_to_name(err));

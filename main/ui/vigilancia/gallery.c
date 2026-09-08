@@ -464,10 +464,13 @@ static void gallery_delete_task(void *arg)
 
 static void gallery_delete_modal_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
-    const char *txt = lbl ? lv_label_get_text(lbl) : "";
-    bool confirmed = (txt && strstr(txt, "Borrar") != NULL);
+    /* Cual boton fue: por user_data (NULL=Cancelar), no por si la etiqueta
+     * CONTIENE "Borrar" -- esto borra ficheros de verdad; un wording futuro
+     * del boton OK que dejara de incluir esa palabra habria hecho que
+     * "Borrar" se quedara sin ejecutar nada (silencioso). Mismo motivo que
+     * el arreglo de ui_confirm_btn_cb (settings_dialogs.c). Detectado
+     * auditando el 08-sep-2026. */
+    bool confirmed = (lv_event_get_user_data(e) != NULL);
 
     if (s_del_modal) { lv_obj_del(s_del_modal); s_del_modal = NULL; }
     if (!confirmed) return;
@@ -544,7 +547,7 @@ static void gallery_show_delete_confirm(const char *msg)
     lv_label_set_text(lc, "Cancelar");
     lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
-    lv_obj_add_event_cb(btn_cancel, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_cancel, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, NULL);   /* NULL = cancelar */
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 200, 56);
@@ -554,7 +557,7 @@ static void gallery_show_delete_confirm(const char *msg)
     lv_label_set_text(lo, LV_SYMBOL_TRASH " Borrar");
     lv_obj_set_style_text_font(lo, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lo);
-    lv_obj_add_event_cb(btn_ok, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_ok, gallery_delete_modal_btn_cb, LV_EVENT_CLICKED, (void *)1);   /* no-NULL = borrar */
 }
 
 static void gallery_delete_clicked_cb(lv_event_t *e)
