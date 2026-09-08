@@ -641,11 +641,21 @@ esp_err_t log_capture_export_coredump(int keep)
         if ((i % 32) == 31) fprintf(f, "\n");
     }
     fprintf(f, "\n");
-    fclose(f);
+    /* fclose() es donde de verdad se entera si la escritura llego a la
+     * tarjeta (stdio bufferea; un SD llena o un fallo de E/S a menudo solo
+     * se ve aqui, no en cada fprintf suelto). Si falla, NO borrar el
+     * coredump: sin esto se perdia el volcado entero (fichero a medias en
+     * la SD Y original ya borrado de flash) en vez de reintentar en el
+     * siguiente arranque. Detectado auditando el 08-sep-2026. */
+    int close_err = fclose(f);
     camera_sd_bus_unlock();
     free(sum);
+    if (close_err != 0) {
+        ESP_LOGW(TAG, "coredump: fallo al cerrar %s, se reintentara en el proximo arranque", path);
+        return ESP_FAIL;
+    }
 
-    esp_core_dump_image_erase();   /* ya exportado: no releerlo en el proximo boot */
+    esp_core_dump_image_erase();   /* ya exportado de verdad: no releerlo en el proximo boot */
     ESP_LOGW(TAG, "coredump exportado -> %s", path);
 
     if (keep > 0) rotate_files("crash_", keep);

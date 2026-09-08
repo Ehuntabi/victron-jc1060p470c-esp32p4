@@ -110,6 +110,14 @@ static void capture_carousel_task(void *arg)
     for (int i = 0; i < total; ++i) {
         const char *name = ui_tour_goto_screen(i);   /* ya hace tour_settle() */
         if (!name) continue;
+        /* La pantalla Wi-Fi ensena en claro la clave del nivel ESTRICTO
+         * (tarjeta "Acceso a Actualizar y Claves"): guardarla en la SD la deja
+         * dentro de /data/capturas.tar, que solo exige el nivel abierto --
+         * un atajo para leer lo que /keys y /ota protegen de verdad. No
+         * guardar esta captura (las otras 8+ siguen igual). Mismo motivo que
+         * el guard anadido en handle_captura (config_server.c). Detectado
+         * auditando el 08-sep-2026. */
+        if (!strcmp(name, "wifi")) continue;
         snprintf(path, sizeof(path), TOUR_DIR "/%02d_%s.jpg", i, name);
         cap_save(path, &ok, &first_err);
     }

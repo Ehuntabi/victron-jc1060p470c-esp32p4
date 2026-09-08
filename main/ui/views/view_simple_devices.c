@@ -641,6 +641,14 @@ static void format_lynx_ttg(lv_obj_t *label, const victron_data_t *data)
     }
     const victron_record_lynx_smart_bms_t *r = &data->record.lynx;
     uint16_t minutes = r->time_to_go_min;
+    /* 0xFFFF = sin dato (bateria en carga, TTG indefinido). Sin esto salia
+     * "1092h 15m" -- el propio centinela formateado como si fuera un tiempo
+     * real. Mismo bug que view_default_battery.c, otro sitio. Detectado
+     * auditando el 08-sep-2026. */
+    if (minutes == 0xFFFF) {
+        lv_label_set_text(label, "--");
+        return;
+    }
     lv_label_set_text_fmt(label, "%uh %02um",
                           (unsigned)(minutes / 60U),
                           (unsigned)(minutes % 60U));

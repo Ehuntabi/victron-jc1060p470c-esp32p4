@@ -566,6 +566,14 @@ static esp_err_t handle_captura(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "n fuera de rango (usa /capturas)");
         return ESP_FAIL;
     }
+    /* La pantalla Wi-Fi ensena en claro la clave del nivel ESTRICTO (Ajustes ->
+     * Wi-Fi, tarjeta "Acceso a Actualizar y Claves") -- exigir aqui SOLO el
+     * nivel abierto dejaba recuperar por este atajo lo que /keys y /ota
+     * protegen con contrasena de verdad: bastaba con estar en el Wi-Fi. Misma
+     * proteccion que esos dos. Detectado auditando el 08-sep-2026. */
+    if (!strcmp(name, "wifi")) {
+        REQUIRE_AUTH_STRICT(req);
+    }
     uint8_t *bmp = NULL;
     size_t len = 0;
     if (screenshot_take_bmp(&bmp, &len) != ESP_OK || !bmp) {

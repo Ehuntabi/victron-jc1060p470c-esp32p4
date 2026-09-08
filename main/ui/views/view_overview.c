@@ -1296,8 +1296,16 @@ static void overview_render(ui_overview_view_t *ov)
         }
 
         /* === Alarma SOC bajo: usa el umbral critico configurable (NVS,
-         * default 30 %), no un valor fijo. soc_deci esta en deci-% === */
-        bool alarm_soc = ov->bat.has_data
+         * default 30 %), no un valor fijo. soc_deci esta en deci-%.
+         * bat_fresh (no bat.has_data): has_data se pone a true la primera
+         * vez que llega el BatteryMonitor y NUNCA se resetea -- si la BLE se
+         * cae con el SoC ya por debajo del umbral, el pitido/parpadeo seguia
+         * para siempre con el ultimo dato congelado. bat_fresh SI caduca
+         * (TIMEOUT_MS sin paquetes), y ya se usa para el resto de esta
+         * pantalla (TTG, arco de SoC...) unas lineas mas abajo. Detectado
+         * auditando el 08-sep-2026 (el fix anterior de frescura de SoC solo
+         * llego al cruce del jingle en ble_ingest.c, no a esta evaluacion). */
+        bool alarm_soc = bat_fresh
                          && ov->bat.soc_deci < alerts_get_soc_critical() * 10;
         if (!alarm_soc && ov->prev_alarm_soc) ov->alarm_soc_muted = false;
         ov->prev_alarm_soc = alarm_soc;
