@@ -10,6 +10,7 @@
 #include "gallery.h"
 #include "ui/settings/settings_panel.h"
 #include "screenshot.h"
+#include "watchdog.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -65,23 +66,29 @@ static void cap_save(const char *path, int *ok, esp_err_t *first_err)
 }
 
 /* Apaga el switch y refleja el resultado (bajo lock LVGL; valida los objetos
- * por si la pagina Display se hubiera reconstruido durante la captura). */
-static void capture_carousel_finish(ui_state_t *ui, int ok, esp_err_t first_err)
+ * por si la pagina Display se hubiera reconstruido durante la captura).
+ * 'guardables' es el total menos las 2 pantallas que se saltan a proposito
+ * (wifi, victron_keys) -- antes el mensaje llevaba un "8" fijo, resto de
+ * cuando el tour solo tenia 8 pantallas; con las que se han ido anadiendo
+ * desde entonces (historico solar, galeria, detalles, GPS...) el aviso
+ * mentia sobre cuantas hacian falta para un "completo". Detectado el
+ * 08-sep-2026 auditando el mismo carrusel. */
+static void capture_carousel_finish(ui_state_t *ui, int ok, int guardables, esp_err_t first_err)
 {
     if (lvgl_port_lock(1000)) {
         if (ui->capture_switch && lv_obj_is_valid(ui->capture_switch)) {
             lv_obj_clear_state(ui->capture_switch, LV_STATE_CHECKED);
         }
         if (ui->capture_status_lbl && lv_obj_is_valid(ui->capture_status_lbl)) {
-            if (ok >= 8) {
-                lv_label_set_text(ui->capture_status_lbl,
-                                  "8/8 capturas guardadas en la SD");
+            if (ok >= guardables) {
+                lv_label_set_text_fmt(ui->capture_status_lbl,
+                                      "%d/%d capturas guardadas en la SD", ok, guardables);
             } else {
                 const char *why = (first_err == ESP_ERR_NO_MEM) ? "sin PSRAM"
                                 : (first_err == ESP_FAIL)        ? screenshot_last_error()
                                 :                                  "error";
                 lv_label_set_text_fmt(ui->capture_status_lbl,
-                                      "%d/8 - fallo: %s", ok, why);
+                                      "%d/%d - fallo: %s", ok, guardables, why);
             }
         }
         lvgl_port_unlock();
@@ -94,11 +101,23 @@ static void capture_carousel_task(void *arg)
     ui_state_t *ui = ui_get_state();
     const ui_view_mode_t saved_mode = ui->view_selection.mode;
     int ok = 0;
+    int guardables = 0;   /* total menos las 2 que se saltan a proposito */
     esp_err_t first_err = ESP_OK;
     char path[96];
 
     const int total = ui_tour_screen_count();
     ESP_LOGI("CAPCAR", "Carrusel de captura: %d pantallas -> %s", total, TOUR_DIR);
+
+    /* Cada captura sostiene el lock de LVGL para fotografiar + codificar JPEG
+     * + escribir a SD (screenshot_save_jpeg toma el lock el internamente);
+     * con 23 pantallas eso puede superar de sobra los 3 fallos seguidos de
+     * 200ms que el vigilante anti-cuelgue (watchdog.c) usa para decidir que
+     * la UI esta congelada -- y fuerza un reinicio a mitad del carrusel, que
+     * no es un cuelgue real. Mismo mecanismo que ya usa el borrado de flash
+     * de la OTA (ota_update.c). Detectado el 08-sep-2026 con el simulador
+     * activo en la P4 de reserva (mas carga que en produccion, lo hizo mas
+     * facil de reproducir, pero el riesgo ya estaba sin el). */
+    watchdog_suspend(true);
 
     /* UN SOLO bucle sobre ui_tour_goto_screen: es la MISMA lista que usa la
      * pagina web /capturas, asi que una pantalla nueva en el tour entra aqui
@@ -121,9 +140,12 @@ static void capture_carousel_task(void *arg)
          * commit 93aceca) solo cubrio "wifi" y dejo "victron_keys" igual de
          * expuesta; corregido el mismo dia. */
         if (!strcmp(name, "wifi") || !strcmp(name, "victron_keys")) continue;
+        guardables++;
         snprintf(path, sizeof(path), TOUR_DIR "/%02d_%s.jpg", i, name);
         cap_save(path, &ok, &first_err);
     }
+
+    watchdog_suspend(false);
 
     /* Restaurar: cerrar lo que quede abierto y volver a Live + la vista previa. */
     if (lvgl_port_lock(1000)) {
@@ -140,7 +162,7 @@ static void capture_carousel_task(void *arg)
 
     ESP_LOGI("CAPCAR", "Carrusel terminado: %d/%d capturas (first_err=0x%x)",
              ok, total, (int)first_err);
-    capture_carousel_finish(ui, ok, first_err);
+    capture_carousel_finish(ui, ok, guardables, first_err);
     s_capture_running = false;
     vTaskDelete(NULL);
 }
@@ -200,6 +222,7 @@ static const char *TOUR_SET_NAMES[] = {
     "sonido",        /* Sonido y alertas      */
     "autocaravana",  /* Autocaravana          */
     "victron_keys",  /* Victron Keys          */
+    "gps",           /* GPS                   */
     "about",         /* Acerca de             */
 };
 #define TOUR_N_LIVE   ((int)(sizeof(TOUR_LIVE) / sizeof(TOUR_LIVE[0])))
