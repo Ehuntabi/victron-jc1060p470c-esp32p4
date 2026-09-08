@@ -16,6 +16,8 @@
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "dns_server.h"
 
 #define DNS_PORT (53)
@@ -60,6 +62,10 @@ typedef struct __attribute__((__packed__))
 struct dns_server_handle {
     bool started;
     TaskHandle_t task;
+    SemaphoreHandle_t stopped_sem;   /* dns_server_task la da justo antes de
+                                       * borrarse a si misma; stop_dns_server
+                                       * la espera en vez de matar la tarea a
+                                       * ciegas (ver el comentario de alli). */
     int num_of_entries;
     dns_entry_pair_t entry[];
 };
@@ -244,12 +250,27 @@ void dns_server_task(void *pvParameters)
         }
         ESP_LOGI(TAG, "Socket bound, port %d", DNS_PORT);
 
+        /* Timeout de recepcion: sin esto recvfrom() bloquea indefinidamente
+         * si no llega ninguna consulta DNS mas, y el bucle nunca vuelve a
+         * mirar handle->started. stop_dns_server() marcaba started=false y
+         * mataba la tarea con vTaskDelete() sin esperar a que se enterara --
+         * el socket (lineas 296+ de aqui abajo) nunca se cerraba: fuga de un
+         * file descriptor por cada vez que se apagaba el Wi-Fi en caliente
+         * desde Ajustes. Detectado auditando el 08-sep-2026. */
+        struct timeval rcv_to = { .tv_sec = 2, .tv_usec = 0 };
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_to, sizeof(rcv_to));
+
         while (handle->started) {
             ESP_LOGI(TAG, "Waiting for data");
             struct sockaddr_in6 source_addr; // Large enough for both IPv4 or IPv6
             socklen_t socklen = sizeof(source_addr);
             int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
 
+            // Sin datos en el plazo (EAGAIN/EWOULDBLOCK): no es un fallo del
+            // socket, solo el turno para volver a comprobar handle->started.
+            if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                continue;
+            }
             // Error occurred during receiving
             if (len < 0) {
                 ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
@@ -293,6 +314,9 @@ void dns_server_task(void *pvParameters)
             close(sock);
         }
     }
+    /* Avisar a stop_dns_server() de que el socket ya esta cerrado y es
+     * seguro liberar el handle, ANTES de borrarse. */
+    if (handle->stopped_sem) xSemaphoreGive(handle->stopped_sem);
     vTaskDelete(NULL);
 }
 
@@ -302,6 +326,7 @@ dns_server_handle_t start_dns_server(dns_server_config_t *config)
     ESP_RETURN_ON_FALSE(handle, NULL, TAG, "Failed to allocate dns server handle");
 
     handle->started = true;
+    handle->stopped_sem = xSemaphoreCreateBinary();
     handle->num_of_entries = config->num_of_entries;
     memcpy(handle->entry, config->item, config->num_of_entries * sizeof(dns_entry_pair_t));
 
@@ -313,7 +338,21 @@ void stop_dns_server(dns_server_handle_t handle)
 {
     if (handle) {
         handle->started = false;
-        vTaskDelete(handle->task);
+        /* Esperar a que la tarea se entere (recvfrom tiene timeout de 2s, ver
+         * dns_server_task) y cierre su socket ella misma, en vez de matarla
+         * con vTaskDelete() a ciegas -- eso saltaba el shutdown()/close()
+         * final y filtraba un socket cada vez que se apagaba el Wi-Fi en
+         * caliente. Tope de 5s como red de seguridad (si algo fuera mal, no
+         * bloquear el apagado del AP para siempre); vTaskDelete queda solo
+         * como ultimo recurso si el aviso no llega. */
+        if (handle->stopped_sem &&
+            xSemaphoreTake(handle->stopped_sem, pdMS_TO_TICKS(5000)) == pdTRUE) {
+            vSemaphoreDelete(handle->stopped_sem);
+        } else {
+            ESP_LOGW(TAG, "dns_server no confirmo el cierre del socket a tiempo, forzando");
+            if (handle->stopped_sem) vSemaphoreDelete(handle->stopped_sem);
+            vTaskDelete(handle->task);
+        }
         free(handle);
     }
 }

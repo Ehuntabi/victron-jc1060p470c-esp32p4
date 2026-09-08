@@ -138,8 +138,23 @@ esp_err_t ota_update_receive(httpd_req_t *req)
      * abierta). Con recv_wait_timeout=30 s, 4 esperas son ~2 min de silencio
      * antes de rendirse. 2026-07-26. */
     const int MAX_ESPERAS = 4;
+    /* Ademas del tope de esperas SEGUIDAS, un plazo total absoluto: esperas
+     * solo cuenta silencios consecutivos y se reinicia con CUALQUIER byte
+     * que llegue, asi que un cliente goteando muy despacio a proposito (1
+     * byte cada 25s) nunca disparaba el limite y podia tener esto ocupado
+     * sin fin -- la unica tarea del httpd. Firmware entero por Wi-Fi puede
+     * tardar de verdad, asi que el plazo es mas generoso que en /save: 10
+     * min cubren una subida lenta legitima con margen. Detectado auditando
+     * el 08-sep-2026 (mismo motivo que el plazo anadido a /save). */
+    const int64_t plazo_us = 10LL * 60 * 1000000LL;
+    const int64_t t0_us = esp_timer_get_time();
     int esperas = 0;
     while (restante > 0) {
+        if (esp_timer_get_time() - t0_us > plazo_us) {
+            ESP_LOGE(TAG, "OTA: plazo total agotado con %d bytes por recibir", restante);
+            fallo = true;
+            break;
+        }
         const int pedir = (restante < OTA_CHUNK) ? restante : OTA_CHUNK;
         const int leido = httpd_req_recv(req, buf, pedir);
         if (leido <= 0) {

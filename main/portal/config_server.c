@@ -17,6 +17,7 @@
 #include "esp_spiffs.h"
 #include "ota_update.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_lvgl_port.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -235,9 +236,25 @@ static esp_err_t post_save(httpd_req_t *req) {
      * peticion, se queda MUDO el portal entero hasta reiniciar. Con
      * recv_wait_timeout=30 s, 4 esperas son ~2 min de silencio antes de rendirse. */
     const int MAX_ESPERAS = 4;
+    /* Ademas del tope de esperas SEGUIDAS, un plazo total absoluto: esperas
+     * solo cuenta silencios consecutivos y se pone a 0 en cuanto llega
+     * CUALQUIER byte, asi que un cliente que fuera goteando datos muy
+     * despacio a proposito (1 byte cada 25s, justo por debajo del timeout)
+     * nunca disparaba el limite de 4 y podia tener el bucle ocupado sin fin
+     * -- la unica tarea del httpd, con solo 4 sockets en total. body son come
+     * mucho 512 bytes, asi que 60s de plazo total sobra de largo para
+     * cualquier cliente real. Detectado auditando el 08-sep-2026. */
+    const int64_t plazo_us = 60LL * 1000000LL;
+    const int64_t t0_us = esp_timer_get_time();
     int esperas = 0;
     int received = 0;
     while (received < (int)len) {
+        if (esp_timer_get_time() - t0_us > plazo_us) {
+            ESP_LOGE(TAG, "/save: plazo total agotado con %d/%d bytes, se corta",
+                     received, (int)len);
+            free(body);
+            return ESP_FAIL;
+        }
         int ret = httpd_req_recv(req, body + received, len - received);
         if (ret == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
         if (ret <= 0) {
@@ -566,12 +583,15 @@ static esp_err_t handle_captura(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "n fuera de rango (usa /capturas)");
         return ESP_FAIL;
     }
-    /* La pantalla Wi-Fi ensena en claro la clave del nivel ESTRICTO (Ajustes ->
-     * Wi-Fi, tarjeta "Acceso a Actualizar y Claves") -- exigir aqui SOLO el
-     * nivel abierto dejaba recuperar por este atajo lo que /keys y /ota
-     * protegen con contrasena de verdad: bastaba con estar en el Wi-Fi. Misma
-     * proteccion que esos dos. Detectado auditando el 08-sep-2026. */
-    if (!strcmp(name, "wifi")) {
+    /* Dos pantallas ensenan en claro lo que el nivel ESTRICTO protege de
+     * verdad: "wifi" (la clave que exige /keys y /ota) y "victron_keys" (las
+     * 8 claves AES de los Victron emparejados, en un textarea SIN
+     * password_mode -- ver settings_victron_keys.c). El primer intento de
+     * este arreglo (08-sep-2026, commit 93aceca) solo cubrio "wifi" y dejo
+     * "victron_keys" exactamente igual de expuesta por el mismo atajo:
+     * bastaba con estar en el Wi-Fi para sacarle una foto a las claves AES
+     * que /keys protege con contrasena de verdad. Corregido el mismo dia. */
+    if (!strcmp(name, "wifi") || !strcmp(name, "victron_keys")) {
         REQUIRE_AUTH_STRICT(req);
     }
     uint8_t *bmp = NULL;
