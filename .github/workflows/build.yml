@@ -62,7 +62,7 @@ jobs:
 
       - name: Comprobar que CUERPO_MAX (satelite) cabe en VIAJE_BODY_MAX (P4)
         run: |
-          cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.c)
+          cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.h)
           body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
           echo "CUERPO_MAX (35cabina) = $cuerpo_max"
           echo "VIAJE_BODY_MAX (victron) = $body_max"

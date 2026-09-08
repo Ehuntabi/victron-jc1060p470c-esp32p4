@@ -68,9 +68,21 @@ static bool ruta_volcar(const char *carpeta);
 #define NVS_CARPETA     "carpeta"     /* ruta del viaje abierto, ausente si no hay */
 #define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
 #define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
-#define IDS_RING_N      16            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
+#define IDS_RING_N      64            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
                                         * satelite): cubre eventos abiertos a la vez que se
-                                        * cierran en cualquier orden. Ver id_ya_aplicado(). */
+                                        * cierran en cualquier orden. Ver id_ya_aplicado().
+                                        *
+                                        * Subido de 16 a 64 (08-sep-2026): con 16, un reintento
+                                        * de una respuesta perdida que llegara tras >16 apuntes
+                                        * aplicados de por medio ya no encontraba su id en el
+                                        * anillo (evictado) y se volvia a aplicar como si fuera
+                                        * nuevo -- doble conteo que ademas podia enmascarar la
+                                        * perdida de OTRO apunte distinto en comprobar_completo().
+                                        * Esquina muy rara (requiere un reintento retrasado mas
+                                        * de 16 apuntes), pero el guard del satelite no la cubre.
+                                        * 64 no lo hace estructuralmente imposible, solo mucho
+                                        * mas improbable; el blob de NVS sigue siendo pequeno
+                                        * (64 x uint32 = 256 B). */
 /* Totales del viaje, acumulados SEGUN LLEGAN los apuntes en vez de sumando los
  * CSV al cerrar. Dos motivos: parsear CSV en el P4 seria bastante codigo para
  * algo que se puede ir sumando, y si el viaje se corta a lo bruto (bateria,
