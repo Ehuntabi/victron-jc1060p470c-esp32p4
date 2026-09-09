@@ -63,6 +63,8 @@ typedef struct {
         uint8_t  charger_error;
         uint32_t last_update_time;
     } solar_state;
+
+    lv_timer_t *freshness_timer; /* reevalua fresh/"--" aunque no llegue BLE */
 } ui_default_battery_view_t;
 
 static void default_battery_view_update(ui_device_view_t *view, const victron_data_t *data);
@@ -70,6 +72,7 @@ static void default_battery_view_show(ui_device_view_t *view);
 static void default_battery_view_hide(ui_device_view_t *view);
 static void default_battery_view_destroy(ui_device_view_t *view);
 static void update_display_elements(ui_default_battery_view_t *bv);
+static void default_battery_freshness_tick_cb(lv_timer_t *t);
 static uint32_t get_current_time_ms(void) { return lv_tick_get(); }
 
 ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *parent)
@@ -174,6 +177,16 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     view->base.show    = default_battery_view_show;
     view->base.hide    = default_battery_view_hide;
     view->base.destroy = default_battery_view_destroy;
+
+    /* update_display_elements() solo se llamaba desde default_battery_view_update,
+     * es decir, solo cuando llegaba un record BLE. Si el BLE se callaba del
+     * todo, este panel se quedaba congelado con el ultimo valor para siempre:
+     * nadie volvia a evaluar bat_fresh/dc_fresh/solar_fresh para pasar a "--".
+     * A diferencia de Overview (camper_tick_timer) y de las 13 vistas de
+     * detalle (active_view_freshness_cb), este panel no tenia ningun timer
+     * propio pese a que el commit que trajo ese ultimo mecanismo daba por
+     * hecho que si lo tenia. Detectado por el usuario el 09-sep-2026. */
+    view->freshness_timer = lv_timer_create(default_battery_freshness_tick_cb, 2000, view);
 
     return &view->base;
 }
@@ -287,8 +300,16 @@ static void default_battery_view_hide(ui_device_view_t *view)
 static void default_battery_view_destroy(ui_device_view_t *view)
 {
     if (!view) return;
+    ui_default_battery_view_t *bv = from_base(view);
+    if (bv && bv->freshness_timer) { lv_timer_del(bv->freshness_timer); bv->freshness_timer = NULL; }
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
+}
+
+static void default_battery_freshness_tick_cb(lv_timer_t *t)
+{
+    ui_default_battery_view_t *bv = (ui_default_battery_view_t *)t->user_data;
+    if (bv) update_display_elements(bv);
 }
 
 static void update_display_elements(ui_default_battery_view_t *bv)
