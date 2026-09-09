@@ -657,8 +657,16 @@ esp_err_t wifi_ap_init(void)
                      ssid, (const char *)leida.ap.ssid);
         }
         if (leida.ap.authmode == WIFI_AUTH_OPEN) {
-            ESP_LOGW(TAG, "El AP esta ABIERTO (sin cifrar) pese a configurar WPA2: "
-                          "esp_hosted no aplica la clave.");
+            /* Fail-closed: si el C6 se ha quedado abierto pese a pedirle
+             * WPA2 (firmware de fabrica, ver comentario de arriba), no vale
+             * seguir como si nada -- el portal quedaria servido sin cifrar
+             * a cualquiera en el aire. Se corta el AP en vez de avisar y
+             * continuar; wifi_ap_init() devuelve error y quien lo llama
+             * (linea ~229) ya sabe no arrancar el HTTP encima. */
+            ESP_LOGE(TAG, "El AP esta ABIERTO (sin cifrar) pese a configurar WPA2: "
+                          "esp_hosted no aplica la clave. Parando el AP.");
+            esp_wifi_stop();
+            return ESP_FAIL;
         }
 
     } else {

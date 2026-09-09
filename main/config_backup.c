@@ -201,8 +201,12 @@ esp_err_t config_backup_import(const char *path)
             if (m > 1440) m = 1440;
             alerts_set_freezer_minutes(m);
         }
-        if ((v = cJSON_GetObjectItem(al, "freezer_temp_c")) && cJSON_IsNumber(v))
-            alerts_set_freezer_temp_c((float)v->valuedouble);
+        if ((v = cJSON_GetObjectItem(al, "freezer_temp_c")) && cJSON_IsNumber(v)) {
+            float t = (float)v->valuedouble;
+            if (t < -30.0f) t = -30.0f;
+            if (t > 10.0f) t = 10.0f;
+            alerts_set_freezer_temp_c(t);
+        }
         if ((v = cJSON_GetObjectItem(al, "soc_critical")) && cJSON_IsNumber(v)) {
             int p = v->valueint;
             if (p < 0) p = 0;

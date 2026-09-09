@@ -349,9 +349,16 @@ void stop_dns_server(dns_server_handle_t handle)
             xSemaphoreTake(handle->stopped_sem, pdMS_TO_TICKS(5000)) == pdTRUE) {
             vSemaphoreDelete(handle->stopped_sem);
         } else {
+            /* vTaskDelete ANTES de vSemaphoreDelete, no al reves: si se
+             * agotan los 5s justo cuando la tarea esta a punto de hacer su
+             * propio xSemaphoreGive(handle->stopped_sem) (dns_server_task,
+             * justo antes de autoborrarse), borrar el semaforo primero
+             * dejaria ese Give apuntando a un handle ya liberado. Matando
+             * la tarea primero se garantiza que no vuelve a ejecutar nada
+             * mas suyo. Detectado el 09-sep-2026. */
             ESP_LOGW(TAG, "dns_server no confirmo el cierre del socket a tiempo, forzando");
-            if (handle->stopped_sem) vSemaphoreDelete(handle->stopped_sem);
             vTaskDelete(handle->task);
+            if (handle->stopped_sem) vSemaphoreDelete(handle->stopped_sem);
         }
         free(handle);
     }
