@@ -870,15 +870,23 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
-    /* Sin viaje abierto el apunte NO se rechaza: es de una salida puntual y va
-     * al historial del vehiculo.
+    /* Sin viaje abierto el apunte NO se rechaza: se apunta al historial del
+     * vehiculo en vez de perderse.
      *
      * Antes esto era un 409 "no hay viaje abierto", pensado para cuando el
      * inicio del viaje seguia en la cola del satelite por delante de este
-     * apunte. Con el cuaderno reorganizado por SALIDAS ya no vale: una salida
-     * puntual no tiene viaje y nunca lo va a tener, asi que el 409 dejaba a la
-     * cola reintentando el mismo apunte para siempre (viaje_cola.c reintenta
-     * los 409 a proposito) y detras se atascaba todo lo demas. */
+     * apunte. Con el cuaderno reorganizado por SALIDAS dejo de valer para las
+     * puntuales de entonces (sin inicio propio), y el 409 dejaba a la cola
+     * reintentando el mismo apunte para siempre (viaje_cola.c reintenta los
+     * 409 a proposito) y detras se atascaba todo lo demas.
+     *
+     * Desde que la 35cabina trata una salida puntual como un viaje de una
+     * sola parada (con su propio op_inicio antes de declarar nada, ver
+     * puntual_declarar_cb en view_registro.c), en_viaje sera casi siempre
+     * true tambien para una puntual -- VEHICULO_DIR queda como red de
+     * seguridad para un apunte que de verdad llegue sin viaje abierto
+     * (satelite mas antiguo, o el inicio se perdio por el camino), no como
+     * el destino habitual de las puntuales. */
     char carpeta[CARPETA_MAX];
     bool en_viaje = viaje_abierto(carpeta, sizeof(carpeta));
     if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
