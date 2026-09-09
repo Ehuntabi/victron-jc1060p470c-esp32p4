@@ -309,7 +309,12 @@ static void default_battery_view_destroy(ui_device_view_t *view)
 static void default_battery_freshness_tick_cb(lv_timer_t *t)
 {
     ui_default_battery_view_t *bv = (ui_default_battery_view_t *)t->user_data;
-    if (bv) update_display_elements(bv);
+    if (!bv || !bv->base.root) return;
+    /* No repintar cada 2s si esta oculto (Overview u otro detalle encima):
+     * mismo flag que alternan default_battery_view_show/hide. Churn menor
+     * pero gratis de evitar. Detectado por el usuario el 09-sep-2026. */
+    if (lv_obj_has_flag(bv->base.root, LV_OBJ_FLAG_HIDDEN)) return;
+    update_display_elements(bv);
 }
 
 static void update_display_elements(ui_default_battery_view_t *bv)
