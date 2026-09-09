@@ -370,6 +370,98 @@ bool camera_decode_jpeg_rgb565(const uint8_t *jpg, size_t len,
     return true;
 }
 
+/* Miniatura de una foto de vigilancia YA guardada en la tarjeta, para el
+ * listado web (/vigilancia): antes el listado incrustaba el JPEG COMPLETO
+ * (960x528, 80-150KB) para cada captura -- con esp_http_server siendo de
+ * una sola tarea, decenas de <img> agotaban los 4 sockets y dejaban el
+ * portal mudo un buen rato con solo abrir la galeria. Decodifica con el
+ * mismo motor HW que camera_decode_jpeg_rgb565 (persistente, reutilizado),
+ * reescala por vecino mas cercano -- de sobra para un tamano tan pequeno,
+ * sin el coste de un filtro de verdad -- y recodifica con el MISMO
+ * encoder/buffers que ya usan las capturas normales (se llama desde la
+ * tarea de vuelco a SD, fuera de cualquier ciclo de captura en curso, asi
+ * que no compiten por el motor).
+ *
+ * *out queda en PSRAM (el que llama hace free()). false si algo falla --
+ * el llamador (vig_write_jpeg_sd) trata "sin miniatura" como no fatal, la
+ * foto grande ya esta guardada de todos modos. Detectado por el usuario
+ * el 09-sep-2026. */
+#define VIG_THUMB_W        160
+#define VIG_THUMB_H         96
+#define VIG_THUMB_QUALITY   60
+static bool vig_make_thumbnail(const uint8_t *jpg, size_t len, uint8_t **out, size_t *out_len)
+{
+    *out = NULL; *out_len = 0;
+    if (!jpg || len == 0) return false;
+    if (!s_jpeg_mutex || xSemaphoreTake(s_jpeg_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) return false;
+
+    bool ok = false;
+    jpeg_decode_memory_alloc_cfg_t in_mc  = { .buffer_direction = JPEG_DEC_ALLOC_INPUT_BUFFER };
+    jpeg_decode_memory_alloc_cfg_t out_mc = { .buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER };
+    size_t in_sz = 0, dec_sz = 0;
+    uint8_t *in = jpeg_alloc_decoder_mem(len, &in_mc, &in_sz);
+    const int aw = (JPEG_W + 15) & ~15;   /* mismo alineado a bloque de 16 que el decoder exige */
+    const int ah = (JPEG_H + 15) & ~15;
+    uint8_t *dec = in ? jpeg_alloc_decoder_mem((size_t)aw * ah * 3, &out_mc, &dec_sz) : NULL;
+
+    if (in && dec) {
+        memcpy(in, jpg, len);
+        /* Motor de decode persistente propio (no el de camera_decode_jpeg_rgb565,
+         * que vive en su propia funcion como "static" local): mismo patron,
+         * crear/destruir uno por miniatura cargaria descriptores DMA en cada
+         * vuelco a SD. */
+        static jpeg_decoder_handle_t s_thumb_dec = NULL;
+        if (!s_thumb_dec) {
+            jpeg_decode_engine_cfg_t eng = { .timeout_ms = 1000 };
+            if (jpeg_new_decoder_engine(&eng, &s_thumb_dec) != ESP_OK) s_thumb_dec = NULL;
+        }
+        bool decoded = false;
+        if (s_thumb_dec) {
+            jpeg_decode_cfg_t dc = {
+                .output_format = JPEG_DECODE_OUT_FORMAT_RGB888,
+                .rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_RGB,
+                .conv_std      = JPEG_YUV_RGB_CONV_STD_BT601,
+            };
+            uint32_t osize = 0;
+            decoded = (jpeg_decoder_process(s_thumb_dec, &dc, in, len, dec, dec_sz, &osize) == ESP_OK);
+        }
+        if (decoded && camera_jpeg_init()) {
+            /* Reescalado vecino-mas-cercano: dec tiene paso de fila 'aw' (no
+             * JPEG_W), como ya avisa camera_decode_jpeg_rgb565 sobre 'ob'. */
+            for (int ty = 0; ty < VIG_THUMB_H; ty++) {
+                const int sy = ty * JPEG_H / VIG_THUMB_H;
+                const uint8_t *srow = dec + (size_t)sy * aw * 3;
+                uint8_t *drow = s_jpeg_in + (size_t)ty * VIG_THUMB_W * 3;
+                for (int tx = 0; tx < VIG_THUMB_W; tx++) {
+                    const int sx = tx * JPEG_W / VIG_THUMB_W;
+                    memcpy(drow + (size_t)tx * 3, srow + (size_t)sx * 3, 3);
+                }
+            }
+            jpeg_encode_cfg_t cfg = {
+                .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
+                .sub_sample    = JPEG_SUBSAMPLING,
+                .image_quality = VIG_THUMB_QUALITY,
+                .width         = VIG_THUMB_W,
+                .height        = VIG_THUMB_H,
+            };
+            uint32_t osize = 0;
+            if (jpeg_encoder_process(s_jpeg_enc, &cfg, s_jpeg_in, s_jpeg_in_sz,
+                                     s_jpeg_out, s_jpeg_out_sz, &osize) == ESP_OK && osize > 0) {
+                uint8_t *copy = heap_caps_malloc(osize, MALLOC_CAP_SPIRAM);
+                if (copy) {
+                    memcpy(copy, s_jpeg_out, osize);
+                    *out = copy; *out_len = osize;
+                    ok = true;
+                }
+            }
+        }
+    }
+    if (in)  free(in);
+    if (dec) free(dec);
+    xSemaphoreGive(s_jpeg_mutex);
+    return ok;
+}
+
 /* Codifica el ultimo thumbnail (BGR 960x540) a JPEG (recorte 960x528, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
  * (el que llama hace free(*out)). false si no hay frame o falla. */
@@ -683,7 +775,8 @@ TaskHandle_t camera_stream_task_handle(void)
  * como datalogger -> escribe en la ventana en que el GDMA de la camara esta
  * parado. El JPEG es pequeno (~50-100KB) -> escritura corta, no ahoga a LVGL.
  * Al guardar OK libera el slot del anillo. Tarea de baja prioridad. */
-#define VIG_SD_DIR   "/sdcard/vigilancia"
+#define VIG_SD_DIR       "/sdcard/vigilancia"
+#define VIG_SD_THUMB_DIR "/sdcard/vigilancia_thumbs"   /* mismo esquema sesion/fichero.jpg */
 #define VIG_SD_CHUNK (8 * 1024)   /* trozo pequeno: se SUELTA el bus entre trozos */
 
 static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
@@ -742,6 +835,57 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
 
     if (ok) ESP_LOGI(TAG, "vig: guardada en SD %s (%u B, troceada)", path, (unsigned)len);
     else    ESP_LOGW(TAG, "vig: fallo guardando en SD (%s)", path);
+
+    /* Miniatura, mismo esquema de carpetas bajo VIG_SD_THUMB_DIR -- ver
+     * vig_make_thumbnail(). No fatal si falla: la foto grande ya esta
+     * guardada, la galeria puede seguir sirviendola entera para esa una
+     * captura (ver handle_vigilancia, que cae a /vigilancia/<name> si no
+     * hay miniatura). */
+    if (ok) {
+        uint8_t *thumb = NULL; size_t thumb_len = 0;
+        if (vig_make_thumbnail(jpg, len, &thumb, &thumb_len)) {
+            char tsess_dir[80];
+            localtime_r(&session, &tmv);
+            strftime(tsess_dir, sizeof(tsess_dir), VIG_SD_THUMB_DIR "/%Y%m%d_%H%M%S", &tmv);
+            char tpath[144];
+            size_t tp = snprintf(tpath, sizeof(tpath), "%s/", tsess_dir);
+            localtime_r(&ts, &tmv);
+            tp += strftime(tpath + tp, sizeof(tpath) - tp, "%Y%m%d_%H%M%S", &tmv);
+            snprintf(tpath + tp, sizeof(tpath) - tp, "_%03lu.jpg", (unsigned long)(id % 1000));
+
+            if (camera_sd_bus_lock(2000)) {
+                struct stat stx2;
+                if (stat(VIG_SD_THUMB_DIR, &stx2) != 0) mkdir(VIG_SD_THUMB_DIR, 0777);
+                if (stat(tsess_dir, &stx2) != 0) mkdir(tsess_dir, 0777);
+                int tfd = open(tpath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                camera_sd_bus_unlock();
+                if (tfd >= 0) {
+                    /* Miniatura pequena (unos KB): un solo write, sin trocear
+                     * como la foto grande -- no vale la pena la complicacion
+                     * para algo que ya cabe holgado en una ventana del bus. */
+                    bool twr_ok = false;
+                    if (camera_sd_bus_lock(2000)) {
+                        twr_ok = (write(tfd, thumb, thumb_len) == (ssize_t)thumb_len);
+                        camera_sd_bus_unlock();
+                    }
+                    bool tgot_lock = camera_sd_bus_lock_wait(5000);
+                    close(tfd);
+                    if (tgot_lock) camera_sd_bus_unlock();
+                    if (!twr_ok) {
+                        ESP_LOGW(TAG, "vig: fallo guardando miniatura (%s)", tpath);
+                        bool ugot_lock = camera_sd_bus_lock_wait(5000);
+                        unlink(tpath);
+                        if (ugot_lock) camera_sd_bus_unlock();
+                    }
+                } else {
+                    ESP_LOGW(TAG, "vig: no abre SD para miniatura (%s)", tpath);
+                }
+            }
+            free(thumb);
+        } else {
+            ESP_LOGW(TAG, "vig: no se pudo generar miniatura para %s", path);
+        }
+    }
     return ok;
 }
 

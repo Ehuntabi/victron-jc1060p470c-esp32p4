@@ -403,7 +403,17 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    if (!cerrado) {
+    /* Un viaje descartado (op_descartar en config_server_viaje.c, carpeta
+     * renombrada a DESCARTADO_<nombre>) nunca tiene resumen.txt -- se
+     * aparto antes de cerrarse, a proposito, y op_descartar conserva los
+     * datos por si hace falta rescatar algo. Exigirle "cerrado" lo dejaba
+     * sin poder bajarse nunca, con un 409 que ademas mentia ("sigue en
+     * curso... finalizalo en la cabina") sobre algo que ya no se puede
+     * finalizar. El propio nombre de carpeta ya lleva la marca. Detectado
+     * por el usuario el 09-sep-2026. */
+    bool descartado = !strncmp(v, "DESCARTADO_", 11);
+
+    if (!cerrado && !descartado) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_sendstr(req, "Ese viaje sigue en curso. Finalizalo en la pantalla "
                                 "de la cabina antes de bajarlo.");

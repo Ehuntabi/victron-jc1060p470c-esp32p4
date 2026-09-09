@@ -7,3 +7,4 @@
 
 esp_err_t handle_snapshot(httpd_req_t *req);
 esp_err_t handle_vigilancia(httpd_req_t *req);
+esp_err_t handle_vigilancia_thumb(httpd_req_t *req);

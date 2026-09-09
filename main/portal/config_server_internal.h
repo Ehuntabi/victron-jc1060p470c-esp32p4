@@ -23,6 +23,23 @@ void ap_off_timer_kick(void);
 void cfg_http_stop(void);
 void cfg_dns_stop(void);
 
+/* Segunda instancia httpd, SOLO para lo que puede tardar segundos y dejar
+ * el server principal mudo mientras dura (.tar completos, OTA, galeria de
+ * vigilancia con JPEGs completos) -- esp_http_server es de una sola tarea,
+ * asi que una peticion larga bloquea TODO lo demas (incluido /api/state,
+ * que la app sondea a 1 Hz) hasta que termina. El puerto 8081 es fijo,
+ * como ya lo es la IP del AP (192.168.4.1, ver el resto del portal): un
+ * solo camino de acceso conocido, sin necesidad de resolver el Host de
+ * cada peticion en tiempo real.
+ *
+ * Cualquier href generado hacia uno de esos endpoints tiene que llevar
+ * PORTAL_HEAVY_BASE por delante (charts_svg.c, config_server_viaje.c,
+ * config_server_vigilancia.c) -- si no, el navegador los pide al puerto
+ * 80 de siempre, donde ya no existen. Detectado por el usuario el
+ * 09-sep-2026. */
+#define PORTAL_HEAVY_PORT 8081
+#define PORTAL_HEAVY_BASE "http://192.168.4.1:8081"
+
 /* Helper macro: pone al inicio de los handlers que exigen auth. Si falla
  * la respuesta 401 ya está enviada — devolvemos ESP_OK para que el http
  * server no reintente ni loggee error. NO aplicar al captive-portal

@@ -1401,7 +1401,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
  * ya estaba escrito en el codigo del tar: "el analizador del PC se traga un
  * viaje incompleto creyendo que esta entero". */
 
-typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO } estado_viaje_t;
+typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO, V_DESCARTADO } estado_viaje_t;
 
 /* Los dos stat() son I/O de SD de verdad: sin camera_sd_bus_lock aqui, un
  * listado de /data/viajes mientras la camara esta grabando arriesga la
@@ -1410,6 +1410,16 @@ typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO } estado_viaje_t;
  * dentro en vez de en cada sitio que lo use. Detectado el 09-sep-2026. */
 static estado_viaje_t estado_de(const char *nombre)
 {
+    /* op_descartar() renombra la carpeta a DESCARTADO_<nombre> sin escribir
+     * NINGUN marcador dentro (ni resumen.txt ni INCOMPLETO.txt) -- antes eso
+     * hacia que cayera por defecto en V_EN_CURSO ("sin resumen: nunca se
+     * cerro"), un estado FALSO: la pantalla decia "finalizalo en la cabina
+     * antes de bajarlo" sobre un viaje que ya no se puede finalizar (ni
+     * siquiera es el abierto), y el listado nunca ofrecia bajarlo pese a
+     * que los datos siguen ahi (op_descartar los conserva a proposito).
+     * El propio nombre de carpeta ya lleva la marca, no hace falta stat
+     * adicional. Detectado por el usuario el 09-sep-2026. */
+    if (!strncmp(nombre, MARCA_DESCARTADO, strlen(MARCA_DESCARTADO))) return V_DESCARTADO;
     char abierto[CARPETA_MAX];
     if (viaje_abierto(abierto, sizeof(abierto))) {
         const char *base = strrchr(abierto, '/');
@@ -1463,6 +1473,7 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
         "margin:0;padding:16px}h1{font-size:20px}a{color:#4FC3F7}"
         "li{margin:14px 0;list-style:none;border-left:3px solid #333;padding-left:10px}"
         ".ok{border-color:#66BB6A}.inc{border-color:#FFA726}.cur{border-color:#888}"
+        ".desc{border-color:#555;opacity:.7}"
         ".e{font-size:13px;color:#aaa}</style>"
         "<h1>Viajes guardados</h1><ul>");
 
@@ -1497,7 +1508,7 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
             if (e == V_LISTO) {
                 snprintf(linea, sizeof(linea),
                     "<li class=ok><b>%s</b><div class=e>Listo</div>"
-                    "<a href='/data/viaje.tar?v=%s'>Descargar</a></li>",
+                    "<a href='" PORTAL_HEAVY_BASE "/data/viaje.tar?v=%s'>Descargar</a></li>",
                     nombre_esc, nombre_esc);
             } else if (e == V_INCOMPLETO) {
                 /* Salida de emergencia: si algo se perdio para siempre, el viaje
@@ -1507,7 +1518,17 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 snprintf(linea, sizeof(linea),
                     "<li class=inc><b>%s</b><div class=e>INCOMPLETO: le faltan apuntes. "
                     "Lee " MARCA_INCOMPLETO " dentro.</div>"
-                    "<a href='/data/viaje.tar?v=%s&incompleto=si'>Descargar de todos modos</a></li>",
+                    "<a href='" PORTAL_HEAVY_BASE "/data/viaje.tar?v=%s&incompleto=si'>Descargar de todos modos</a></li>",
+                    nombre_esc, nombre_esc);
+            } else if (e == V_DESCARTADO) {
+                /* op_descartar NO borra nada -- se conserva a proposito por si
+                 * hace falta rescatar algo -- asi que se deja bajar igual que
+                 * un viaje normal, sin exigir resumen.txt (nunca lo tendra:
+                 * se aparto antes de cerrarse). */
+                snprintf(linea, sizeof(linea),
+                    "<li class=desc><b>%s</b><div class=e>Descartado: no cuenta como "
+                    "viaje, pero los datos se conservan.</div>"
+                    "<a href='" PORTAL_HEAVY_BASE "/data/viaje.tar?v=%s'>Descargar</a></li>",
                     nombre_esc, nombre_esc);
             } else {
                 snprintf(linea, sizeof(linea),
@@ -1527,7 +1548,7 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
     if (!alguno) httpd_resp_sendstr_chunk(req, "<li>Todavia no hay ningun viaje.</li>");
     httpd_resp_sendstr_chunk(req,
         "</ul><p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
-        "los dias) esta en <a href='/data/historico.tar'>historico.tar</a>.</p>"
+        "los dias) esta en <a href='" PORTAL_HEAVY_BASE "/data/historico.tar'>historico.tar</a>.</p>"
         "<p><a href='/data'>Volver</a></p>");
     httpd_resp_sendstr_chunk(req, NULL);
     return ESP_OK;

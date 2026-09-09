@@ -431,7 +431,7 @@ esp_err_t handle_data_frigo(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>FRIGO</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV (hoy)</a> <a href='/data/frigo.tar'>Descargar todo (.tar)</a></div>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/frigo.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#00BFFF'></i>Aletas</span>"
         "<span><i class='dot' style='background:#FF4444'></i>Congelador</span>"
@@ -737,7 +737,7 @@ esp_err_t handle_data_bateria(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>BATERIA</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV (hoy)</a> <a href='/data/bateria.tar'>Descargar todo (.tar)</a></div>"
+        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/bateria.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#4FC3F7'></i>BatteryMonitor</span>"
         "<span><i class='dot' style='background:#FFD54F'></i>SolarCharger</span>"
@@ -816,18 +816,22 @@ esp_err_t handle_data_index(httpd_req_t *req)
         "<a class='btn' href='/data/bateria'>BATERIA</a>"
         "<h2>Volcado por WiFi: elige la carpeta a descargar (.tar)</h2>"
         "<div class='dl'>"
-          "<a href='/data/frigo.tar'>frigo</a>"
-          "<a href='/data/bateria.tar'>bateria</a>"
-          "<a href='/data/solar.tar'>solar</a>"
-          "<a href='/data/capturas.tar'>capturas</a>"
-          "<a href='/data/vigilancia.tar'>vigilancia</a>"
-          "<a href='/data/config.tar'>config</a>"
-          "<a href='/data/logs.tar'>logs</a>"
+          /* .tar sirve desde la instancia httpd "pesada" (puerto separado,
+           * ver PORTAL_HEAVY_BASE): un href relativo los pediria al puerto
+           * de siempre, donde ya no existen. */
+          "<a href='" PORTAL_HEAVY_BASE "/data/frigo.tar'>frigo</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/bateria.tar'>bateria</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/solar.tar'>solar</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/capturas.tar'>capturas</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/vigilancia.tar'>vigilancia</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/config.tar'>config</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/logs.tar'>logs</a>"
           /* "viaje" ahora lleva a la LISTA de viajes, que es donde se elige
            * cual bajarse y donde se ve si alguno esta incompleto. El paquete de
-           * siempre (todo el historico) se llama ya por lo que es. */
+           * siempre (todo el historico) se llama ya por lo que es. La LISTA en
+           * si (/data/viajes) es ligera y se queda en el puerto de siempre. */
           "<a href='/data/viajes'><b>viajes</b></a>"
-          "<a href='/data/historico.tar'>historico</a>"
+          "<a href='" PORTAL_HEAVY_BASE "/data/historico.tar'>historico</a>"
         "</div>"
         "</body></html>";
     httpd_resp_sendstr(req, html);

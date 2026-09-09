@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <time.h>
+#include <sys/stat.h>
 
 static const char *TAG = "cfg_srv_vig";
 
@@ -136,13 +137,19 @@ static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
     return n;
 }
 
+/* Miniaturas (vig_make_thumbnail en camera.c), mismo esquema de carpetas
+ * "sesion/fichero.jpg" que las fotos completas -- solo cambia el directorio
+ * base. Ver PORTAL_HEAVY_BASE y el listado de handle_vigilancia. */
+#define VIG_SD_THUMB_DIR_PATH "/sdcard/vigilancia_thumbs"
+
 /* Sirve un JPEG de la tarjeta en trozos, SOLTANDO el cerrojo del bus entre cada
  * uno: si el httpd retiene la SD durante todo el fichero, el GDMA de la camara
- * se queda parado y se acaba en INT WDT. Mismo patron que vig_write_jpeg_sd. */
-static esp_err_t vig_sd_send(httpd_req_t *req, const char *name)
+ * se queda parado y se acaba en INT WDT. Mismo patron que vig_write_jpeg_sd.
+ * base_dir: VIG_SD_DIR_PATH (foto completa) o VIG_SD_THUMB_DIR_PATH (miniatura). */
+static esp_err_t vig_sd_send(httpd_req_t *req, const char *base_dir, const char *name)
 {
-    char path[128];
-    snprintf(path, sizeof(path), VIG_SD_DIR_PATH "/%s", name);
+    char path[144];
+    snprintf(path, sizeof(path), "%s/%s", base_dir, name);
     if (!camera_sd_bus_lock(2000)) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
                             "tarjeta ocupada, reintenta");
@@ -226,7 +233,7 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
                 httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
                 return ESP_FAIL;
             }
-            return vig_sd_send(req, idstr);
+            return vig_sd_send(req, VIG_SD_DIR_PATH, idstr);
         }
         uint32_t id = (uint32_t)strtoul(idstr, NULL, 10);
         uint8_t *jpg = NULL; size_t jlen = 0;
@@ -281,9 +288,12 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
             const char *nm = sd_names[i];
             const char *slash = strrchr(nm, '/');
             const char *fn = slash ? slash + 1 : nm;
+            /* href a la foto completa de siempre; src a la miniatura --
+             * handle_vigilancia_thumb cae a la foto completa si no
+             * encuentra miniatura (capturas de antes de este cambio). */
             snprintf(line, sizeof(line),
                      "<div class=cap><div class=t>%.4s-%.2s-%.2s %.2s:%.2s:%.2s &middot; tarjeta</div>"
-                     "<a href='/vigilancia/%s'><img src='/vigilancia/%s' loading=lazy></a></div>",
+                     "<a href='/vigilancia/%s'><img src='/vigilancia_thumb/%s' loading=lazy></a></div>",
                      fn, fn + 4, fn + 6, fn + 9, fn + 11, fn + 13, nm, nm);
             httpd_resp_sendstr_chunk(req, line);
         }
@@ -297,4 +307,34 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
     httpd_resp_sendstr_chunk(req, "</body></html>");
     httpd_resp_sendstr_chunk(req, NULL);
     return ESP_OK;
+}
+
+/* GET /vigilancia_thumb/<sesion>/<fichero>.jpg -> miniatura (vig_make_thumbnail,
+ * camera.c). Si no existe (capturas de antes de este cambio, o la miniatura
+ * fallo al generarse) cae a la foto COMPLETA: mejor una imagen grande que un
+ * icono roto en el listado. Mismo chequeo de nombre que handle_vigilancia --
+ * es la misma superficie (rutas bajo /sdcard), mismo riesgo. */
+esp_err_t handle_vigilancia_thumb(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
+    const char *uri = req->uri;
+    const char *idstr = NULL;
+    if (strncmp(uri, "/vigilancia_thumb/", 18) == 0 && uri[18] != '\0') idstr = uri + 18;
+    if (!idstr) { httpd_resp_send_404(req); return ESP_FAIL; }
+
+    const size_t il = strlen(idstr);
+    if (il < 5 || il >= VIG_NAME_LEN || strcmp(idstr + il - 4, ".jpg") != 0 ||
+        !vig_sd_name_safe(idstr)) {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
+        return ESP_FAIL;
+    }
+
+    char thumb_path[144];
+    snprintf(thumb_path, sizeof(thumb_path), VIG_SD_THUMB_DIR_PATH "/%s", idstr);
+    struct stat st;
+    bool hay_miniatura = false;
+    if (camera_sd_bus_lock(2000)) {
+        hay_miniatura = (stat(thumb_path, &st) == 0);
+        camera_sd_bus_unlock();
+    }
+    return vig_sd_send(req, hay_miniatura ? VIG_SD_THUMB_DIR_PATH : VIG_SD_DIR_PATH, idstr);
 }

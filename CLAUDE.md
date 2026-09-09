@@ -31,10 +31,13 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 - Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
 - Monitor: `idf.py -p /dev/ttyACM0 monitor`
 - OTA habitual: subir directamente por Wi-Fi desde este portatil a
-  `http://192.168.4.1/ota` (pide Basic Auth strict: usuario/clave de
-  Ajustes -> Wi-Fi). El USB queda solo para cuando hace falta diagnosticar
-  un arranque (log de boot, crash, NVS) — sacar la placa de donde esta
-  instalada es un engorro.
+  `http://192.168.4.1:8081/ota` (pide Basic Auth strict: usuario/clave de
+  Ajustes -> Wi-Fi). Puerto 8081 desde el 09-sep-2026: OTA vive en la
+  instancia httpd "pesada" (junto con los .tar y la galeria de vigilancia),
+  separada de la principal (puerto 80) para que una subida larga no deje
+  mudo el resto del portal (`/api/state`, la web). El USB queda solo para
+  cuando hace falta diagnosticar un arranque (log de boot, crash, NVS) —
+  sacar la placa de donde esta instalada es un engorro.
 
 ## CI
 - `.github/workflows/build.yml` (2026-08-14): compila con `idf.py build`
@@ -106,7 +109,13 @@ fallo igual, que es justo lo que pasó el 21-ago-2026.
 - main/portal/ (2026-08-14, antes plano en main/):
   - config_server.c: portal HTTP — handlers core (root, keys, static,
     save, api_state, dashboard, settime, capturas) + arranque/registro de
-    URIs del httpd y del DNS del captive portal
+    URIs del httpd y del DNS del captive portal. DOS instancias httpd desde
+    el 09-sep-2026: la principal (puerto 80, `s_httpd`) y otra "pesada"
+    (puerto 8081, `s_httpd_heavy`, ver PORTAL_HEAVY_BASE en
+    config_server_internal.h) solo para OTA, los .tar y la galeria de
+    vigilancia — esp_http_server es de una sola tarea, y una de esas
+    peticiones dejaba mudo TODO lo demas (incluido /api/state) mientras
+    duraba. cfg_http_stop() para las dos.
   - config_server_ap.c: ciclo de vida del AP Wi-Fi — radio (wifi_ap_init),
     timers de auto-off del HTTP, cola de trabajos (start/stop/apply);
     expone cfg_http_stop()/cfg_dns_stop() (definidas en config_server.c)
