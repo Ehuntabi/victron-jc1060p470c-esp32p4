@@ -161,6 +161,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_font(ui->wifi.ssid, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_one_line(ui->wifi.ssid, true);
     lv_obj_set_width(ui->wifi.ssid, 350);
+    /* Tope 802.11: SSID max 32 caracteres. Sin esto se podia teclear un SSID
+     * mas largo, que guardar_wifi_cb() (mas abajo) no rechazaba -- solo
+     * validaba el minimo de la clave -- y wifi_ap_init() lo lee de NVS sin
+     * revalidar. Detectado por el usuario el 09-sep-2026. */
+    lv_textarea_set_max_length(ui->wifi.ssid, 32);
     lv_textarea_set_text(ui->wifi.ssid, default_ssid);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.ssid, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
@@ -205,6 +210,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_textarea_set_password_mode(ui->wifi.password, true);
     lv_textarea_set_one_line(ui->wifi.password, true);
     lv_obj_set_width(ui->wifi.password, 280);
+    /* Tope WPA2-PSK: clave max 63 caracteres. Mismo motivo que el del SSID
+     * de arriba. */
+    lv_textarea_set_max_length(ui->wifi.password, 63);
     lv_textarea_set_text(ui->wifi.password, ap_password);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_FOCUSED, ui);
     lv_obj_add_event_cb(ui->wifi.password, ta_event_cb, LV_EVENT_DEFOCUSED, ui);
@@ -410,6 +418,18 @@ static void wifi_save_cb(lv_event_t *e)
         }
         return;
     }
+    /* Tope 802.11 (32 caracteres). lv_textarea_set_max_length ya lo impide
+     * al teclear, pero esto es la validacion de verdad -- por si algun dia
+     * el SSID llega por otro camino que no pase por ese textarea. */
+    if (strlen(ssid) > 32) {
+        ESP_LOGW(TAG_SETTINGS, "SSID de %u caracteres: no se guarda (max 32)",
+                 (unsigned)strlen(ssid));
+        if (s_wifi_estado) {
+            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_label_set_text(s_wifi_estado, "El nombre de la red no puede pasar de 32 caracteres");
+        }
+        return;
+    }
     /* WPA2 exige 8-63 caracteres. wifi_ap_init() (config_server_ap.c) lee esta
      * clave de NVS SIN revalidarla -- confia en que config_server_ensure_ap_
      * password() ya la dejo buena, pero esa funcion solo corre UNA VEZ al
@@ -424,6 +444,16 @@ static void wifi_save_cb(lv_event_t *e)
         if (s_wifi_estado) {
             lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
             lv_label_set_text(s_wifi_estado, "La clave Wi-Fi necesita al menos 8 caracteres (WPA2)");
+        }
+        return;
+    }
+    /* Tope WPA2-PSK (63 caracteres), mismo motivo que el del SSID de arriba:
+     * validacion de verdad, no solo el max_length del textarea. */
+    if (pass_len > 63) {
+        ESP_LOGW(TAG_SETTINGS, "clave WPA2 de %u caracteres: no se guarda (max 63)", (unsigned)pass_len);
+        if (s_wifi_estado) {
+            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_label_set_text(s_wifi_estado, "La clave Wi-Fi no puede pasar de 63 caracteres (WPA2)");
         }
         return;
     }

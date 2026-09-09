@@ -1426,6 +1426,32 @@ static estado_viaje_t estado_de(const char *nombre)
     return listo ? V_LISTO : V_EN_CURSO;      /* sin resumen: nunca se cerro */
 }
 
+/* Escapa lo minimo para meter texto arbitrario en HTML (contenido Y dentro de
+ * un atributo entrecomillado con '): & < > " '. ent->d_name es el nombre de
+ * carpeta del viaje, que viene en ultima instancia del destino que se teclea
+ * en la 3.5" (texto libre) -- sin esto se incrustaba tal cual en <b> y en el
+ * href='/data/viaje.tar?v=...', asi que un nombre con < > o ' rompia el HTML
+ * o el atributo (XSS almacenado si llega a contener algo ejecutable; hoy
+ * requiere ya tener acceso al satelite o a la SD para forzar ese nombre, pero
+ * no deberia depender de eso). out debe ser al menos 4x mayor que in por si
+ * cada caracter se convierte en la entidad mas larga (&amp;). Detectado por
+ * el usuario el 09-sep-2026. */
+static void html_escape(const char *in, char *out, size_t out_len)
+{
+    size_t o = 0;
+    for (size_t i = 0; in[i] != '\0' && o + 6 < out_len; i++) {
+        switch (in[i]) {
+            case '&':  memcpy(out + o, "&amp;",  5); o += 5; break;
+            case '<':  memcpy(out + o, "&lt;",   4); o += 4; break;
+            case '>':  memcpy(out + o, "&gt;",   4); o += 4; break;
+            case '"':  memcpy(out + o, "&quot;", 6); o += 6; break;
+            case '\'': memcpy(out + o, "&#39;",  5); o += 5; break;
+            default:   out[o++] = in[i]; break;
+        }
+    }
+    out[o] = '\0';
+}
+
 esp_err_t handle_data_viajes(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
@@ -1466,11 +1492,13 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
             if (ent->d_name[0] == '.') continue;
             alguno = true;
             estado_viaje_t e = estado_de(ent->d_name);
+            char nombre_esc[256 * 6 / 4];   /* margen para el peor caso (&quot; x char) */
+            html_escape(ent->d_name, nombre_esc, sizeof(nombre_esc));
             if (e == V_LISTO) {
                 snprintf(linea, sizeof(linea),
                     "<li class=ok><b>%s</b><div class=e>Listo</div>"
                     "<a href='/data/viaje.tar?v=%s'>Descargar</a></li>",
-                    ent->d_name, ent->d_name);
+                    nombre_esc, nombre_esc);
             } else if (e == V_INCOMPLETO) {
                 /* Salida de emergencia: si algo se perdio para siempre, el viaje
                  * quedaria bloqueado eternamente. Se deja bajar, pero con el
@@ -1480,11 +1508,11 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                     "<li class=inc><b>%s</b><div class=e>INCOMPLETO: le faltan apuntes. "
                     "Lee " MARCA_INCOMPLETO " dentro.</div>"
                     "<a href='/data/viaje.tar?v=%s&incompleto=si'>Descargar de todos modos</a></li>",
-                    ent->d_name, ent->d_name);
+                    nombre_esc, nombre_esc);
             } else {
                 snprintf(linea, sizeof(linea),
                     "<li class=cur><b>%s</b><div class=e>En curso: finalizalo en la "
-                    "pantalla de la cabina antes de bajarlo</div></li>", ent->d_name);
+                    "pantalla de la cabina antes de bajarlo</div></li>", nombre_esc);
             }
             httpd_resp_sendstr_chunk(req, linea);
         }

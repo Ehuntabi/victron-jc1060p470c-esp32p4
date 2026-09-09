@@ -351,12 +351,15 @@ static esp_err_t post_save(httpd_req_t *req) {
         key[i] = strtol(tmp, NULL, 16);
     }
     
-    ESP_LOGI(TAG, "Parsed MAC address: %02X:%02X:%02X:%02X:%02X:%02X", 
+    ESP_LOGI(TAG, "Parsed MAC address: %02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    /* clave AES solo en DEBUG: no debe quedar en los logs persistidos en SD */
-    ESP_LOGD(TAG, "Parsed AES key:");
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, key, 16, ESP_LOG_DEBUG);
-    
+    /* NUNCA loguear la clave AES, ni en DEBUG: el comentario que habia aqui
+     * decia "no debe quedar en los logs persistidos en SD" pero el propio
+     * nivel DEBUG es justo el que se activa al depurar en campo -- y
+     * log_capture.c captura TODO lo que pase por ESP_LOGx para exportarlo,
+     * asi que "solo en DEBUG" no protegia nada en el caso real de uso.
+     * Detectado por el usuario el 09-sep-2026. */
+
     // Save to Victron devices configuration
     esp_err_t err = add_victron_device(mac, key);
     
