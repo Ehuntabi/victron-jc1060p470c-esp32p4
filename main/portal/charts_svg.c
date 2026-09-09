@@ -149,10 +149,15 @@ typedef struct {
 
 static void ts_init(ts_series_t *s, int cap)
 {
-    s->x     = malloc(sizeof(float) * cap);
-    s->y     = malloc(sizeof(float) * cap);
-    s->y_max = malloc(sizeof(float) * cap);
-    s->y_min = malloc(sizeof(float) * cap);
+    /* PSRAM: un dia completo de bateria (4 fuentes @ 10s) da cap ~34500, y
+     * son 4 arrays de floats por serie x 4 series -- ~2,1 MB en RAM
+     * INTERNA con malloc() normal, que en el P4 no tiene ese margen. OOM
+     * silencioso (build_bateria_html se queda sin grafica sin avisar nada
+     * claro). Detectado auditando el 09-sep-2026. */
+    s->x     = heap_caps_malloc(sizeof(float) * cap, MALLOC_CAP_SPIRAM);
+    s->y     = heap_caps_malloc(sizeof(float) * cap, MALLOC_CAP_SPIRAM);
+    s->y_max = heap_caps_malloc(sizeof(float) * cap, MALLOC_CAP_SPIRAM);
+    s->y_min = heap_caps_malloc(sizeof(float) * cap, MALLOC_CAP_SPIRAM);
     if (!s->x || !s->y || !s->y_max || !s->y_min) {
         /* Fallo parcial de malloc: liberar lo reservado y dejar todo NULL
          * para que el guard OOM del caller (if !.x) lo detecte. */
@@ -233,7 +238,7 @@ static void build_frigo_html(const char *csv,
     *rows_html = NULL;
 
     size_t svg_cap = 32 * 1024;
-    char *svg = malloc(svg_cap);
+    char *svg = heap_caps_malloc(svg_cap, MALLOC_CAP_SPIRAM);
     if (!svg) { *svg_inner = NULL; return; }
     svg[0] = 0;
     size_t sp = 0;
@@ -503,7 +508,7 @@ static void build_bateria_html(const char *csv,
 
     /* Buffer SVG amplio para soportar muchos puntos (8640/24h × 4 series) */
     size_t svg_cap = 192 * 1024;
-    char *svg = malloc(svg_cap);
+    char *svg = heap_caps_malloc(svg_cap, MALLOC_CAP_SPIRAM);
     if (!svg) { *svg_inner = NULL; return; }
     svg[0] = 0;
     size_t sp = 0;

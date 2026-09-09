@@ -43,6 +43,29 @@ static const char *TAG = "ota";
 static void ota_wdt_suspend(bool suspend)
 {
     watchdog_suspend(suspend);
+
+    /* El borrado de esp_ota_begin (varios segundos) tambien puede impedir
+     * que la tarea IDLE del nucleo que ejecuta este worker httpd llegue a
+     * latir -- CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0/1=y vigila las dos
+     * IDLE con 10s de margen. No es el propio worker el que hay que
+     * desuscribir (los workers httpd no se registran en el TWDT por
+     * defecto, a diferencia de cam_stream de aqui abajo): es su IDLE. Se
+     * desuscriben las DOS a proposito y no solo la del nucleo actual -- el
+     * worker puede migrar de nucleo entre el suspend y el resume (no va
+     * fijado con core_id), y rastrear cual tocaba en cada momento anadia
+     * riesgo de descuadre para una operacion puntual de pocos segundos.
+     * Nunca reproducido (a diferencia de cam_stream, que si), pero el
+     * margen es real. Detectado el 09-sep-2026. */
+    for (int core = 0; core < 2; core++) {
+        TaskHandle_t idle = xTaskGetIdleTaskHandleForCore(core);
+        if (!idle) continue;
+        esp_err_t err_idle = suspend ? esp_task_wdt_delete(idle) : esp_task_wdt_add(idle);
+        if (err_idle != ESP_OK) {
+            ESP_LOGW(TAG, "TWDT idle nucleo %d: no se pudo %s (%s)",
+                     core, suspend ? "desuscribir" : "resuscribir", esp_err_to_name(err_idle));
+        }
+    }
+
     TaskHandle_t cam = camera_stream_task_handle();
     if (!cam) return;
     esp_err_t err = suspend ? esp_task_wdt_delete(cam) : esp_task_wdt_add(cam);
