@@ -100,13 +100,16 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
     if (strstr(q, "off") || strstr(q, "on")) {
         bool on = strstr(q, "on") != NULL;   /* "off" contiene "o" pero no "on" */
-        bool done = false;
+        bool done = false, accepted = false;
         if (bsp_display_lock(300)) {
-            ausente_request(on);   /* on: cuenta atras+vigilancia; off: cancela/sale */
+            accepted = ausente_request(on);   /* on: cuenta atras+vigilancia; off: cancela/sale */
             bsp_display_unlock();
             done = true;
         }
         httpd_resp_sendstr(req, !done ? "No pude tomar el lock de pantalla, reintenta"
+                                : (on && !accepted) ? "Rechazado: la SD no esta montada "
+                                                       "(se solto en Ajustes), sin ella la "
+                                                       "vigilancia no tendria donde guardar"
                                 : on ? "Modo ausente/vigilancia activado"
                                      : "Modo ausente desactivado");
     } else {

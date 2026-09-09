@@ -594,6 +594,12 @@ static void gallery_close_cb(lv_event_t *e)
         s_btn_delete = NULL;
     }
     if (s_img_buf) { heap_caps_free(s_img_buf); s_img_buf = NULL; }
+    /* s_del_modal es HIJO de lv_layer_top(), no de s_screen -- borrar
+     * s_screen no se lo lleva por delante. Sin esto, cerrar la galeria con
+     * un "Borrar?" a medio responder dejaba ese aviso flotando encima de
+     * cualquier pantalla siguiente. Detectado por el usuario el
+     * 09-sep-2026. */
+    if (s_del_modal) { lv_obj_del(s_del_modal); s_del_modal = NULL; }
 }
 
 /* Cierre programatico, para el carrusel de capturas. Reusa el mismo camino que

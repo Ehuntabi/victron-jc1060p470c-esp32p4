@@ -118,7 +118,18 @@ void settings_ausente_sync_switch(bool on)
 static void ausente_switch_cb(lv_event_t *e)
 {
     lv_obj_t *sw = lv_event_get_target(e);
-    ausente_request(lv_obj_has_state(sw, LV_STATE_CHECKED));
+    bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    if (!ausente_request(on)) {
+        /* Rechazado (sin SD montada, ver ausente_mode.c): el switch no
+         * puede quedar en ON mintiendo sobre un modo que no llego a
+         * armarse. */
+        lv_obj_clear_state(sw, LV_STATE_CHECKED);
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  Modo ausente",
+            "No se puede activar: la tarjeta SD\nno esta montada (se solto en\n"
+            "Ajustes -> Autocaravana), y sin ella\nla vigilancia no tendria "
+            "donde\nguardar las fotos.\n\nReinicia la pantalla para volver\n"
+            "a montarla.");
+    }
 }
 
 /* Card "Modo ausente / vigilancia", reubicada al submenu Autocaravana (antes

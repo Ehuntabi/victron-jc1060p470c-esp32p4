@@ -664,6 +664,29 @@ static void victron_confirm_btn_cb(lv_event_t *e)
     else           { if (cancel) cancel(ud); }
 }
 
+/* Cierre forzado de los dos modales de esta pagina (s_victron_warning y
+ * s_victron_confirm_modal), para llamarlo desde fuera al navegar sin haber
+ * respondido -- ambos se creaban en lv_layer_top() y solo se cerraban con
+ * sus propios botones, asi que sobrevivian a cualquier cambio de pantalla
+ * (idle->live, auto-retorno de Ajustes) flotando encima de lo que viniera
+ * despues, con su callback de confirmacion todavia armado. A proposito NO
+ * se invoca ni el ok ni el cancel: navegar fuera no es "confirmar" ni
+ * "cancelar", es abandonar -- cualquier efecto secundario de esos callbacks
+ * (revertir NVS, etc) tiene que dispararlo el usuario a proposito, con un
+ * boton, no un timeout de inactividad. Detectado por el usuario el
+ * 09-sep-2026. */
+void victron_keys_close_modals(void)
+{
+    if (s_victron_warning) { lv_obj_del(s_victron_warning); s_victron_warning = NULL; }
+    if (s_victron_confirm_modal) {
+        lv_obj_del(s_victron_confirm_modal);
+        s_victron_confirm_modal = NULL;
+    }
+    s_victron_confirm_ok = NULL;
+    s_victron_confirm_cancel = NULL;
+    s_victron_confirm_ud = NULL;
+}
+
 static void victron_show_confirm_modal(const char *msg,
                                        victron_confirm_fn on_ok,
                                        victron_confirm_fn on_cancel,

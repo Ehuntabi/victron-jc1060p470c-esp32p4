@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include <lvgl.h>
 #include "camera.h"
+#include "datalogger.h"
 
 /* Definido en main.c: re-aplica el brillo segun la arbitracion actual
  * (night_mode_timer_cb). Lo llamamos al entrar/salir para efecto inmediato. */
@@ -113,10 +114,23 @@ static void countdown_cb(lv_timer_t *t)
     }
 }
 
-void ausente_request(bool on)
+bool ausente_request(bool on)
 {
     if (on) {
-        if (s_state != AUS_OFF) return;  /* ya pendiente o activo */
+        if (s_state != AUS_OFF) return true;  /* ya pendiente o activo */
+        /* Sin SD no hay donde guardar las fotos de vigilancia (ver
+         * vig_sd_drain_task/vig_write_jpeg_sd en camera.c): tras "Soltar
+         * tarjeta" (trip_manager.c) la SD queda desmontada hasta reiniciar,
+         * y armar modo ausente en ese estado activaba igual (log "modo
+         * ausente ACTIVO") sin ningun aviso de que cada foto fallaria en
+         * silencio -- solo un WARN de camera.c en el log serie, invisible
+         * para quien confia en que esto vigila. Detectado por el usuario
+         * el 09-sep-2026. */
+        if (!datalogger_sd_montada()) {
+            ESP_LOGW(TAG, "modo ausente RECHAZADO: SD no montada (soltar "
+                          "tarjeta?), no habria donde guardar la vigilancia");
+            return false;
+        }
         s_state = AUS_PENDING;
         s_secs  = 10;
 
@@ -157,4 +171,5 @@ void ausente_request(bool on)
             ESP_LOGI(TAG, "modo ausente DESACTIVADO (gesto/HTTP)");
         }
     }
+    return true;
 }

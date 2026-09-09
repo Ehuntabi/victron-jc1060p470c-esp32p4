@@ -55,4 +55,15 @@ void ui_settings_panel_show_gps(void);
 
 void ui_settings_screensaver_create_timer(ui_state_t *ui);
 
+/* Cierre forzado de los modales de la pagina Victron Keys (aviso previo y
+ * confirmacion), sin ejecutar sus callbacks -- ver settings_victron_keys.c. */
+void victron_keys_close_modals(void);
+
+/* Cierre forzado del dialogo modal generico de Ajustes (Reiniciar, Soltar
+ * tarjeta, Energia del viaje...), sin ejecutar on_confirm -- ver
+ * settings_dialogs.c/settings_common.h. Reexportada aqui para que quien
+ * solo necesite "cerrar todo al navegar" (ui.c) no tenga que incluir
+ * settings_common.h entero. */
+void ui_close_confirm_dialog(void);
+
 #endif /* UI_SETTINGS_PANEL_H */

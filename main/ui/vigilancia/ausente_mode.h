@@ -17,9 +17,15 @@
 extern "C" {
 #endif
 
-/* on=true: inicia la cuenta atras de 10 s y luego activa el modo.
- * on=false: cancela la cuenta atras (si pendiente) o sale del modo (si activo). */
-void ausente_request(bool on);
+/* on=true: inicia la cuenta atras de 10 s y luego activa el modo. Devuelve
+ * false SIN empezar la cuenta atras si la SD no esta montada -- vigilancia
+ * necesita la SD para guardar las fotos (via vig_sd_drain_task en camera.c);
+ * armar igual dejaria "modo ausente ACTIVO" en el log mientras cada foto
+ * fallaba en silencio al no encontrar donde escribirla (solo un WARN en
+ * el log de la camara, invisible para quien confia en que esto vigila).
+ * on=false: cancela la cuenta atras (si pendiente) o sale del modo (si
+ * activo); siempre devuelve true. */
+bool ausente_request(bool on);
 
 /* true cuando el modo esta plenamente activo (pantalla apagada). */
 bool ausente_is_active(void);

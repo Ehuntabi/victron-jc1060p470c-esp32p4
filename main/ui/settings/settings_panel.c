@@ -6,6 +6,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 #include "ui.h"
 #include "ui/widgets/ui_card.h"
 #include "ui/vigilancia/ausente_mode.h"
+#include "ui/vigilancia/gallery.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "alerts.h"
@@ -1008,6 +1009,16 @@ static void screensaver_wake(ui_state_t *ui)
                     lv_tabview_get_tab_act(ui->tabview) != 0) {
                     lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
                 }
+                /* Modales huerfanos: mismo motivo que en
+                 * idle_to_live_timer_cb (ui.c) -- se crean en
+                 * lv_layer_top() y solo se cerraban con sus propios
+                 * botones, asi que este otro camino de vuelta a Live (el
+                 * salvapantallas rotando) tambien podia dejarlos flotando
+                 * encima de la pantalla siguiente. Detectado por el
+                 * usuario el 09-sep-2026. */
+                ui_close_confirm_dialog();
+                victron_keys_close_modals();
+                ui_gallery_close();
             }
             ui->screensaver.rotate_index = 0;
         }

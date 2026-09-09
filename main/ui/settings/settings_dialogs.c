@@ -113,3 +113,16 @@ void ui_show_info_dialog(const char *title, const char *msg)
 {
     ui_show_confirm_dialog(title, msg, "Entendido", NULL);
 }
+
+/* Cierre forzado, para llamarlo al navegar sin haber respondido: el modal se
+ * crea en lv_layer_top() (visible por encima de CUALQUIER pantalla, no solo
+ * la que lo abrio) y solo se cerraba con sus propios botones -- "Reiniciar",
+ * "Soltar tarjeta" etc podian quedar flotando encima de la pantalla
+ * siguiente, con la accion original todavia armada si se pulsaba OK sin
+ * fijarse. A proposito NO se ejecuta on_confirm: navegar fuera es abandonar,
+ * no confirmar. Detectado por el usuario el 09-sep-2026. */
+void ui_close_confirm_dialog(void)
+{
+    if (s_confirm_modal) { lv_obj_del(s_confirm_modal); s_confirm_modal = NULL; }
+    s_confirm_action = NULL;
+}

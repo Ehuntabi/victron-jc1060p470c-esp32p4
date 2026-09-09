@@ -16,6 +16,7 @@ static struct {
     double yesterday_pv_wh;  /* snapshot ayer (al rollover de medianoche) */
     double yesterday_loads_wh;
     uint16_t solar_yield_centikwh;  /* último valor reportado por SmartSolar */
+    time_t   solar_yield_ts;        /* cuando llego ese valor, para caducarlo */
     int day_of_year;
     int year;
     time_t last_sample;      /* timestamp del último update de batería */
@@ -181,17 +182,36 @@ void energy_today_on_solar_yield(uint16_t yield_centikwh)
     if (!s.mtx) energy_today_init();
     xSemaphoreTake(s.mtx, portMAX_DELAY);
     s.solar_yield_centikwh = yield_centikwh;
+    s.solar_yield_ts = time(NULL);
     xSemaphoreGive(s.mtx);
 }
+
+/* Igual que el resto de records BLE de este dashboard (ver solar_fresh en
+ * view_overview.c): 30s sin dato nuevo del SmartSolar y se deja de confiar
+ * en el. */
+#define SOLAR_YIELD_TIMEOUT_S 30
 
 float energy_today_pv_kwh(void)
 {
     if (!s.mtx) return 0;
     xSemaphoreTake(s.mtx, portMAX_DELAY);
-    /* Si tenemos yield del SmartSolar lo preferimos (mas fiable que integrar
-     * con BMV) */
+    /* Si tenemos yield del SmartSolar RECIENTE lo preferimos (mas fiable que
+     * integrar con BMV). s.solar_yield_centikwh no llevaba caducidad: si el
+     * SmartSolar se callaba (bateria muerta, fuera de alcance, o durante
+     * toda la noche sin sol), el ultimo valor -- el yield final de AYER --
+     * se seguia enseniando como "hoy" indefinidamente, porque
+     * check_day_rollover_locked() (que si resetea pv_wh) solo se evalua
+     * desde energy_today_on_battery(), nunca desde aqui. Con el timeout, en
+     * cuanto pasan 30s sin un record nuevo se cae al valor integrado (que
+     * SI rueda de dia correctamente via el BMV), y en cuanto el SmartSolar
+     * vuelve a hablar -- ya con SU propio contador reiniciado a medianoche
+     * -- se le vuelve a hacer caso. Detectado por el usuario el 09-sep-2026. */
     float v;
-    if (s.solar_yield_centikwh > 0) {
+    time_t now = time(NULL);
+    bool yield_fresco = s.solar_yield_centikwh > 0 && s.solar_yield_ts > 0 &&
+                        now >= s.solar_yield_ts &&
+                        (now - s.solar_yield_ts) < SOLAR_YIELD_TIMEOUT_S;
+    if (yield_fresco) {
         v = (float)s.solar_yield_centikwh / 100.0f;
     } else {
         v = (float)s.pv_wh / 1000.0f;

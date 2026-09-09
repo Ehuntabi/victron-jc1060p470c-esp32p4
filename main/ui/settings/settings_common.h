@@ -55,6 +55,9 @@ typedef void (*ui_confirm_action_t)(void);
 void ui_show_confirm_dialog(const char *title, const char *msg,
                             const char *ok_txt, ui_confirm_action_t on_confirm);
 void ui_show_info_dialog(const char *title, const char *msg);
+/* Cierre forzado sin ejecutar on_confirm, para llamarlo al navegar fuera de
+ * Ajustes sin haber respondido (ver settings_dialogs.c). */
+void ui_close_confirm_dialog(void);
 
 #ifdef __cplusplus
 }

@@ -886,6 +886,15 @@ static void idle_to_live_timer_cb(lv_timer_t *t)
     ui_close_battery_history_screen();
     /* Detalle de card abierto -> volver a la principal tras 1 min sin tocar. */
     ui_close_card_detail();
+    /* Modales huerfanos: se crean en lv_layer_top() (visible por encima de
+     * CUALQUIER pantalla) y antes solo se cerraban con sus propios botones
+     * -- "Reiniciar", "Soltar tarjeta" etc podian quedar flotando encima de
+     * lo que viniera despues de este mismo timeout de inactividad, con la
+     * accion original todavia armada. Detectado por el usuario el
+     * 09-sep-2026. */
+    ui_close_confirm_dialog();
+    victron_keys_close_modals();
+    ui_gallery_close();
 }
 
 void ui_notify_user_activity(void)
