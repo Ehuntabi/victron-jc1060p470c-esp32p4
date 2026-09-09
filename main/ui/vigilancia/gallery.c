@@ -146,10 +146,13 @@ static void gallery_scan(void)
     }
 
     /* El closedir SI tiene que ocurrir (si no, fuga del DIR), asi que se espera
-     * al cerrojo en vez de saltarselo, como ya se hace mas abajo. 2026-07-26. */
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+     * al cerrojo en vez de saltarselo -- pero acotado (camera_sd_bus_lock_wait):
+     * un bus SD atascado de verdad no puede colgar esto para siempre. 2026-07-26,
+     * acotado el 09-sep-2026. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
     closedir(d);
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
     if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
 }
 
@@ -184,9 +187,12 @@ static uint8_t *gallery_read_file(const char *path, size_t *out_len)
         off += (size_t)r;
         vTaskDelay(pdMS_TO_TICKS(8));   /* ceder a la camara entre trozos */
     }
-    while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+    /* Mismo criterio que el closedir de gallery_scan: acotado con
+     * camera_sd_bus_lock_wait en vez de esperar sin limite. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "close sin cerrojo SD tras 5s de espera");
     close(fd);
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
 
     if (!ok || off != len) { heap_caps_free(buf); return NULL; }
     *out_len = len;
@@ -444,9 +450,10 @@ static void gallery_delete_task(void *arg)
                 }
                 vTaskDelay(pdMS_TO_TICKS(5));
             }
-            while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+            bool got_lock = camera_sd_bus_lock_wait(5000);
+            if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
             closedir(d);
-            camera_sd_bus_unlock();
+            if (got_lock) camera_sd_bus_unlock();
         }
         if (camera_sd_bus_lock(2000)) { rmdir(dir); camera_sd_bus_unlock(); }
     }

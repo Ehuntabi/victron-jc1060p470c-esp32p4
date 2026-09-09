@@ -536,9 +536,14 @@ void log_capture_migrate_legacy_flat_files(void)
         else ESP_LOGW(MTAG, "no pude migrar %s", n);
         camera_sd_bus_unlock();
     }
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+    /* El closedir SI tiene que ocurrir (fuga de DIR si no), asi que se espera
+     * al cerrojo en vez de saltarselo -- pero acotado (camera_sd_bus_lock_wait):
+     * un bus SD atascado de verdad no puede colgar esto para siempre. Detectado
+     * auditando el 09-sep-2026. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(MTAG, "closedir sin cerrojo SD tras 5s de espera");
     closedir(d);
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
     if (moved > 0) ESP_LOGI(MTAG, "migrados %d logs/crash sueltos a carpetas por dia", moved);
 }
 

@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -18,6 +19,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <time.h>
+
+static const char *TAG = "charts_svg";
 
 static void get_today_csv_path(const char *subdir, char *out, size_t out_len)
 {
@@ -90,9 +93,15 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
      * grandes del proyecto (log_capture, thumbnails de camara). */
     char *buf = heap_caps_malloc(st.st_size + 1, MALLOC_CAP_SPIRAM);
     if (!buf) {
-        while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+        /* El fclose SI tiene que ocurrir (fuga de fd si no), asi que se espera
+         * al cerrojo en vez de saltarselo -- pero acotado: un bus SD atascado
+         * de verdad no puede colgar esto para siempre (worker httpd, pocos
+         * disponibles). Detectado auditando el 09-sep-2026, mismo patron que
+         * ya arreglo effff1d en data_export_tar.c/config_server_vigilancia.c. */
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
         fclose(f);
-        camera_sd_bus_unlock();
+        if (got_lock) camera_sd_bus_unlock();
         return NULL;
     }
 
@@ -111,9 +120,12 @@ static char *read_file_to_buf(const char *path, size_t *out_len)
         n += r;
         if ((n % (8 * 4096)) == 0) vTaskDelay(1);   /* ceder CPU cada ~32KB */
     }
-    while (!camera_sd_bus_lock(1000)) vTaskDelay(1);
+    /* Mismo criterio que el fclose de arriba: acotado con
+     * camera_sd_bus_lock_wait en vez de esperar sin limite. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
     fclose(f);
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
 
     buf[n] = 0;
     if (out_len) *out_len = n;

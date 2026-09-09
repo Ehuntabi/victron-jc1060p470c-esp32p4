@@ -173,11 +173,15 @@ static esp_err_t write_buf_to_sd(const char *path, const uint8_t *buf, size_t le
     }
 
     /* close() hace la transaccion real (flush + entrada de dir): siempre bajo el
-     * bus, reintentando para no solapar la ventana GDMA de la camara. */
-    while (!camera_sd_bus_lock(1000)) { vTaskDelay(1); }
+     * bus. El cierre SI tiene que ocurrir, asi que se espera al cerrojo en vez
+     * de saltarselo -- pero acotado (camera_sd_bus_lock_wait): un bus SD
+     * atascado de verdad no puede colgar esto para siempre. Acotado el
+     * 09-sep-2026, mismo patron que effff1d en data_export_tar.c. */
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "close sin cerrojo SD tras 5s de espera");
     int cerr = close(fd);
     int close_errno = errno;
-    camera_sd_bus_unlock();
+    if (got_lock) camera_sd_bus_unlock();
     if (cerr != 0) { snprintf(s_last_err, sizeof(s_last_err), "close errno=%d", close_errno); ok = false; }
 
     if (!ok || wr != len) {
