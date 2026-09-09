@@ -23,6 +23,15 @@ static void load_float(nvs_handle_t h, const char *k, float *out)
     if (nvs_get_i32(h, k, &v) == ESP_OK) *out = v / 100.0f;
 }
 
+/* Mismos limites que ya usa config_backup.c al importar un backup (el unico
+ * sitio que tenia clamp hasta ahora): un valor de NVS corrupto (bit
+ * volteado, escritura a medias) alimentaria umbrales de alarma absurdos o
+ * negativos hasta el proximo ajuste manual en Ajustes. La carga normal de
+ * NVS se habia quedado sin este clamp. Detectado por el usuario el
+ * 09-sep-2026. */
+static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+static float clamp_float(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
 void alerts_init(void)
 {
     nvs_handle_t h;
@@ -33,6 +42,10 @@ void alerts_init(void)
         load_int(h, "soc_warn", &s_soc_warn);
         nvs_close(h);
     }
+    s_freezer_min  = clamp_int(s_freezer_min, 0, 1440);
+    s_freezer_temp = clamp_float(s_freezer_temp, -30.0f, 10.0f);
+    s_soc_crit     = clamp_int(s_soc_crit, 0, 100);
+    s_soc_warn     = clamp_int(s_soc_warn, 0, 100);
     ESP_LOGI(TAG, "Umbrales: freezer=%d min @ %.1fC, soc_crit=%d soc_warn=%d",
              s_freezer_min, s_freezer_temp, s_soc_crit, s_soc_warn);
 }

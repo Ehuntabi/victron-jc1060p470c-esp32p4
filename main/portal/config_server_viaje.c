@@ -974,7 +974,23 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
          * abriria un viaje fantasma en /sdcard/vehiculo. El id si se
          * guarda siempre: es la idempotencia. */
         estado_set_en(h, en_viaje ? carpeta : NULL, id);
-        nvs_commit(h);
+        esp_err_t commit_err = nvs_commit(h);
+        if (commit_err != ESP_OK) {
+            /* Mismo caso que el nvs_open() que falla ahi abajo: la fila de
+             * la SD ya esta escrita, asi que un reintento del satelite no
+             * duplica nada (el id nunca llego a quedar en el anillo) -- se
+             * sigue respondiendo "ok" con el mismo razonamiento. La
+             * diferencia es que ANTES este fallo pasaba en silencio, sin
+             * rastro en el log: si algun dia empieza a fallar de verdad
+             * (flash gastada, NVS casi lleno) no habia forma de saberlo
+             * salvo por el sintoma indirecto (duplicados esporadicos).
+             * Detectado por el usuario el 09-sep-2026. */
+            ESP_LOGE(TAG, "nvs_commit fallo para totales/contador/dedupe de "
+                          "'%s' (%s): nada de eso ha quedado guardado, el "
+                          "reintento repetira la fila de la SD pero no "
+                          "duplicara importes",
+                     jt->valuestring, esp_err_to_name(commit_err));
+        }
         nvs_close(h);
     } else {
         ESP_LOGE(TAG, "no se pudo abrir NVS para totales/contador/dedupe de "

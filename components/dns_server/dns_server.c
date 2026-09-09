@@ -330,7 +330,19 @@ dns_server_handle_t start_dns_server(dns_server_config_t *config)
     handle->num_of_entries = config->num_of_entries;
     memcpy(handle->entry, config->item, config->num_of_entries * sizeof(dns_entry_pair_t));
 
-    xTaskCreate(dns_server_task, "dns_server", 4096, handle, 5, &handle->task);
+    if (xTaskCreate(dns_server_task, "dns_server", 4096, handle, 5, &handle->task) != pdPASS) {
+        /* handle->task se queda a NULL (xTaskCreate no lo toca si falla, y el
+         * handle sale de calloc zero-inicializado). Sin este check, handle
+         * se devolveria con started=true como si hubiera arrancado bien, y
+         * el stop_dns_server() de mas abajo -- al no haber tarea que le de
+         * el semaforo nunca -- agotaria los 5s y acabaria en
+         * vTaskDelete(NULL): eso borra la tarea QUE LLAMA a stop_dns_server,
+         * no ninguna de dns_server. Detectado por el usuario el 09-sep-2026. */
+        ESP_LOGE(TAG, "Failed to create dns_server task");
+        if (handle->stopped_sem) vSemaphoreDelete(handle->stopped_sem);
+        free(handle);
+        return NULL;
+    }
     return handle;
 }
 
@@ -357,7 +369,12 @@ void stop_dns_server(dns_server_handle_t handle)
              * la tarea primero se garantiza que no vuelve a ejecutar nada
              * mas suyo. Detectado el 09-sep-2026. */
             ESP_LOGW(TAG, "dns_server no confirmo el cierre del socket a tiempo, forzando");
-            vTaskDelete(handle->task);
+            /* Guard defensivo: vTaskDelete(NULL) borra la tarea QUE LLAMA,
+             * no queda sin hacer nada. Con el check de xTaskCreate en
+             * start_dns_server() esto no deberia darse, pero ademas de
+             * barato es la diferencia entre "no hace nada" y "se suicida
+             * la tarea equivocada" si algun dia se cuela un handle asi. */
+            if (handle->task) vTaskDelete(handle->task);
             if (handle->stopped_sem) vSemaphoreDelete(handle->stopped_sem);
         }
         free(handle);

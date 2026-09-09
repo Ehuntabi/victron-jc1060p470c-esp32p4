@@ -109,9 +109,29 @@ static void nvs_load(void)
     uint8_t umbral_v = 0;
     nvs_get_u8(h, NVS_KEY_UMBRAL_V, &umbral_v);
     if (umbral_v >= UMBRAL_VERSION) {
-        /* Al dia: manda lo guardado, que puede ser un ajuste del usuario. */
-        if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) s_state.T_min = v;
-        if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) s_state.T_max = v;
+        /* Al dia: manda lo guardado, que puede ser un ajuste del usuario.
+         * Mismos limites que ya exige frigo_set_thresholds() al guardar --
+         * un valor de NVS corrupto (bit volteado, escritura a medias) no
+         * tiene por que respetarlos, y sin este clamp llevaria el
+         * ventilador a un umbral sin sentido (o T_min >= T_max) hasta el
+         * proximo ajuste manual. Si tras el clamp el orden sigue mal, mejor
+         * quedarse con los valores de fabrica que arriesgarlo. Solo
+         * importacion (config_backup.c) tenia este tipo de clamp; aqui, en
+         * la carga normal de NVS, faltaba. Detectado por el usuario el
+         * 09-sep-2026. */
+        uint8_t tmin = s_state.T_min, tmax = s_state.T_max;
+        if (nvs_get_u8(h, NVS_KEY_TMIN, &v) == ESP_OK) tmin = v;
+        if (nvs_get_u8(h, NVS_KEY_TMAX, &v) == ESP_OK) tmax = v;
+        if (tmin < 30) tmin = 30;
+        if (tmax > 60) tmax = 60;
+        if (tmin < tmax) {
+            s_state.T_min = tmin;
+            s_state.T_max = tmax;
+        } else {
+            ESP_LOGW(TAG, "umbrales de NVS fuera de rango (%u/%u tras clamp), "
+                          "uso los de fabrica %d/%d",
+                     tmin, tmax, s_state.T_min, s_state.T_max);
+        }
     } else {
         /* Umbrales de una version anterior: se dejan los nuevos por defecto y
          * se marcan como migrados. Ocurre UNA vez; a partir de ahi, lo que
@@ -120,11 +140,21 @@ static void nvs_load(void)
         ESP_LOGW(TAG, "umbrales antiguos en NVS -> paso a los nuevos por "
                       "defecto %d/%d", s_state.T_min, s_state.T_max);
     }
-    if (nvs_get_u8(h, NVS_KEY_FANMIN, &v) == ESP_OK) s_state.fan_min_pct = v;
+    if (nvs_get_u8(h, NVS_KEY_FANMIN, &v) == ESP_OK) {
+        s_state.fan_min_pct = (v > 60) ? 60 : v;   /* mismo techo que frigo_set_fan_min() */
+    }
     uint8_t sv;
     if (nvs_get_u8(h, NVS_KEY_SOL_EN,  &sv) == ESP_OK) s_sol_en      = sv ? true : false;
-    if (nvs_get_u8(h, NVS_KEY_SOL_ON,  &sv) == ESP_OK) s_sol_on_pct  = sv;
-    if (nvs_get_u8(h, NVS_KEY_SOL_OFF, &sv) == ESP_OK) s_sol_off_pct = sv;
+    if (nvs_get_u8(h, NVS_KEY_SOL_ON,  &sv) == ESP_OK) {
+        if (sv < 80) sv = 80;                       /* mismos limites que */
+        if (sv > 100) sv = 100;                      /* frigo_solar_set_soc_on() */
+        s_sol_on_pct = sv;
+    }
+    if (nvs_get_u8(h, NVS_KEY_SOL_OFF, &sv) == ESP_OK) {
+        if (sv < 50) sv = 50;                        /* mismos limites que */
+        if (sv > (uint8_t)(s_sol_on_pct - 5)) sv = (uint8_t)(s_sol_on_pct - 5);  /* frigo_solar_set_soc_off() */
+        s_sol_off_pct = sv;
+    }
     nvs_close(h);
 }
 
