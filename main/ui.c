@@ -50,6 +50,7 @@
 
 static int64_t s_last_ble_data_us = 0;
 static void ble_indicator_timer_cb(lv_timer_t *t);
+static void active_view_freshness_cb(lv_timer_t *t);
 static void gps_indicator_timer_cb(lv_timer_t *t);
 
 /* Estado de 'wifi/enabled' cacheado en RAM para el icono de la barra. -1 = aun
@@ -208,10 +209,13 @@ static lv_timer_t *s_idle_to_live_timer;
  * pulsar la card y se cierra con el boton volver o tras 1 min sin tocar. */
 static bool      s_card_detail_active   = false;
 static lv_obj_t *s_card_detail_back_btn = NULL;
-/* Ultimo record recibido por fuente, para pintar el detalle al instante. */
-static victron_data_t s_last_solar;   static bool s_has_solar   = false;
-static victron_data_t s_last_battery; static bool s_has_battery = false;
-static victron_data_t s_last_dcdc;    static bool s_has_dcdc    = false;
+/* Ultimo record recibido por fuente, para pintar el detalle al instante.
+ * *_us acompaña la hora real de esa llegada (no la de redibujado), para que
+ * active_view_freshness_cb sepa desde el primer instante si lo que se
+ * repinta desde cache ya estaba caducado. */
+static victron_data_t s_last_solar;   static bool s_has_solar   = false; static int64_t s_last_solar_us   = 0;
+static victron_data_t s_last_battery; static bool s_has_battery = false; static int64_t s_last_battery_us = 0;
+static victron_data_t s_last_dcdc;    static bool s_has_dcdc    = false; static int64_t s_last_dcdc_us    = 0;
 
 #define IDLE_TO_LIVE_TIMEOUT_MS 60000
 
@@ -602,6 +606,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
     lv_timer_create(clock_timer_cb, 30000, ui);
     lv_timer_create(ble_indicator_timer_cb, 1000, ui);
+    lv_timer_create(active_view_freshness_cb, 2000, ui);
     lv_timer_create(gps_indicator_timer_cb, 1000, ui);
     s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
                                            IDLE_TO_LIVE_TIMEOUT_MS, ui);
@@ -654,10 +659,16 @@ void ui_on_panel_data(const victron_data_t *d) {
     /* Cache del ultimo record por fuente para el detalle instantaneo de las
      * cards del Overview (Solar/Bateria/DC-DC). */
     switch (d->type) {
-        case VICTRON_BLE_RECORD_SOLAR_CHARGER:   s_last_solar = *d;   s_has_solar = true;   break;
-        case VICTRON_BLE_RECORD_BATTERY_MONITOR: s_last_battery = *d; s_has_battery = true; break;
+        case VICTRON_BLE_RECORD_SOLAR_CHARGER:
+            s_last_solar = *d;   s_has_solar = true;   s_last_solar_us = esp_timer_get_time();
+            break;
+        case VICTRON_BLE_RECORD_BATTERY_MONITOR:
+            s_last_battery = *d; s_has_battery = true; s_last_battery_us = esp_timer_get_time();
+            break;
         case VICTRON_BLE_RECORD_DCDC_CONVERTER:
-        case VICTRON_BLE_RECORD_ORION_XS:        s_last_dcdc = *d;    s_has_dcdc = true;    break;
+        case VICTRON_BLE_RECORD_ORION_XS:
+            s_last_dcdc = *d;    s_has_dcdc = true;    s_last_dcdc_us = esp_timer_get_time();
+            break;
         default: break;
     }
 
@@ -723,7 +734,8 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     if (ui->active_view && ui->active_view->update) {
         ui->active_view->update(ui->active_view, d);
-        
+        ui->active_view->last_update_us = esp_timer_get_time();
+
         // Prepare detailed status information based on device type
         char detailed_status[256] = {0};
         ui_prepare_detailed_device_status(d, detailed_status, sizeof(detailed_status));
@@ -911,16 +923,17 @@ void ui_show_card_detail(ui_state_t *ui, victron_record_type_t category)
     /* Resolver tipo concreto + ultimo dato conocido para pintar al instante. */
     victron_record_type_t type = category;
     const victron_data_t *cached = NULL;
+    int64_t cached_us = 0;
     switch (category) {
         case VICTRON_BLE_RECORD_SOLAR_CHARGER:
-            if (s_has_solar) cached = &s_last_solar;
+            if (s_has_solar) { cached = &s_last_solar; cached_us = s_last_solar_us; }
             break;
         case VICTRON_BLE_RECORD_BATTERY_MONITOR:
-            if (s_has_battery) cached = &s_last_battery;
+            if (s_has_battery) { cached = &s_last_battery; cached_us = s_last_battery_us; }
             break;
         case VICTRON_BLE_RECORD_DCDC_CONVERTER:
         case VICTRON_BLE_RECORD_ORION_XS:
-            if (s_has_dcdc) { cached = &s_last_dcdc; type = s_last_dcdc.type; }
+            if (s_has_dcdc) { cached = &s_last_dcdc; type = s_last_dcdc.type; cached_us = s_last_dcdc_us; }
             break;
         default:
             break;
@@ -935,7 +948,13 @@ void ui_show_card_detail(ui_state_t *ui, victron_record_type_t category)
     ui->active_view = view;
     s_card_detail_active = true;
 
-    if (cached && view->update) view->update(view, cached);
+    if (cached && view->update) {
+        view->update(view, cached);
+        /* Timestamp de la llegada REAL, no del redibujado: si ya estaba
+         * caducado al recibirlo, active_view_freshness_cb debe verlo asi
+         * desde el primer frame, no esperar 30s desde que se abrio. */
+        view->last_update_us = cached_us;
+    }
 
     ui_card_detail_ensure_back_btn();
     lv_obj_clear_flag(s_card_detail_back_btn, LV_OBJ_FLAG_HIDDEN);
@@ -1310,6 +1329,28 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
         lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
         lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
     }
+}
+
+/* Caducidad de la tarjeta de detalle abierta (Solar/Battery Monitor/Inverter/
+ * etc, las 13 del registro por tipo). A diferencia de Overview y del panel
+ * por defecto -- que ya llevan su propio timer de frescura -- estas vistas
+ * solo se repintan cuando llega un paquete BLE nuevo: si el dispositivo deja
+ * de emitir, se quedaban congeladas con el ultimo dato para siempre sin
+ * ningun aviso. Un solo timer generico basta porque ui->active_view es
+ * siempre UNA sola vista (la que se ve en pantalla ahora mismo), no las 13
+ * a la vez. Mismo umbral (30 s) que usan Overview/default. Detectado el
+ * 09-sep-2026. */
+static void active_view_freshness_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->active_view || !ui->active_view->root) return;
+
+    const int64_t TIMEOUT_US = 30000LL * 1000LL;
+    int64_t age_us = esp_timer_get_time() - ui->active_view->last_update_us;
+    bool stale = ui->active_view->last_update_us != 0 && age_us > TIMEOUT_US;
+
+    lv_obj_set_style_opa(ui->active_view->root,
+                         stale ? LV_OPA_50 : LV_OPA_COVER, 0);
 }
 
 /* Icono del GPS: TRES estados, no dos.
