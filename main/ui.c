@@ -40,6 +40,7 @@
 #include "log_browser.h"
 #include "screenshot.h"
 #include "frigo.h"
+#include "watchdog.h"
 #include "esp_heap_caps.h"
 #include <sys/stat.h>
 #include <math.h>
@@ -50,6 +51,7 @@
 
 static int64_t s_last_ble_data_us = 0;
 static void ble_indicator_timer_cb(lv_timer_t *t);
+static void lvgl_heartbeat_timer_cb(lv_timer_t *t);
 static void active_view_freshness_cb(lv_timer_t *t);
 static void gps_indicator_timer_cb(lv_timer_t *t);
 
@@ -606,6 +608,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_obj_add_event_cb(ui->tabview, tabview_touch_event_cb, LV_EVENT_GESTURE, ui);
     lv_timer_create(clock_timer_cb, 30000, ui);
     lv_timer_create(ble_indicator_timer_cb, 1000, ui);
+    lv_timer_create(lvgl_heartbeat_timer_cb, 1000, NULL);
     lv_timer_create(active_view_freshness_cb, 2000, ui);
     lv_timer_create(gps_indicator_timer_cb, 1000, ui);
     s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
@@ -1332,6 +1335,19 @@ void ui_set_freezer_alarm(ui_state_t *ui, bool active)
 bool ui_get_freezer_alarm(void)
 {
     return s_freezer_alarm_active;
+}
+
+/* Latido de watchdog para WD_TASK_LVGL (ver watchdog.c). Un lv_timer normal
+ * SI es un latido de verdad: lv_timer_handler() lo procesa dentro de la
+ * MISMA tarea de LVGL, asi que si esa tarea se atasca por lo que sea
+ * (render colgado, o esperando el mismo lock que antes probaba el trylock
+ * que esto sustituye) el timer tampoco vuelve a latir -- sin necesidad de
+ * tocar esp_lvgl_port (componente vendorizado, su bucle no es nuestro).
+ * Cambiado por decision del usuario el 09-sep-2026. */
+static void lvgl_heartbeat_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    watchdog_heartbeat(WD_TASK_LVGL);
 }
 
 static void ble_indicator_timer_cb(lv_timer_t *t)

@@ -25,6 +25,14 @@ int log_cleanup_run_now(int max_days_keep);
  * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
 TaskHandle_t log_cleanup_task_handle(void);
 
+/* Latido de watchdog para cleanup_task (mismo patron que
+ * frigo_set_heartbeat_cb/datalogger_set_heartbeat_cb/
+ * battery_history_set_heartbeat_cb): este componente no puede incluir
+ * main/watchdog.h directamente, asi que quien registra el callback
+ * (main.c) es quien conoce wd_task_t. NULL = sin vigilar. */
+typedef void (*log_cleanup_heartbeat_cb_t)(void);
+void log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat_cb_t cb);
+
 #ifdef __cplusplus
 }
 #endif

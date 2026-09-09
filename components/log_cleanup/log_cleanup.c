@@ -219,12 +219,16 @@ static esp_timer_handle_t s_daily_timer = NULL;
  * arreglo que datalogger.c/battery_history.c/ne185_vlog.c/
  * config_server_viaje.c. Detectado auditando el 07-sep-2026. */
 static TaskHandle_t s_cleanup_task_handle;
+static log_cleanup_heartbeat_cb_t s_hb_cb = NULL;   /* ver log_cleanup_set_heartbeat_cb */
+
+void log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat_cb_t cb) { s_hb_cb = cb; }
 
 static void cleanup_task(void *arg)
 {
     (void)arg;
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (s_hb_cb) s_hb_cb();   /* latido watchdog: ver log_cleanup_set_heartbeat_cb */
         log_cleanup_run_now(s_max_days_cached);
     }
 }

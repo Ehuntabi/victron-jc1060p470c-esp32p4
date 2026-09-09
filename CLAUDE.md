@@ -28,58 +28,16 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 ## Forks de drivers vendorizados
 
 Dos componentes traen parches locales sobre lo que sea que traiga el próximo
-bump de IDF. Higiene, no bug: si algo de esto deja de hacer falta o de
-cuadrar tras un upgrade, hay que darse cuenta, no que falle en silencio.
-Añadido el 09-sep-2026 a petición del usuario, sin tocar código.
-
-### components/esp_lcd_jd9165 — fork de un componente oficial
-
-- **Origen**: `espressif/esp_lcd_jd9165` (ESP Component Registry), vendorizado
-  en `v1.0.4` (ver su propio `CHANGELOG.md` dentro del componente — el
-  historial de versiones de upstream SÍ está aquí, es el registry el que no
-  tiene un `git log` consultable desde este repo).
-- **Parche local**: `esp_lcd_jd9165.c`, dentro de `panel_jd9165_init()`
-  (comentario "FORK LOCAL" ~línea 150). Se DESHABILITA la lectura del
-  Display ID (cmd 0x04): el host hace busy-wait sin timeout en
-  `mipi_dsi_hal_host_gen_read_short_packet`, y si el panel no responde a
-  tiempo (pasa en el Guition JC1060P470C) cuelga 5s y dispara el WDT IDLE0.
-  Referencia: esp-idf issue #15137. El ID solo se usaba para un log de
-  debug — no toca la operación real del panel.
-- **Re-sync al subir de versión** (bump del `idf_component.yml` o de IDF):
-  1. Mirar si `esp-idf#15137` (o el equivalente que aplique en la versión
-     nueva) sigue abierto. Si Espressif lo arregló, el bypass ya no hace
-     falta — probarlo SIN el parche antes de asumir que sigue siendo
-     necesario.
-  2. Si se sube de version, diff `panel_jd9165_init()` contra la nueva
-     `esp_lcd_jd9165.c` del registry (bajarla aparte, no reinstalar encima)
-     para ver si el codigo de lectura de ID cambio de sitio o de forma.
-
-### components/ov02c10 — port directo, no vendorizado desde un paquete
-
-- **Origen**: portado "del kernel Linux" (mensaje del commit `a15cdde`,
-  29-jun-2026) — **sin URL ni hash de origen anotado en el repo**. No he
-  podido verificar de qué commit/versión exacta del driver del kernel
-  (`drivers/media/i2c/ov02c10.c` o similar) se partió; si hace falta
-  volver a comparar contra upstream, hay que localizarlo de nuevo a mano.
-  No inventar un hash aquí solo por rellenar el hueco.
-- **Parche local**: `ov02c10.c` líneas 963, 978 y 993 — tres valores de
-  `tline_ns` (tiempo por línea: `1e9/(fps*lineas)`) que el comentario dice
-  que "FALTA en el PR" de referencia (tampoco anotado con URL). Sin esos
-  valores el timing de exposición sale mal.
-- **Workaround relacionado, en `main/esp_bsp.c:33-53`**: copia LOCAL del
-  layout privado de `esp_lcd_dsi_bus_t` (de
-  `components/esp_lcd/dsi/mipi_dsi_priv.h` en IDF 5.4.4) para poder
-  deshabilitar `cmd_ack` del DBI IO — el panel JD9165 no responde con BTA y
-  sin esto se llena el FIFO TX a los 17 comandos y cuelga el host. Ya trae
-  `_Static_assert` que **falla la compilación sola** si el offset de
-  `bus_id`/`hal` cambia en un IDF nuevo — es el propio build el que avisa,
-  no hace falta acordarse de mirarlo a mano. Si falla: regenerar el
-  `typedef` mirando el `mipi_dsi_priv.h` de la version nueva.
-- **Re-sync al subir de IDF**: los `_Static_assert` de `esp_bsp.c` son la
-  primera señal (compilación rota = layout cambiado). Aparte de eso, no hay
-  automatismo: revisar a mano si `tline_ns` sigue haciendo falta o si algún
-  ejemplo oficial de Espressif para el OV02C10 apareció mientras tanto (en
-  ese momento valdría más migrar al oficial que seguir manteniendo el port).
+bump de IDF: `components/esp_lcd_jd9165/UPSTREAM.md` (fork del paquete
+oficial del registry, v1.0.4, bypass del read-ID) y
+`components/ov02c10/UPSTREAM.md` (port del PR
+espressif/esp-video-components#46, sin mergear a fecha 09-sep-2026, con los
+`tline_ns` que le faltan al PR). Cada uno documenta su origen exacto y el
+procedimiento de re-sync al subir de versión — mirar ahí, no aquí, para no
+mantener el mismo dato en dos sitios. El workaround BTA relacionado (mismo
+panel JD9165, pero no es parte del componente) vive en
+`main/esp_bsp.c:33-53` y se autoprotege con `_Static_assert` contra un
+cambio de layout privado de IDF.
 
 ## Comandos habituales
 - Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.4/export.sh`

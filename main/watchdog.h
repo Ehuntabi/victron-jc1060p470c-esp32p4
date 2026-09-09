@@ -49,6 +49,9 @@ typedef enum {
     WD_TASK_DL_FLUSH,     /* datalogger.c: flush_task */
     WD_TASK_BH_FLUSH,     /* battery_history.c: bh_flush_task */
     WD_TASK_VIAJE_TICK,   /* config_server_viaje.c: viaje_tick_task */
+    WD_TASK_NE185_VLOG,   /* ne185_vlog.c: vlog_flush_task */
+    WD_TASK_LOG_CLEANUP,  /* log_cleanup.c: cleanup_task */
+    WD_TASK_LVGL,          /* ui.c: lv_timer periodico -- ver wd_monitor_task */
     WD_TASK_COUNT
 } wd_task_t;
 

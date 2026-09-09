@@ -28,7 +28,15 @@ extern "C" {
 /* ── Configuración LVGL (idéntica a la del proyecto original) ─────────────── */
 typedef struct {
     lvgl_port_cfg_t  lvgl_port_cfg;  /*!< Configuración del port LVGL          */
-    uint32_t         buffer_size;    /*!< Tamaño del buffer en píxeles          */
+    /* buffer_size y rotate se mantienen por compatibilidad de API con el
+     * proyecto original (ver cabecera del fichero), pero bsp_display_new_
+     * with_handles() en esp_bsp.c los IGNORA -- usa BSP_LCD_DRAW_BUFF_SIZE
+     * y una rotacion fija sin rotar (sin soporte de rotacion HW en este
+     * panel). Detalle completo, y el motivo de NO implementar rotate a
+     * medias (desincroniza el tactil GT911), en esp_bsp.c junto a
+     * bsp_display_new_with_handles(). Detectado por el usuario el
+     * 09-sep-2026 (auditoria de capa media, punto 40). */
+    uint32_t         buffer_size;    /*!< Tamaño del buffer en píxeles (IGNORADO) */
     bool             double_buffer;  /*!< true → doble buffer                   */
     struct {
         unsigned int buff_dma    : 1; /*!< Buffer en memoria DMA                */
@@ -36,9 +44,9 @@ typedef struct {
         unsigned int sw_rotate   : 1; /*!< Rotación por software (LVGL)         */
     } flags;
 #if LVGL_VERSION_MAJOR >= 9
-    lv_disp_rotation_t rotate;       /*!< Rotación LVGL 9+                     */
+    lv_disp_rotation_t rotate;       /*!< Rotación LVGL 9+ (IGNORADO, ver arriba) */
 #else
-    lv_disp_rot_t      rotate;       /*!< Rotación LVGL 8                      */
+    lv_disp_rot_t      rotate;       /*!< Rotación LVGL 8 (IGNORADO, ver arriba)  */
 #endif
 } bsp_display_cfg_t;
 

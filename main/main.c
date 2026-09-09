@@ -54,7 +54,6 @@
 
 static const char *TAG = "VICTRON_LVGL_APP";
 #define logSection(section) ESP_LOGI(TAG, "\n\n***** %s *****\n", section)
-#define LVGL_PORT_ROTATION_DEGREE 90
 #define HEAP_LOG_INTERVAL_US (10ULL * 60 * 1000000)    /* 10 minutos */
 #define LOG_INTERVAL_MS    (5 * 60 * 1000)             /* 5 minutos */
 #define ALARM_RISE_MINUTES  30      /* minutos subiendo para alarma */
@@ -101,6 +100,20 @@ static void gps_odometro_cb(void *arg)
 /* ── Backup periódico de hora a NVS ──────────────────────────── */
 static void rtc_backup_timer_cb(void *arg)
 {
+    /* Re-comprobar el VLF (pila CR1220) aqui: antes SOLO se miraba una vez,
+     * en rtc_init(), asi que una pila que se moria EN MARCHA (caida lenta,
+     * semanas/meses de uptime -- el timer que ya corre cada hora es cadencia
+     * de sobra) no se detectaba hasta el siguiente power-on, sin ningun
+     * aviso previo para cambiarla. Independiente del "hora aun no valida"
+     * de abajo: el chequeo de VLF no necesita que el sistema ya tenga hora
+     * buena. Solo deja rastro en el log (rtc_battery_low() queda expuesto
+     * por si algun dia se quiere una tarjeta de aviso en la UI, pero eso es
+     * un cambio de UI aparte que no venia pedido aqui). Detectado por el
+     * usuario el 09-sep-2026. */
+    if (rtc_is_ready() && rtc_check_vlf_now()) {
+        ESP_LOGW(TAG, "RTC: pila CR1220 baja o recien caida -- la hora puede haberse perdido");
+    }
+
     time_t now = time(NULL);
     if (now < 1000000000L) return;  /* hora aún no válida */
     nvs_handle_t nh;
@@ -270,6 +283,12 @@ static void frigo_heartbeat(void) { watchdog_heartbeat(WD_TASK_FRIGO); }
  * 09-sep-2026. */
 static void dl_flush_heartbeat(void) { watchdog_heartbeat(WD_TASK_DL_FLUSH); }
 static void bh_flush_heartbeat(void) { watchdog_heartbeat(WD_TASK_BH_FLUSH); }
+/* Completa la cobertura de tareas de volcado a SD (09-sep-2026): las 3
+ * "pesadas" (dl_flush/bh_flush/viaje_tick) ya se vigilaban desde antes;
+ * estas dos quedaban fuera. ne185_vlog.c esta en main/, asi que su
+ * vlog_flush_task llama a watchdog_heartbeat() directamente -- no necesita
+ * este patron de callback. */
+static void log_cleanup_heartbeat(void) { watchdog_heartbeat(WD_TASK_LOG_CLEANUP); }
 
 static void frigo_update_cb(const frigo_state_t *state)
 {
@@ -458,18 +477,18 @@ static void init_nvs_wifi_pass_watchdog(void)
 static void init_display_ui(void)
 {
     logSection("Display init");
+    /* buffer_size y rotate quedan puestos por compatibilidad de API, pero
+     * esp_bsp.c los IGNORA (ver el comentario junto a bsp_display_new_
+     * with_handles() ahi -- incluye por que NO hay que "arreglar" rotate a
+     * secas: desincroniza el tactil GT911 si no va acompañado del
+     * transform correspondiente). Antes esto tenia un #if sobre un
+     * LVGL_PORT_ROTATION_DEGREE local puesto a 90 -- parecia que la
+     * pantalla rotaba 90 grados y nunca lo habia hecho, puro ruido.
+     * Detectado por el usuario el 09-sep-2026. */
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
         .buffer_size   = EXAMPLE_LCD_QSPI_H_RES * EXAMPLE_LCD_QSPI_V_RES,
-#if LVGL_PORT_ROTATION_DEGREE == 90
-        .rotate = LV_DISP_ROT_90,
-#elif LVGL_PORT_ROTATION_DEGREE == 180
-        .rotate = LV_DISP_ROT_180,
-#elif LVGL_PORT_ROTATION_DEGREE == 270
-        .rotate = LV_DISP_ROT_270,
-#else
-        .rotate = LV_DISP_ROT_NONE,
-#endif
+        .rotate        = LV_DISP_ROT_NONE,
     };
     /* Bump LVGL task stack 7168 -> 12288 B. Margen para draw recursion +
      * assert handler en escenarios pesados (modales anidados, etc).
@@ -610,6 +629,7 @@ static void init_telemetry(void)
         battery_history_set_heartbeat_cb(bh_flush_heartbeat);
     }
     log_cleanup_init(60); /* Borrar logs > 60 dias */
+    if (log_cleanup_task_handle()) log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat);
     alerts_init();
     energy_today_init();
     trip_computer_init();

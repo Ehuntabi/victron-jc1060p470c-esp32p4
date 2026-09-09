@@ -27,6 +27,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "watchdog.h"
 #include "esp_timer.h"
 
 #include "ne185/ne185.h"
@@ -196,6 +197,7 @@ static void vlog_flush_task(void *arg)
     (void)arg;
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        watchdog_heartbeat(WD_TASK_NE185_VLOG);
         flush_to_sd();
     }
 }

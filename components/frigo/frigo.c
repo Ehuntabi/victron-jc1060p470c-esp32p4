@@ -462,11 +462,24 @@ static void frigo_task(void *arg)
  * las buenas (un reset sobre el bus que ya existe). Solo si eso falla se destruye
  * y recrea el bus, porque tras un timeout el canal RX del RMT queda en
  * INVALID_STATE y los resets siguientes sobre el mismo handle NO tocan el cable
- * (son un no-op silencioso). */
+ * (son un no-op silencioso).
+ *
+ * El "solo si eso falla se destruye y recrea" de arriba NO se cumplia para
+ * el escaneo periodico: con intentos=1 el bucle de abajo nunca llegaba a
+ * intento>0, que es justo donde vive el codigo de recrear el bus (mas
+ * abajo, "if (intento > 0)"). Si el bus quedaba en INVALID_STATE, el
+ * escaneo de cada 5 min repetia el MISMO reset-que-no-toca-el-cable para
+ * siempre -- sondas perdidas hasta que alguien tocara el cableado y pidiera
+ * un rescan manual (recuperar=true). Con intentos=2 el periodico sigue
+ * intentando primero por las buenas (intento=0, barato) pero AHORA si le da
+ * la segunda oportunidad -- con recreacion de bus -- que el comentario ya
+ * decia que deberia tener. No sube a 5 (como el manual) para no gastar de
+ * mas en un camino que corre solo de fondo. Detectado por el usuario el
+ * 09-sep-2026. */
 static int bus_enumerar(uint64_t out[FRIGO_MAX_SENSORS], bool recuperar)
 {
     int n = 0;
-    const int intentos = recuperar ? 5 : 1;
+    const int intentos = recuperar ? 5 : 2;
 
     for (int intento = 0; intento < intentos && n == 0; intento++) {
         /* Latido: un escaneo con el bus muerto tarda ~6 s (5 intentos x ~1,2 s

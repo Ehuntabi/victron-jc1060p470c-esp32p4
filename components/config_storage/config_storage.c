@@ -36,6 +36,19 @@ static bool nvs_missing_or_log(esp_err_t err, const char *what)
 #define VICTRON_DEVICES_NAMESPACE "victron_dev"
 #define VICTRON_DEVICES_COUNT_KEY "count"
 #define VICTRON_DEVICES_DATA_KEY  "devices"
+/* El blob de VICTRON_DEVICES_DATA_KEY es un array crudo de
+ * victron_device_config_t: si ese struct cambia de layout en una futura
+ * version (reordenar/añadir campos manteniendo el mismo sizeof) el chequeo
+ * de blob_size de abajo no lo detecta, y se leerian claves AES y MACs de
+ * sitios equivocados sin ningun aviso. Version explicita para detectar ese
+ * caso: si esta clave YA existe y no coincide, se trata igual que un blob
+ * corrupto (reinicio a vacio, ver mas abajo) -- si NO existe (dato guardado
+ * por firmware anterior a este cambio, mismo layout que hoy), se asume la
+ * version actual, para no borrar la configuracion de quien ya tenia
+ * dispositivos emparejados. Subir VICTRON_DEVICES_SCHEMA_VERSION el dia que
+ * el struct cambie de verdad. Detectado por el usuario el 09-sep-2026. */
+#define VICTRON_DEVICES_VERSION_KEY   "ver"
+#define VICTRON_DEVICES_SCHEMA_VERSION 1
 
 #define NE185_NAMESPACE       "ne185"
 #define AUTOSTART_LOADS_KEY   "autostart"
@@ -297,9 +310,29 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
 
     bool changed = false;
 
+    // Version del blob (ver comentario junto a VICTRON_DEVICES_VERSION_KEY).
+    // Ausente = dato de firmware pre-version, se asume el layout actual.
+    uint8_t ver = VICTRON_DEVICES_SCHEMA_VERSION;
+    esp_err_t vtmp = nvs_get_u8(h, VICTRON_DEVICES_VERSION_KEY, &ver);
+    bool version_mismatch = (vtmp == ESP_OK && ver != VICTRON_DEVICES_SCHEMA_VERSION);
+    if (version_mismatch) {
+        ESP_LOGW(TAG, "victron_devices: version de blob %u != %u esperada, reinicio a vacio",
+                 ver, (unsigned)VICTRON_DEVICES_SCHEMA_VERSION);
+    }
+
     // Load device count
     uint8_t count = 0;
-    esp_err_t tmp = nvs_get_u8(h, VICTRON_DEVICES_COUNT_KEY, &count);
+    esp_err_t tmp;
+    if (version_mismatch) {
+        // Blob de version distinta: no fiarse de su layout ni intentar
+        // migrar desde la clave AES legacy (esa migracion es solo para el
+        // primer arranque de verdad). Tratarlo como vacio, igual que abajo
+        // se hace con el blob de datos.
+        count = 0;
+        nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
+        changed = true;
+    } else {
+    tmp = nvs_get_u8(h, VICTRON_DEVICES_COUNT_KEY, &count);
     if (tmp != ESP_OK) {
         // Solo migrar/inicializar a vacio si de verdad no habia clave
         // guardada. Un error real de NVS aqui NO debe borrar la lista de
@@ -337,6 +370,7 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
             }
         }
     }
+    }
 
     if (count > VICTRON_MAX_DEVICES) {
         count = VICTRON_MAX_DEVICES;
@@ -349,13 +383,13 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
     memset(stored_devices, 0, sizeof(stored_devices));
     size_t blob_size = sizeof(stored_devices);
     tmp = nvs_get_blob(h, VICTRON_DEVICES_DATA_KEY, stored_devices, &blob_size);
-    if (tmp != ESP_OK || blob_size != sizeof(stored_devices)) {
+    if (version_mismatch || tmp != ESP_OK || blob_size != sizeof(stored_devices)) {
         // blob_size solo queda distinto de sizeof(stored_devices) si la
         // lectura fue ESP_OK con un tamano viejo/corrupto: en ese caso si
         // conviene reescribir. Un error real de NVS (no NOT_FOUND) dejaria
         // blob_size intacto -> nvs_missing_or_log decide si hay que avisar
         // en vez de sobrescribir el blob guardado con la lista vacia.
-        bool persist = (tmp == ESP_OK) || nvs_missing_or_log(tmp, "victron_devices_data");
+        bool persist = version_mismatch || (tmp == ESP_OK) || nvs_missing_or_log(tmp, "victron_devices_data");
         // Initialize empty devices (solo en RAM si no se va a persistir)
         for (size_t i = 0; i < VICTRON_MAX_DEVICES; ++i) {
             memset(&stored_devices[i], 0, sizeof(victron_device_config_t));
@@ -369,7 +403,11 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
         }
     }
 
+    // Sellar la version actual siempre que se haya escrito algo (blob
+    // nuevo, migracion o reinicio por version distinta): la proxima carga
+    // ya no debe volver a tratarla como "version ausente".
     if (changed) {
+        nvs_set_u8(h, VICTRON_DEVICES_VERSION_KEY, VICTRON_DEVICES_SCHEMA_VERSION);
         nvs_commit(h);
     }
 
@@ -429,6 +467,9 @@ esp_err_t save_victron_devices(const victron_device_config_t *devices,
     err = nvs_set_u8(h, VICTRON_DEVICES_COUNT_KEY, count);
     if (err == ESP_OK) {
         err = nvs_set_blob(h, VICTRON_DEVICES_DATA_KEY, stored_devices, sizeof(stored_devices));
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u8(h, VICTRON_DEVICES_VERSION_KEY, VICTRON_DEVICES_SCHEMA_VERSION);
     }
     if (err == ESP_OK) {
         err = nvs_commit(h);
@@ -586,6 +627,13 @@ esp_err_t load_timezone(char *tz_out, size_t maxlen)
     err = nvs_get_str(h, TZ_KEY, tz_out, &sz);
     nvs_close(h);
     if (err != ESP_OK) {
+        /* nvs_missing_or_log ya distingue "no habia nada guardado" (primer
+         * arranque, normal) de un error real -- aqui interesa sobre todo
+         * ESP_ERR_NVS_INVALID_LENGTH (el TZ guardado no cabe en maxlen):
+         * antes se caia aqui en silencio y el usuario veia "Madrid" sin
+         * ningun aviso de que su zona horaria guardada no se pudo leer.
+         * Detectado por el usuario el 09-sep-2026. */
+        nvs_missing_or_log(err, "timezone");
         strncpy(tz_out, TZ_DEFAULT, maxlen - 1);
         tz_out[maxlen - 1] = 0;
     }
@@ -624,10 +672,16 @@ esp_err_t load_night_mode(bool *enabled_out,
     esp_err_t e1 = nvs_get_u8(h, NIGHT_EN_KEY,    &en);
     esp_err_t e2 = nvs_get_u8(h, NIGHT_START_KEY, &sh);
     esp_err_t e3 = nvs_get_u8(h, NIGHT_END_KEY,   &eh);
-    if (e1 != ESP_OK && nvs_missing_or_log(e1, "night_mode_enabled")) nvs_set_u8(h, NIGHT_EN_KEY,    en);
-    if (e2 != ESP_OK && nvs_missing_or_log(e2, "night_mode_start"))   nvs_set_u8(h, NIGHT_START_KEY, sh);
-    if (e3 != ESP_OK && nvs_missing_or_log(e3, "night_mode_end"))     nvs_set_u8(h, NIGHT_END_KEY,   eh);
-    nvs_commit(h);
+    /* commit solo si de verdad se escribio algun default (primer arranque);
+     * un commit de NVS es una escritura a flash -- hacerlo incondicional en
+     * cada load_night_mode() (se llama en cada apertura de Ajustes) desgasta
+     * flash de balde cuando ya habia valores guardados y nada cambio.
+     * Detectado por el usuario el 09-sep-2026. */
+    bool changed = false;
+    if (e1 != ESP_OK && nvs_missing_or_log(e1, "night_mode_enabled")) { nvs_set_u8(h, NIGHT_EN_KEY,    en); changed = true; }
+    if (e2 != ESP_OK && nvs_missing_or_log(e2, "night_mode_start"))   { nvs_set_u8(h, NIGHT_START_KEY, sh); changed = true; }
+    if (e3 != ESP_OK && nvs_missing_or_log(e3, "night_mode_end"))     { nvs_set_u8(h, NIGHT_END_KEY,   eh); changed = true; }
+    if (changed) nvs_commit(h);
     nvs_close(h);
 
     *enabled_out    = (en != 0);

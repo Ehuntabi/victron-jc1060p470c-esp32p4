@@ -111,7 +111,13 @@ static void screensaver_sync_timer_state(ui_state_t *ui);
 /* Aplica inmediatamente el brillo correcto según hora actual + config. */
 static bool night_in_window(int h, uint8_t s, uint8_t e)
 {
-    if (s == e) return false;
+    /* Inicio==Fin se trata como 24h (siempre de noche), no como "nunca".
+     * Antes devolvia false sin avisar: activar el switch con Inicio==Fin
+     * (llegar ahi con los botones +/- es facil, dan la vuelta a 0..23) dejaba
+     * el modo nocturno completamente mudo, pareciendo roto. "Quiero que sea
+     * de noche siempre" es la lectura natural de esa igualdad para quien
+     * llega ahi. Detectado por el usuario el 09-sep-2026. */
+    if (s == e) return true;
     if (s < e)  return h >= s && h < e;
     return h >= s || h < e;     /* cruza medianoche */
 }

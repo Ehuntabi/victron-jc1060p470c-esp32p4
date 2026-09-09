@@ -436,16 +436,28 @@ static lv_disp_t    *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         /* Buffer parcial (no pantalla completa): acota el tamano de cada
          * esp_cache_msync en el flush DSI, para no bloquear interrupciones
          * el tiempo suficiente como para disparar el INT WDT (avoid_tearing
-         * ya esta desactivado, BSP_LCD_DPI_BUFFER_NUMS=1). */
+         * ya esta desactivado, BSP_LCD_DPI_BUFFER_NUMS=1). cfg->buffer_size
+         * se IGNORA a proposito -- ver el comentario junto al campo en
+         * esp_bsp.h. */
         .buffer_size    = BSP_LCD_DRAW_BUFF_SIZE,
         .double_buffer  = cfg->double_buffer,
         .hres           = BSP_LCD_H_RES,
         .vres           = BSP_LCD_V_RES,
         .monochrome     = false,
-        /*
-         * El panel es landscape nativo (1024×600).
-         * Sin rotación hardware; LVGL aplicará sw_rotate si se configura.
-         */
+        /* El panel es landscape nativo (1024x600), sin rotacion HW.
+         * cfg->rotate se IGNORA a proposito: solo existe por compatibilidad
+         * de API (ver esp_bsp.h), main.c lo calcula pero nunca ha tenido
+         * efecto. NO "arreglar" esto poniendo aqui cfg->rotate sin mas:
+         * el tactil GT911 reporta coordenadas en la orientacion NATIVA del
+         * panel (1024x600 apaisado), y hoy el framebuffer coincide con esa
+         * orientacion -> el mapeo es 1:1 y funciona porque no hay rotacion
+         * de verdad. Si algun dia se activa (aqui o via cfg->flags.sw_rotate,
+         * que ese SI se aplica, ver mas abajo), el contenido giraria pero
+         * el dedo seguiria en el espacio del panel: input desalineado (tocar
+         * arriba = actuar abajo). El transform del touch (swap x/y + mirror,
+         * en el driver GT911) tiene que implementarse A LA VEZ que la
+         * rotacion, no como cambio suelto, y probarse en placa. Confirmado
+         * por el usuario el 09-sep-2026 (auditoria de capa media, punto 40). */
         .rotation = { .swap_xy = false, .mirror_x = false, .mirror_y = false },
 #if LVGL_VERSION_MAJOR >= 9
         .color_format = LV_COLOR_FORMAT_RGB565,

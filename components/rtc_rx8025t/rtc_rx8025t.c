@@ -46,6 +46,7 @@ static const char *TAG = "RTC_RX8025T";
 
 static i2c_master_dev_handle_t s_dev   = NULL;
 static bool                    s_ready = false;
+static bool                    s_battery_low = false;
 
 static inline uint8_t bcd2dec(uint8_t b) { return (b >> 4) * 10 + (b & 0x0F); }
 static inline uint8_t dec2bcd(uint8_t d) { return ((d / 10) << 4) | (d % 10); }
@@ -91,20 +92,34 @@ esp_err_t rtc_init(i2c_master_bus_handle_t bus)
         return ret;
     }
 
-    /* Limpiar VLF (Voltage Low Flag) si está activo. Si lo está, la hora del
-     * RTC no es fiable. Indicamos ESP_OK pero el caller debe verificar año. */
-    uint8_t flag = 0;
-    if (rtc_read(REG_FLAG, &flag, 1) == ESP_OK && (flag & FLAG_VLF)) {
-        ESP_LOGW(TAG, "VLF activo — RTC perdió la hora; limpiando flag");
-        rtc_write(REG_FLAG, flag & ~FLAG_VLF);
-    }
+    s_ready = true;   /* rtc_check_vlf_now() (usa rtc_read) exige s_ready */
+    rtc_check_vlf_now();   /* limpia VLF si esta activo; ver su comentario */
 
-    s_ready = true;
     ESP_LOGI(TAG, "RX8025T OK (addr=0x%02X)", RTC_I2C_ADDR);
     return ESP_OK;
 }
 
 bool rtc_is_ready(void) { return s_ready; }
+
+bool rtc_check_vlf_now(void)
+{
+    if (!s_ready) return false;
+    /* Limpiar VLF (Voltage Low Flag) si está activo. Si lo está, la hora del
+     * RTC no es fiable. Indicamos ESP_OK pero el caller debe verificar año.
+     * (Antes esto solo corria dentro de rtc_init(), una vez al arrancar --
+     * ver el comentario de rtc_check_vlf_now() en el header.) */
+    uint8_t flag = 0;
+    bool low = false;
+    if (rtc_read(REG_FLAG, &flag, 1) == ESP_OK && (flag & FLAG_VLF)) {
+        ESP_LOGW(TAG, "VLF activo — RTC perdió la hora (¿pila CR1220 baja?); limpiando flag");
+        rtc_write(REG_FLAG, flag & ~FLAG_VLF);
+        low = true;
+    }
+    s_battery_low = low;
+    return low;
+}
+
+bool rtc_battery_low(void) { return s_battery_low; }
 
 esp_err_t rtc_get_time(struct tm *tm_out)
 {

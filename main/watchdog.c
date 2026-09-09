@@ -6,7 +6,6 @@
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_lvgl_port.h"
 #include "display.h"
 
 static const char *TAG = "WD";
@@ -20,10 +19,8 @@ static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
 static volatile bool s_suspended = false;
 
-/* Configuración del monitor LVGL */
+/* Configuración del monitor */
 #define WD_MONITOR_PERIOD_MS   3000   /* cadencia de chequeo */
-#define WD_LVGL_LOCK_TIMEOUT   200    /* ms */
-#define WD_LVGL_FAIL_THRESHOLD 3      /* fallos consecutivos para reset */
 
 /* Vigilancia de tareas por heartbeat. Umbral POR TAREA, no uno global: NE185
  * y FRIGO laten en su bucle de polling (segundos), pero DL_FLUSH/BH_FLUSH/
@@ -37,11 +34,23 @@ static volatile bool s_suspended = false;
 #define WD_TASK_TIMEOUT_US     (10LL * 1000000LL)  /* NE185/FRIGO: 10 s sin latido -> reset */
 
 static const int64_t WD_TASK_TIMEOUT_US_TABLE[WD_TASK_COUNT] = {
-    [WD_TASK_NE185]      = WD_TASK_TIMEOUT_US,
+    [WD_TASK_NE185]       = WD_TASK_TIMEOUT_US,
     [WD_TASK_FRIGO]       = WD_TASK_TIMEOUT_US,
-    [WD_TASK_DL_FLUSH]    = 150LL * 1000000LL,   /* periodo 60s  -> 2.5x */
-    [WD_TASK_BH_FLUSH]    = 1200LL * 1000000LL,  /* periodo 600s -> 2x   */
-    [WD_TASK_VIAJE_TICK]  = 90LL * 1000000LL,    /* periodo 30s  -> 3x   */
+    [WD_TASK_DL_FLUSH]    = 150LL * 1000000LL,     /* periodo 60s    -> 2.5x */
+    [WD_TASK_BH_FLUSH]    = 1200LL * 1000000LL,    /* periodo 600s   -> 2x   */
+    [WD_TASK_VIAJE_TICK]  = 90LL * 1000000LL,      /* periodo 30s    -> 3x   */
+    [WD_TASK_NE185_VLOG]  = 1200LL * 1000000LL,    /* periodo ~600s  -> 2x, mismo margen que BH_FLUSH */
+    [WD_TASK_LOG_CLEANUP] = 172800LL * 1000000LL,  /* periodo 86400s (diario) -> 2x */
+    /* Sustituye al trylock de 200ms/3s que habia antes (falso positivo
+     * posible si LVGL esta en medio de un render largo legitimo, p.ej.
+     * lv_snapshot en /captura). Un lv_timer normal (ver ui.c) SI es un
+     * latido de verdad: lo procesa lv_timer_handler() en la MISMA tarea de
+     * LVGL, asi que si esa tarea se atasca por cualquier motivo -- render
+     * colgado, o esperando el mismo lock que antes probaba el trylock --
+     * el timer tampoco vuelve a latir. Mismo umbral que NE185/FRIGO: el
+     * timer late cada 1s, de sobra de margen. Cambiado por decision del
+     * usuario el 09-sep-2026. */
+    [WD_TASK_LVGL]        = WD_TASK_TIMEOUT_US,
 };
 
 static volatile int64_t s_last_beat[WD_TASK_COUNT];   /* 0 = nunca latio */
@@ -57,12 +66,18 @@ void watchdog_heartbeat(wd_task_t task)
 }
 
 /* Devuelve el indice de la primera tarea que lleva muda mas de SU umbral, o
- * -1. Ignora tareas que aun no han latido (s_last_beat == 0). */
+ * -1. Ignora tareas que aun no han latido (s_last_beat == 0).
+ *
+ * WD_TASK_LVGL se salta mientras watchdog_suspend(true) este activo (OTA
+ * borrando flash, etc): es el equivalente al "!s_suspended" que ya tenia
+ * el trylock que sustituye este mecanismo -- SOLO afecta a LVGL, las demas
+ * tareas se siguen vigilando igual durante una OTA. */
 static int wd_stalled_task(int64_t now)
 {
     int stalled = -1;
     portENTER_CRITICAL(&s_beat_mux);
     for (int i = 0; i < WD_TASK_COUNT; i++) {
+        if (i == WD_TASK_LVGL && s_suspended) continue;
         if (s_last_beat[i] != 0 && (now - s_last_beat[i]) > WD_TASK_TIMEOUT_US_TABLE[i]) {
             stalled = i;
             break;
@@ -177,7 +192,6 @@ static const char *reason_to_str(esp_reset_reason_t r)
 
 static void wd_monitor_task(void *arg)
 {
-    int consecutive_fail = 0;
     /* Grace period inicial: ignorar fallos los primeros 30 s para que la
      * inicializacion completa (display, BLE, audio, SD, BT...) no provoque
      * resets espureos antes de que LVGL este realmente listo. */
@@ -188,35 +202,26 @@ static void wd_monitor_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(WD_MONITOR_PERIOD_MS));
         int64_t now_us = esp_timer_get_time();
         bool in_grace = (now_us - start_us) < GRACE_US;
+        if (in_grace) continue;
 
-        if (lvgl_port_lock(WD_LVGL_LOCK_TIMEOUT)) {
-            lvgl_port_unlock();
-            consecutive_fail = 0;
-        } else if (!in_grace && !s_suspended) {
-            consecutive_fail++;
-            ESP_LOGW(TAG, "LVGL lock timeout (%d/%d)",
-                     consecutive_fail, WD_LVGL_FAIL_THRESHOLD);
-            if (consecutive_fail >= WD_LVGL_FAIL_THRESHOLD) {
-                ESP_LOGE(TAG, "UI congelada — reset controlado (sin flush SD)");
+        /* Vigilancia por heartbeat, LVGL incluido (WD_TASK_LVGL, ver ui.c):
+         * antes LVGL tenia su propio mecanismo aparte (trylock de 200ms
+         * cada 3s, con falso positivo posible si estaba en medio de un
+         * render largo legitimo). Ahora es UNA tarea mas de wd_stalled_task,
+         * con su propio umbral en la tabla. */
+        int stalled = wd_stalled_task(now_us);
+        if (stalled >= 0) {
+            if (stalled == WD_TASK_LVGL) {
+                ESP_LOGE(TAG, "UI congelada (sin latido LVGL) — reset controlado (sin flush SD)");
                 /* No hacemos flush a SD aqui: si el cuelgue lo causa el
                  * propio subsistema de SD/FAT (mutex retenido por una task
                  * muerta), datalogger_flush() / battery_history_flush()
                  * deadlock-an y el reset nunca ocurre. Preferimos perder
-                 * el ultimo bloque de muestras antes que no reiniciar. El
-                 * motivo (1) se escribe best-effort dentro de wd_force_reset,
-                 * que garantiza el esp_restart. */
-                wd_force_reset(1);   /* R4: registrar el motivo + reset */
-            }
-        }
-
-        /* Vigilancia de tareas de app por heartbeat. Una tarea que dejo de
-         * latir (colgada en UART/1-Wire) no la detecta el chequeo de LVGL. */
-        if (!in_grace) {
-            int stalled = wd_stalled_task(now_us);
-            if (stalled >= 0) {
-                ESP_LOGE(TAG, "Tarea %d sin latido >10s — reset controlado",
-                         stalled);
-                wd_force_reset(2);   /* R4: registrar el motivo + reset garantizado */
+                 * el ultimo bloque de muestras antes que no reiniciar. */
+                wd_force_reset(1);   /* motivo 1 = LVGL congelada (ver KEY_FORCED arriba) */
+            } else {
+                ESP_LOGE(TAG, "Tarea %d sin latido — reset controlado", stalled);
+                wd_force_reset(2);   /* motivo 2 = tarea muda */
             }
         }
     }

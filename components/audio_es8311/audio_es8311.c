@@ -124,11 +124,34 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     };
     std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
 
+    /* Limpieza en cada fallo de aqui en adelante (09-sep-2026, auditoria de
+     * capa media): los "return ret/ESP_FAIL" de este bloque dejaban
+     * s_tx_chan (y a partir del paso 3, tambien data_if/ctrl_if/codec_if)
+     * sin liberar. audio_init() solo se llama una vez al arrancar, asi que
+     * el impacto practico es bajo, pero si algun dia se reintenta (o el
+     * fallo es intermitente) cada intento fugaba un canal I2S entero.
+     * i2s_channel_disable() SOLO hace falta si i2s_channel_enable() ya se
+     * ejecuto con exito (linea de abajo) -- llamarlo antes es un error de
+     * la propia API de I2S. data_if/ctrl_if/codec_if NO tienen funcion de
+     * borrado publica en esp_codec_dev (revisado: solo existe
+     * esp_codec_dev_delete() para el dispositivo YA ensamblado) -- se dejan
+     * sin liberar a proposito en vez de adivinar una API interna; son
+     * structs de configuracion, no recursos de hardware como el canal I2S. */
     ret = i2s_channel_init_std_mode(s_tx_chan, &std_cfg);
-    if (ret != ESP_OK) { ESP_LOGE(TAG, "i2s_init_std: %s", esp_err_to_name(ret)); return ret; }
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2s_init_std: %s", esp_err_to_name(ret));
+        i2s_del_channel(s_tx_chan);   /* aun no habilitado: sin disable previo */
+        s_tx_chan = NULL;
+        return ret;
+    }
 
     ret = i2s_channel_enable(s_tx_chan);
-    if (ret != ESP_OK) { ESP_LOGE(TAG, "i2s_enable: %s", esp_err_to_name(ret)); return ret; }
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2s_enable: %s", esp_err_to_name(ret));
+        i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        return ret;
+    }
 
     /* 2. Configurar PA por GPIO11 / PA_CTRL (NS4150), apagado en reposo.
      * Antes quedaba a 1 desde el boot: el NS4150 estaba alimentado todo el
@@ -152,7 +175,13 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
         .rx_handle = NULL,
     };
     const audio_codec_data_if_t *data_if = audio_codec_new_i2s_data(&i2s_data_cfg);
-    if (!data_if) { ESP_LOGE(TAG, "new_i2s_data fallo"); return ESP_FAIL; }
+    if (!data_if) {
+        ESP_LOGE(TAG, "new_i2s_data fallo");
+        i2s_channel_disable(s_tx_chan);   /* ya habilitado (paso 1) */
+        i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        return ESP_FAIL;
+    }
 
     /* 4. Crear interfaz audio_codec_ctrl (I2C) */
     audio_codec_i2c_cfg_t i2c_ctrl_cfg = {
@@ -161,7 +190,13 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
         .bus_handle = bus,
     };
     const audio_codec_ctrl_if_t *ctrl_if = audio_codec_new_i2c_ctrl(&i2c_ctrl_cfg);
-    if (!ctrl_if) { ESP_LOGE(TAG, "new_i2c_ctrl fallo"); return ESP_FAIL; }
+    if (!ctrl_if) {
+        ESP_LOGE(TAG, "new_i2c_ctrl fallo");
+        i2s_channel_disable(s_tx_chan);
+        i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        return ESP_FAIL;
+    }
 
     /* 5. Crear codec ES8311 (no GPIO if porque PA va manual) */
     es8311_codec_cfg_t es_cfg = {
@@ -178,7 +213,13 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
         .hw_gain     = { 0 },
     };
     const audio_codec_if_t *codec_if = es8311_codec_new(&es_cfg);
-    if (!codec_if) { ESP_LOGE(TAG, "es8311_codec_new fallo"); return ESP_FAIL; }
+    if (!codec_if) {
+        ESP_LOGE(TAG, "es8311_codec_new fallo");
+        i2s_channel_disable(s_tx_chan);
+        i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        return ESP_FAIL;
+    }
 
     /* 6. Crear handle final */
     esp_codec_dev_cfg_t dev_cfg = {
@@ -187,7 +228,13 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
         .data_if  = data_if,
     };
     s_codec = esp_codec_dev_new(&dev_cfg);
-    if (!s_codec) { ESP_LOGE(TAG, "esp_codec_dev_new fallo"); return ESP_FAIL; }
+    if (!s_codec) {
+        ESP_LOGE(TAG, "esp_codec_dev_new fallo");
+        i2s_channel_disable(s_tx_chan);
+        i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        return ESP_FAIL;
+    }
 
     /* 7. Abrir codec con sample rate y volumen */
     esp_codec_dev_sample_info_t fs = {
@@ -217,13 +264,22 @@ static esp_err_t play_tones_impl(const audio_note_t *notes, size_t count, bool w
     if (!s_codec) return ESP_ERR_INVALID_STATE;
     if (!notes || count == 0) return ESP_ERR_INVALID_ARG;
 
+    /* my_gen se captura ANTES de esperar el mutex, no despues: si una
+     * alarma queda en cola (wait_if_busy, hasta 2s) detras de otra
+     * reproduccion, y audio_cancel_playback() llega DURANTE esa espera, el
+     * generation counter ya se ha movido cuando por fin se consigue el
+     * mutex -- el chequeo de "s_audio_gen != my_gen" que ya usa el bucle
+     * (mas abajo) lo detecta al primer chunk y aborta sin sonar, en vez de
+     * reproducir la alarma igual porque my_gen se capturaba DESPUES,
+     * ya con el cancel aplicado. Detectado por el usuario el 09-sep-2026. */
+    uint32_t my_gen = s_audio_gen;
+
     /* Serializar sobre s_codec: la alarma espera un poco (wait_if_busy),
      * un click aborta de inmediato si ya hay una reproduccion en curso. */
     if (s_play_mtx) {
         TickType_t to = wait_if_busy ? pdMS_TO_TICKS(2000) : 0;
         if (xSemaphoreTake(s_play_mtx, to) != pdTRUE) return ESP_ERR_TIMEOUT;
     }
-    uint32_t my_gen = s_audio_gen;
 
     /* Asegurar PA encendido durante toda la secuencia */
     gpio_set_level(PA_CTRL, 1);
@@ -238,7 +294,15 @@ static esp_err_t play_tones_impl(const audio_note_t *notes, size_t count, bool w
         return ESP_ERR_NO_MEM;
     }
 
-    for (size_t n = 0; n < count; ++n) {
+    /* write_failed: antes se ignoraba el retorno de esp_codec_dev_write en
+     * los tres sitios de este bucle -- un fallo (bus I2S caido, codec
+     * desconectado) no se notaba y el bucle seguia generando y "escribiendo"
+     * el resto de la secuencia entera sin producir sonido, gastando CPU y
+     * tiempo en un jingle que ya no suena. Se corta a la primera, igual que
+     * ya se hace con s_audio_gen != my_gen. Detectado por el usuario el
+     * 09-sep-2026. */
+    bool write_failed = false;
+    for (size_t n = 0; n < count && !write_failed; ++n) {
         if (s_audio_gen != my_gen) break;
         int freq = notes[n].freq_hz;
         int dur  = notes[n].duration_ms;
@@ -251,7 +315,11 @@ static esp_err_t play_tones_impl(const audio_note_t *notes, size_t count, bool w
             memset(buf, 0, buf_bytes);
             for (int c = 0; c < chunks; ++c) {
                 if (s_audio_gen != my_gen) break;
-                esp_codec_dev_write(s_codec, buf, buf_bytes);
+                if (esp_codec_dev_write(s_codec, buf, buf_bytes) != ESP_OK) {
+                    ESP_LOGW(TAG, "esp_codec_dev_write fallo, abortando secuencia");
+                    write_failed = true;
+                    break;
+                }
             }
             continue;
         }
@@ -287,11 +355,19 @@ static esp_err_t play_tones_impl(const audio_note_t *notes, size_t count, bool w
                     buf[i*2 + 1] = (int16_t)(buf[i*2 + 1] * k);
                 }
             }
-            esp_codec_dev_write(s_codec, buf, buf_bytes);
+            if (esp_codec_dev_write(s_codec, buf, buf_bytes) != ESP_OK) {
+                ESP_LOGW(TAG, "esp_codec_dev_write fallo, abortando secuencia");
+                write_failed = true;
+                break;
+            }
         }
     }
 
-    /* Silencio final + apagar PA */
+    /* Silencio final + apagar PA. Este SI se intenta siempre (incluso tras
+     * write_failed): es lo que evita dejar un ruido colgado a mitad de nota,
+     * y esp_codec_dev_write ya no tiene nada peor que hacer que devolver
+     * error otra vez si el bus sigue caido -- no hace falta comprobarlo
+     * aqui, el PA se apaga igual justo debajo. */
     memset(buf, 0, buf_bytes);
     for (int i = 0; i < 4; ++i) esp_codec_dev_write(s_codec, buf, buf_bytes);
     gpio_set_level(PA_CTRL, 0);

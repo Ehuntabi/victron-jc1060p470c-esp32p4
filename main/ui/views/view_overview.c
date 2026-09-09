@@ -97,6 +97,7 @@ typedef struct {
     bool      grey_aligned;      /* one-shot: ancho 230V + base alineada a limpias */
     lv_timer_t *camper_tick_timer; /* refresco periodico widgets camper */
     lv_timer_t *fan_rotate_timer;  /* animacion rotacion ventilador */
+    lv_timer_t *freezer_alarm_timer; /* alarma congelador, independiente de BLE/visibilidad */
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -383,6 +384,46 @@ static void alarm_mute_freezer_cb(lv_event_t *e)
         ui_show_chart_screen(ov->base.ui);
     }
     audio_cancel_playback();
+}
+
+/* Alarma de congelador: extraida de overview_render() a una funcion propia
+ * mas un timer INDEPENDIENTE (overview_freezer_alarm_timer_cb, mas abajo)
+ * que corre siempre, sin condicion de visibilidad ni de BLE.
+ *
+ * La deteccion (ui_get_freezer_alarm(), fuente unica en
+ * main.c::frigo_update_cb) es local al frigo -- no tiene nada que ver con
+ * Victron/BLE. Pero el SONIDO solo se evaluaba dentro de overview_render(),
+ * que unicamente corre si (a) llega un record BLE (cualquier pestaña) o
+ * (b) el timer periodico del Overview lo encuentra VISIBLE
+ * (overview_camper_tick_cb corta si esta oculto, ver mas abajo). Sin BLE y
+ * con otra pantalla abierta, una alarma de congelador real se quedaba
+ * completamente muda -- justo el caso para el que existe la alarma.
+ * Se sigue llamando tambien desde overview_render() (respuesta inmediata
+ * si hay BLE); el guard de intervalo (5 min) hace que llamarla dos veces
+ * seguidas sea inofensivo. Detectado por el usuario el 09-sep-2026. */
+static void check_freezer_alarm(ui_overview_view_t *ov, uint32_t now_ms)
+{
+    if (!ov) return;
+    const uint32_t INTERVAL_MS = 5 * 60 * 1000;
+    bool alarm_freezer = ui_get_freezer_alarm();
+    if (!alarm_freezer && ov->prev_alarm_freezer) ov->alarm_freezer_muted = false;
+    ov->prev_alarm_freezer = alarm_freezer;
+    if (alarm_freezer && !ov->alarm_freezer_muted && s_alarm_queue) {
+        if (ov->alarm_freezer_last_sound_ms == 0 ||
+            (now_ms - ov->alarm_freezer_last_sound_ms) >= INTERVAL_MS) {
+            ov->alarm_freezer_last_sound_ms = now_ms;
+            uint8_t v = 1;
+            xQueueSend(s_alarm_queue, &v, 0);
+        }
+    } else {
+        ov->alarm_freezer_last_sound_ms = 0;
+    }
+}
+
+static void overview_freezer_alarm_timer_cb(lv_timer_t *t)
+{
+    ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
+    check_freezer_alarm(ov, (uint32_t)lv_tick_get());
 }
 
 static void overview_camper_tick_cb(lv_timer_t *t)
@@ -997,6 +1038,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * dato Victron. Cada 500 ms re-renderiza la vista. */
     ov->camper_tick_timer = lv_timer_create(overview_camper_tick_cb, 500, ov);
     ov->fan_rotate_timer  = lv_timer_create(overview_fan_rotate_cb,  150, ov);
+    /* Sin condicion de visibilidad ni de BLE a proposito: ver el comentario
+     * de check_freezer_alarm()/overview_freezer_alarm_timer_cb. */
+    ov->freezer_alarm_timer = lv_timer_create(overview_freezer_alarm_timer_cb, 2000, ov);
 
     /* Cola y tarea para la alarma sonora de 5 s (no bloquea LVGL). */
     if (!s_alarm_queue) {
@@ -1326,29 +1370,19 @@ static void overview_render(ui_overview_view_t *ov)
             ov->alarm_soc_last_sound_ms = 0;
         }
 
-        /* === Alarma Frigo: criterio robusto unico (subiendo >=N min +
-         * T>umbral), calculado en main.c::frigo_update_cb. Aqui solo se
-         * lee el estado para no duplicar el criterio. === */
-        bool alarm_freezer = ui_get_freezer_alarm();
-        if (!alarm_freezer && ov->prev_alarm_freezer) ov->alarm_freezer_muted = false;
-        ov->prev_alarm_freezer = alarm_freezer;
-        if (alarm_freezer && !ov->alarm_freezer_muted && s_alarm_queue) {
-            if (ov->alarm_freezer_last_sound_ms == 0 ||
-                (now_ms_val - ov->alarm_freezer_last_sound_ms) >= INTERVAL_MS) {
-                ov->alarm_freezer_last_sound_ms = now_ms_val;
-                uint8_t v = 1;
-                xQueueSend(s_alarm_queue, &v, 0);
-            }
-        } else {
-            ov->alarm_freezer_last_sound_ms = 0;
-        }
+        /* === Alarma Frigo: extraida a check_freezer_alarm() + timer propio
+         * (ver overview_freezer_alarm_timer_cb) -- se llama tambien aqui
+         * para que un record BLE dispare respuesta inmediata, pero YA NO
+         * depende de esto: el timer nuevo la evalua igual con BLE muerto y
+         * el Overview oculto. === */
+        check_freezer_alarm(ov, now_ms_val);
 
         /* ── Feature A: interrumpir la rotacion del salvapantallas cuando
          * salta cualquier alarma no silenciada, para que no quede oculta. ── */
         bool any_alarm = (alarm_s1 && !ov->alarm_s1_muted) ||
                          (alarm_r1 && !ov->alarm_r1_muted) ||
                          (alarm_soc && !ov->alarm_soc_muted) ||
-                         (alarm_freezer && !ov->alarm_freezer_muted);
+                         (ui_get_freezer_alarm() && !ov->alarm_freezer_muted);
         s_ov_alarm_active = any_alarm;
         if (any_alarm && !s_ov_prev_alarm) {
             ui_alarm_interrupt_screensaver();
@@ -1517,8 +1551,9 @@ static void overview_destroy(ui_device_view_t *view)
 {
     if (!view) return;
     ui_overview_view_t *ov = (ui_overview_view_t *)view;
-    if (ov->camper_tick_timer) { lv_timer_del(ov->camper_tick_timer); ov->camper_tick_timer = NULL; }
-    if (ov->fan_rotate_timer)  { lv_timer_del(ov->fan_rotate_timer);  ov->fan_rotate_timer  = NULL; }
+    if (ov->camper_tick_timer)   { lv_timer_del(ov->camper_tick_timer);   ov->camper_tick_timer   = NULL; }
+    if (ov->fan_rotate_timer)    { lv_timer_del(ov->fan_rotate_timer);    ov->fan_rotate_timer    = NULL; }
+    if (ov->freezer_alarm_timer) { lv_timer_del(ov->freezer_alarm_timer); ov->freezer_alarm_timer = NULL; }
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
 }
