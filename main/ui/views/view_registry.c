@@ -68,6 +68,7 @@ ui_device_view_t *ui_view_registry_ensure(ui_state_t *ui,
             ESP_LOGE(TAG, "Failed to create view for type 0x%02X", (unsigned)type);
             return NULL;
         }
+        view->device_type = type;
         ui->views[index] = view;
     }
 

@@ -30,6 +30,14 @@ struct ui_device_view {
      * redibujado desde cache). 0 = nunca. Lo usa ui.c para atenuar la
      * tarjeta si el dispositivo deja de emitir; ver active_view_freshness_cb. */
     int64_t last_update_us;
+    /* Tipo de record que pinta esta vista (lo fija ui_view_registry_ensure
+     * al crearla). ui_on_panel_data lo compara con el tipo de CADA record
+     * que llega antes de tocar last_update_us: si no coincide, update() ya
+     * hace un return sin pintar nada (cada vista filtra por tipo), pero el
+     * sello se seguia refrescando igual -- asi que si el dispositivo activo
+     * se callaba y otro Victron distinto seguia emitiendo, la tarjeta nunca
+     * llegaba a atenuarse. Detectado por el usuario el 09-sep-2026. */
+    victron_record_type_t device_type;
 };
 
 typedef ui_device_view_t *(*ui_device_view_create_fn)(struct ui_state *ui, lv_obj_t *parent);

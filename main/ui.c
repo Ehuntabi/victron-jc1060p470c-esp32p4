@@ -734,7 +734,14 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     if (ui->active_view && ui->active_view->update) {
         ui->active_view->update(ui->active_view, d);
-        ui->active_view->last_update_us = esp_timer_get_time();
+        /* Solo si el record es del tipo que esta vista realmente pinta:
+         * si no coincide, update() ya ha hecho un return sin tocar nada
+         * (cada vista filtra por tipo), y sellar aqui igualmente ocultaria
+         * que el dispositivo mostrado en pantalla lleva rato callado
+         * mientras otro Victron distinto sigue emitiendo. */
+        if (d->type == ui->active_view->device_type) {
+            ui->active_view->last_update_us = esp_timer_get_time();
+        }
 
         // Prepare detailed status information based on device type
         char detailed_status[256] = {0};
