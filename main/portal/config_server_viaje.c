@@ -170,10 +170,10 @@ static void ids_ring_limpiar(nvs_handle_t h)
     nvs_set_u8(h, NVS_IDS_CURSOR, 0);
 }
 
-static void estado_set(const char *carpeta, uint32_t id)
+/* Version que opera sobre un handle YA ABIERTO, sin comitear ni cerrar --
+ * mismo motivo que totales_sumar_en(). */
+static void estado_set_en(nvs_handle_t h, const char *carpeta, uint32_t id)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     if (carpeta) nvs_set_str(h, NVS_CARPETA, carpeta);
     else         nvs_set_str(h, NVS_CARPETA, "");
 
@@ -186,7 +186,16 @@ static void estado_set(const char *carpeta, uint32_t id)
     ring[cursor] = id;
     nvs_set_blob(h, NVS_IDS_RING, ring, sizeof(ring));
     nvs_set_u8(h, NVS_IDS_CURSOR, (uint8_t)((cursor + 1) % IDS_RING_N));
+}
 
+/* Envoltorio para los llamadores que solo tocan esto (op_inicio/op_fin/
+ * op_descartar): abre, marca, comitea. op_registro() NO usa este -- llama a
+ * estado_set_en() sobre su propio handle, junto con totales y el contador. */
+static void estado_set(const char *carpeta, uint32_t id)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    estado_set_en(h, carpeta, id);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -290,11 +299,14 @@ static void nvs_set_d(nvs_handle_t h, const char *k, double v)
  * no significaria nada. No se convierte (haria falta un cambio, que este
  * aparato no tiene y quedaria desfasado), pero SI se detecta: si aparece mas de
  * una moneda, el resumen lo dice en vez de dar un total que parece bueno. */
-static void totales_sumar(const char *tipo, const cJSON *datos)
+/* Version que opera sobre un handle YA ABIERTO, sin comitear ni cerrar: la
+ * usa op_registro() para que esto, el contador de aplicados y estado_set()
+ * (el anillo de dedupe) se comiteen TODOS JUNTOS en un solo nvs_commit al
+ * final -- ver el comentario de op_registro sobre por que separarlos en
+ * commits independientes era peligroso. Detectado el 09-sep-2026. */
+static void totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON *datos)
 {
     if (!datos) return;
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
 
     const cJSON *jm = cJSON_GetObjectItem(datos, "moneda");
     if (cJSON_IsString(jm) && jm->valuestring[0]) {
@@ -378,9 +390,6 @@ static void totales_sumar(const char *tipo, const cJSON *datos)
                   nvs_get_d(h, NVS_T_ALOJA) + precio * noches + extras);
     }
     #undef IMPORTE_DE
-
-    nvs_commit(h);
-    nvs_close(h);
 }
 
 static void totales_borrar(void)
@@ -934,26 +943,45 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
-    /* Los totales y el contador de apuntes son DEL VIAJE: un repostaje del
-     * historial del vehiculo no cuenta en el resumen de ningun viaje, y
-     * sumarlo al contador haria que el viaje siguiente pareciese completo con
-     * un apunte de menos. */
-    if (en_viaje) {
-        totales_sumar(jt->valuestring, jd);
-        nvs_handle_t h;
-        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+    /* Los totales, el contador de aplicados y la marca de dedupe (el
+     * anillo de estado_set) van AHORA en el MISMO handle y un unico
+     * nvs_commit, no en tres aperturas independientes como antes. Con tres
+     * commits separados, un apagon justo entre el de totales y el del
+     * anillo dejaba el importe ya sumado y el contador ya incrementado
+     * pero el id SIN marcar como aplicado: el satelite nunca recibio el
+     * 200 (se corto antes), reintenta el mismo id, id_ya_aplicado() no lo
+     * encuentra en el anillo (nunca se comiteo) y lo vuelve a aplicar
+     * ENTERO -- importe duplicado en el resumen, en silencio, porque
+     * aplicados sigue >= esperados (los dos contadores suben juntos). Con
+     * un solo commit, el mismo apagon deja TODO sin aplicar (el handle
+     * nunca llega a comitearse) y el reintento entra limpio, sin duplicar
+     * nada -- todo o nada, no "unos si y el id no". Detectado el
+     * 09-sep-2026 (mismo criterio que salida/trip_blob en el satelite). */
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        /* Los totales y el contador son DEL VIAJE: un repostaje del
+         * historial del vehiculo no cuenta en el resumen de ningun viaje,
+         * y sumarlo al contador haria que el viaje siguiente pareciese
+         * completo con un apunte de menos. */
+        if (en_viaje) {
+            totales_sumar_en(h, jt->valuestring, jd);
             uint32_t n = 0;
             nvs_get_u32(h, NVS_T_APLIC, &n);
             nvs_set_u32(h, NVS_T_APLIC, n + 1);
-            nvs_commit(h);
-            nvs_close(h);
         }
+        /* NULL y no 'carpeta' si no hay viaje: esto guarda cual es el
+         * viaje ABIERTO, y el historial del vehiculo no lo es. Pasarlo
+         * abriria un viaje fantasma en /sdcard/vehiculo. El id si se
+         * guarda siempre: es la idempotencia. */
+        estado_set_en(h, en_viaje ? carpeta : NULL, id);
+        nvs_commit(h);
+        nvs_close(h);
+    } else {
+        ESP_LOGE(TAG, "no se pudo abrir NVS para totales/contador/dedupe de "
+                      "'%s': nada de eso queda guardado, el reintento repetira "
+                      "la fila de la SD pero no duplicara importes",
+                 jt->valuestring);
     }
-
-    /* NULL y no 'carpeta' si no hay viaje: estado_set guarda cual es el viaje
-     * ABIERTO, y el historial del vehiculo no lo es. Pasarlo abriria un viaje
-     * fantasma en /sdcard/vehiculo. El id si se guarda: es la idempotencia. */
-    estado_set(en_viaje ? carpeta : NULL, id);
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
     httpd_resp_sendstr(req, "ok");
     return ESP_OK;
@@ -1357,6 +1385,11 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
 typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO } estado_viaje_t;
 
+/* Los dos stat() son I/O de SD de verdad: sin camera_sd_bus_lock aqui, un
+ * listado de /data/viajes mientras la camara esta grabando arriesga la
+ * misma contencion SDMMC<->GDMA que camera.h documenta (INT WDT -> reinicio).
+ * Unico llamador (el listado de handle_data_viajes), asi que se protege aqui
+ * dentro en vez de en cada sitio que lo use. Detectado el 09-sep-2026. */
 static estado_viaje_t estado_de(const char *nombre)
 {
     char abierto[CARPETA_MAX];
@@ -1364,13 +1397,15 @@ static estado_viaje_t estado_de(const char *nombre)
         const char *base = strrchr(abierto, '/');
         if (base && !strcmp(base + 1, nombre)) return V_EN_CURSO;
     }
+    if (!camera_sd_bus_lock(1000)) return V_EN_CURSO;   /* se reintenta al recargar */
     char ruta[RUTA_MAX];
     struct stat st;
     snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, nombre);
-    if (stat(ruta, &st) == 0) return V_INCOMPLETO;
+    if (stat(ruta, &st) == 0) { camera_sd_bus_unlock(); return V_INCOMPLETO; }
     snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/resumen.txt", nombre);
-    if (stat(ruta, &st) == 0) return V_LISTO;
-    return V_EN_CURSO;      /* sin resumen: nunca se cerro */
+    bool listo = (stat(ruta, &st) == 0);
+    camera_sd_bus_unlock();
+    return listo ? V_LISTO : V_EN_CURSO;      /* sin resumen: nunca se cerro */
 }
 
 esp_err_t handle_data_viajes(httpd_req_t *req)
@@ -1387,12 +1422,29 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
         ".e{font-size:13px;color:#aaa}</style>"
         "<h1>Viajes guardados</h1><ul>");
 
+    /* opendir/readdir/closedir son I/O de SD real, igual que en gallery.c
+     * (35cabina) o data_export_tar.c -- sin el cerrojo, listar /data/viajes
+     * mientras la camara esta grabando arriesga la misma contencion SDMMC
+     * que camera.h documenta. No estaba protegido; unico sitio de este
+     * fichero que tocaba directorios sin pasar por camera_sd_bus_lock.
+     * Detectado el 09-sep-2026. */
+    if (!camera_sd_bus_lock(2000)) {
+        httpd_resp_sendstr_chunk(req, "<li>SD ocupada, prueba a recargar.</li>");
+        httpd_resp_sendstr_chunk(req, "</ul>");
+        httpd_resp_sendstr_chunk(req, NULL);
+        return ESP_OK;
+    }
     DIR *d = opendir(VIAJES_DIR);
+    camera_sd_bus_unlock();
     bool alguno = false;
     if (d) {
         struct dirent *ent;
         char linea[512];
-        while ((ent = readdir(d)) != NULL) {
+        for (;;) {
+            if (!camera_sd_bus_lock(1000)) break;
+            ent = readdir(d);
+            camera_sd_bus_unlock();
+            if (!ent) break;
             if (ent->d_name[0] == '.') continue;
             alguno = true;
             estado_viaje_t e = estado_de(ent->d_name);
@@ -1418,7 +1470,13 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
             }
             httpd_resp_sendstr_chunk(req, linea);
         }
+        /* El closedir SI tiene que ocurrir (fuga de DIR si no), asi que se
+         * espera al cerrojo en vez de saltarselo -- pero acotado: un bus SD
+         * atascado de verdad no puede colgar esto para siempre. */
+        bool got_lock = camera_sd_bus_lock_wait(5000);
+        if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
         closedir(d);
+        if (got_lock) camera_sd_bus_unlock();
     }
     if (!alguno) httpd_resp_sendstr_chunk(req, "<li>Todavia no hay ningun viaje.</li>");
     httpd_resp_sendstr_chunk(req,
