@@ -62,7 +62,20 @@ static const char *TAG = "ne185";
                                 * NE185 (necesita 2 para procesar toggle). */
 #define RELEASE_FRAMES    5    /* subido de 2->5: mas idle entre press del
                                 * mismo boton para evitar doble toggle */
-#define READ_TIMEOUT_MS   200  /* timeout lectura respuesta NE185 (NE185 puede tardar 50-150ms) */
+/* Timeout lectura respuesta NE185 (puede tardar 50-150ms). Bajado de 200 a
+ * 150 el 09-sep-2026: uart_read_bytes pide RX_READ_LEN=40 bytes, pero el
+ * NE185 nunca manda mas de 20 (ver el escaneo de sincronizacion mas abajo),
+ * asi que ESTE READ SIEMPRE agota el timeout entero -- con 200ms, cada
+ * ciclo costaba el doble de POLL_PERIOD_MS(100), y vTaskDelayUntil() no
+ * podia compensarlo (la cuenta ya iba tarde). No se toca RX_READ_LEN: es a
+ * proposito mas grande que una trama para que el escaneo encuentre la
+ * cabecera pese al desfase del stream continuo (ver comentario 2026-06-23,
+ * incidente medido alli: 703 rx20 fallidos vs 3 parseados sin ese margen).
+ * 150ms deja margen sobre el peor caso documentado (150ms) sin tocar esa
+ * logica; no llega al objetivo exacto de 100ms, pero reduce el
+ * desperdicio real sin riesgo de reintroducir tramas descartadas.
+ * Pendiente de verificar en vivo si se quiere apurar mas. */
+#define READ_TIMEOUT_MS   150
 #define FRESH_MS          30000
 #define BUS_DEAD_THRESH   20   /* N timeouts consecutivos -> bus caido */
 #define MUTEX_TIMEOUT_MS  100  /* timeout take mutex (en lugar de portMAX_DELAY)
@@ -226,9 +239,15 @@ static void parse_frame(const uint8_t *b)
     tmp.pump      = (f & 0x04) != 0;
     tmp.shore     = (b[16] & 0x01) != 0;
 
-    /* Baterias: voltaje = (byte - 30) / 10  (formula NE334, SIN verificar aqui) */
-    tmp.battery1_v = ((float)b[12] - 30.0f) / 10.0f;
-    tmp.battery2_v = ((float)b[13] - 30.0f) / 10.0f;
+    /* Baterias: voltaje = (byte - 30) / 10  (formula NE334, SIN verificar aqui).
+     * b[12]/b[13] = 0 es el sentinel de "sin dato" (sonda no conectada); sin
+     * este check la formula lo convertia en -3.0 V, un numero perfectamente
+     * creible que se enseñaba como tension real en el JSON del camper y en
+     * los logs -- justo lo que ne185.h ya documenta que NO deberia pasar
+     * ("battery1_v: bateria servicio (V), 0 si no disponible"). Detectado
+     * por el usuario el 09-sep-2026. */
+    tmp.battery1_v = (b[12] == 0) ? 0.0f : ((float)b[12] - 30.0f) / 10.0f;
+    tmp.battery2_v = (b[13] == 0) ? 0.0f : ((float)b[13] - 30.0f) / 10.0f;
     /* Crudo sin convertir, para el log de comparacion contra el SmartShunt. */
     tmp.battery1_raw = b[12];
     tmp.battery2_raw = b[13];

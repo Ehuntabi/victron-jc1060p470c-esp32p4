@@ -63,6 +63,13 @@ void battery_history_get_totals(bh_source_t src,
 
 const char *battery_history_source_name(bh_source_t src);
 
+/* Latido de watchdog para bh_flush_task (mismo patron que
+ * frigo_set_heartbeat_cb): este componente no puede incluir main/watchdog.h
+ * directamente, asi que quien registra el callback (main.c) es quien conoce
+ * wd_task_t. NULL = sin vigilar (comportamiento de siempre). */
+typedef void (*battery_history_heartbeat_cb_t)(void);
+void battery_history_set_heartbeat_cb(battery_history_heartbeat_cb_t cb);
+
 #ifdef __cplusplus
 }
 #endif

@@ -32,6 +32,7 @@
 #include "gps/gps.h"
 #include "frigo.h"
 #include "ne185/ne185.h"
+#include "watchdog.h"
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
@@ -1221,6 +1222,7 @@ static void viaje_tick_task(void *arg)
     (void)arg;
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        watchdog_heartbeat(WD_TASK_VIAJE_TICK);
         tick_viaje_cb(NULL);
     }
 }

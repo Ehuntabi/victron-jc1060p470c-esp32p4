@@ -25,9 +25,24 @@ static volatile bool s_suspended = false;
 #define WD_LVGL_LOCK_TIMEOUT   200    /* ms */
 #define WD_LVGL_FAIL_THRESHOLD 3      /* fallos consecutivos para reset */
 
-/* Vigilancia de tareas por heartbeat. Umbral generoso (margen amplio sobre
- * la cadencia mas lenta) para no provocar resets espureos. */
-#define WD_TASK_TIMEOUT_US     (10LL * 1000000LL)  /* 10 s sin latido -> reset */
+/* Vigilancia de tareas por heartbeat. Umbral POR TAREA, no uno global: NE185
+ * y FRIGO laten en su bucle de polling (segundos), pero DL_FLUSH/BH_FLUSH/
+ * VIAJE_TICK solo laten cuando su timer periodico las despierta (30 s, 60 s
+ * y 600 s respectivamente -- ver FLUSH_INTERVAL_MS/BH_FLUSH_INTERVAL_MS/
+ * RUTA_SEG en sus ficheros). Un umbral unico de 10s habria disparado un
+ * reset falso en CADA ciclo normal de esas tres. Cada umbral es ~2-2.5x su
+ * periodo: margen para que una escritura a SD lenta (tarjeta grande, bus
+ * ocupado por la camara) no dispare un reset, sin tardar demasiado en pillar
+ * un atasco real. Detectado por el usuario el 09-sep-2026. */
+#define WD_TASK_TIMEOUT_US     (10LL * 1000000LL)  /* NE185/FRIGO: 10 s sin latido -> reset */
+
+static const int64_t WD_TASK_TIMEOUT_US_TABLE[WD_TASK_COUNT] = {
+    [WD_TASK_NE185]      = WD_TASK_TIMEOUT_US,
+    [WD_TASK_FRIGO]       = WD_TASK_TIMEOUT_US,
+    [WD_TASK_DL_FLUSH]    = 150LL * 1000000LL,   /* periodo 60s  -> 2.5x */
+    [WD_TASK_BH_FLUSH]    = 1200LL * 1000000LL,  /* periodo 600s -> 2x   */
+    [WD_TASK_VIAJE_TICK]  = 90LL * 1000000LL,    /* periodo 30s  -> 3x   */
+};
 
 static volatile int64_t s_last_beat[WD_TASK_COUNT];   /* 0 = nunca latio */
 static portMUX_TYPE s_beat_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -41,14 +56,14 @@ void watchdog_heartbeat(wd_task_t task)
     portEXIT_CRITICAL(&s_beat_mux);
 }
 
-/* Devuelve el indice de la primera tarea que lleva muda mas del umbral, o -1.
- * Ignora tareas que aun no han latido (s_last_beat == 0). */
+/* Devuelve el indice de la primera tarea que lleva muda mas de SU umbral, o
+ * -1. Ignora tareas que aun no han latido (s_last_beat == 0). */
 static int wd_stalled_task(int64_t now)
 {
     int stalled = -1;
     portENTER_CRITICAL(&s_beat_mux);
     for (int i = 0; i < WD_TASK_COUNT; i++) {
-        if (s_last_beat[i] != 0 && (now - s_last_beat[i]) > WD_TASK_TIMEOUT_US) {
+        if (s_last_beat[i] != 0 && (now - s_last_beat[i]) > WD_TASK_TIMEOUT_US_TABLE[i]) {
             stalled = i;
             break;
         }

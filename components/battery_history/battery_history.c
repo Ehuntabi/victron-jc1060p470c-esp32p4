@@ -103,6 +103,9 @@ static int s_last_local_day = -1;
  * el 07-sep-2026 -- ver el comentario de bh_flush_task mas abajo. */
 static TaskHandle_t s_bh_flush_task_handle = NULL;
 static time_t       s_pending_rollover_yest = 0;   /* 0 = nada pendiente, protegido con BH_LOCK */
+static battery_history_heartbeat_cb_t s_hb_cb = NULL;   /* ver battery_history_set_heartbeat_cb */
+
+void battery_history_set_heartbeat_cb(battery_history_heartbeat_cb_t cb) { s_hb_cb = cb; }
 
 /* Snapshot por flush para evitar mantener BH_LOCK durante la I/O a SD.
  *
@@ -489,6 +492,7 @@ static void bh_flush_task(void *arg)
 {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (s_hb_cb) s_hb_cb();   /* latido watchdog: ver battery_history_set_heartbeat_cb */
 
         BH_LOCK();
         time_t yest = s_pending_rollover_yest;

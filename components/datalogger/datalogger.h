@@ -33,3 +33,10 @@ esp_err_t datalogger_close_sd(void);
 
 /* true si la tarjeta sigue montada. */
 bool datalogger_sd_montada(void);
+
+/* Latido de watchdog para flush_task (mismo patron que
+ * frigo_set_heartbeat_cb): este componente no puede incluir main/watchdog.h
+ * directamente, asi que quien registra el callback (main.c) es quien conoce
+ * wd_task_t. NULL = sin vigilar (comportamiento de siempre). */
+typedef void (*datalogger_heartbeat_cb_t)(void);
+void datalogger_set_heartbeat_cb(datalogger_heartbeat_cb_t cb);

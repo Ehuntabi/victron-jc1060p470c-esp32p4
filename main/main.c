@@ -263,6 +263,14 @@ void brightness_apply_now(void)
  * la tarea real aunque el modo simulacion este activo. */
 static void frigo_heartbeat(void) { watchdog_heartbeat(WD_TASK_FRIGO); }
 
+/* Mismo patron para los otros dos componentes con tarea propia de volcado a
+ * SD (ver datalogger_set_heartbeat_cb / battery_history_set_heartbeat_cb):
+ * antes ninguna de las tres estaba vigilada, asi que un atasco de SD/FAT en
+ * cualquiera de ellas no lo detectaba nadie. Detectado por el usuario el
+ * 09-sep-2026. */
+static void dl_flush_heartbeat(void) { watchdog_heartbeat(WD_TASK_DL_FLUSH); }
+static void bh_flush_heartbeat(void) { watchdog_heartbeat(WD_TASK_BH_FLUSH); }
+
 static void frigo_update_cb(const frigo_state_t *state)
 {
     if (!s_ui) return;
@@ -496,8 +504,13 @@ static void init_sd_rtc_frigo(void)
 {
     /* --- SD + RTC + Frigo --- */
     esp_err_t sd_err = datalogger_init();
-    if (sd_err != ESP_OK)
+    if (sd_err != ESP_OK) {
         ESP_LOGW(TAG, "datalogger_init failed: %s", esp_err_to_name(sd_err));
+    } else {
+        /* Mismo criterio que frigo mas abajo: solo vigilar lo que de verdad
+         * arranco. */
+        datalogger_set_heartbeat_cb(dl_flush_heartbeat);
+    }
 
     /* Si alguna vez se encendio el simulador, dejo apartado el registro real
      * del dia como "<csv>.real" y el inventado ocupando su nombre. Aqui se
@@ -591,7 +604,11 @@ static void init_network(void)
 /* Historicos (bateria/energia/viaje/solar) + alertas + NE185. */
 static void init_telemetry(void)
 {
-    battery_history_init();
+    if (battery_history_init() == ESP_OK) {
+        /* Mismo criterio que frigo/datalogger: solo vigilar lo que de
+         * verdad arranco. */
+        battery_history_set_heartbeat_cb(bh_flush_heartbeat);
+    }
     log_cleanup_init(60); /* Borrar logs > 60 dias */
     alerts_init();
     energy_today_init();

@@ -97,6 +97,20 @@ static void parse_idf_line(const char *line, log_capture_entry_t *e)
  * el ring, y forwardea al vprintf previo (UART). */
 static int log_capture_vprintf(const char *fmt, va_list args)
 {
+    /* esp_log_set_vprintf() sustituye el vprintf GLOBAL de ESP_LOGx: cualquier
+     * ISR que llegue a loguear (hoy ninguna lo hace, pero es un hook global,
+     * no controlamos que futuro driver lo haga) pasaria por aqui. xSemaphoreTake
+     * sobre un mutex normal desde ISR es un uso indebido de FreeRTOS (para eso
+     * existen las variantes FromISR) -- y el vsnprintf de ~350B en pila tampoco
+     * es gratis en una pila de ISR. Cortar aqui, ANTES de tocar nada de eso: en
+     * ISR nos limitamos a reenviar al vprintf anterior (que ya se las
+     * arreglaba sin este hook) y no capturamos esa linea en el anillo -- perder
+     * una linea de diagnostico es mejor que un crash. Detectado por el usuario
+     * el 09-sep-2026. */
+    if (xPortInIsrContext()) {
+        return s_prev_vprintf ? s_prev_vprintf(fmt, args) : 0;
+    }
+
     /* Copiar args ANTES de usarlas, para poder reenviar al UART */
     va_list args_copy;
     va_copy(args_copy, args);

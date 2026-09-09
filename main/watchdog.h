@@ -34,11 +34,21 @@ const char *watchdog_last_reset_reason(void);
 
 /* Tareas de app vigiladas por heartbeat. Cada una debe llamar a
  * watchdog_heartbeat() en cada iteracion de su bucle principal. Si una deja
- * de latir mas de WD_TASK_TIMEOUT, el monitor fuerza un reset controlado.
- * Una tarea que nunca late (p.ej. no arranco) simplemente no se vigila. */
+ * de latir mas de su umbral (ver WD_TASK_TIMEOUT_US_TABLE en watchdog.c --
+ * NO es el mismo para todas: las de volcado a SD laten cada 30-600s, mucho
+ * mas lento que NE185/FRIGO), el monitor fuerza un reset controlado. Una
+ * tarea que nunca late (p.ej. no arranco) simplemente no se vigila.
+ *
+ * DL_FLUSH/BH_FLUSH/VIAJE_TICK anadidas el 09-sep-2026: antes un atasco de
+ * SD/FAT en cualquiera de estas tres (mutex retenido, tarjeta muerta) no lo
+ * detectaba nadie -- la placa seguia "viva" (LVGL respondia) con el volcado
+ * a SD parado para siempre. */
 typedef enum {
     WD_TASK_NE185 = 0,
     WD_TASK_FRIGO,
+    WD_TASK_DL_FLUSH,     /* datalogger.c: flush_task */
+    WD_TASK_BH_FLUSH,     /* battery_history.c: bh_flush_task */
+    WD_TASK_VIAJE_TICK,   /* config_server_viaje.c: viaje_tick_task */
     WD_TASK_COUNT
 } wd_task_t;
 

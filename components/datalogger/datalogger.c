@@ -380,11 +380,15 @@ static void flush_pending_to_sd_impl(void)
  * sincrona a proposito: quien la llama necesita saber que ya termino antes
  * de seguir. Detectado auditando el 07-sep-2026. */
 static TaskHandle_t s_flush_task_handle = NULL;
+static datalogger_heartbeat_cb_t s_hb_cb = NULL;   /* ver datalogger_set_heartbeat_cb */
+
+void datalogger_set_heartbeat_cb(datalogger_heartbeat_cb_t cb) { s_hb_cb = cb; }
 
 static void flush_task(void *arg)
 {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (s_hb_cb) s_hb_cb();   /* latido watchdog: ver datalogger_set_heartbeat_cb */
         flush_pending_to_sd_impl();
     }
 }

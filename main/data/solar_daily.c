@@ -206,6 +206,28 @@ void solar_daily_init(void)
     UNLOCK();
 }
 
+/* Cambio de dia: cierra el que acaba y arranca el nuevo. Llamar SIEMPRE con
+ * s_mtx tomado.
+ *
+ * Antes esto vivia solo dentro de solar_daily_on_pv(): si el MPPT estaba
+ * muerto/apagado (de noche es lo normal) pero el BMV seguia emitiendo,
+ * solar_daily_on_battery() acumulaba el consumo de madrugada en s_hoy sin
+ * que nadie evaluara hoy_id() -- el consumo entraba en el dia de AYER de
+ * forma indefinida, y el blob "hoy" (el que enseñan el JSON/UI) se quedaba
+ * congelado en la fecha vieja hasta que el panel volviera a producir.
+ * Factorizado para que ambos caminos (pv y bateria) lo evaluen por igual.
+ * Detectado por el usuario el 09-sep-2026. */
+static void check_day_rollover_locked(void)
+{
+    const int32_t id = hoy_id();
+    if (id == s_hoy.day_id) return;
+    cerrar_dia(&s_hoy);
+    memset(&s_hoy, 0, sizeof(s_hoy));
+    s_hoy.day_id = id;
+    s_last_us = 0;
+    s_last_bat_us = 0;
+}
+
 void solar_daily_on_pv(int32_t watts)
 {
     if (watts < 0 || !s_mtx) return;
@@ -217,15 +239,7 @@ void solar_daily_on_pv(int32_t watts)
      * segundos. */
     if (s_pend_valid && anadir_csv(&s_pend)) s_pend_valid = false;
 
-    /* Cambio de dia: cierra el que acaba y arranca el nuevo. */
-    const int32_t id = hoy_id();
-    if (id != s_hoy.day_id) {
-        cerrar_dia(&s_hoy);
-        memset(&s_hoy, 0, sizeof(s_hoy));
-        s_hoy.day_id = id;
-        s_last_us = 0;
-        s_last_bat_us = 0;
-    }
+    check_day_rollover_locked();
 
     if (s_last_us > 0) {
         const double dt_s = (double)(ahora - s_last_us) / 1e6;
@@ -252,6 +266,7 @@ void solar_daily_on_battery(int32_t milli_amps, int32_t centi_volts)
     const int64_t ahora = esp_timer_get_time();
 
     LOCK();
+    check_day_rollover_locked();
     if (s_last_bat_us > 0) {
         const double dt_s = (double)(ahora - s_last_bat_us) / 1e6;
         if (dt_s > 0.0 && dt_s <= HUECO_MAX_S) {
