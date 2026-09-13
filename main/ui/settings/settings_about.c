@@ -36,6 +36,11 @@
  * un fallback por si la descripcion de la app no estuviera disponible. */
 static const char *APP_VERSION_FALLBACK = "v?";
 
+/* Linea de diagnostico del watchdog ("Ultimo reset: ... | Resets WDT/panic: N").
+ * Se guarda para poder repintarla cuando el usuario pone el contador a cero, sin
+ * tener que salir de la pantalla y volver a entrar. */
+static lv_obj_t *s_lbl_wd = NULL;
+
 /* Vuelca a la tarjeta/NVS todo lo que vive en RAM, antes de un esp_restart.
  *
  * Lo comparten los DOS caminos de reinicio (el switch de Wi-Fi y el boton
@@ -124,6 +129,44 @@ static void reboot_btn_cb(lv_event_t *e)
         "Reiniciar", do_reboot_action);
 }
 
+/* Repinta la linea de diagnostico: motivo y fecha del ultimo reinicio QUE NO
+ * fue para reprogramar, y el contador de resets por vigilante/panic.
+ *
+ * El separador es un guion y NO el punto medio "·": la fuente montserrat_20_es
+ * no tiene ese glifo (U+00B7) y salia un rectangulo justo antes de la fecha
+ * (visto por el usuario el 13-sep-2026). */
+static void about_refresh_wd_label(void)
+{
+    if (!s_lbl_wd) return;
+    char cuando[40] = "sin fecha";
+    const uint32_t boot = watchdog_arranque_epoch();
+    if (boot > 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
+        time_t t = (time_t)boot;
+        struct tm tmv;
+        localtime_r(&t, &tmv);
+        strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
+    }
+    lv_label_set_text_fmt(s_lbl_wd,
+                          "Ultimo reset: %s - %s   |   Resets WDT/panic: %lu",
+                          watchdog_last_reset_reason(), cuando,
+                          (unsigned long)watchdog_get_reset_count());
+}
+
+static void do_reset_count_zero(void)
+{
+    watchdog_clear_reset_count();
+    about_refresh_wd_label();     /* que se vea el 0 sin salir de la pantalla */
+}
+
+static void reset_count_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_show_confirm_dialog(LV_SYMBOL_REFRESH "  Contador a cero",
+        "Se pondra a cero el contador de reinicios por vigilante y por fallo. "
+        "La fecha y el motivo del ultimo reinicio no cambian.",
+        "Poner a cero", do_reset_count_zero);
+}
+
 void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     style_settings_scrollbar(page);
@@ -171,22 +214,23 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
 
     /* Diagnostico de salud: causa del ultimo reset + total de resets WDT/panic */
-    lv_obj_t *lbl_wd = lv_label_create(card2);
-    lv_obj_set_style_text_font(lbl_wd, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_wd, lv_color_hex(0xFFD54F), 0);
-    /* Fecha del ultimo reinicio que NO fue para reprogramar (0 = sin dato) */
-    char cuando[40] = "sin fecha";
-    const uint32_t boot = watchdog_arranque_epoch();
-    if (boot > 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
-        time_t t = (time_t)boot;
-        struct tm tmv;
-        localtime_r(&t, &tmv);
-        strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
-    }
-    lv_label_set_text_fmt(lbl_wd,
-                          "Ultimo reset: %s · %s   |   Resets WDT/panic: %lu",
-                          watchdog_last_reset_reason(), cuando,
-                          (unsigned long)watchdog_get_reset_count());
+    s_lbl_wd = lv_label_create(card2);
+    lv_obj_set_style_text_font(s_lbl_wd, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_wd, lv_color_hex(0xFFD54F), 0);
+    about_refresh_wd_label();
+
+    /* Poner a cero el contador de reinicios por vigilante/fallo. La fecha y el
+     * motivo del ultimo reinicio NO se tocan: eso sigue siendo cierto y es lo
+     * que se mira para diagnosticar. */
+    lv_obj_t *btn_zero = lv_btn_create(card2);
+    lv_obj_set_size(btn_zero, 230, 44);
+    lv_obj_set_style_bg_color(btn_zero, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_radius(btn_zero, 8, 0);
+    lv_obj_t *lbl_zero = lv_label_create(btn_zero);
+    lv_label_set_text(lbl_zero, LV_SYMBOL_REFRESH "  Poner a cero");
+    lv_obj_set_style_text_font(lbl_zero, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl_zero);
+    lv_obj_add_event_cb(btn_zero, reset_count_btn_cb, LV_EVENT_CLICKED, NULL);
 
     /* === Card 3: Credits === */
     lv_obj_t *card3 = lv_obj_create(cont);

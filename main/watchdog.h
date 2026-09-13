@@ -22,6 +22,12 @@ esp_err_t watchdog_init(void);
  * desde el primer arranque tras último wipe. */
 uint32_t watchdog_get_reset_count(void);
 
+/* Pone a cero ese contador (NVS + RAM). La fecha y el motivo del ultimo
+ * arranque NO se tocan: siguen siendo el ultimo reinicio de verdad, que es lo
+ * que sirve para diagnosticar. Lo llama el boton "Poner a cero" de
+ * Ajustes -> Acerca de, para poder empezar a contar de nuevo. */
+void watchdog_clear_reset_count(void);
+
 /* Suspende (true) o reanuda (false) la detección de UI congelada. Para
  * operaciones que se sabe que bloquean LVGL mucho rato sin ser un cuelgue
  * real (p.ej. el borrado de flash al empezar una actualización OTA). */

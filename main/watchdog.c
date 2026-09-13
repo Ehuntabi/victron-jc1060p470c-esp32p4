@@ -367,6 +367,27 @@ uint32_t watchdog_get_reset_count(void)
     return s_reset_count;
 }
 
+/* Boton "Poner a cero" de Ajustes -> Acerca de. Solo el contador: la fecha y el
+ * motivo del ultimo arranque se dejan como estan (son el ultimo reinicio de
+ * verdad, y eso no deja de ser cierto porque se ponga el contador a cero). */
+void watchdog_clear_reset_count(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "no puedo abrir NVS para poner el contador a cero");
+        return;
+    }
+    nvs_set_u32(h, KEY_COUNT, 0);
+    esp_err_t err = nvs_commit(h);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "el contador a cero no persistio: %s", esp_err_to_name(err));
+        return;
+    }
+    s_reset_count = 0;
+    ESP_LOGI(TAG, "contador de resets puesto a cero por el usuario");
+}
+
 const char *watchdog_last_reset_reason(void)
 {
     return s_reason_str;
