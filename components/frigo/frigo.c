@@ -366,7 +366,9 @@ static void frigo_solar_tick(void)
      * delta se acota a 10 s: si la tarea se atasca, no se inventan minutos. */
     if (s_sol_last_ms != 0 && now > s_sol_last_ms) {
         uint32_t delta = now - s_sol_last_ms;
-        if (delta > 10000u) delta = 10000u;
+        /* Tope de 30 s: la vuelta del frigo puede tardar ~6 s (enumeracion del
+         * bus con el bus muerto) y un atasco mayor no debe inventar minutos. */
+        if (delta > 30000u) delta = 30000u;
         if (prev) s_sol_ms_hoy += delta;
     }
     s_sol_last_ms = now;
@@ -887,10 +889,14 @@ uint8_t frigo_solar_get_soc_off(void)
 bool frigo_solar_get_active(void)
 {
     if (!s_mutex) return false;
+    static bool s_last_active = false;
     bool v = false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_sm.active;
+        s_last_active = v;                  /* ultimo valor bueno */
         xSemaphoreGive(s_mutex);
+    } else {
+        v = s_last_active;                  /* sin mutex: no inventar un "off" */
     }
     /* En modo simulacion manda lo que diga el sim: asi las capturas de pantalla
      * salen con el aviso de excedente sin tener que esperar a que haya sol. */
@@ -903,10 +909,14 @@ uint32_t frigo_solar_get_seg_hoy(void)
 {
     if (s_sim_mode && s_sim_solar) return (uint32_t)s_sim_solar_min * 60u;
     if (!s_mutex) return 0;
+    static uint32_t s_last_seg = 0;
     uint32_t v = 0;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_ms_hoy / 1000u;
+        s_last_seg = v;                     /* ultimo valor bueno */
         xSemaphoreGive(s_mutex);
+    } else {
+        v = s_last_seg;                     /* sin mutex: no devolver un 0 falso */
     }
     return v;
 }

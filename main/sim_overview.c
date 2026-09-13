@@ -277,6 +277,10 @@ static void sim_escribir_frigo(const char *fecha)
         if (fan > 100) fan = 100;
         int exc = (sol > 0.55f) ? 1 : 0;
         if (exc) min_solar += SIM_PASO_MIN;
+        /* OJO: la fila se escribe a mano y comparte cabecera con el log de
+         * verdad: al anadir una columna hay que tocar los DOS sitios. Por aqui
+         * se colo el bug del 13-sep-2026 (la columna llegaba al CSV del portal
+         * pero no al de la tarjeta). */
         fprintf(f, "%s %02d:%02d:00,%.1f,%.1f,%.1f,%d,%d,%d\n",
                 fecha, m / 60, m % 60, t_aletas, t_cong, t_ext,
                 fan, exc, min_solar);

@@ -25,6 +25,7 @@ static const char *KEY_BOOT = "boot";
  * (visto el 13-sep-2026). */
 static const char *KEY_REASON = "reason";
 
+
 /* Codigos de KEY_FORCED */
 #define WD_FORCED_LVGL    1   /* el monitor SW reinicio por UI/LVGL congelada */
 #define WD_FORCED_TAREA   2   /* ... o por una tarea sin latido */
