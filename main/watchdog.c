@@ -24,6 +24,12 @@ static const char *KEY_BOOT = "boot";
  * de la fecha del ultimo reinicio de verdad, que son dos cosas distintas
  * (visto el 13-sep-2026). */
 static const char *KEY_REASON = "reason";
+/* Par (fecha, motivo) del ultimo arranque apuntado, en UN solo blob: con dos
+ * claves separadas, un fallo de espacio entre una y otra dejaba fecha nueva con
+ * motivo viejo (o sin motivo). Se sigue escribiendo tambien "boot" para que un
+ * firmware anterior (rollback por OTA) pueda leer la fecha. Auditoria 13-sep. */
+static const char *KEY_ARRANQUE = "arranque";
+typedef struct { uint32_t epoch; uint8_t motivo; } wd_arranque_nvs_t;
 
 
 /* Codigos de KEY_FORCED */
@@ -292,7 +298,11 @@ static uint32_t wd_load_arranque_nvs(void)
         nvs_get_u32(h, KEY_BOOT, &v);
         nvs_close(h);
     }
-    return v;
+    wd_arranque_nvs_t a = {0};
+    size_t len = sizeof(a);
+    if (nvs_get_blob(h, KEY_ARRANQUE, &a, &len) == ESP_OK) v = a.epoch;   /* formato nuevo */
+    else nvs_get_u32(h, KEY_BOOT, &v);                                    /* formato viejo */
+        return v;
 }
 
 /* Motivo del ultimo arranque apuntado. Igual que la fecha: se lee UNA vez al
@@ -305,7 +315,11 @@ static uint8_t wd_load_arranque_reason_nvs(void)
         nvs_get_u8(h, KEY_REASON, &v);
         nvs_close(h);
     }
-    return v;
+    wd_arranque_nvs_t a = {0};
+    size_t len = sizeof(a);
+    if (nvs_get_blob(h, KEY_ARRANQUE, &a, &len) == ESP_OK) v = a.motivo;  /* formato nuevo */
+    else nvs_get_u8(h, KEY_REASON, &v);                                   /* formato viejo */
+        return v;
 }
 
 esp_err_t watchdog_init(void)
@@ -407,8 +421,9 @@ void watchdog_anota_arranque(void)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     /* nvs_commit() es un no-op en IDF 5.4.4: la escritura a flash la hace cada
      * nvs_set_*, asi que hay que mirar SU codigo de error, no el del commit. */
-    esp_err_t e1 = nvs_set_u32(h, KEY_BOOT, hora_ok ? (uint32_t)ahora : 0);
-    esp_err_t e2 = nvs_set_u8(h, KEY_REASON, motivo);
+    wd_arranque_nvs_t par = { .epoch = hora_ok ? (uint32_t)ahora : 0, .motivo = motivo };
+    esp_err_t e1 = nvs_set_blob(h, KEY_ARRANQUE, &par, sizeof(par));   /* los dos de golpe */
+    esp_err_t e2 = nvs_set_u32(h, KEY_BOOT, par.epoch);                /* compat rollback */
     nvs_commit(h);
     nvs_close(h);
     if (e1 != ESP_OK || e2 != ESP_OK) {

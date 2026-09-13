@@ -695,6 +695,20 @@ static void frigo_chart_load_day(void)
                 e->excedente_solar ? 3 : LV_CHART_POINT_NONE);
         }
         frigo_apply_temp_range(t_min, t_max);
+        /* Sol de hoy: tambien aqui. Sin RTC no hay CSV que leer, pero el anillo de
+         * RAM si trae el acumulado; antes esta rama lo dejaba en blanco (auditoria
+         * del 13-sep-2026). */
+        if (s_frigo_lbl_sol) {
+            int min_sol = -1;
+            for (int i = wa; i < wb; i++) {
+                const datalogger_entry_t *e = datalogger_get_entry(i);
+                if (e && (int)e->min_solar_hoy > min_sol) min_sol = (int)e->min_solar_hoy;
+            }
+            if (min_sol < 0)       lv_label_set_text(s_frigo_lbl_sol, "");
+            else if (min_sol < 60) lv_label_set_text_fmt(s_frigo_lbl_sol, "Sol: %d min", min_sol);
+            else                   lv_label_set_text_fmt(s_frigo_lbl_sol, "Sol: %d h %02d min",
+                                                          min_sol / 60, min_sol % 60);
+        }
         /* Pasamos el rango raw del datalogger (base + n), no `valid`: las
          * funciones de xlabels indexan en datalogger_get_entry(idx) que
          * usa el espacio global de indices; pasar `valid` desincroniza
