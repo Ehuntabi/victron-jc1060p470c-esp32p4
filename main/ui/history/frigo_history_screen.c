@@ -157,12 +157,12 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 12);
 
     /* Tiempo del dia con el frigo tirando del excedente solar (columna
-     * min_solar_hoy del CSV). Va debajo del titulo, en el mismo verde que el
-     * aviso "12V sol" de la barra de abajo, para que se vea de un vistazo
-     * cuanto sol ha aprovechado el dia que estas mirando. */
+     * min_solar_hoy del CSV). Va debajo del titulo y en el MISMO violeta que la
+     * serie "Sol" de la grafica y su leyenda: el verde se deja para el aviso en
+     * vivo "12V sol" de la barra (que es otra cosa: si esta tirando AHORA). */
     s_frigo_lbl_sol = lv_label_create(scr);
     lv_obj_set_style_text_font(s_frigo_lbl_sol, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_frigo_lbl_sol, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(s_frigo_lbl_sol, lv_color_hex(0xBB66FF), 0);
     lv_label_set_text(s_frigo_lbl_sol, "");
     lv_obj_align(s_frigo_lbl_sol, LV_ALIGN_TOP_LEFT, 16, 42);
 
@@ -212,7 +212,9 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_color_hex(0xFF4444),
         lv_color_hex(0x44FF44),
         lv_color_hex(0xFFAA00),
-        lv_color_hex(0xE0900A)      /* el mismo ambar que la tarjeta del modo solar */
+        lv_color_hex(0xBB66FF)      /* violeta: el ambar (0xE0900A) se confundia con
+                                     * el naranja del ventilador (0xFFAA00), visto
+                                     * el 13-sep-2026 */
     };
     const int n_leg = 5, paso_leg = 165, ancho_leg = 150;
     for (int i = 0; i < n_leg; i++) {
@@ -305,7 +307,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     s_ser_congelador = lv_chart_add_series(s_chart, colores[1], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_exterior   = lv_chart_add_series(s_chart, colores[2], LV_CHART_AXIS_PRIMARY_Y);
     s_ser_fan        = lv_chart_add_series(s_chart, colores[3], LV_CHART_AXIS_SECONDARY_Y);
-    s_ser_solar      = lv_chart_add_series(s_chart, lv_color_hex(0xE0900A), LV_CHART_AXIS_SECONDARY_Y);
+    s_ser_solar      = lv_chart_add_series(s_chart, colores[4], LV_CHART_AXIS_SECONDARY_Y);
 
     /* Contenedor de labels horarios bajo el chart */
     s_frigo_xlabels = lv_obj_create(scr);
