@@ -263,6 +263,44 @@ void datalogger_flush(void)
     flush_pending_to_sd_impl();
 }
 
+/* El dia que se instala una version con la columna nueva (min_solar_hoy), el
+ * fichero de ESE dia ya lo creo la version anterior: se le anadiran filas de 7
+ * valores bajo una cabecera de 6 nombres. Los lectores por indice del firmware
+ * lo aguantan, pero los que van por nombre (la app del movil y el analizador
+ * del PC) se lian. Se arregla una vez: si la primera linea no es la cabecera
+ * actual, se reescribe el fichero con la cabecera nueva y las filas viejas con
+ * un campo vacio al final (que los lectores ya interpretan como "sin dato").
+ * Se llama con el cerrojo de la SD ya tomado y el fichero abierto aparte. */
+static void arreglar_cabecera_si_hace_falta(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char linea[160];
+    if (!fgets(linea, sizeof(linea), f)) { fclose(f); return; }
+    if (strcmp(linea, DATALOGGER_CSV_HEADER) == 0) { fclose(f); return; }
+
+    char tmp[80];
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) { fclose(f); return; }
+    FILE *o = fopen(tmp, "w");
+    if (!o) { fclose(f); return; }
+
+    fputs(DATALOGGER_CSV_HEADER, o);
+    int campos = 1;                       /* comas + 1 */
+    for (const char *p = linea; *p; ++p) if (*p == ',') campos++;
+    size_t n = strlen(linea);
+    while (n > 0 && (linea[n-1] == '\n' || linea[n-1] == '\r')) linea[--n] = 0;
+    if (campos >= 7) fprintf(o, "%s\n", linea);
+    else             fprintf(o, "%s,\n", linea);   /* el campo que le falta, vacio */
+    while (fgets(linea, sizeof(linea), f)) fputs(linea, o);
+
+    fclose(o);
+    fclose(f);
+    if (remove(path) == 0 && rename(tmp, path) == 0)
+        ESP_LOGI(TAG, "cabecera del CSV actualizada (formato viejo): %s", path);
+    else
+        ESP_LOGW(TAG, "no he podido actualizar la cabecera de %s", path);
+}
+
 static void flush_pending_to_sd_impl(void)
 {
     if (!s_sd_mounted || !s_mutex) return;
@@ -306,6 +344,7 @@ static void flush_pending_to_sd_impl(void)
         return;
     }
     bool need_header = (stat(path, &st) != 0);
+    if (!need_header) arreglar_cabecera_si_hace_falta(path);
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed", path);
@@ -464,7 +503,10 @@ esp_err_t datalogger_log(const frigo_state_t *frigo)
     entry.T_Exterior   = frigo->T_Exterior;
     entry.fan_percent  = frigo->fan_percent;
     entry.excedente_solar = frigo_solar_get_active();
-    entry.min_solar_hoy   = (uint16_t)(frigo_solar_get_seg_hoy() / 60u);
+    /* Acotado antes del cast: con el RTC sin hora el acumulado no se reinicia
+     * nunca y a los 45 dias daria la vuelta (65535 min). */
+    uint32_t min_sol = frigo_solar_get_seg_hoy() / 60u;
+    entry.min_solar_hoy   = (uint16_t)(min_sol > 65535u ? 65535u : min_sol);
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Log descartado: timeout tomando mutex");
         return ESP_ERR_TIMEOUT;

@@ -20,7 +20,7 @@ static const char *TAG = "sim_overview";
 /* Minutos de sol que se inventan para las capturas (solo sale en la pantalla:
  * el rele del frigo NO se cierra). Con 0 y el interruptor del modo solar
  * encendido, el chivato sale en su estado ambar "En espera de excedente". */
-#define SIM_SOLAR_MINUTOS  134
+#define SIM_SOLAR_MINUTOS  395
 
 #if SIM_OVERVIEW_ENABLE
 

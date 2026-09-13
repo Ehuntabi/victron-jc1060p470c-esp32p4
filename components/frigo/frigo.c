@@ -36,6 +36,13 @@ static bool s_migrar_umbrales;
 #define NVS_KEY_SOL_ON   "sol_on"
 #define NVS_KEY_SOL_OFF  "sol_off"
 #define NVS_KEY_ROLEADDR "roleaddr"
+/* Acumulado de sol de hoy: dia en formato AAAAMMDD + milisegundos. Se apunta
+ * cada ~5 min para que un reinicio a mediodia (OTA, corte de 12 V) no deje el
+ * chivato y la columna min_solar_hoy del CSV mintiendo a la baja. Auditoria del
+ * 13-sep-2026. */
+#define NVS_KEY_SOL_DIA  "sol_dia"
+#define NVS_KEY_SOL_MS   "sol_ms"
+#define SOL_GUARDAR_MS   (5u * 60u * 1000u)
 
 #define READ_INTERVAL_MS   2000
 #define DS18B20_CONV_MS     800
@@ -98,6 +105,10 @@ static uint32_t s_sol_feed_ms  = 0;
 static uint32_t s_sol_last_ms  = 0;
 static uint32_t s_sol_ms_hoy   = 0;
 static int      s_sol_dia      = -1;
+/* Ultimo valor apuntado en NVS y cuando: para guardar solo si ha cambiado y
+ * como mucho cada SOL_GUARDAR_MS. */
+static uint32_t s_sol_ms_guardado   = 0;
+static uint32_t s_sol_last_save_ms  = 0;
 /* Simulacion (banco/capturas): que se VEA el excedente activo sin cerrar el
  * rele. Solo surte efecto con s_sim_mode ya puesto por frigo_sim_inject(), y
  * solo lo llama sim_overview.c con SIM_OVERVIEW_ENABLE=1; en produccion nadie
@@ -169,6 +180,16 @@ static void nvs_load(void)
         if (sv < 50) sv = 50;                        /* mismos limites que */
         if (sv > (uint8_t)(s_sol_on_pct - 5)) sv = (uint8_t)(s_sol_on_pct - 5);  /* frigo_solar_set_soc_off() */
         s_sol_off_pct = sv;
+    }
+    /* Acumulado de sol de hoy. Se carga tal cual: si el dia guardado no es el de
+     * hoy, el propio tick lo pone a cero en cuanto tenga fecha del RTC. */
+    {
+        uint32_t dia = 0, ms = 0;
+        if (nvs_get_u32(h, NVS_KEY_SOL_DIA, &dia) == ESP_OK &&
+            nvs_get_u32(h, NVS_KEY_SOL_MS,  &ms)  == ESP_OK && ms > 0) {
+            s_sol_dia    = (int)dia;
+            s_sol_ms_hoy = ms;
+        }
     }
     nvs_close(h);
 }
@@ -349,15 +370,31 @@ static void frigo_solar_tick(void)
         if (prev) s_sol_ms_hoy += delta;
     }
     s_sol_last_ms = now;
-    /* Corte de dia: solo cuando el RTC da una fecha creible (tm_year > 100). */
+    /* Corte de dia: solo cuando el RTC da una fecha creible (tm_year > 100).
+     * El dia se apunta como AAAAMMDD (y no tm_yday) para no confundirlo con el
+     * mismo dia del ano anterior. Si el dia guardado en NVS no es el de hoy,
+     * esto deja el acumulado a cero: no se arrastra el sol de ayer. */
     time_t ahora = time(NULL);
     struct tm t;
     localtime_r(&ahora, &t);
     if (t.tm_year > 100) {
-        if (t.tm_yday != s_sol_dia) {
-            s_sol_dia   = t.tm_yday;
+        int dia_hoy = (t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + t.tm_mday;
+        if (dia_hoy != s_sol_dia) {
+            s_sol_dia    = dia_hoy;
             s_sol_ms_hoy = 0;
         }
+    }
+    /* Guardar el acumulado en NVS cada 5 min (solo si ha cambiado): un reinicio
+     * a mediodia no puede dejar el chivato y la columna del CSV diciendo que hoy
+     * ha habido menos sol del que ha habido. */
+    bool guardar_sol = (s_sol_dia > 0 && s_sol_ms_hoy != s_sol_ms_guardado &&
+                        (s_sol_last_save_ms == 0 ||
+                         (now - s_sol_last_save_ms) >= SOL_GUARDAR_MS));
+    uint32_t sol_dia_a_guardar = (uint32_t)s_sol_dia;
+    uint32_t sol_ms_a_guardar  = s_sol_ms_hoy;
+    if (guardar_sol) {
+        s_sol_ms_guardado  = s_sol_ms_hoy;
+        s_sol_last_save_ms = now;
     }
     xSemaphoreGive(s_mutex);
 
@@ -365,6 +402,16 @@ static void frigo_solar_tick(void)
     if (relay != prev)
         ESP_LOGI(TAG, "Excedente solar: frigo 12V %s (SoC=%.1f%% PV=%dW)",
                  relay ? "ON" : "OFF", s_sol_soc_deci / 10.0f, s_sol_pv_w);
+
+    /* Fuera del mutex: NVS puede tardar ~15 ms y aqui no estorba a nadie. */
+    if (guardar_sol) {
+        nvs_handle_t h;
+        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+            nvs_set_u32(h, NVS_KEY_SOL_DIA, sol_dia_a_guardar);
+            nvs_set_u32(h, NVS_KEY_SOL_MS,  sol_ms_a_guardar);
+            nvs_close(h);
+        }
+    }
 }
 
 /* ── Tarea de lectura ────────────────────────────────────────── */
@@ -847,7 +894,7 @@ bool frigo_solar_get_active(void)
     }
     /* En modo simulacion manda lo que diga el sim: asi las capturas de pantalla
      * salen con el aviso de excedente sin tener que esperar a que haya sol. */
-    if (s_sim_mode && s_sim_solar) return true;
+    if (s_sim_mode && s_sim_solar && s_sol_en) return true;   /* coherente con el interruptor */
     return v;
 }
 
