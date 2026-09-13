@@ -98,6 +98,12 @@ static uint32_t s_sol_feed_ms  = 0;
 static uint32_t s_sol_last_ms  = 0;
 static uint32_t s_sol_ms_hoy   = 0;
 static int      s_sol_dia      = -1;
+/* Simulacion (banco/capturas): que se VEA el excedente activo sin cerrar el
+ * rele. Solo surte efecto con s_sim_mode ya puesto por frigo_sim_inject(), y
+ * solo lo llama sim_overview.c con SIM_OVERVIEW_ENABLE=1; en produccion nadie
+ * llama a frigo_sim_solar() y esto se queda en false. */
+static volatile bool     s_sim_solar     = false;
+static volatile uint16_t s_sim_solar_min = 0;
 
 /* ── NVS ─────────────────────────────────────────────────────── */
 static void nvs_load(void)
@@ -839,12 +845,16 @@ bool frigo_solar_get_active(void)
         v = s_sol_sm.active;
         xSemaphoreGive(s_mutex);
     }
+    /* En modo simulacion manda lo que diga el sim: asi las capturas de pantalla
+     * salen con el aviso de excedente sin tener que esperar a que haya sol. */
+    if (s_sim_mode && s_sim_solar) return true;
     return v;
 }
 
 /* Segundos acumulados hoy con el frigo alimentado por excedente solar. */
 uint32_t frigo_solar_get_seg_hoy(void)
 {
+    if (s_sim_mode && s_sim_solar) return (uint32_t)s_sim_solar_min * 60u;
     if (!s_mutex) return 0;
     uint32_t v = 0;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -852,6 +862,14 @@ uint32_t frigo_solar_get_seg_hoy(void)
         xSemaphoreGive(s_mutex);
     }
     return v;
+}
+
+/* Solo para el simulador de capturas (ver sim_overview.c). NO cierra el rele:
+ * cambia unicamente lo que devuelven los dos getters de arriba. */
+void frigo_sim_solar(bool activo, uint16_t minutos_hoy)
+{
+    s_sim_solar     = activo;
+    s_sim_solar_min = minutos_hoy;
 }
 
 /* ── Escaneo bajo peticion ───────────────────────────────────── */

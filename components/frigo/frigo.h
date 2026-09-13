@@ -97,6 +97,10 @@ void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb);
 /* Inyeccion para modo simulacion: sobreescribe temperaturas y % fan. */
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent);
+/* Inyeccion para modo simulacion: hace que el excedente solar se reporte como
+ * activo (con esos minutos de hoy inventados) para que salga en las capturas de
+ * pantalla. NO cierra el rele del frigo. Solo lo llama sim_overview.c. */
+void frigo_sim_solar(bool activo, uint16_t minutos_hoy);
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx);
 /* Umbrales de T_Aletas para el ventilador en AUTO. Rango 30..60 en pasos de 5,
  * con t_min < t_max. Por debajo de t_min el ventilador esta parado, por encima

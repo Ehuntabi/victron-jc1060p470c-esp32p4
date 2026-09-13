@@ -17,6 +17,11 @@
 
 static const char *TAG = "sim_overview";
 
+/* Minutos de sol que se inventan para las capturas (solo sale en la pantalla:
+ * el rele del frigo NO se cierra). Con 0 y el interruptor del modo solar
+ * encendido, el chivato sale en su estado ambar "En espera de excedente". */
+#define SIM_SOLAR_MINUTOS  134
+
 #if SIM_OVERVIEW_ENABLE
 
 #include <math.h>
@@ -160,6 +165,14 @@ static void sim_task(void *arg) {
         float t_ext = 22.0f + tri(0.0f, 6.0f, t, 90000);
         uint8_t fan = (uint8_t)tri(0.0f, 100.0f, t, 18000);
         frigo_sim_inject(t_aletas, t_cong, t_ext, fan);
+
+        /* === Excedente solar del frigo: se reporta como ACTIVO y con unos
+         *   minutos de hoy inventados, para que salga en las capturas tanto el
+         *   aviso "12V sol" de la barra de abajo como el chivato de la tarjeta
+         *   de la nevera. El rele NO se cierra: esto solo cambia lo que se
+         *   muestra. Para la captura del estado "En espera de excedente", poner
+         *   SIM_SOLAR_MINUTOS en 0 y encender el interruptor del modo solar. */
+        frigo_sim_solar(true, SIM_SOLAR_MINUTOS);
 
         /* === GPS: fix fijado, 9 satelites, en Zumaia (mismo sitio que las
          *   capturas de viaje del README). No hay heredado real que oscilar
