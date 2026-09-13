@@ -118,7 +118,14 @@ PY
 )"
 echo "[info] versión embebida en el binario: '$EMB'   (tag: '$TAG')"
 if [ "$EMB" != "$TAG" ]; then
-  echo "AVISO: no coinciden. Revisa 'git describe --tags' (¿hay commits por encima del tag?)."
+  # Cortar AQUI: todavia no se ha subido ni publicado nada, asi que abortar es
+  # gratis. Antes solo avisaba y seguia, y eso dejaba una Release publicada con
+  # un .bin que dice otra version: justo el fichero que se lleva a la
+  # autocaravana por OTA (auditoria del 13-sep-2026).
+  echo "ERROR: la version embebida ('$EMB') no es la del tag ('$TAG'): NO publico nada." >&2
+  echo "       Revisa 'git describe --tags' y si hay commits por encima del tag." >&2
+  echo "       El tag $TAG se ha creado; borralo con:  git tag -d $TAG" >&2
+  exit 1
 fi
 
 # ── 6) PUBLICAR: subir código, tag y Release ────────────────────────────────
