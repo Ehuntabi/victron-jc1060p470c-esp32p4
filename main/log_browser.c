@@ -167,6 +167,9 @@ int log_browser_load_frigo(const char *path,
         e->t_exter  = fields[3][0] ? strtof(fields[3], NULL) : NAN;
         e->fan_pct  = fields[4][0] ? atoi(fields[4]) : 0;
         e->excedente_solar = (nf >= 6 && fields[5][0]) ? atoi(fields[5]) : 0;
+        /* -1 = el fichero es de antes de que existiera la columna: la pantalla lo
+         * enseña como "--" en vez de un 0 que pareceria "no hubo sol". */
+        e->min_solar_hoy   = (nf >= 7 && fields[6][0]) ? atoi(fields[6]) : -1;
         n++;
     }
     fclose(f);

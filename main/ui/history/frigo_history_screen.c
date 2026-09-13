@@ -69,6 +69,7 @@ static lv_obj_t   *s_frigo_leg_dot[4] = {NULL};
 static lv_color_t  s_frigo_leg_col[4];
 static bool        s_frigo_ser_hidden[4] = {false};
 static lv_obj_t *s_frigo_lbl_date = NULL;    /* header con la fecha */
+static lv_obj_t *s_frigo_lbl_sol = NULL;     /* minutos de sol del dia mostrado */
 static lv_obj_t *s_frigo_xlabels = NULL;     /* contenedor de etiquetas hora */
 static lv_obj_t *s_frigo_lbl_zoom = NULL;
 static int  s_frigo_day_idx = -1;            /* -1 = "hoy" buffer RAM */
@@ -154,6 +155,16 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_set_style_text_color(lbl_title, lv_color_white(), 0);
     lv_label_set_text(lbl_title, "Temperaturas");
     lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 16, 12);
+
+    /* Tiempo del dia con el frigo tirando del excedente solar (columna
+     * min_solar_hoy del CSV). Va debajo del titulo, en el mismo verde que el
+     * aviso "12V sol" de la barra de abajo, para que se vea de un vistazo
+     * cuanto sol ha aprovechado el dia que estas mirando. */
+    s_frigo_lbl_sol = lv_label_create(scr);
+    lv_obj_set_style_text_font(s_frigo_lbl_sol, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_frigo_lbl_sol, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(s_frigo_lbl_sol, "");
+    lv_obj_align(s_frigo_lbl_sol, LV_ALIGN_TOP_LEFT, 16, 42);
 
     /* Fecha del log mostrado (centrada arriba) */
     s_frigo_lbl_date = lv_label_create(scr);
@@ -487,6 +498,7 @@ static void frigo_append_ring_tail(frigo_log_entry_t *buf, int *n, int max)
         o->t_exter  = e->T_Exterior;
         o->fan_pct  = e->fan_percent;
         o->excedente_solar = e->excedente_solar ? 1 : 0;
+        o->min_solar_hoy   = (int)e->min_solar_hoy;
         (*n)++;
     }
 }
@@ -545,6 +557,24 @@ static void frigo_paint_day(void)
         }
     }
     lv_chart_refresh(s_chart);
+
+    /* Sol aprovechado por el frigo en el dia que se esta viendo. El valor de la
+     * columna es el acumulado del dia, asi que se coge el mayor de los datos
+     * pintados (no el ultimo: el anillo de HOY mezcla el CSV con lo de RAM). */
+    if (s_frigo_lbl_sol) {
+        int min_sol = -1;
+        for (int i = 0; i < n; ++i) {
+            if (s_frigo_buf[i].min_solar_hoy > min_sol) min_sol = s_frigo_buf[i].min_solar_hoy;
+        }
+        if (min_sol < 0) {
+            lv_label_set_text(s_frigo_lbl_sol, "");   /* CSV sin la columna */
+        } else if (min_sol < 60) {
+            lv_label_set_text_fmt(s_frigo_lbl_sol, "Sol: %d min", min_sol);
+        } else {
+            lv_label_set_text_fmt(s_frigo_lbl_sol, "Sol: %d h %02d min",
+                                  min_sol / 60, min_sol % 60);
+        }
+    }
 }
 
 /* Lee de la SD el dia que pida s_frigo_req_idx y lo pinta. Corre en

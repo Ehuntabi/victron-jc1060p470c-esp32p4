@@ -16,7 +16,8 @@ int  log_browser_list_dates(const char *dir,
                             char dates_out[][LOG_BROWSER_DATE_LEN],
                             int max);
 
-/* Frigo: entrada CSV "timestamp,Ta,Tc,Te,fan_pct". Devuelve nº de entradas. */
+/* Frigo: entrada CSV "timestamp,Ta,Tc,Te,fan_pct[,excedente_solar,min_solar_hoy]".
+ * Devuelve nº de entradas. */
 typedef struct {
     int   hh;        /* hora local extraida del timestamp */
     int   mm;
@@ -25,6 +26,8 @@ typedef struct {
     float t_exter;
     int   fan_pct;
     int   excedente_solar;   /* 0/1; 0 si el CSV no tiene la columna (formato viejo) */
+    int   min_solar_hoy;     /* minutos acumulados del dia con el frigo a 12V por
+                              * excedente solar; -1 si el CSV no trae la columna */
 } frigo_log_entry_t;
 
 int  log_browser_load_frigo(const char *path,
