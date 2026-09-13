@@ -64,10 +64,10 @@ static lv_chart_series_t *s_ser_solar      = NULL;
 /* Leyenda-boton: cada elemento muestra/oculta su serie. Guardamos etiqueta,
  * punto y color para poder atenuarlos al ocultar. Estado por sesion de pantalla
  * (las series se recrean al abrir -> todo visible por defecto). */
-static lv_obj_t   *s_frigo_leg_lbl[4] = {NULL};
-static lv_obj_t   *s_frigo_leg_dot[4] = {NULL};
-static lv_color_t  s_frigo_leg_col[4];
-static bool        s_frigo_ser_hidden[4] = {false};
+static lv_obj_t   *s_frigo_leg_lbl[5] = {NULL};
+static lv_obj_t   *s_frigo_leg_dot[5] = {NULL};
+static lv_color_t  s_frigo_leg_col[5];
+static bool        s_frigo_ser_hidden[5] = {false};
 static lv_obj_t *s_frigo_lbl_date = NULL;    /* header con la fecha */
 static lv_obj_t *s_frigo_lbl_sol = NULL;     /* minutos de sol del dia mostrado */
 static lv_obj_t *s_frigo_xlabels = NULL;     /* contenedor de etiquetas hora */
@@ -202,15 +202,20 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_center(lbl_close);
     lv_obj_add_event_cb(btn_close, chart_screen_close_cb, LV_EVENT_CLICKED, scr);
 
-    /* Leyenda */
-    const char *leyenda[] = {"Aletas", "Congel.", "Exter.", "Fan%"};
+    /* Leyenda. "Sol" es la serie del excedente solar: dibuja un punto bajo (en
+     * el eje derecho, 0..100) en cada muestra en la que el frigo tiraba del
+     * sol. Estaba en la grafica pero sin nombre en la leyenda, asi que no habia
+     * forma de saber que era esa linea (visto el 13-sep-2026). */
+    const char *leyenda[] = {"Aletas", "Congel.", "Exter.", "Fan%", "Sol"};
     lv_color_t colores[]  = {
         lv_color_hex(0x00BFFF),
         lv_color_hex(0xFF4444),
         lv_color_hex(0x44FF44),
-        lv_color_hex(0xFFAA00)
+        lv_color_hex(0xFFAA00),
+        lv_color_hex(0xE0900A)      /* el mismo ambar que la tarjeta del modo solar */
     };
-    for (int i = 0; i < 4; i++) {
+    const int n_leg = 5, paso_leg = 165, ancho_leg = 150;
+    for (int i = 0; i < n_leg; i++) {
         s_frigo_leg_col[i]    = colores[i];
         s_frigo_ser_hidden[i] = false;
 
@@ -218,9 +223,11 @@ void ui_show_chart_screen(ui_state_t *ui)
          * su linea en la grafica. El contenedor transparente es el area tactil. */
         lv_obj_t *item = lv_obj_create(scr);
         lv_obj_remove_style_all(item);
-        lv_obj_set_size(item, 150, 34);
-        /* Grupo centrado: 4 items de paso 165 ocupan (3*165 + 150) px. */
-        lv_obj_set_pos(item, (LV_HOR_RES - (3 * 165 + 150)) / 2 + i * 165, 560);
+        lv_obj_set_size(item, ancho_leg, 34);
+        /* Grupo centrado: n items de paso 165 ocupan ((n-1)*165 + 150) px. */
+        lv_obj_set_pos(item,
+                       (LV_HOR_RES - ((n_leg - 1) * paso_leg + ancho_leg)) / 2 + i * paso_leg,
+                       560);
         lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_event_cb(item, frigo_legend_toggle_cb, LV_EVENT_CLICKED,
@@ -346,11 +353,12 @@ void ui_show_chart_screen(ui_state_t *ui)
 static void frigo_legend_toggle_cb(lv_event_t *e)
 {
     int i = (int)(intptr_t)lv_event_get_user_data(e);
-    if (i < 0 || i >= 4 || !s_chart) return;
+    if (i < 0 || i >= 5 || !s_chart) return;
     lv_chart_series_t *ser = (i == 0) ? s_ser_aletas
                            : (i == 1) ? s_ser_congelador
                            : (i == 2) ? s_ser_exterior
-                                      : s_ser_fan;
+                           : (i == 3) ? s_ser_fan
+                                      : s_ser_solar;
     if (!ser) return;
     bool hide = !s_frigo_ser_hidden[i];
     s_frigo_ser_hidden[i] = hide;
