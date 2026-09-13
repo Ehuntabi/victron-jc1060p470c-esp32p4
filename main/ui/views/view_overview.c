@@ -73,6 +73,7 @@ typedef struct {
     lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
     lv_obj_t *img_fan;           /* icono ventilador (animado, debajo 230V) */
     lv_obj_t *arc_fan;           /* aro-gauge del PWM 0..100 % alrededor del ventilador */
+    lv_obj_t *alarm_hint;        /* aviso flotante "toca para silenciar" */
     int       fan_angle_deci;    /* angulo actual rotacion (0..3599) */
     /* ── Alarmas (S1 vacio / R1 lleno / SOC < 30 % / Frigo > umbral) ── */
     bool      alarm_s1_muted;
@@ -374,6 +375,7 @@ static void alarm_mute_soc_cb(lv_event_t *e)
     }
     audio_cancel_playback();
 }
+
 static void alarm_mute_freezer_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
@@ -384,6 +386,39 @@ static void alarm_mute_freezer_cb(lv_event_t *e)
         ui_show_chart_screen(ov->base.ui);
     }
     audio_cancel_playback();
+}
+
+/* Aviso flotante de las alarmas: dice cual es y que se toca para callarla.
+ * Existe por un caso real: el 13-sep-2026 al usuario le sono la alarma de agua
+ * en reserva desde el mediodia y no supo pararla. El gesto de tocar el tanque
+ * (o la card de bateria, o la temperatura del congelador) YA la silenciaba,
+ * pero nada lo decia: ni en pantalla ni en el manual. Con este aviso, ademas de
+ * parpadeo y pitido, hay un texto que dice exactamente que hacer.
+ *
+ * Silencia las cuatro alarmas a la vez: solo puede haber una activa de verdad y
+ * silenciar las demas no hace nada mientras no salten. */
+static void alarm_hint_cb(lv_event_t *e)
+{
+    ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
+    if (ov) {
+        ov->alarm_s1_muted      = true;   /* agua limpia en reserva */
+        ov->alarm_r1_muted      = true;   /* aguas grises llenas */
+        ov->alarm_soc_muted     = true;   /* bateria por debajo del umbral */
+        ov->alarm_freezer_muted = true;   /* congelador fuera de temperatura */
+    }
+    audio_cancel_playback();
+}
+
+/* Texto del aviso: la alarma activa que NO este silenciada, o NULL si no hay
+ * ninguna. Se evalua en el render, que es donde se conocen los cuatro estados. */
+static const char *alarm_hint_text(const ui_overview_view_t *ov,
+                                   bool alarm_s1, bool alarm_r1, bool alarm_soc)
+{
+    if (alarm_s1 && !ov->alarm_s1_muted)                                     return "Agua limpia en reserva";
+    if (alarm_r1 && !ov->alarm_r1_muted)                                     return "Aguas grises llenas";
+    if (alarm_soc && !ov->alarm_soc_muted)                                   return "Bateria baja";
+    if (ui_get_freezer_alarm() && !ov->alarm_freezer_muted)                  return "Congelador fuera de temperatura";
+    return NULL;
 }
 
 /* Alarma de congelador: extraida de overview_render() a una funcion propia
@@ -879,6 +914,24 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
 
+    /* Aviso flotante de alarma. Se crea sobre la raiz de la vista (no dentro de
+     * la card, que es flex: un hijo mas descolocaria las tres columnas) y con
+     * IGNORE_LAYOUT para poder colocarlo donde queramos. Flota justo encima de
+     * la barra de abajo, oculto, y solo aparece mientras haya una alarma activa
+     * sin silenciar: dice cual es y que se toca para callarla. */
+    ov->alarm_hint = lv_label_create(ov->base.root);
+    lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_text_font(ov->alarm_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ov->alarm_hint, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_bg_color(ov->alarm_hint, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(ov->alarm_hint, LV_OPA_70, 0);
+    lv_obj_set_style_pad_all(ov->alarm_hint, 8, 0);
+    lv_obj_set_style_radius(ov->alarm_hint, 8, 0);
+    lv_obj_align(ov->alarm_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_add_event_cb(ov->alarm_hint, alarm_hint_cb, LV_EVENT_CLICKED, ov);
+
     /* ── Columna 3: botones [Luz INT + Bomba] arriba, Luz EXT debajo ── */
     lv_obj_t *btn_col = lv_obj_create(camper_card);
     lv_obj_remove_style_all(btn_col);
@@ -1353,6 +1406,20 @@ static void overview_render(ui_overview_view_t *ov)
                          && ov->bat.soc_deci < alerts_get_soc_critical() * 10;
         if (!alarm_soc && ov->prev_alarm_soc) ov->alarm_soc_muted = false;
         ov->prev_alarm_soc = alarm_soc;
+
+        /* Aviso flotante: aqui ya se conocen las cuatro alarmas (agua, aguas
+         * grises, bateria y congelador). Aparece solo si hay alguna activa y sin
+         * silenciar, y dice cual es y que se toca para callarla. */
+        if (ov->alarm_hint) {
+            const char *cual = alarm_hint_text(ov, alarm_s1, alarm_r1, alarm_soc);
+            if (cual) {
+                lv_label_set_text_fmt(ov->alarm_hint, "%s  -  toca para silenciar", cual);
+                lv_obj_clear_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_move_foreground(ov->alarm_hint);
+            } else {
+                lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
         /* Parpadeo visual del card de bateria */
         if (ov->card_bat) {
             lv_opa_t opa = (alarm_soc && !ov->alarm_soc_muted && ov->blink_phase)
