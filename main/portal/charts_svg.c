@@ -280,7 +280,7 @@ static void build_frigo_html(const char *csv,
             float ta = (strcmp(fields[1], "---") == 0) ? -200.0f : atof(fields[1]);
             float tc = (strcmp(fields[2], "---") == 0) ? -200.0f : atof(fields[2]);
             float te = (strcmp(fields[3], "---") == 0) ? -200.0f : atof(fields[3]);
-            int   fp = atoi(fields[4]);
+            int   fp = atoi(fields[4]   /* el CSV tiene 7 columnas; aqui se usan 5: no reordenar sin mirar */);
             float xpos = (float)idx;
             if (ta > -120.0f) ts_push(&s_aletas, xpos, ta);
             if (tc > -120.0f) ts_push(&s_cong, xpos, tc);

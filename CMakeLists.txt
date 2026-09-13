@@ -39,7 +39,7 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET
 )
-if(VER_DESCRITA MATCHES "^v([0-9]+)\\.([0-9]+)$")
+if(VER_DESCRITA MATCHES "^v([0-9]+)\\.([0-9]+)(\\.[0-9]+)?$")
     set(PROJECT_VER "${VER_DESCRITA}")
 elseif(VER_DESCRITA MATCHES "^v([0-9]+)\\.([0-9]+)-")
     math(EXPR VER_MINOR_SIGUIENTE "1 + ${CMAKE_MATCH_2}")

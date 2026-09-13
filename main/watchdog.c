@@ -33,6 +33,13 @@ static const char *KEY_REASON = "reason";
 /* Por debajo de esto no hay hora creible (1-ene-2021). */
 #define WD_EPOCH_MINIMO   1609459200UL
 
+/* Motivos PROPIOS (por encima de esp_reset_reason_t) para los reinicios que
+ * fuerza el monitor de software: si se guardara el codigo crudo, un reset del
+ * vigilante se apuntaria como ESP_RST_SW -> "Software", que no dice nada y es
+ * justo la confusion que se queria evitar. Auditoria del 13-sep-2026. */
+#define WD_RST_UI_COLGADA  0x10
+#define WD_RST_TAREA_MUDA  0x11
+
 static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
 /* Motivo del ultimo arranque APUNTADO (0xFF = ninguno todavia). En RAM: se lee
@@ -156,6 +163,26 @@ static void wd_reason_writer_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/* Task de un solo uso para poner el contador a cero. Se lanza aparte porque la
+ * peticion llega desde un evento de LVGL y nvs_set_* escribe flash de verdad
+ * (nvs_commit() es un no-op en IDF 5.4.4). Mismo patron que la del motivo. */
+static void wd_zero_count_writer_task(void *arg)
+{
+    (void)arg;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "no puedo abrir NVS para poner el contador a cero");
+        vTaskDelete(NULL);
+        return;
+    }
+    esp_err_t err = nvs_set_u32(h, KEY_COUNT, 0);
+    nvs_commit(h);
+    nvs_close(h);
+    if (err != ESP_OK) ESP_LOGW(TAG, "el contador a cero no persistio: %s", esp_err_to_name(err));
+    else               ESP_LOGI(TAG, "contador de resets a cero (persistido)");
+    vTaskDelete(NULL);
+}
+
 /* Reinicio forzado GARANTIZADO: la escritura del motivo es best-effort en una
  * task aparte (si se cuelga en flash/NVS no arrastra al reset) y esta funcion
  * solo hace operaciones sin flash antes de esp_restart(), que SIEMPRE se
@@ -185,6 +212,10 @@ static uint8_t wd_take_forced_reason_nvs(void)
 
 static const char *reason_to_str(esp_reset_reason_t r)
 {
+    /* Motivos PROPIOS del monitor de software (WD_RST_*): van fuera del switch
+     * porque no forman parte del enum esp_reset_reason_t de ESP-IDF. */
+    if ((int)r == WD_RST_UI_COLGADA) return "Watchdog SW (UI congelada)";
+    if ((int)r == WD_RST_TAREA_MUDA) return "Watchdog SW (tarea muda)";
     switch (r) {
         case ESP_RST_POWERON:   return "Power-on";
         case ESP_RST_EXT:       return "External pin";
@@ -358,26 +389,36 @@ void watchdog_anota_arranque(void)
                  s_reason_str);
         return;
     }
+    /* Motivo EFECTIVO: un reset forzado por el monitor se apunta como tal y no
+     * como el "Software" generico de esp_reset_reason(). */
+    uint8_t motivo = (uint8_t)s_reason_code;
+    if (s_forced_code == WD_FORCED_LVGL)       motivo = WD_RST_UI_COLGADA;
+    else if (s_forced_code == WD_FORCED_TAREA) motivo = WD_RST_TAREA_MUDA;
+
+    /* Sin hora creible se apunta el MOTIVO igual (con fecha 0): antes se
+     * descartaba todo y el diagnostico de ese arranque se perdia para siempre
+     * justo cuando mas hace falta. */
     time_t ahora = time(NULL);
-    if ((uint32_t)ahora < WD_EPOCH_MINIMO) {
-        ESP_LOGW(TAG, "reloj sin poner: no apunto la fecha del arranque");
-        return;
-    }
+    bool hora_ok = ((uint32_t)ahora >= WD_EPOCH_MINIMO);
+    if (!hora_ok) ESP_LOGW(TAG, "reloj sin hora: apunto el motivo sin fecha");
+
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_u32(h, KEY_BOOT, (uint32_t)ahora);
-    nvs_set_u8(h, KEY_REASON, (uint8_t)s_reason_code);   /* motivo de ESTE arranque */
-    esp_err_t err = nvs_commit(h);
+    /* nvs_commit() es un no-op en IDF 5.4.4: la escritura a flash la hace cada
+     * nvs_set_*, asi que hay que mirar SU codigo de error, no el del commit. */
+    esp_err_t e1 = nvs_set_u32(h, KEY_BOOT, hora_ok ? (uint32_t)ahora : 0);
+    esp_err_t e2 = nvs_set_u8(h, KEY_REASON, motivo);
+    nvs_commit(h);
     nvs_close(h);
-    if (err == ESP_OK) {
-        s_arranque_epoch = (uint32_t)ahora;
-        /* Y el motivo, EN LA MISMA RAM. Sin esto la pantalla emparejaba la
-         * fecha de ESTE arranque con el motivo del arranque ANTERIOR (la fecha
-         * se refrescaba y el motivo no): la pareja que enseña Acerca de tiene
-         * que ser siempre la pareja que hay en NVS. Auditoria del 13-sep-2026. */
-        s_arranque_reason_code = (uint8_t)s_reason_code;
-        ESP_LOGI(TAG, "arranque apuntado: %lu", (unsigned long)s_arranque_epoch);
+    if (e1 != ESP_OK || e2 != ESP_OK) {
+        ESP_LOGW(TAG, "no se pudo apuntar el arranque (%s / %s)",
+                 esp_err_to_name(e1), esp_err_to_name(e2));
+        return;
     }
+    s_arranque_epoch = hora_ok ? (uint32_t)ahora : 0;
+    s_arranque_reason_code = motivo;
+    ESP_LOGI(TAG, "arranque apuntado: motivo %u, fecha %s", (unsigned)motivo,
+             hora_ok ? "si" : "no");
 }
 
 void watchdog_marca_reinicio_pedido(void)
@@ -390,6 +431,10 @@ void watchdog_marca_reinicio_pedido(void)
 }
 
 uint32_t watchdog_arranque_epoch(void) { return s_arranque_epoch; }
+
+/* ¿La fecha del ultimo reinicio apuntado es utilizable? (con la pila del RTC
+ * muerta puede no haberla, pero el motivo si). */
+bool watchdog_arranque_con_fecha(void) { return s_arranque_epoch >= WD_EPOCH_MINIMO; }
 
 /* Motivo del ultimo arranque que SI se apunto. "sin reinicios apuntados"
  * mientras no haya ninguno (los de grabacion, OTA y boton Reiniciar no se
@@ -410,23 +455,13 @@ uint32_t watchdog_get_reset_count(void)
  * verdad, y eso no deja de ser cierto porque se ponga el contador a cero). */
 void watchdog_clear_reset_count(void)
 {
-    nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
-        ESP_LOGW(TAG, "no puedo abrir NVS para poner el contador a cero");
-        return;
-    }
-    nvs_set_u32(h, KEY_COUNT, 0);
-    esp_err_t err = nvs_commit(h);
-    nvs_close(h);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "el contador a cero no persistio: %s", esp_err_to_name(err));
-        return;
-    }
-    s_reset_count = 0;
+    /* Lo llama el boton "Poner a cero" desde un evento de LVGL: la escritura a
+     * flash se delega en la tarea que ya escribe NVS (wd_reason_writer_task),
+     * para no meter una operacion de flash en el hilo de la UI (precedente
+     * f3278be: INT WDT por NVS en la tarea de LVGL). En RAM se pone a cero ya,
+     * para que la pantalla lo enseñe al instante. */
+    s_reset_count = 0;   /* en RAM ya, para que la pantalla lo enseñe al instante */
+    xTaskCreate(wd_zero_count_writer_task, "wd_zero", 3072, NULL, tskIDLE_PRIORITY + 1, NULL);
     ESP_LOGI(TAG, "contador de resets puesto a cero por el usuario");
 }
 
-const char *watchdog_last_reset_reason(void)
-{
-    return s_reason_str;
-}

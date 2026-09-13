@@ -43,7 +43,7 @@ static lv_obj_t *s_lbl_solon  = NULL;
 static lv_obj_t *s_lbl_soloff = NULL;
 /* Chivato del modo solar (punto de color + texto). La cache evita rehacer el
  * texto en cada vuelta de ui_frigo_panel_update, que corre en cada iteracion
- * de main y no solo cuando cambia algo. min=0xFFFFFFFF fuerza el primer pintado. */
+ * de la tarea del frigo (via frigo_update_cb), no de main. min=0xFFFFFFFF fuerza el primer pintado. */
 static lv_obj_t *s_lbl_sol_estado = NULL;
 static lv_obj_t *s_dot_sol        = NULL;
 static bool      s_sol_est_act    = false;

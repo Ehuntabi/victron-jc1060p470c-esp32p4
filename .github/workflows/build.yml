@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # sin los tags, la version embebida sale "v?"
 
       - name: esp-idf build
         uses: espressif/esp-idf-ci-action@v1

@@ -33,16 +33,16 @@ void watchdog_clear_reset_count(void);
  * real (p.ej. el borrado de flash al empezar una actualización OTA). */
 void watchdog_suspend(bool suspend);
 
-/* Devuelve la causa del último reset, en formato legible para mostrar en UI
- * ("Power-on", "Watchdog (TWDT)", "Panic", etc.). El puntero apunta a una
- * cadena estática y no debe liberarse. */
-const char *watchdog_last_reset_reason(void);
 
 /* Fecha y hora del ultimo arranque QUE NO FUE PARA REPROGRAMAR, en epoch.
  * 0 = no hay dato: o el reloj no estaba puesto, o el ultimo arranque fue una
  * grabacion por cable, una actualizacion OTA o el boton de reiniciar (esos no
  * interesan para diagnosticar, y por eso no se apuntan). */
 uint32_t watchdog_arranque_epoch(void);
+
+/* ¿Hay fecha utilizable para el ultimo reinicio apuntado? El motivo puede
+ * estar aunque no la haya: con la pila del RTC muerta se apunta sin fecha. */
+bool watchdog_arranque_con_fecha(void);
 
 /* Motivo del ultimo arranque que SI se apunto (el de la fecha de arriba), o
  * "sin reinicios apuntados" mientras no haya ninguno: los reinicios de

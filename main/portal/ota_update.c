@@ -19,7 +19,6 @@
 #include "esp_app_desc.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_task_wdt.h"
