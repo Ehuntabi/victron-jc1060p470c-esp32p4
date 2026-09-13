@@ -2,6 +2,9 @@
  * con valores que cambian en el tiempo. Activar via SIM_OVERVIEW_ENABLE
  * en sim_overview.h o desactivar para deshabilitar. */
 #include "sim_overview.h"
+/* DATALOGGER_CSV_HEADER: el dia inventado de frigo se escribe con la MISMA
+ * cabecera que el log de verdad, definida en un solo sitio. */
+#include "datalogger.h"
 
 /* Fuera de la guarda: sim_overview_restaurar_reales() tiene que compilar y
  * ejecutarse justo cuando el simulador esta APAGADO. */
@@ -247,8 +250,7 @@ static void sim_escribir_frigo(const char *fecha)
     mkdir("/sdcard/frigo", 0777);
     FILE *f = fopen(path, "w");
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
-    fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar,"
-               "min_solar_hoy\n");
+    fprintf(f, DATALOGGER_CSV_HEADER);
     /* min_solar acumula como lo hace la placa de verdad: suma el paso entero
      * mientras el excedente esta activo (mismo criterio que la columna 6). */
     int min_solar = 0;

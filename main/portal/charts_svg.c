@@ -469,11 +469,9 @@ esp_err_t handle_data_frigo_csv(httpd_req_t *req)
         httpd_resp_sendstr(req, csv);
         free(csv);
     } else {
-        /* Sin datos (ni SD ni RAM): cabecera vacia con el MISMO formato que el
-         * CSV real, para que el que la descargue no vea un formato viejo. */
-        httpd_resp_sendstr(req,
-            "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar,"
-            "min_solar_hoy\n");
+        /* Sin datos (ni SD ni RAM): la misma cabecera que el CSV real, definida
+         * en un solo sitio (datalogger.h) para que no se quede atras. */
+        httpd_resp_sendstr(req, DATALOGGER_CSV_HEADER);
     }
     return ESP_OK;
 }

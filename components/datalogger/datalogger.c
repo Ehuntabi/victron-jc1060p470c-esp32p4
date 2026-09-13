@@ -329,7 +329,7 @@ static void flush_pending_to_sd_impl(void)
 
     bool io_error = false;
     if (need_header) {
-        if (fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n") < 0) {
+        if (fprintf(f, DATALOGGER_CSV_HEADER) < 0) {
             io_error = true;
         }
     }
@@ -345,8 +345,9 @@ static void flush_pending_to_sd_impl(void)
         format_temp(ta, sizeof ta, e->T_Aletas);
         format_temp(tc, sizeof tc, e->T_Congelador);
         format_temp(te, sizeof te, e->T_Exterior);
-        int r = fprintf(f, "%s,%s,%s,%s,%d,%d\n",
-                        e->timestamp, ta, tc, te, e->fan_percent, e->excedente_solar ? 1 : 0);
+        int r = fprintf(f, DATALOGGER_CSV_ROW,
+                        e->timestamp, ta, tc, te, e->fan_percent,
+                        e->excedente_solar ? 1 : 0, (unsigned)e->min_solar_hoy);
         if (r < 0 || ferror(f)) { io_error = true; break; }
         written++;
     }
@@ -526,9 +527,7 @@ char *datalogger_get_csv(void)
     char *csv = malloc(size);
     if (!csv) return NULL;
     int pos = 0;
-    pos += snprintf(csv + pos, size - pos,
-                    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar,"
-                    "min_solar_hoy\n");
+    pos += snprintf(csv + pos, size - pos, DATALOGGER_CSV_HEADER);
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
         for (int i = 0; i < s_count && pos < (int)size - 80; i++) {
             datalogger_entry_t e;  /* get_entry_locked: ya tenemos s_mutex */
@@ -537,10 +536,9 @@ char *datalogger_get_csv(void)
             format_temp(ta, sizeof ta, e.T_Aletas);
             format_temp(tc, sizeof tc, e.T_Congelador);
             format_temp(te, sizeof te, e.T_Exterior);
-            pos += snprintf(csv + pos, size - pos,
-                            "%s,%s,%s,%s,%d,%d,%u\n",
-                            e.timestamp, ta, tc, te, e.fan_percent, e.excedente_solar ? 1 : 0,
-                            (unsigned)e.min_solar_hoy);
+            pos += snprintf(csv + pos, size - pos, DATALOGGER_CSV_ROW,
+                            e.timestamp, ta, tc, te, e.fan_percent,
+                            e.excedente_solar ? 1 : 0, (unsigned)e.min_solar_hoy);
         }
         xSemaphoreGive(s_mutex);
     }

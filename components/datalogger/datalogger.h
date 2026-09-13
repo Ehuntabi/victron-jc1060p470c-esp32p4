@@ -7,6 +7,23 @@
 
 #define DATALOGGER_MAX_ENTRIES  200
 
+/* Formato del CSV del frigo, en UN solo sitio: lo escriben el volcado a la SD
+ * (datalogger_flush), el CSV de RAM que sirve el portal (datalogger_get_csv),
+ * la cabecera de relleno del portal cuando no hay datos y el simulador; y lo
+ * leen el visor del firmware, la app y el analizador del PC.
+ *
+ * El 13-sep-2026 la columna min_solar_hoy se anadio solo a uno de los dos
+ * escritores: los ficheros de la tarjeta -- que son el log de verdad -- se
+ * quedaron sin el dato, y ademas con una cabecera de seis columnas para filas
+ * de siete. Con la cabecera y la fila definidas aqui, o cambian las dos o no
+ * cambia ninguna.
+ *
+ * La columna nueva va SIEMPRE al final: los lectores que van por indice
+ * (log_browser exige nf >= 5 y usa fields[0..5]) siguen funcionando igual. */
+#define DATALOGGER_CSV_HEADER \
+    "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar,min_solar_hoy\n"
+#define DATALOGGER_CSV_ROW "%s,%s,%s,%s,%d,%d,%u\n"
+
 typedef struct {
     char timestamp[24];
     float T_Aletas;
