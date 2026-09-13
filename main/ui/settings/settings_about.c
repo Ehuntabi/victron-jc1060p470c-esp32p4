@@ -9,9 +9,7 @@
 #include "settings_common.h"
 #include "fonts/fonts_es.h"
 
-#include <string.h>
 #include <time.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <lvgl.h>
 #include "freertos/FreeRTOS.h"
@@ -141,21 +139,22 @@ static void about_refresh_wd_label(void)
     const uint32_t boot = watchdog_arranque_epoch();
     const unsigned long cuenta = (unsigned long)watchdog_get_reset_count();
 
-    /* Sin ningun arranque apuntado todavia (todos los reinicios han sido de
-     * grabacion/OTA) se dice tal cual, en vez de mezclar el motivo del arranque
-     * de AHORA con una fecha que es de otro reinicio. */
-    if (boot <= 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
+    /* Sin motivo apuntado (todos los reinicios han sido de grabacion/OTA) se
+     * dice tal cual. Si hay motivo pero no fecha (pila del RTC muerta) se
+     * enseña el motivo y "sin fecha": el diagnostico no se pierde. */
+    (void)boot;
+    if (strcmp(watchdog_arranque_reason(), "sin reinicios apuntados") == 0) {
         lv_label_set_text_fmt(s_lbl_wd,
             "Ultimo reset: sin reinicios apuntados (los de grabacion y OTA no cuentan)"
             "   |   Resets WDT/panic: %lu", cuenta);
         return;
     }
 
-    char cuando[40];
-    time_t t = (time_t)boot;
-    struct tm tmv;
-    localtime_r(&t, &tmv);
-    strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
+    char cuando[40] = "sin fecha";
+    struct tm tmv = {0};
+    time_t t = (time_t)watchdog_arranque_epoch();
+    if (watchdog_arranque_con_fecha() && localtime_r(&t, &tmv) != NULL)
+        strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
     lv_label_set_text_fmt(s_lbl_wd,
                           "Ultimo reset: %s - %s   |   Resets WDT/panic: %lu",
                           watchdog_arranque_reason(), cuando, cuenta);
@@ -225,6 +224,11 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Diagnostico de salud: causa del ultimo reset + total de resets WDT/panic */
     s_lbl_wd = lv_label_create(card2);
     lv_obj_set_style_text_font(s_lbl_wd, &lv_font_montserrat_20_es, 0);
+    /* Ancho al 100 % y envoltura: con un contador de 3 cifras el texto de
+     * respaldo no cabe en una linea y sin esto LVGL lo recorta (auditoria del
+     * 13-sep-2026). */
+    lv_obj_set_width(s_lbl_wd, lv_pct(100));
+    lv_label_set_long_mode(s_lbl_wd, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(s_lbl_wd, lv_color_hex(0xFFD54F), 0);
     about_refresh_wd_label();
 
