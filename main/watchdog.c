@@ -371,6 +371,11 @@ void watchdog_anota_arranque(void)
     nvs_close(h);
     if (err == ESP_OK) {
         s_arranque_epoch = (uint32_t)ahora;
+        /* Y el motivo, EN LA MISMA RAM. Sin esto la pantalla emparejaba la
+         * fecha de ESTE arranque con el motivo del arranque ANTERIOR (la fecha
+         * se refrescaba y el motivo no): la pareja que enseña Acerca de tiene
+         * que ser siempre la pareja que hay en NVS. Auditoria del 13-sep-2026. */
+        s_arranque_reason_code = (uint8_t)s_reason_code;
         ESP_LOGI(TAG, "arranque apuntado: %lu", (unsigned long)s_arranque_epoch);
     }
 }
