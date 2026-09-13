@@ -18,6 +18,12 @@ static const char *KEY_COUNT = "count";
 static const char *KEY_FORCED = "forced";
 /* Epoch del ultimo arranque "de verdad" (los de reprogramar no se apuntan). */
 static const char *KEY_BOOT = "boot";
+/* Motivo del ultimo arranque ANOTADO. Se guarda el codigo esp_reset_reason_t
+ * para poder decirlo junto a la fecha: si no, la pantalla enseñaba el motivo del
+ * arranque de AHORA (p.ej. "USB (cable de grabar)" tras una grabacion) al lado
+ * de la fecha del ultimo reinicio de verdad, que son dos cosas distintas
+ * (visto el 13-sep-2026). */
+static const char *KEY_REASON = "reason";
 
 /* Codigos de KEY_FORCED */
 #define WD_FORCED_LVGL    1   /* el monitor SW reinicio por UI/LVGL congelada */
@@ -29,6 +35,9 @@ static const char *KEY_BOOT = "boot";
 
 static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
+/* Motivo del ultimo arranque APUNTADO (0xFF = ninguno todavia). En RAM: se lee
+ * de NVS una vez al arrancar, no cada vez que se pinta Ajustes. */
+static uint8_t s_arranque_reason_code = 0xFF;
 static volatile bool s_suspended = false;
 static esp_reset_reason_t s_reason_code = ESP_RST_UNKNOWN;   /* motivo crudo */
 static uint8_t s_forced_code = 0;                             /* que lo forzo (o 0) */
@@ -254,6 +263,19 @@ static uint32_t wd_load_arranque_nvs(void)
     return v;
 }
 
+/* Motivo del ultimo arranque apuntado. Igual que la fecha: se lee UNA vez al
+ * arrancar y se guarda en RAM, porque pintar Ajustes no debe tocar la flash. */
+static uint8_t wd_load_arranque_reason_nvs(void)
+{
+    nvs_handle_t h;
+    uint8_t v = 0xFF;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u8(h, KEY_REASON, &v);
+        nvs_close(h);
+    }
+    return v;
+}
+
 esp_err_t watchdog_init(void)
 {
     esp_reset_reason_t r = esp_reset_reason();
@@ -297,6 +319,7 @@ esp_err_t watchdog_init(void)
     }
     /* La ultima fecha apuntada (de un arranque que no fue de reprogramar) */
     s_arranque_epoch = wd_load_arranque_nvs();
+    s_arranque_reason_code = wd_load_arranque_reason_nvs();
     ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic/forzados: %lu; ultimo arranque apuntado: %lu",
              s_reason_str, (unsigned long)s_reset_count,
              (unsigned long)s_arranque_epoch);
@@ -343,6 +366,7 @@ void watchdog_anota_arranque(void)
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_u32(h, KEY_BOOT, (uint32_t)ahora);
+    nvs_set_u8(h, KEY_REASON, (uint8_t)s_reason_code);   /* motivo de ESTE arranque */
     esp_err_t err = nvs_commit(h);
     nvs_close(h);
     if (err == ESP_OK) {
@@ -361,6 +385,15 @@ void watchdog_marca_reinicio_pedido(void)
 }
 
 uint32_t watchdog_arranque_epoch(void) { return s_arranque_epoch; }
+
+/* Motivo del ultimo arranque que SI se apunto. "sin reinicios apuntados"
+ * mientras no haya ninguno (los de grabacion, OTA y boton Reiniciar no se
+ * apuntan a proposito: no son averias ni interesan para diagnosticar). */
+const char *watchdog_arranque_reason(void)
+{
+    if (s_arranque_reason_code == 0xFF) return "sin reinicios apuntados";
+    return reason_to_str((esp_reset_reason_t)s_arranque_reason_code);
+}
 
 uint32_t watchdog_get_reset_count(void)
 {

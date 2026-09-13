@@ -44,6 +44,11 @@ const char *watchdog_last_reset_reason(void);
  * interesan para diagnosticar, y por eso no se apuntan). */
 uint32_t watchdog_arranque_epoch(void);
 
+/* Motivo del ultimo arranque que SI se apunto (el de la fecha de arriba), o
+ * "sin reinicios apuntados" mientras no haya ninguno: los reinicios de
+ * grabacion por cable, las OTA y el boton Reiniciar no se apuntan. */
+const char *watchdog_arranque_reason(void);
+
 /* Apunta la fecha del arranque actual. Llamar UNA vez, cuando ya hay reloj
  * (en main.c, despues de rtc_init y de poner la hora). */
 void watchdog_anota_arranque(void);

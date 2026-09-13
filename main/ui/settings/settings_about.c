@@ -138,18 +138,27 @@ static void reboot_btn_cb(lv_event_t *e)
 static void about_refresh_wd_label(void)
 {
     if (!s_lbl_wd) return;
-    char cuando[40] = "sin fecha";
     const uint32_t boot = watchdog_arranque_epoch();
-    if (boot > 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
-        time_t t = (time_t)boot;
-        struct tm tmv;
-        localtime_r(&t, &tmv);
-        strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
+    const unsigned long cuenta = (unsigned long)watchdog_get_reset_count();
+
+    /* Sin ningun arranque apuntado todavia (todos los reinicios han sido de
+     * grabacion/OTA) se dice tal cual, en vez de mezclar el motivo del arranque
+     * de AHORA con una fecha que es de otro reinicio. */
+    if (boot <= 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
+        lv_label_set_text_fmt(s_lbl_wd,
+            "Ultimo reset: sin reinicios apuntados (los de grabacion y OTA no cuentan)"
+            "   |   Resets WDT/panic: %lu", cuenta);
+        return;
     }
+
+    char cuando[40];
+    time_t t = (time_t)boot;
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
     lv_label_set_text_fmt(s_lbl_wd,
                           "Ultimo reset: %s - %s   |   Resets WDT/panic: %lu",
-                          watchdog_last_reset_reason(), cuando,
-                          (unsigned long)watchdog_get_reset_count());
+                          watchdog_arranque_reason(), cuando, cuenta);
 }
 
 static void do_reset_count_zero(void)
