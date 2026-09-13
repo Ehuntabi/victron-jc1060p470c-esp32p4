@@ -814,6 +814,11 @@ void app_main(void)
     finish_boot_splash();
     init_camera_and_solar_feed();
 
-    logSection("Setup complete");
+        /* Ya hay reloj (venga del RTC o del respaldo en NVS): apuntar la fecha de
+     * este arranque. Si el arranque fue para reprogramar (cable, OTA o boton),
+     * watchdog_anota_arranque() lo ignora a proposito. */
+    watchdog_anota_arranque();
+
+logSection("Setup complete");
     mark_boot_successful();
 }

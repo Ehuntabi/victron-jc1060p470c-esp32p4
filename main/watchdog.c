@@ -1,5 +1,7 @@
 #include "watchdog.h"
 
+#include <time.h>
+
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -14,10 +16,23 @@ static const char *KEY_COUNT = "count";
 /* Motivo del reset FORZADO por el monitor SW (esp_restart -> aparece como ESP_RST_SW,
  * indistinguible de un reboot planificado). 0=ninguno 1=LVGL congelada 2=tarea muda. */
 static const char *KEY_FORCED = "forced";
+/* Epoch del ultimo arranque "de verdad" (los de reprogramar no se apuntan). */
+static const char *KEY_BOOT = "boot";
+
+/* Codigos de KEY_FORCED */
+#define WD_FORCED_LVGL    1   /* el monitor SW reinicio por UI/LVGL congelada */
+#define WD_FORCED_TAREA   2   /* ... o por una tarea sin latido */
+#define WD_FORCED_PEDIDO  3   /* lo pidio el aparato: OTA o boton Reiniciar */
+
+/* Por debajo de esto no hay hora creible (1-ene-2021). */
+#define WD_EPOCH_MINIMO   1609459200UL
 
 static uint32_t s_reset_count = 0;
 static const char *s_reason_str = "Unknown";
 static volatile bool s_suspended = false;
+static esp_reset_reason_t s_reason_code = ESP_RST_UNKNOWN;   /* motivo crudo */
+static uint8_t s_forced_code = 0;                             /* que lo forzo (o 0) */
+static uint32_t s_arranque_epoch = 0;                         /* ultimo arranque util */
 
 /* Configuración del monitor */
 #define WD_MONITOR_PERIOD_MS   3000   /* cadencia de chequeo */
@@ -227,9 +242,22 @@ static void wd_monitor_task(void *arg)
     }
 }
 
+/* Ultima fecha apuntada (solo lectura: pintar Ajustes no debe tocar la flash). */
+static uint32_t wd_load_arranque_nvs(void)
+{
+    nvs_handle_t h;
+    uint32_t v = 0;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u32(h, KEY_BOOT, &v);
+        nvs_close(h);
+    }
+    return v;
+}
+
 esp_err_t watchdog_init(void)
 {
     esp_reset_reason_t r = esp_reset_reason();
+    s_reason_code = r;
     s_reason_str = reason_to_str(r);
 
     /* Si el ultimo reset fue por watchdog/panic (sintomas de cuelgue),
@@ -247,22 +275,31 @@ esp_err_t watchdog_init(void)
     /* R4: un reset FORZADO por este monitor llega como ESP_RST_SW (no como WDT), asi
      * que no lo contaba is_wdt_reset. Leer/borrar el motivo guardado y contarlo. */
     uint8_t forced = wd_take_forced_reason_nvs();
-    if (is_wdt_reset || forced) {
+    s_forced_code = forced;
+    /* Un reinicio PEDIDO (OTA o boton) no es una averia: no cuenta. */
+    bool pedido = (forced == WD_FORCED_PEDIDO);
+    if ((is_wdt_reset || forced) && !pedido) {
         wd_increment_counter_nvs();
     }
-    if (forced) {
+    if (forced == WD_FORCED_PEDIDO) {
+        ESP_LOGW(TAG, "arranque tras un reinicio pedido (OTA o boton)");
+        s_reason_str = "Reinicio pedido";
+    } else if (forced) {
         ESP_LOGW(TAG, "Reset FORZADO por watchdog SW: %s",
-                 forced == 1 ? "UI/LVGL congelada" : "tarea sin latido");
+                 forced == WD_FORCED_LVGL ? "UI/LVGL congelada" : "tarea sin latido");
         /* Y que se vea tambien en Ajustes -> Acerca de. Sin esto el motivo se
          * quedaba SOLO en el log: esp_reset_reason() devuelve ESP_RST_SW para un
          * esp_restart forzado por el monitor, o sea "Software", indistinguible de
          * un reinicio pedido a proposito. Diagnosticar por que se reiniciaba la
          * placa obligaba a rescatar el log de la SD. */
-        s_reason_str = (forced == 1) ? "Watchdog SW (UI congelada)"
-                                     : "Watchdog SW (tarea muda)";
+        s_reason_str = (forced == WD_FORCED_LVGL) ? "Watchdog SW (UI congelada)"
+                                                  : "Watchdog SW (tarea muda)";
     }
-    ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic/forzados: %lu",
-             s_reason_str, (unsigned long)s_reset_count);
+    /* La ultima fecha apuntada (de un arranque que no fue de reprogramar) */
+    s_arranque_epoch = wd_load_arranque_nvs();
+    ESP_LOGI(TAG, "Reset reason: %s; total WDT/panic/forzados: %lu; ultimo arranque apuntado: %lu",
+             s_reason_str, (unsigned long)s_reset_count,
+             (unsigned long)s_arranque_epoch);
 
     /* Task monitor de salud de LVGL */
     BaseType_t ok = xTaskCreate(wd_monitor_task, "wd_monitor",
@@ -274,6 +311,56 @@ void watchdog_suspend(bool suspend)
 {
     s_suspended = suspend;
 }
+
+/* ¿El arranque de ahora ha sido para reprogramar? Entonces no se apunta: no es
+ * un reinicio que interese (lo provoco una grabacion, no el aparato). */
+static bool wd_fue_reprogramacion(void)
+{
+    switch (s_reason_code) {
+        case ESP_RST_EXT:       /* boton de reset, o el RTS del cable de grabar */
+        case ESP_RST_USB:       /* grabado por USB */
+        case ESP_RST_UNKNOWN:   /* esptool no deja un motivo reconocible */
+            return true;
+        case ESP_RST_SW:        /* esp_restart: solo si NO lo pidio el aparato */
+            return (s_forced_code == WD_FORCED_PEDIDO);
+        default:
+            return false;       /* encendido, bajon, watchdog, panic... si cuentan */
+    }
+}
+
+void watchdog_anota_arranque(void)
+{
+    if (wd_fue_reprogramacion()) {
+        ESP_LOGI(TAG, "arranque tras reprogramar (%s): no apunto la fecha",
+                 s_reason_str);
+        return;
+    }
+    time_t ahora = time(NULL);
+    if ((uint32_t)ahora < WD_EPOCH_MINIMO) {
+        ESP_LOGW(TAG, "reloj sin poner: no apunto la fecha del arranque");
+        return;
+    }
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u32(h, KEY_BOOT, (uint32_t)ahora);
+    esp_err_t err = nvs_commit(h);
+    nvs_close(h);
+    if (err == ESP_OK) {
+        s_arranque_epoch = (uint32_t)ahora;
+        ESP_LOGI(TAG, "arranque apuntado: %lu", (unsigned long)s_arranque_epoch);
+    }
+}
+
+void watchdog_marca_reinicio_pedido(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u8(h, KEY_FORCED, WD_FORCED_PEDIDO);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+uint32_t watchdog_arranque_epoch(void) { return s_arranque_epoch; }
 
 uint32_t watchdog_get_reset_count(void)
 {

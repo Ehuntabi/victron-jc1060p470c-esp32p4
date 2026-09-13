@@ -13,6 +13,7 @@
 #include "freertos/semphr.h"
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 static const char *TAG = "FRIGO";
 
@@ -89,6 +90,14 @@ static uint16_t s_sol_pv_w     = 0;
 static bool     s_sol_shore    = false;
 static bool     s_sol_fresh    = false;
 static uint32_t s_sol_feed_ms  = 0;
+/* Tiempo que el frigo ha estado tirando del excedente solar HOY. Se acumula en
+ * frigo_solar_tick (corre cada ~1 s) con el reloj monotonico: el intervalo que
+ * se suma es el YA transcurrido con el rele cerrado. El dia lo marca el RTC; si
+ * el RTC no fuese valido (pila agotada), no se reinicia y cuenta desde el
+ * arranque. Lo consume el log (columna min_solar_hoy) y el chivato del panel. */
+static uint32_t s_sol_last_ms  = 0;
+static uint32_t s_sol_ms_hoy   = 0;
+static int      s_sol_dia      = -1;
 
 /* ── NVS ─────────────────────────────────────────────────────── */
 static void nvs_load(void)
@@ -324,6 +333,26 @@ static void frigo_solar_tick(void)
     };
     bool prev = s_sol_sm.active;
     relay = frigo_solar_eval(&in, &s_sol_sm);
+
+    /* Acumulado de hoy. Se suma el intervalo anterior (por eso mira prev, el
+     * estado con el que ha estado el rele durante ese rato, no el nuevo). El
+     * delta se acota a 10 s: si la tarea se atasca, no se inventan minutos. */
+    if (s_sol_last_ms != 0 && now > s_sol_last_ms) {
+        uint32_t delta = now - s_sol_last_ms;
+        if (delta > 10000u) delta = 10000u;
+        if (prev) s_sol_ms_hoy += delta;
+    }
+    s_sol_last_ms = now;
+    /* Corte de dia: solo cuando el RTC da una fecha creible (tm_year > 100). */
+    time_t ahora = time(NULL);
+    struct tm t;
+    localtime_r(&ahora, &t);
+    if (t.tm_year > 100) {
+        if (t.tm_yday != s_sol_dia) {
+            s_sol_dia   = t.tm_yday;
+            s_sol_ms_hoy = 0;
+        }
+    }
     xSemaphoreGive(s_mutex);
 
     gpio_set_level(FRIGO_SOLAR_RELAY_GPIO, relay ? 1 : 0);
@@ -808,6 +837,18 @@ bool frigo_solar_get_active(void)
     bool v = false;
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         v = s_sol_sm.active;
+        xSemaphoreGive(s_mutex);
+    }
+    return v;
+}
+
+/* Segundos acumulados hoy con el frigo alimentado por excedente solar. */
+uint32_t frigo_solar_get_seg_hoy(void)
+{
+    if (!s_mutex) return 0;
+    uint32_t v = 0;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        v = s_sol_ms_hoy / 1000u;
         xSemaphoreGive(s_mutex);
     }
     return v;

@@ -129,3 +129,6 @@ uint8_t  frigo_solar_get_soc_on(void);
 uint8_t  frigo_solar_get_soc_off(void);
 /* Estado ON real (rele activado por excedente). Para el indicador principal. */
 bool     frigo_solar_get_active(void);
+/* Segundos que el frigo lleva hoy alimentado por excedente solar (acumula
+ * mientras el rele esta cerrado; se pone a cero al cambiar de dia). */
+uint32_t frigo_solar_get_seg_hoy(void);

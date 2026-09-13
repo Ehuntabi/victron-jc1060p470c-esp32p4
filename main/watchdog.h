@@ -32,6 +32,20 @@ void watchdog_suspend(bool suspend);
  * cadena estática y no debe liberarse. */
 const char *watchdog_last_reset_reason(void);
 
+/* Fecha y hora del ultimo arranque QUE NO FUE PARA REPROGRAMAR, en epoch.
+ * 0 = no hay dato: o el reloj no estaba puesto, o el ultimo arranque fue una
+ * grabacion por cable, una actualizacion OTA o el boton de reiniciar (esos no
+ * interesan para diagnosticar, y por eso no se apuntan). */
+uint32_t watchdog_arranque_epoch(void);
+
+/* Apunta la fecha del arranque actual. Llamar UNA vez, cuando ya hay reloj
+ * (en main.c, despues de rtc_init y de poner la hora). */
+void watchdog_anota_arranque(void);
+
+/* Marca que el reinicio que viene lo pide el propio aparato a proposito (OTA o
+ * boton Reiniciar). El arranque siguiente lo lee y no lo cuenta como averia. */
+void watchdog_marca_reinicio_pedido(void);
+
 /* Tareas de app vigiladas por heartbeat. Cada una debe llamar a
  * watchdog_heartbeat() en cada iteracion de su bucle principal. Si una deja
  * de latir mas de su umbral (ver WD_TASK_TIMEOUT_US_TABLE en watchdog.c --

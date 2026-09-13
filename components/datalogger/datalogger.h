@@ -14,6 +14,7 @@ typedef struct {
     float T_Exterior;
     uint8_t fan_percent;
     bool    excedente_solar;   /* 1 = frigo alimentado por excedente solar en esa muestra */
+    uint16_t min_solar_hoy;    /* minutos acumulados hoy alimentado por solar (hasta esta muestra) */
 } datalogger_entry_t;
 
 esp_err_t datalogger_init(void);

@@ -66,11 +66,31 @@ cambio de layout privado de IDF.
 ## Versionado / releases
 - La version que se ve en Ajustes -> Acerca de sale SOLA de `git describe`
   (esp_app_get_description()->version). NO se edita ningun numero en el codigo.
-- Para publicar una version nueva: `./release.sh X.Y.Z` (crea el tag, build limpio
-  anti-gotcha, imagen fusionada, y recuerda push + crear Release + flashear).
+- **Regla (13-sep-2026, decisión del usuario): la versión NUNCA lleva sufijos.**
+  Ni `-dirty` ni `-N-g<hash>`: un binario se llama `v2.6` y punto. Lo que hay por
+  encima del último tag **es** la versión siguiente, **+0.1** (`v2.5` + trabajo
+  sin etiquetar -> `v2.6`). Ese cálculo vive en `CMakeLists.txt` (versión
+  embebida) y en `scripts/bin_con_version.sh` (nombre del fichero).
+- **Todo build deja una copia con la versión en el nombre**:
+  `build/joint_spl_145_control_v2.6.bin`, junto al binario de siempre (el
+  original `joint_spl_145_control.bin` no se toca: es el que usan `idf.py flash`
+  y `flash_args`). Lo hace el target `bin_con_version` de `CMakeLists.txt` (tiene
+  que ir DESPUÉS de que esptool genere el `.bin`: colgado del `POST_BUILD` del
+  `.elf` copiaba el binario de la compilación anterior), así que no hay que
+  acordarse de nada; el build imprime las rutas con `[bin]`.
+- **La copia va además a `~/joint-releases`**, con el mismo nombre que publica
+  `release.sh` para OTA (`joint-spl-145-control-vX.Y-app.bin`): es la carpeta
+  donde se sabe que está lo que se lleva a la autocaravana. Ahí **se deja solo la
+  última versión** del P4 —las viejas se retiran, igual que hace `release.sh`
+  (siguen en la Release de GitHub y en su tag)— sin tocar nada de otros
+  proyectos (`35cabina`) ni la app Flutter.
+- Para publicar: `./release.sh [X.Y]` (crea el tag, build limpio anti-gotcha,
+  imagen fusionada, y publica la Release). **Sin X.Y coge el último tag +0.1.**
 - Gotcha ESP-IDF: la version/fecha se cachea en el configure de CMake; si el About
   muestra datos viejos, `idf.py reconfigure` + borrar el .obj de esp_app_desc lo
-  refresca (release.sh ya lo hace).
+  refresca (release.sh ya lo hace). Desde el 13-sep-2026
+  `scripts/bin_con_version.sh` avisa en el build cuando el binario lleva
+  embebida una versión distinta de la del árbol.
 
 ## ⚠️ Trampa recurrente: `dependencies.lock` y la ruta de esp_hosted
 

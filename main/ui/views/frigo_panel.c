@@ -41,6 +41,14 @@ static lv_obj_t *s_lbl_fanmin_val = NULL;
 
 static lv_obj_t *s_lbl_solon  = NULL;
 static lv_obj_t *s_lbl_soloff = NULL;
+/* Chivato del modo solar (punto de color + texto). La cache evita rehacer el
+ * texto en cada vuelta de ui_frigo_panel_update, que corre en cada iteracion
+ * de main y no solo cuando cambia algo. min=0xFFFFFFFF fuerza el primer pintado. */
+static lv_obj_t *s_lbl_sol_estado = NULL;
+static lv_obj_t *s_dot_sol        = NULL;
+static bool      s_sol_est_act    = false;
+static bool      s_sol_est_en     = false;
+static uint32_t  s_sol_est_min    = 0xFFFFFFFFu;
 
 static ui_state_t *s_ui = NULL;
 
@@ -265,6 +273,43 @@ static void refresh_soloff_label(void)
 {
     if (!s_lbl_soloff) return;
     lv_label_set_text_fmt(s_lbl_soloff, "Cortar a SoC: %d%%", frigo_solar_get_soc_off());
+}
+
+/* Chivato: dice si el frigo esta tirando AHORA del excedente solar y cuanto
+ * lleva hoy (el mismo acumulado que va a la columna min_solar_hoy del log). */
+static void refresh_sol_estado_label(void)
+{
+    if (!s_lbl_sol_estado) return;
+    uint32_t seg = frigo_solar_get_seg_hoy();
+    bool     act = frigo_solar_get_active();
+    bool     en  = frigo_solar_get_enabled();
+    uint32_t min = seg / 60u;
+    if (act == s_sol_est_act && en == s_sol_est_en && min == s_sol_est_min) return;
+    s_sol_est_act = act;
+    s_sol_est_en  = en;
+    s_sol_est_min = min;
+
+    char tiempo[28];
+    if (seg >= 3600u) {
+        snprintf(tiempo, sizeof(tiempo), "%lu h %02lu min",
+                 (unsigned long)(seg / 3600u), (unsigned long)((seg % 3600u) / 60u));
+    } else {
+        snprintf(tiempo, sizeof(tiempo), "%lu min", (unsigned long)min);
+    }
+
+    uint32_t col;
+    if (act) {
+        lv_label_set_text_fmt(s_lbl_sol_estado, "ALIMENTANDO POR SOLAR  (hoy: %s)", tiempo);
+        col = 0x00C851;   /* verde: el frigo come del panel */
+    } else if (en) {
+        lv_label_set_text_fmt(s_lbl_sol_estado, "En espera de excedente  (hoy: %s)", tiempo);
+        col = 0xE0900A;   /* ambar: modo puesto, sin sol suficiente */
+    } else {
+        lv_label_set_text_fmt(s_lbl_sol_estado, "Modo solar desactivado  (hoy: %s)", tiempo);
+        col = 0x888888;   /* gris: apagado a mano */
+    }
+    lv_obj_set_style_text_color(s_lbl_sol_estado, lv_color_hex(col), 0);
+    if (s_dot_sol) lv_obj_set_style_bg_color(s_dot_sol, lv_color_hex(act ? col : 0x555555), 0);
 }
 static void btn_solon_minus_cb(lv_event_t *e)
 {
@@ -880,6 +925,32 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_center(lbl_sfp);
     lv_obj_add_event_cb(btn_soloff_p, btn_soloff_plus_cb, LV_EVENT_CLICKED, NULL);
 
+    /* Chivato del modo solar: punto de color + estado + tiempo acumulado hoy.
+     * El punto va como objeto aparte (no como simbolo de fuente) para no
+     * depender de que la fuente traiga el glifo. */
+    lv_obj_t *row_solar_estado = lv_obj_create(card_solar);
+    lv_obj_remove_style_all(row_solar_estado);
+    lv_obj_set_width(row_solar_estado, lv_pct(100));
+    lv_obj_set_height(row_solar_estado, LV_SIZE_CONTENT);
+    lv_obj_set_layout(row_solar_estado, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(row_solar_estado, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_solar_estado, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_solar_estado, 10, 0);
+
+    s_dot_sol = lv_obj_create(row_solar_estado);
+    lv_obj_remove_style_all(s_dot_sol);
+    lv_obj_set_size(s_dot_sol, 14, 14);
+    lv_obj_set_style_radius(s_dot_sol, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(s_dot_sol, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(s_dot_sol, lv_color_hex(0x555555), 0);
+
+    s_lbl_sol_estado = lv_label_create(row_solar_estado);
+    lv_obj_set_style_text_font(s_lbl_sol_estado, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_sol_estado, lv_color_hex(0x888888), 0);
+    s_sol_est_min = 0xFFFFFFFFu;   /* forzar el primer pintado del chivato */
+    refresh_sol_estado_label();
+
     /* Overlay Exterior */
     lv_obj_t *overlay_cont = lv_obj_create(ui->bottom_bar ? ui->bottom_bar : lv_scr_act());
     lv_obj_remove_style_all(overlay_cont);
@@ -1037,6 +1108,9 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
             snprintf(buf, sizeof(buf), "%+5.1f \xc2\xb0""C", state->T_Exterior);
         lv_label_set_text(s_lbl_exterior_overlay, buf);
     }
+
+    /* Chivato del modo solar (se autocensura: solo repinta si cambio algo). */
+    refresh_sol_estado_label();
 
     /* Ha cambiado el conjunto de sondas y el usuario aun no lo ha visto. La
      * bandera NO se limpia aqui sino en el boton del aviso: este update puede

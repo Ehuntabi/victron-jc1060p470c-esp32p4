@@ -19,6 +19,7 @@
 #include "esp_app_desc.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "watchdog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_task_wdt.h"
@@ -81,6 +82,9 @@ static void ota_reboot_cb(void *arg)
 {
     (void)arg;
     ESP_LOGW(TAG, "actualizacion aplicada: reiniciando");
+    /* Que el arranque siguiente sepa que este reinicio lo pedia una
+     * actualizacion: no es una averia y no se apunta como ultimo reinicio. */
+    watchdog_marca_reinicio_pedido();
     esp_restart();
 }
 

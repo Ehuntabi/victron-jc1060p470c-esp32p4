@@ -2,9 +2,10 @@
 #
 # release.sh — prepara un release de "Joint SPL 145 Control".
 #
-# Uso:  ./release.sh X.Y  ["mensaje del tag"]
+# Uso:  ./release.sh [X.Y] ["mensaje del tag"]
 #   ej: ./release.sh 1.12
 #       ./release.sh 1.13 "Añade gráfico de consumo"
+#       ./release.sh                      <- coge el último tag +0.1 (v2.5 -> v2.6)
 #
 # Qué hace (SÍ publica: sube código+tag y crea la Release en GitHub):
 #   1. Comprueba que no hay cambios sin commitear.
@@ -35,8 +36,17 @@ RELDIR="$HOME/joint-releases"
 # ── 0) argumentos ────────────────────────────────────────────────────────────
 VER_IN="${1:-}"
 if [ -z "$VER_IN" ]; then
-  echo "Uso: ./release.sh X.Y [\"mensaje del tag\"]   (ej: ./release.sh 1.12)"
-  exit 1
+  # Sin argumento: la siguiente version es el ultimo tag +0.1, que es la misma
+  # regla que usa el build (nada de "-dirty"). Asi publicar la tanda de trabajo
+  # que ya esta en el arbol no depende de acordarse del numero.
+  ULTIMO_TAG="$(git describe --tags --abbrev=0 --match 'v*.*' 2>/dev/null || true)"
+  if [ -z "$ULTIMO_TAG" ]; then
+    echo "Uso: ./release.sh [X.Y] [\"mensaje del tag\"]   (ej: ./release.sh 2.6)"
+    echo "     Sin X.Y se usa el ultimo tag +0.1, y ahora mismo no hay ningun tag v*."
+    exit 1
+  fi
+  VER_IN="$(printf '%s' "$ULTIMO_TAG" | awk -F. '{ printf "%s.%d", $1, $2 + 1 }')"
+  echo "[i] sin argumento: toca $VER_IN (ultimo tag $ULTIMO_TAG, +0.1)"
 fi
 VER="${VER_IN#v}"                                   # quita una 'v' inicial si la hay
 # DOS numeros, no tres (24-ago-2026, decision del usuario). Con tres se acabo

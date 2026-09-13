@@ -10,6 +10,7 @@
 #include "fonts/fonts_es.h"
 
 #include <string.h>
+#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <lvgl.h>
@@ -107,6 +108,9 @@ static void about_timer_cb(lv_timer_t *t)
 static void do_reboot_action(void)
 {
     ESP_LOGW(TAG_SETTINGS, "Reboot confirmed by user");
+    /* Este reinicio lo pide el usuario: el arranque siguiente no lo apunta como
+     * "ultimo reinicio" ni lo cuenta como averia. */
+    watchdog_marca_reinicio_pedido();
     flush_all_before_restart();
     vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
@@ -170,8 +174,18 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *lbl_wd = lv_label_create(card2);
     lv_obj_set_style_text_font(lbl_wd, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_wd, lv_color_hex(0xFFD54F), 0);
-    lv_label_set_text_fmt(lbl_wd, "Ultimo reset: %s   |   Resets WDT/panic: %lu",
-                          watchdog_last_reset_reason(),
+    /* Fecha del ultimo reinicio que NO fue para reprogramar (0 = sin dato) */
+    char cuando[40] = "sin fecha";
+    const uint32_t boot = watchdog_arranque_epoch();
+    if (boot > 1609459200UL) {                 /* 1-ene-2021: antes, no es creible */
+        time_t t = (time_t)boot;
+        struct tm tmv;
+        localtime_r(&t, &tmv);
+        strftime(cuando, sizeof(cuando), "%d/%m/%Y %H:%M", &tmv);
+    }
+    lv_label_set_text_fmt(lbl_wd,
+                          "Ultimo reset: %s · %s   |   Resets WDT/panic: %lu",
+                          watchdog_last_reset_reason(), cuando,
                           (unsigned long)watchdog_get_reset_count());
 
     /* === Card 3: Credits === */
@@ -215,36 +229,20 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Version + fecha/hora de compilacion, todo en una linea. */
     const esp_app_desc_t *app_desc = esp_app_get_description();
     const char *raw_ver = app_desc ? app_desc->version : APP_VERSION_FALLBACK;
-    /* git describe da "v1.0.0" en un tag exacto, o "v1.0.0-<n>-g<hash>[-dirty]"
-     * en un build intermedio, donde <n> es cuantos commits van por encima del
-     * tag. Se muestra "v1.0.0 +7": el tag y esa cuenta.
+    /* La version se muestra TAL CUAL: es siempre un numero limpio "vX.Y".
      *
-     * Antes ponia "-dev" a secas y ahi estaba el problema: TODOS los builds
-     * entre dos versiones se llamaban igual, asi que mirando la pantalla no
-     * habia forma de saber cual tenias puesto. Con la cuenta se ordenan solos y
-     * se sigue viendo que no es una version publicada.
-     *
-     * Sumarle 0.0.1 al tag no vale: inventaria un numero de version que no
-     * existe (sin tag, sin release, sin binario guardado) y ademas tampoco
-     * distinguiria un build de otro. Si no hay cuenta -- "v1.0.0-dirty", que es
-     * un tag exacto con cambios sin commitear -- se queda el aviso de siempre. */
-    char ver_disp[48];
-    const char *dash = strchr(raw_ver, '-');
-    int commits = dash ? atoi(dash + 1) : 0;
-    if (dash && commits > 0) {
-        snprintf(ver_disp, sizeof(ver_disp), "%.*s +%d",
-                 (int)(dash - raw_ver), raw_ver, commits);
-    } else if (dash) {
-        snprintf(ver_disp, sizeof(ver_disp), "%.*s-dev",
-                 (int)(dash - raw_ver), raw_ver);
-    } else {
-        snprintf(ver_disp, sizeof(ver_disp), "%s", raw_ver);
-    }
+     * Antes se sacaba el `git describe` en crudo y se decoraba aqui ("v2.5 +7"
+     * con los commits por encima del tag, o "v2.5-dirty" cuando habia cambios
+     * sin commitear). El usuario lo corto el 13-sep-2026: no quiere ver un
+     * build marcado como sucio, y cada tanda de trabajo es la version
+     * SIGUIENTE, +0.1 sobre el ultimo tag. Ese +0.1 lo calcula CMakeLists.txt
+     * antes de compilar; aqui no se inventa ningun numero, y asi lo que dice
+     * esta pantalla es exactamente lo que dice el nombre del .bin. */
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
     lv_label_set_text_fmt(lbl_ver_top, "Version: %s    Compilado: %s  %s",
-                          ver_disp,
+                          raw_ver,
                           app_desc ? app_desc->date : __DATE__,
                           app_desc ? app_desc->time : __TIME__);
 

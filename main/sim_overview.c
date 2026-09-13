@@ -247,7 +247,11 @@ static void sim_escribir_frigo(const char *fecha)
     mkdir("/sdcard/frigo", 0777);
     FILE *f = fopen(path, "w");
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", path); return; }
-    fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar\n");
+    fprintf(f, "timestamp,T_Aletas,T_Congelador,T_Exterior,fan_pct,excedente_solar,"
+               "min_solar_hoy\n");
+    /* min_solar acumula como lo hace la placa de verdad: suma el paso entero
+     * mientras el excedente esta activo (mismo criterio que la columna 6). */
+    int min_solar = 0;
     for (int m = 0; m < 24 * 60; m += SIM_PASO_MIN) {
         float sol = sim_sol(m);
         float t_ext    = 14.0f + 18.0f * sol;                 /* 14..32 */
@@ -256,9 +260,11 @@ static void sim_escribir_frigo(const char *fecha)
         int   fan      = (t_aletas <= 35.0f) ? 0
                        : (int)((t_aletas - 35.0f) / 13.0f * 100.0f);
         if (fan > 100) fan = 100;
-        fprintf(f, "%s %02d:%02d:00,%.1f,%.1f,%.1f,%d,%d\n",
+        int exc = (sol > 0.55f) ? 1 : 0;
+        if (exc) min_solar += SIM_PASO_MIN;
+        fprintf(f, "%s %02d:%02d:00,%.1f,%.1f,%.1f,%d,%d,%d\n",
                 fecha, m / 60, m % 60, t_aletas, t_cong, t_ext,
-                fan, (sol > 0.55f) ? 1 : 0);
+                fan, exc, min_solar);
     }
     fclose(f);
     ESP_LOGI(TAG, "historico frigo inventado -> %s", path);
