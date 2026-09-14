@@ -366,17 +366,26 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *c4_hint = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
-    /* Desde 2026-08-07 hay DOS niveles (ver config_server.c): la web normal no
-     * pide nada — basta con estar en el Wi-Fi del display — pero /ota, /keys y
-     * /save SI, porque reescriben el firmware o entregan las claves AES. Hay
-     * que decir exactamente donde hacen falta: anunciarlas como necesarias para
-     * todo fue lo que hizo perder el tiempo buscando por que la app no
-     * conectaba, y decir que no hacen falta para nada seria mentir ahora. */
+    /* OJO con este texto, que ya ha mentido una vez (auditado el 14-sep-2026).
+     *
+     * El 2026-08-07 esto eran DOS niveles: la web abierta y solo /ota, /keys y
+     * /save cerrados. Aquel texto decia, con razon entonces, que "la app no
+     * pide nada: basta con el Wi-Fi".
+     *
+     * El 21-ago-2026 el portal volvio a exigir credenciales TAMBIEN en el nivel
+     * abierto (PORTAL_REQUIRE_BASIC_AUTH=1, config_server_auth.c) y ese cartel
+     * se quedo con el texto viejo. Resultado: decia justo lo contrario de lo que
+     * hace el firmware, y es la clase de cartel que se cree -- la app de Android
+     * iba sin credenciales y el portal le contestaba 401 a todo.
+     *
+     * Ahora dice la verdad, y si algun dia se vuelve a abrir el nivel abierto
+     * (poniendo PORTAL_REQUIRE_BASIC_AUTH a 0) hay que cambiar ESTE texto a la
+     * vez: son la misma decision contada en dos sitios. */
     lv_label_set_text(c4_hint,
-                      "Solo para Actualizar (/ota) y Claves Victron. El resto\n"
-                      "de la web y la app no piden nada: basta con el Wi-Fi.\n"
-                      "Ojo: la web es HTTP sin cifrar, protegida solo por la\n"
-                      "clave Wi-Fi de arriba, no por esta.");
+                      "La web, la app del movil y Actualizar (/ota) piden\n"
+                      "este usuario y clave. Se leen aqui. Ojo: la web es HTTP\n"
+                      "sin cifrar, protegida solo por la clave Wi-Fi de arriba,\n"
+                      "no por esta.");
 
     /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */
