@@ -73,21 +73,12 @@ static const audio_note_t s_patron[] = {
 
 static QueueHandle_t s_cola_pitido = NULL;
 
-/* Cortes pedidos desde OTRAS tareas (el portal, al atender una orden de la
- * cabina). El corte de verdad (audio_cancel_playback) lo hace la tarea del
- * pitido, que es la unica que habla con el codec: llamarlo desde la tarea del
- * httpd seria tocar el mismo driver desde dos sitios. */
-static volatile uint32_t s_cortes_pedidos = 0;
-static volatile uint32_t s_cortes_hechos  = 0;
-
 static void alarma_task(void *arg)
 {
     (void)arg;
     uint8_t v;
     for (;;) {
-        /* 100 ms de espera en vez de esperar sin limite: es lo que tarda como
-         * mucho en atenderse un corte pedido por otra tarea. */
-        if (xQueueReceive(s_cola_pitido, &v, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (xQueueReceive(s_cola_pitido, &v, portMAX_DELAY) == pdTRUE) {
             /* Subir al maximo solo durante el pitido y restaurar despues, para
              * no tocar el volumen normal del usuario. */
             int prev_vol = audio_get_volume();
@@ -97,17 +88,7 @@ static void alarma_task(void *arg)
                                    true);
             audio_set_volume_transient(prev_vol);
         }
-        if (s_cortes_pedidos != s_cortes_hechos) {
-            s_cortes_hechos = s_cortes_pedidos;
-            audio_cancel_playback();
-        }
     }
-}
-
-/* Pide el corte del pitido en curso. Se puede llamar desde cualquier tarea. */
-static void pedir_corte(void)
-{
-    s_cortes_pedidos++;
 }
 
 #define PITIDO_INTERVALO_MS  (5u * 60u * 1000u)   /* 5 s de pitido cada 5 min */
@@ -250,7 +231,20 @@ void alarma_silenciar(alarma_tipo_t t)
     if (s_al[t].silenciada) return;
     s_al[t].silenciada = true;
     ESP_LOGI(TAG, "alarma de %s silenciada (la senal visual sigue)", s_nombre[t]);
-    pedir_corte();
+
+    /* El corte del pitido va AQUI, en la tarea que pide el silencio, y no en la
+     * tarea del pitido. Parece mas ordenado pasarlo por una cola -- y se hizo
+     * asi en la primera version -- pero entonces el corte solo se atendia
+     * CUANDO TERMINABA la reproduccion en curso: el pitido sonaba 5 segundos
+     * enteros aunque el usuario (o la cabina) lo hubiera callado al primer
+     * segundo. Justo el caso que se quiere resolver: se toca porque se oye.
+     *
+     * Llamarlo desde otra tarea es seguro POR DISEÑO: audio_cancel_playback()
+     * solo incrementa un contador de generacion (s_audio_gen) y el bucle de
+     * reproduccion lo comprueba en cada trozo, asi que aborta en milisegundos.
+     * Ese contador existe precisamente para esto (ver el comentario de
+     * audio_es8311.c sobre el caso del 09-sep-2026). Auditado el 14-sep-2026. */
+    audio_cancel_playback();
 }
 
 void alarma_alternar_silencio(alarma_tipo_t t)
