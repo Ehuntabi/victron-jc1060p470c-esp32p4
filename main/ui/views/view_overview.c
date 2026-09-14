@@ -410,10 +410,13 @@ static void alarm_mute_freezer_cb(lv_event_t *e)
 static const char *alarm_hint_text(const ui_overview_view_t *ov,
                                    bool alarm_s1, bool alarm_r1, bool alarm_soc)
 {
-    if (alarm_s1 && !ov->alarm_s1_muted)                                     return "Agua limpia en reserva: toca el deposito";
-    if (alarm_r1 && !ov->alarm_r1_muted)                                     return "Aguas grises llenas: toca el deposito";
-    if (alarm_soc && !ov->alarm_soc_muted)                                   return "Bateria baja: toca la bateria";
-    if (ui_get_freezer_alarm() && !ov->alarm_freezer_muted)                  return "Congelador fuera de temperatura: toca su temperatura";
+    /* Se enseña SIEMPRE que la alarma este activa, silenciada o no: silenciar
+     * corta el sonido, no la señal visual (decidido el 13-sep-2026). Si esta
+     * silenciada, el texto lo dice, para que se sepa que sigue pasando. */
+    if (alarm_s1)  return ov->alarm_s1_muted ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
+    if (alarm_r1)  return ov->alarm_r1_muted ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
+    if (alarm_soc) return ov->alarm_soc_muted ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
+    if (ui_get_freezer_alarm()) return ov->alarm_freezer_muted ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
     return NULL;
 }
 
@@ -1358,12 +1361,12 @@ static void overview_render(ui_overview_view_t *ov)
         /* Parpadeo visual: alternar opacidad cada 500 ms si alarma activa
          * y no silenciada. */
         if (ov->tank_s1) {
-            lv_opa_t opa = (alarm_s1 && !ov->alarm_s1_muted && ov->blink_phase)
+            lv_opa_t opa = (alarm_s1 && ov->blink_phase)
                 ? LV_OPA_30 : LV_OPA_COVER;
             lv_obj_set_style_opa(ov->tank_s1, opa, 0);
         }
         if (ov->tank_r1) {
-            lv_opa_t opa = (alarm_r1 && !ov->alarm_r1_muted && ov->blink_phase)
+            lv_opa_t opa = (alarm_r1 && ov->blink_phase)
                 ? LV_OPA_30 : LV_OPA_COVER;
             lv_obj_set_style_opa(ov->tank_r1, opa, 0);
         }
@@ -1425,7 +1428,7 @@ static void overview_render(ui_overview_view_t *ov)
         }
         /* Parpadeo visual del card de bateria */
         if (ov->card_bat) {
-            lv_opa_t opa = (alarm_soc && !ov->alarm_soc_muted && ov->blink_phase)
+            lv_opa_t opa = (alarm_soc && ov->blink_phase)
                 ? LV_OPA_30 : LV_OPA_COVER;
             lv_obj_set_style_opa(ov->card_bat, opa, 0);
         }
@@ -1449,10 +1452,9 @@ static void overview_render(ui_overview_view_t *ov)
 
         /* ── Feature A: interrumpir la rotacion del salvapantallas cuando
          * salta cualquier alarma no silenciada, para que no quede oculta. ── */
-        bool any_alarm = (alarm_s1 && !ov->alarm_s1_muted) ||
-                         (alarm_r1 && !ov->alarm_r1_muted) ||
-                         (alarm_soc && !ov->alarm_soc_muted) ||
-                         (ui_get_freezer_alarm() && !ov->alarm_freezer_muted);
+        /* Cuenta cualquier alarma activa, silenciada o no: la pantalla tiene que
+         * enseñarla (lo que se calla es el pitido). */
+        bool any_alarm = alarm_s1 || alarm_r1 || alarm_soc || ui_get_freezer_alarm();
         s_ov_alarm_active = any_alarm;
         if (any_alarm && !s_ov_prev_alarm) {
             ui_alarm_interrupt_screensaver();
@@ -1516,7 +1518,7 @@ static void overview_render(ui_overview_view_t *ov)
                  * Parpadeo (alfa 30% / 100%) si la alarma esta activa y
                  * sin mutear, para que destaque sobre la barra inferior. */
                 col = over ? UI_COLOR_RED : UI_COLOR_TEXT;
-                opa = (over && !ov->alarm_freezer_muted && ov->blink_phase)
+                opa = (over && ov->blink_phase)
                     ? LV_OPA_30 : LV_OPA_COVER;
             } else {
                 snprintf(fbuf, sizeof(fbuf), " --");
