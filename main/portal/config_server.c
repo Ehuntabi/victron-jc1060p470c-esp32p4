@@ -38,6 +38,9 @@
 #include "ui/vigilancia/ausente_mode.h"   /* salida de emergencia del modo ausente por HTTP */
 #include "ne185/ne185.h"       /* control de luces/bomba (POST /control) */
 #include "frigo.h"             /* control del ventilador (POST /control) */
+#include "alarma_estado.h"     /* POST /api/alarma: la orden de silencio de la cabina */
+#include "net/mini_proto.h"    /* MINI_ALARM_*, el bitmask que manda la cabina */
+#include "cJSON.h"             /* POST /api/alarma */
 #include "esp_bsp.h"           /* bsp_display_lock/unlock para tocar LVGL desde httpd */
 #include "screenshot.h"        /* screenshot_take_bmp para /captura?n=<i> */
 #include "esp_heap_caps.h"     /* heap_caps_free del BMP servido */
@@ -165,6 +168,66 @@ static esp_err_t handle_control(httpd_req_t *req) {
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "dev? (luz_int|luz_ext|bomba|fan)");
     }
+    return ESP_OK;
+}
+
+/* POST /api/alarma — la orden de silencio que manda la pantalla de cabina.
+ *
+ * POR QUE EXISTE (14-sep-2026): el pitido lo hace esta P4 (lleva el codec y el
+ * amplificador) y la cabina 3,5" no tiene altavoz, asi que en marcha habia que
+ * ir hasta atras para callar una alarma. Con esto se calla desde el asiento del
+ * conductor. Lo que se corta es SOLO el sonido: el parpadeo, el aviso y la
+ * senal de la cabina siguen (decision del usuario, 13-sep-2026).
+ *
+ * POR QUE HTTP Y NO UDP: la telemetria va por UDP broadcast (una perdida no
+ * importa, al segundo siguiente llega otra), pero esto es una ORDEN: si se
+ * pierde, la alarma se queda pitando y el que la ha silenciado no lo sabe. Por
+ * TCP se sabe con certeza que llego, y de paso reutiliza el mismo camino que ya
+ * usan los apuntes del cuaderno de viaje (POST /api/viaje). Ver net/p4_api.c de
+ * la 35cabina.
+ *
+ * Cuerpo: {"alarmas":N} con el bitmask MINI_ALARM_* (main/net/mini_proto.h) de
+ * la alarma que se quiere callar. Lo manda la cabina con el byte que acaba de
+ * recibir en la telemetria, de modo que silencia la que ella ve en pantalla.
+ *
+ * NO pide autenticacion, igual que /api/viaje: el que puede mandar esto esta ya
+ * dentro del SoftAP de la P4 (WPA2), y la orden no hace nada irreversible
+ * (calla un pitido). Ponerle Basic Auth solo añadiria un modo de fallo mas
+ * (credenciales mal puestas en Ajustes -> silencio que no llega, sin decir por
+ * que). Si algun dia esto crece a algo que toque la instalacion, habra que
+ * revisarlo.
+ *
+ * Responde {"ok":true,"silenciadas":N}; con N=0 cuando no habia nada que
+ * silenciar (la alarma ya no estaba activa), que no es un error: la cabina se
+ * entera de que su pantalla iba con retraso respecto a la P4. */
+static esp_err_t handle_api_alarma(httpd_req_t *req) {
+    char body[96] = {0};
+    int total = req->content_len < (int)sizeof(body) - 1 ? req->content_len : (int)sizeof(body) - 1;
+    int got = 0;
+    while (got < total) {
+        int r = httpd_req_recv(req, body + got, total - got);
+        if (r <= 0) break;
+        got += r;
+    }
+    body[got] = 0;
+
+    httpd_resp_set_type(req, "application/json");
+    cJSON *j = cJSON_Parse(body);
+    const cJSON *jm = j ? cJSON_GetObjectItem(j, "alarmas") : NULL;
+    if (!cJSON_IsNumber(jm)) {
+        if (j) cJSON_Delete(j);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"falta alarmas\"}");
+        return ESP_OK;
+    }
+    int mask = jm->valueint;
+    cJSON_Delete(j);
+
+    /* El bitmask lo interpreta alarma_estado.c, que es quien tiene el estado. */
+    int n = alarma_silenciar_mask((uint8_t)(mask & MINI_ALARM_TODAS));
+    char resp[64];
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"silenciadas\":%d}", n);
+    httpd_resp_sendstr(req, resp);
     return ESP_OK;
 }
 
@@ -803,6 +866,11 @@ esp_err_t config_server_start(void) {
      * registros). Ver main/portal/config_server_viaje.c. */
     httpd_uri_t uri_viaje = { .uri = "/api/viaje", .method = HTTP_POST, .handler = handle_api_viaje };
     httpd_register_uri_handler(server, &uri_viaje);
+    /* Silenciar una alarma desde la pantalla de cabina. Va en el httpd normal
+     * (puerto 80) y no en el "pesado": tiene que atenderse al instante, no
+     * esperar detras de una descarga de .tar o de una OTA. */
+    httpd_uri_t uri_alarma = { .uri = "/api/alarma", .method = HTTP_POST, .handler = handle_api_alarma };
+    httpd_register_uri_handler(server, &uri_alarma);
     /* Lista de viajes con su estado, y el historico con su nombre de verdad. */
     httpd_uri_t uri_viajes = { .uri = "/data/viajes", .method = HTTP_GET, .handler = handle_data_viajes };
     httpd_register_uri_handler(server, &uri_viajes);

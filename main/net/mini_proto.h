@@ -1,4 +1,4 @@
-/* mini_proto.h - Protocolo UDP-broadcast del 7" (P4+C6) hacia el satelite.
+/* mini_proto.h - Protocolo entre el 7" (P4+C6) y el satelite 3,5" de cabina.
  *
  * MANTENER SINCRONIZADO entre DOS proyectos, byte a byte:
  *   - 7"       : ~/joint/victron/main/net/mini_proto.h
@@ -17,6 +17,12 @@
  * Topologia: el satelite se asocia al SoftAP del 7" como cliente STA (DHCP).
  * Cadencia: 1 Hz desde el 7".
  *
+ * Sentido de la telemetria: 7" -> satelite, y SOLO en ese sentido. Lo que va de
+ * vuelta (apuntes del cuaderno de viaje y la orden de silenciar una alarma) NO
+ * viaja por aqui: va por HTTP contra el portal del 7", que confirma la entrega
+ * (ver net/p4_api.c de la 35cabina). Un silencio perdido por UDP en silencio
+ * dejaria la alarma pitando sin que nadie sepa por que.
+ *
  * Para valores "sin dato" usar el sentinel definido por campo.
  */
 #pragma once
@@ -28,11 +34,34 @@
 extern "C" {
 #endif
 
-#define MINI_PROTO_VERSION   4
+#define MINI_PROTO_VERSION   5
 #define MINI_PROTO_UDP_PORT  4242
 #define MINI_NO_DATA_I16     INT16_MIN   /* -32768 = sin sensor / sin dato */
 #define MINI_NO_DATA_I32     INT32_MIN
 #define MINI_NO_DATA_U8      0xFF
+
+/* Bitmask de alarmas activas. Se usa en DOS sitios y con el MISMO significado
+ * en los dos; de eso va este byte (14-sep-2026):
+ *   - en la telemetria (mini_msg.alarmas), de la P4 hacia la 35cabina, para
+ *     que la cabina sepa cual de sus tarjetas esta en alarma y le ponga el
+ *     icono del altavoz;
+ *   - en la orden de silencio de la cabina hacia la P4 (POST /api/alarma,
+ *     ver udp_tx.c aqui y net/p4_api.c en la 35cabina), diciendo CUAL se
+ *     silencia.
+ *
+ * QUE SIGNIFICA "ACTIVA": que la condicion de alarma se cumple, este sonando
+ * o este silenciada. El silencio corta el pitido, no la senal visual (decision
+ * del 13-sep-2026), asi que el parpadeo, el aviso y este byte siguen igual
+ * mientras dure la condicion. Lo que este byte NO dice es si esta sonando:
+ * eso lo sabe quien tiene el estado de silencio (la P4, alarm_estado.c).
+ *
+ * El bit se pone y se quita solo: al recuperarse la alarma el silencio se
+ * rearma, de modo que si vuelve a pasar, vuelve a sonar. */
+#define MINI_ALARM_AGUA       0x01   /* agua limpia en reserva */
+#define MINI_ALARM_GRISES     0x02   /* aguas grises llenas */
+#define MINI_ALARM_BATERIA    0x04   /* bateria por debajo del umbral critico */
+#define MINI_ALARM_CONGELADOR 0x08   /* congelador por encima de su umbral */
+#define MINI_ALARM_TODAS      0x0F
 
 /* Umbral de cordura para el reloj: cualquier fecha anterior a esta (1-ene-2021)
  * es el 1970 que devuelve el sistema mientras el RTC no ha puesto la hora.
@@ -40,8 +69,9 @@ extern "C" {
 #define MINI_EPOCH_VALIDO    1609459200L
 
 /* Payload broadcast 7" -> mini. Tamaño fijo, sin punteros, packed.
- * Total: 38 bytes (sizeof(struct mini_msg), verificado con el compilador).
- * Eran 32 hasta la v3 (que añadió epoch_local) y 36 hasta la v4 (gps_estado). */
+ * Total: 40 bytes (sizeof(struct mini_msg), verificado con el compilador).
+ * Eran 32 hasta la v3 (que añadió epoch_local), 36 hasta la v4 (gps_estado) y
+ * 38 hasta la v5 (alarmas). */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
     uint8_t  _pad0;               /* alignment */
@@ -109,23 +139,37 @@ struct __attribute__((packed)) mini_msg {
      * sitio donde ocurrieron, habrá que subir el protocolo OTRA VEZ y regrabar
      * las dos pantallas. */
     uint8_t  gps_estado;          /* 0=sin datos, 1=buscando, 2=posición fijada */
-    uint8_t  _pad3;
+    uint8_t  _pad3;               /* relleno heredado: mantiene los offsets */
+
+    /* Alarmas ACTIVAS (MINI_ALARM_*, ver arriba). Va AQUI, en el hueco de
+     * relleno que ya existia antes del CRC (el byte 34, que hasta la v4 nadie
+     * leia), para no mover ningun campo de los que ya viajaban.
+     *
+     * Existe para que la cabina pueda poner el icono del altavoz en la tarjeta
+     * que esta en alarma y mandar la orden de silencio sabiendo CUAL es. Hasta
+     * ahora la cabina deducia la alarma por su cuenta a partir de los niveles
+     * (agua a 0, grises lleno...) y el pitido del congelador no lo veia nadie
+     * desde alli: la P4 es la unica que sabe si una alarma esta activa de
+     * verdad, porque es la unica que tiene los umbrales y las temporizaciones. */
+    uint8_t  alarmas;
+
+    uint8_t  _pad4[1];            /* el relleno que alinea el uint32 del CRC */
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };
 
 typedef struct mini_msg mini_msg_t;
 
-/* El comentario de arriba ("Total: 38 bytes... verificado con el compilador")
+/* El comentario de arriba ("Total: 40 bytes... verificado con el compilador")
  * no era una asercion real, solo lo decia: nada impedia que un campo nuevo
  * cambiara el tamano sin que nadie se enterase hasta que la P4 y el satelite
  * empezaran a rechazarse los paquetes en produccion. Con esto, si algun dia
  * dejan de cuadrar, el build de LOS DOS proyectos falla en el sitio exacto,
  * no en el monitor serie semanas despues. Detectado auditando el 07-sep-2026. */
-_Static_assert(sizeof(mini_msg_t) == 38,
+_Static_assert(sizeof(mini_msg_t) == 40,
                "mini_msg_t cambio de tamano: sube MINI_PROTO_VERSION y "
                "actualiza este numero (y el comentario de mas arriba)");
-_Static_assert(offsetof(mini_msg_t, crc32) == 34,
+_Static_assert(offsetof(mini_msg_t, crc32) == 36,
                "el CRC32 ya no esta al final de la struct: build_msg() en "
                "udp_tx.c y la comprobacion en udp_rx.c asumen los bytes "
                "[0..crc32) como el area protegida");

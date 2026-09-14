@@ -12,6 +12,7 @@
 #include "mini_proto.h"
 #include "gps/gps.h"
 #include "../data/dashboard_state.h"
+#include "../alarma_estado.h"   /* alarma_estado_bits(): que alarmas estan activas */
 #include "frigo.h"
 #include "../ne185/ne185.h"
 #include "../ui.h"
@@ -157,6 +158,20 @@ static void build_msg(mini_msg_t *out)
         gps_get(&g);
         out->gps_estado = !g.hay_datos ? 0 : (g.hay_fix ? 2 : 1);
     }
+
+    /* Alarmas activas (bitmask MINI_ALARM_*), de alarma_estado.c, que es la
+     * unica que sabe si una alarma esta activa de verdad: tiene los umbrales y
+     * las temporizaciones. La cabina lo usa para poner el icono del altavoz en
+     * la tarjeta que toca y para saber CUAL silencia cuando se toca.
+     *
+     * OJO con el sentido de "activa": dice que la CONDICION se cumple, suene o
+     * este silenciada. Lo que se calla con el silencio es el pitido de la P4,
+     * no la senal visual de la cabina (decision del 13-sep-2026), asi que la
+     * cabina tiene que seguir enseñando la alarma aunque la P4 este callada.
+     *
+     * Se lee SIN cerrojo a proposito: alarma_estado.c publica cada alarma en un
+     * bool volatile (asignacion de un byte), asi que no hay valor a medias. */
+    out->alarmas = alarma_estado_bits();
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
     out->crc32 = esp_crc32_le(0, (const uint8_t *)out,

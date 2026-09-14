@@ -4,6 +4,7 @@
 #include "fonts/fonts_es.h"
 #include "icons/icons.h"
 #include "ui.h"
+#include "alarma_estado.h"   /* estado compartido de las cuatro alarmas */
 #include "ne185/ne185.h"
 #include "frigo.h"
 #include "audio_es8311.h"
@@ -76,21 +77,15 @@ typedef struct {
     lv_obj_t *alarm_hint;        /* aviso flotante "toca X para silenciar" */
     char      alarm_hint_txt[64];/* ultimo texto puesto (para no rehacerlo cada render) */
     int       fan_angle_deci;    /* angulo actual rotacion (0..3599) */
-    /* ── Alarmas (S1 vacio / R1 lleno / SOC < 30 % / Frigo > umbral) ── */
-    bool      alarm_s1_muted;
-    bool      alarm_r1_muted;
-    bool      alarm_soc_muted;       /* mute al pulsar la card de bateria */
-    bool      alarm_freezer_muted;   /* mute al pulsar la temp congelador */
-    bool      prev_alarm_s1;
-    bool      prev_alarm_r1;
-    bool      prev_alarm_soc;
-    bool      prev_alarm_freezer;
-    uint32_t  alarm_s1_last_sound_ms;
-    uint32_t  alarm_s1_pending_since_ms; /* inicio condicion vacio (debounce 1 min) */
-    uint32_t  alarm_r1_last_sound_ms;
-    uint32_t  alarm_r1_pending_since_ms; /* inicio condicion lleno (debounce 1 min) */
-    uint32_t  alarm_soc_last_sound_ms;
-    uint32_t  alarm_freezer_last_sound_ms;
+    /* ── Icono del altavoz de cada alarma ──────────────────────────────
+     * Uno por tarjeta que puede estar en alarma, oculto mientras su alarma no
+     * este activa. Ver alarm_mute_icono_cb() y refresh_mute_iconos().
+     * El ESTADO no vive aqui: vive en alarma_estado.c, que es lo que comparten
+     * la pantalla, la telemetria UDP y la orden que llega de la cabina. */
+    lv_obj_t *ic_mute_s1;
+    lv_obj_t *ic_mute_r1;
+    lv_obj_t *ic_mute_bat;
+    lv_obj_t *ic_mute_frigo;
     uint8_t   blink_phase;           /* alterna 0/1 cada tick para parpadeo */
     lv_obj_t *camper_bottom;     /* contenedor de los 3 botones */
     lv_obj_t *btn_lin;
@@ -99,7 +94,6 @@ typedef struct {
     bool      grey_aligned;      /* one-shot: ancho 230V + base alineada a limpias */
     lv_timer_t *camper_tick_timer; /* refresco periodico widgets camper */
     lv_timer_t *fan_rotate_timer;  /* animacion rotacion ventilador */
-    lv_timer_t *freezer_alarm_timer; /* alarma congelador, independiente de BLE/visibilidad */
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -297,96 +291,122 @@ static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
  * Widgets camper (NE185): barra superior con tanques + 230V,
  * fila inferior con 3 botones (luz int, luz ext, bomba).
  * ─────────────────────────────────────────────────────────────── */
-/* ── Sistema de alarmas tanques: cola + tarea para el pitido de 5 s ── */
-static QueueHandle_t s_alarm_queue = NULL;
-
-/* Estado agregado de alarmas (cualquiera activa y no silenciada), para que el
+/* ── Alarmas ────────────────────────────────────────────────────────────────
+ * El ESTADO (condicion activa, silencio, temporizaciones y pitido) ya NO vive
+ * aqui: se mudo a main/alarma_estado.c el 14-sep-2026, cuando la cabina 3,5"
+ * paso a poder silenciarlas y la telemetria UDP tuvo que publicar cuales estan
+ * activas. Esta vista es ahora UN consumidor mas: pinta el parpadeo, el aviso y
+ * el icono del altavoz, y llama a alarma_silenciar()/alarma_alternar_silencio()
+ * cuando se toca. Ver el porque en la cabecera de alarma_estado.h.
+ *
+ * Estado agregado de alarmas (cualquiera activa, silenciada o no), para que el
  * salvapantallas pueda interrumpir la rotacion. Lo actualiza overview_render. */
 static volatile bool s_ov_alarm_active = false;
 static bool          s_ov_prev_alarm   = false;
 
 bool ui_overview_alarm_active(void) { return s_ov_alarm_active; }
 
-/* Patron de alarma estilo "detector de humos" (~5 s).
- * Es el sonido universalmente reconocido como ALARMA: tres pitidos
- * agudos cortos, silencio, repetido. Sin musicalidad ni adornos —
- * directamente identificable como aviso de emergencia. */
-static const audio_note_t s_alarm_pattern[] = {
-    /* Triple beep #1 */
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 700},
+/* ── Icono del altavoz, en la esquina de la tarjeta en alarma ───────────────
+ * Mismo gesto y mismo dibujo que en la cabina 3,5" (pedido del usuario,
+ * 14-sep-2026: que las dos pantallas se vean y se comporten igual):
+ *   - solo se ve mientras ESA alarma esta activa (no es un boton permanente);
+ *   - la zona tactil es mayor que el dibujo (lv_obj_set_ext_click_area), que es
+ *     lo que hace falta con el dedo y en marcha;
+ *   - un toque SILENCIA, el siguiente vuelve a habilitar el sonido.
+ *
+ * EL BOTON CANCELA LA PROPAGACION del evento. Sin eso el toque llegaria tambien
+ * a la tarjeta, que abre su pantalla de detalle (o cambia el brillo, que
+ * escucha en la pantalla entera): tocar el altavoz acabaria abriendo otra
+ * pantalla, que no es lo que se ha pedido.
+ *
+ * El numero de zona tactil es 14, el mismo que usan las flechas del historico. */
+#define MUTE_CLICK_EXTRA 14
 
-    /* Triple beep #2 */
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 700},
-
-    /* Triple beep #3 */
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 700},
-
-    /* Triple beep final */
-    {2700, 120}, {0, 80},
-    {2700, 120}, {0, 80},
-    {2700, 120},
-};
-
-static void overview_alarm_task(void *arg)
+static void alarm_mute_icono_cb(lv_event_t *e)
 {
-    (void)arg;
-    uint8_t v;
-    while (1) {
-        if (xQueueReceive(s_alarm_queue, &v, portMAX_DELAY) == pdTRUE) {
-            /* Subir al maximo solo durante el pitido y restaurar despues
-             * para no afectar el volumen normal del usuario. */
-            int prev_vol = audio_get_volume();
-            audio_set_volume_transient(100);
-            audio_play_alarm_tones(s_alarm_pattern,
-                             sizeof(s_alarm_pattern) / sizeof(s_alarm_pattern[0]),
-                             true);
-            audio_set_volume_transient(prev_vol);
+    alarma_tipo_t t = (alarma_tipo_t)(intptr_t)lv_event_get_user_data(e);
+    lv_event_stop_bubbling(e);
+    alarma_alternar_silencio(t);
+}
+
+static lv_obj_t *alarm_mute_icono_crear(lv_obj_t *card, alarma_tipo_t t)
+{
+    lv_obj_t *ic = lv_label_create(card);
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_label_set_text(ic, "");
+    /* Fuente _es: es la que trae los glifos de FontAwesome. Comprobado que
+     * LV_SYMBOL_MUTE (U+F026) esta en la tabla de caracteres de esta fuente; si
+     * algun dia no estuviera, aqui saldria un rectangulo (ya paso con el punto
+     * medio en esta pantalla). */
+    lv_obj_set_style_text_font(ic, &lv_font_montserrat_20_es, 0);
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(ic, MUTE_CLICK_EXTRA);
+    lv_obj_add_flag(ic, LV_OBJ_FLAG_HIDDEN);   /* hasta que su alarma este activa */
+    lv_obj_align(ic, LV_ALIGN_TOP_RIGHT, 2, 2);
+    lv_obj_add_event_cb(ic, alarm_mute_icono_cb, LV_EVENT_CLICKED, (void *)(intptr_t)t);
+    return ic;
+}
+
+/* Pinta los cuatro iconos segun el estado compartido. Se agrupa en una funcion
+ * para que la tarjeta y el icono digan SIEMPRE lo mismo (salir por un camino
+ * que olvide actualizar el icono dejaria una pantalla mintiendo). */
+static void refresh_mute_iconos(ui_overview_view_t *ov)
+{
+    const alarma_tipo_t tipos[4] = { ALARMA_AGUA, ALARMA_GRISES,
+                                     ALARMA_BATERIA, ALARMA_CONGELADOR };
+    lv_obj_t *iconos[4] = { NULL, NULL, NULL, NULL };
+    if (!ov) return;
+    iconos[0] = ov->ic_mute_s1;
+    iconos[1] = ov->ic_mute_r1;
+    iconos[2] = ov->ic_mute_bat;
+    iconos[3] = ov->ic_mute_frigo;
+    for (int i = 0; i < 4; i++) {
+        if (!iconos[i]) continue;
+        bool activa = alarma_activa(tipos[i]);
+        if (!activa) {
+            lv_obj_add_flag(iconos[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
         }
+        bool callada = alarma_silenciada(tipos[i]);
+        /* Con el sonido habilitado, el altavoz CON ondas (VOLUME_MAX) invita a
+         * tocarlo para callarlo; callada, el altavoz TACHADO y en gris, que se
+         * lee de un vistazo sin tener que aprender nada. */
+        lv_label_set_text(iconos[i], callada ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+        lv_obj_set_style_text_color(iconos[i],
+                                    callada ? lv_color_hex(0x777777) : lv_color_hex(0xFFFFFF), 0);
+        lv_obj_clear_flag(iconos[i], LV_OBJ_FLAG_HIDDEN);
     }
 }
 
-/* Callbacks de click en tanques para silenciar la alarma correspondiente.
- * audio_cancel_playback corta la reproduccion en curso en < 50 ms. */
+/* Callbacks de toque en las tarjetas para silenciar la alarma correspondiente.
+ * El pitido y las temporizaciones los lleva alarma_estado.c; aqui solo se pide.
+ *
+ * En esta pantalla el toque en la tarjeta ADEMAS abre su pantalla de detalle
+ * (el historico de bateria, la grafica de temperaturas): es el atajo que ya
+ * existia y el usuario decidio el 14-sep-2026 que se quede como esta. En la
+ * cabina 3,5", que no tiene esas pantallas, la tarjeta solo silencia. */
 static void alarm_mute_s1_cb(lv_event_t *e)
 {
-    ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) ov->alarm_s1_muted = true;
-    audio_cancel_playback();
+    (void)e;
+    alarma_silenciar(ALARMA_AGUA);
 }
 static void alarm_mute_r1_cb(lv_event_t *e)
 {
-    ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) ov->alarm_r1_muted = true;
-    audio_cancel_playback();
+    (void)e;
+    alarma_silenciar(ALARMA_GRISES);
 }
 static void alarm_mute_soc_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) {
-        /* Un solo gesto: silenciar la alarma SoC y abrir los logs de bateria
-         * (atajo a la pantalla de historico). */
-        ov->alarm_soc_muted = true;
-        ui_show_battery_history_screen(ov->base.ui);
-    }
-    audio_cancel_playback();
+    alarma_silenciar(ALARMA_BATERIA);
+    if (ov) ui_show_battery_history_screen(ov->base.ui);
 }
 
 static void alarm_mute_freezer_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
-    if (ov) {
-        /* Un solo gesto: silenciar la alarma del congelador y abrir los logs
-         * del frigorifico (atajo a la grafica de Temperaturas). */
-        ov->alarm_freezer_muted = true;
-        ui_show_chart_screen(ov->base.ui);
-    }
-    audio_cancel_playback();
+    alarma_silenciar(ALARMA_CONGELADOR);
+    if (ov) ui_show_chart_screen(ov->base.ui);
 }
 
 /* Aviso flotante de las alarmas: dice cual es y que se toca para callarla.
@@ -405,64 +425,18 @@ static void alarm_mute_freezer_cb(lv_event_t *e)
  * usuario esta en Ajustes o en una pantalla de detalle: antes solo existia
  * dentro del Overview y ahi la alarma pitaba sin decir nada. */
 
-/* Texto del aviso: la alarma activa que NO este silenciada, o NULL si no hay
- * ninguna. Se evalua en el render, que es donde se conocen los cuatro estados. */
-static const char *alarm_hint_text(const ui_overview_view_t *ov,
-                                   bool alarm_s1, bool alarm_r1, bool alarm_soc)
+/* Texto del aviso: la primera alarma activa, o NULL si no hay ninguna. Se
+ * evalua en el render, que es donde se conocen los cuatro estados. */
+static const char *alarm_hint_text(bool alarm_s1, bool alarm_r1, bool alarm_soc)
 {
     /* Se enseña SIEMPRE que la alarma este activa, silenciada o no: silenciar
      * corta el sonido, no la señal visual (decidido el 13-sep-2026). Si esta
      * silenciada, el texto lo dice, para que se sepa que sigue pasando. */
-    if (alarm_s1)  return ov->alarm_s1_muted ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
-    if (alarm_r1)  return ov->alarm_r1_muted ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
-    if (alarm_soc) return ov->alarm_soc_muted ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
-    if (ui_get_freezer_alarm()) return ov->alarm_freezer_muted ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
+    if (alarm_s1)  return alarma_silenciada(ALARMA_AGUA) ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
+    if (alarm_r1)  return alarma_silenciada(ALARMA_GRISES) ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
+    if (alarm_soc) return alarma_silenciada(ALARMA_BATERIA) ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
+    if (ui_get_freezer_alarm()) return alarma_silenciada(ALARMA_CONGELADOR) ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
     return NULL;
-}
-
-/* Alarma de congelador: extraida de overview_render() a una funcion propia
- * mas un timer INDEPENDIENTE (overview_freezer_alarm_timer_cb, mas abajo)
- * que corre siempre, sin condicion de visibilidad ni de BLE.
- *
- * La deteccion (ui_get_freezer_alarm(), fuente unica en
- * main.c::frigo_update_cb) es local al frigo -- no tiene nada que ver con
- * Victron/BLE. Pero el SONIDO solo se evaluaba dentro de overview_render(),
- * que unicamente corre si (a) llega un record BLE (cualquier pestaña) o
- * (b) el timer periodico del Overview lo encuentra VISIBLE
- * (overview_camper_tick_cb corta si esta oculto, ver mas abajo). Sin BLE y
- * con otra pantalla abierta, una alarma de congelador real se quedaba
- * completamente muda -- justo el caso para el que existe la alarma.
- * Se sigue llamando tambien desde overview_render() (respuesta inmediata
- * si hay BLE); el guard de intervalo (5 min) hace que llamarla dos veces
- * seguidas sea inofensivo. Detectado por el usuario el 09-sep-2026. */
-static void check_freezer_alarm(ui_overview_view_t *ov, uint32_t now_ms)
-{
-    if (!ov) return;
-    const uint32_t INTERVAL_MS = 5 * 60 * 1000;
-    bool alarm_freezer = ui_get_freezer_alarm();
-    /* El mute solo cuenta MIENTRAS la alarma esta activa. Rearmarlo solo en el
-     * flanco de bajada dejaba envenenadas a las alarmas que no estaban activas:
-     * silenciar una (con el aviso) ponia muted=true en las otras tres, que al no
-     * haber tenido flanco se quedaban mudas e invisibles en su primer episodio
-     * real. Auditoria del 13-sep-2026. */
-    if (!alarm_freezer) ov->alarm_freezer_muted = false;
-    ov->prev_alarm_freezer = alarm_freezer;
-    if (alarm_freezer && !ov->alarm_freezer_muted && s_alarm_queue) {
-        if (ov->alarm_freezer_last_sound_ms == 0 ||
-            (now_ms - ov->alarm_freezer_last_sound_ms) >= INTERVAL_MS) {
-            ov->alarm_freezer_last_sound_ms = now_ms;
-            uint8_t v = 1;
-            xQueueSend(s_alarm_queue, &v, 0);
-        }
-    } else {
-        ov->alarm_freezer_last_sound_ms = 0;
-    }
-}
-
-static void overview_freezer_alarm_timer_cb(lv_timer_t *t)
-{
-    ui_overview_view_t *ov = (ui_overview_view_t *)t->user_data;
-    check_freezer_alarm(ov, (uint32_t)lv_tick_get());
 }
 
 static void overview_camper_tick_cb(lv_timer_t *t)
@@ -935,6 +909,18 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_radius(ov->alarm_hint, 8, 0);
     lv_obj_align(ov->alarm_hint, LV_ALIGN_TOP_MID, 0, 8);   /* arriba: no tapa los botones de abajo */
 
+    /* Icono del altavoz de cada tarjeta que puede estar en alarma. Se crean
+     * aqui (despues de las tarjetas, para que queden por encima del dibujo) y
+     * los pinta refresh_mute_iconos() en cada render. Ver arriba el porque de
+     * cada detalle. */
+    ov->ic_mute_s1 = alarm_mute_icono_crear(ov->tank_s1, ALARMA_AGUA);
+    ov->ic_mute_r1 = alarm_mute_icono_crear(ov->tank_r1, ALARMA_GRISES);
+    ov->ic_mute_bat = alarm_mute_icono_crear(ov->card_bat, ALARMA_BATERIA);
+    if (ov->card_bat) lv_obj_move_foreground(ov->ic_mute_bat);
+    /* El del congelador va en su hueco dentro de la card frigo, que no es un
+     * objeto suelto de esta funcion: se crea alli (ver el bloque de card_fridge
+     * mas abajo), donde se conoce el objeto del congelador. */
+
     /* ── Columna 3: botones [Luz INT + Bomba] arriba, Luz EXT debajo ── */
     lv_obj_t *btn_col = lv_obj_create(camper_card);
     lv_obj_remove_style_all(btn_col);
@@ -987,6 +973,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_flex_align(card_fridge, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(card_fridge, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Icono del altavoz de la alarma del congelador. Se crea DESPUES del
+         * contenido (mas abajo, junto al resto de la card) para que quede por
+         * encima; aqui solo se reserva el sitio en el struct. */
 
         /* Congelador (arriba dentro de la card). El toque (silenciar alarma +
          * abrir logs del frigo) se gestiona a nivel de card_fridge, para que
@@ -1088,23 +1078,23 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_add_flag(card_fridge, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(card_fridge, alarm_mute_freezer_cb, LV_EVENT_CLICKED, ov);
         ov_card_make_tappable(card_fridge, NULL);
+
+        /* Icono del altavoz, ahora que la card y su contenido existen (el
+         * ultimo hijo es el que queda por encima). */
+        ov->ic_mute_frigo = alarm_mute_icono_crear(card_fridge, ALARMA_CONGELADOR);
+        lv_obj_move_foreground(ov->ic_mute_frigo);
     }
 
     /* Timer LVGL para refrescar los widgets camper aunque no llegue
      * dato Victron. Cada 500 ms re-renderiza la vista. */
     ov->camper_tick_timer = lv_timer_create(overview_camper_tick_cb, 500, ov);
     ov->fan_rotate_timer  = lv_timer_create(overview_fan_rotate_cb,  150, ov);
-    /* Sin condicion de visibilidad ni de BLE a proposito: ver el comentario
-     * de check_freezer_alarm()/overview_freezer_alarm_timer_cb. */
-    ov->freezer_alarm_timer = lv_timer_create(overview_freezer_alarm_timer_cb, 2000, ov);
 
-    /* Cola y tarea para la alarma sonora de 5 s (no bloquea LVGL). */
-    if (!s_alarm_queue) {
-        s_alarm_queue = xQueueCreate(1, sizeof(uint8_t));
-        if (s_alarm_queue) {
-            xTaskCreate(overview_alarm_task, "ov_alarm", 3072, NULL, 4, NULL);
-        }
-    }
+    /* Alarmas: la evaluacion y el pitido los lleva alarma_estado.c, con su
+     * propio temporizador, para que no dependan de que ESTA vista exista o se
+     * dibuje (una alarma suena tambien en Ajustes, en modo Rotar o con la vista
+     * destruida). Aqui solo se arranca, y es idempotente. */
+    alarma_estado_init();
 
     /* Defaults */
     ov->bat.ttg_min = 0xFFFFFFFF;
@@ -1319,47 +1309,22 @@ static void overview_render(ui_overview_view_t *ov)
         if (ov->tank_s1) ui_tank_set(ov->tank_s1, cd.fresh ? cd.s1 : 0xFF);
         if (ov->tank_r1) ui_tank_set(ov->tank_r1, cd.fresh ? cd.r1 : 0xFF);
 
-        /* ── Alarmas de tanque ─────────────────────────────── */
-        uint32_t now_ms_val = (uint32_t)(lv_tick_get());
+        /* ── Alarmas ───────────────────────────────────────────
+         * El estado viene de alarma_estado.c, que es quien temporiza y quien
+         * pita (ver la cabecera del bloque de arriba). Aqui solo se lee: asi la
+         * pantalla, la telemetria UDP y la orden que llega de la cabina dicen
+         * siempre lo mismo, y el pitido deja de depender de que esta vista se
+         * este dibujando. */
+        bool alarm_s1  = alarma_activa(ALARMA_AGUA);
+        bool alarm_r1  = alarma_activa(ALARMA_GRISES);
+        bool alarm_soc = alarma_activa(ALARMA_BATERIA);
 
-        /* Limpio en reserva: con el tanque a 1/4 y la autocaravana en
-         * movimiento el agua chapotea y el sensor lee "vacio" un instante.
-         * Para evitar falsas alarmas exigimos que la condicion se mantenga
-         * 1 minuto continuo antes de dispararla. */
-        const uint32_t ALARM_S1_DEBOUNCE_MS = 60 * 1000;
-        bool raw_s1 = cd.fresh && cd.s1 == 0;
-        if (raw_s1) {
-            if (ov->alarm_s1_pending_since_ms == 0)
-                ov->alarm_s1_pending_since_ms = now_ms_val ? now_ms_val : 1;
-        } else {
-            ov->alarm_s1_pending_since_ms = 0;
-        }
-        bool alarm_s1 = raw_s1 && ov->alarm_s1_pending_since_ms != 0 &&
-            (now_ms_val - ov->alarm_s1_pending_since_ms) >= ALARM_S1_DEBOUNCE_MS;
-
-        /* Grises lleno (NE185 real: 0=vacio, 1=lleno): mismo debounce de 1 min
-         * que limpias para evitar falsas alarmas por chapoteo en movimiento. */
-        const uint32_t ALARM_R1_DEBOUNCE_MS = 60 * 1000;
-        bool raw_r1 = cd.fresh && cd.r1 == 1;
-        if (raw_r1) {
-            if (ov->alarm_r1_pending_since_ms == 0)
-                ov->alarm_r1_pending_since_ms = now_ms_val ? now_ms_val : 1;
-        } else {
-            ov->alarm_r1_pending_since_ms = 0;
-        }
-        bool alarm_r1 = raw_r1 && ov->alarm_r1_pending_since_ms != 0 &&
-            (now_ms_val - ov->alarm_r1_pending_since_ms) >= ALARM_R1_DEBOUNCE_MS;
-
-        /* Auto-reset del mute: mientras la alarma NO esta activa, el mute no
-         * cuenta (mismo motivo que en la alarma del congelador). */
-        if (!alarm_s1) ov->alarm_s1_muted = false;
-        if (!alarm_r1) ov->alarm_r1_muted = false;
-        ov->prev_alarm_s1 = alarm_s1;
-        ov->prev_alarm_r1 = alarm_r1;
         ov->blink_phase ^= 1;
 
-        /* Parpadeo visual: alternar opacidad cada 500 ms si alarma activa
-         * y no silenciada. */
+        /* Parpadeo visual: alternar opacidad cada 500 ms si la alarma esta
+         * activa. SIGUE aunque este silenciada: lo que se calla es el pitido,
+         * no la senal visual (decision del 13-sep-2026, y por eso el parpadeo
+         * no mira alarma_silenciada()). */
         if (ov->tank_s1) {
             lv_opa_t opa = (alarm_s1 && ov->blink_phase)
                 ? LV_OPA_30 : LV_OPA_COVER;
@@ -1371,53 +1336,14 @@ static void overview_render(ui_overview_view_t *ov)
             lv_obj_set_style_opa(ov->tank_r1, opa, 0);
         }
 
-        /* Sonido: 5 segundos cada 5 minutos (300000 ms) mientras la
-         * alarma persista y no este silenciada. */
-        const uint32_t INTERVAL_MS = 5 * 60 * 1000;
-        if (alarm_s1 && !ov->alarm_s1_muted && s_alarm_queue) {
-            if (ov->alarm_s1_last_sound_ms == 0 ||
-                (now_ms_val - ov->alarm_s1_last_sound_ms) >= INTERVAL_MS) {
-                ov->alarm_s1_last_sound_ms = now_ms_val;
-                uint8_t v = 1;
-                xQueueSend(s_alarm_queue, &v, 0);
-            }
-        } else {
-            /* Reset del timer cuando no hay alarma o cuando se muta */
-            ov->alarm_s1_last_sound_ms = 0;
-        }
-        if (alarm_r1 && !ov->alarm_r1_muted && s_alarm_queue) {
-            if (ov->alarm_r1_last_sound_ms == 0 ||
-                (now_ms_val - ov->alarm_r1_last_sound_ms) >= INTERVAL_MS) {
-                ov->alarm_r1_last_sound_ms = now_ms_val;
-                uint8_t v = 1;
-                xQueueSend(s_alarm_queue, &v, 0);
-            }
-        } else {
-            ov->alarm_r1_last_sound_ms = 0;
-        }
-
-        /* === Alarma SOC bajo: usa el umbral critico configurable (NVS,
-         * default 30 %), no un valor fijo. soc_deci esta en deci-%.
-         * bat_fresh (no bat.has_data): has_data se pone a true la primera
-         * vez que llega el BatteryMonitor y NUNCA se resetea -- si la BLE se
-         * cae con el SoC ya por debajo del umbral, el pitido/parpadeo seguia
-         * para siempre con el ultimo dato congelado. bat_fresh SI caduca
-         * (TIMEOUT_MS sin paquetes), y ya se usa para el resto de esta
-         * pantalla (TTG, arco de SoC...) unas lineas mas abajo. Detectado
-         * auditando el 08-sep-2026 (el fix anterior de frescura de SoC solo
-         * llego al cruce del jingle en ble_ingest.c, no a esta evaluacion). */
-        bool alarm_soc = bat_fresh
-                         && ov->bat.soc_deci < alerts_get_soc_critical() * 10;
-        if (!alarm_soc) ov->alarm_soc_muted = false;   /* el mute solo cuenta con la alarma activa */
-        ov->prev_alarm_soc = alarm_soc;
-
         /* Aviso flotante: aqui ya se conocen las cuatro alarmas (agua, aguas
-         * grises, bateria y congelador). Aparece solo si hay alguna activa y sin
-         * silenciar, y dice cual es y que hay que tocar para callarla. El texto
-         * se cambia solo cuando cambia de verdad: lv_label_set_text_fmt no
-         * compara y este render corre varias veces por segundo. */
+         * grises, bateria y congelador). Aparece mientras haya alguna activa
+         * (silenciada o no: silenciar no la esconde) y dice cual es y que hay
+         * que tocar para callarla. El texto se cambia solo cuando cambia de
+         * verdad: lv_label_set_text_fmt no compara y este render corre varias
+         * veces por segundo. */
         if (ov->alarm_hint) {
-            const char *cual = alarm_hint_text(ov, alarm_s1, alarm_r1, alarm_soc);
+            const char *cual = alarm_hint_text(alarm_s1, alarm_r1, alarm_soc);
             const char *txt = cual ? cual : "";
             if (strcmp(txt, ov->alarm_hint_txt) != 0) {
                 snprintf(ov->alarm_hint_txt, sizeof(ov->alarm_hint_txt), "%s", txt);
@@ -1432,26 +1358,14 @@ static void overview_render(ui_overview_view_t *ov)
                 ? LV_OPA_30 : LV_OPA_COVER;
             lv_obj_set_style_opa(ov->card_bat, opa, 0);
         }
-        if (alarm_soc && !ov->alarm_soc_muted && s_alarm_queue) {
-            if (ov->alarm_soc_last_sound_ms == 0 ||
-                (now_ms_val - ov->alarm_soc_last_sound_ms) >= INTERVAL_MS) {
-                ov->alarm_soc_last_sound_ms = now_ms_val;
-                uint8_t v = 1;
-                xQueueSend(s_alarm_queue, &v, 0);
-            }
-        } else {
-            ov->alarm_soc_last_sound_ms = 0;
-        }
 
-        /* === Alarma Frigo: extraida a check_freezer_alarm() + timer propio
-         * (ver overview_freezer_alarm_timer_cb) -- se llama tambien aqui
-         * para que un record BLE dispare respuesta inmediata, pero YA NO
-         * depende de esto: el timer nuevo la evalua igual con BLE muerto y
-         * el Overview oculto. === */
-        check_freezer_alarm(ov, now_ms_val);
+        /* Icono del altavoz en la esquina de cada tarjeta en alarma (ver
+         * refresh_mute_iconos): se enseña solo si esa alarma esta activa, y
+         * cambia de dibujo segun este sonando o silenciada. */
+        refresh_mute_iconos(ov);
 
         /* ── Feature A: interrumpir la rotacion del salvapantallas cuando
-         * salta cualquier alarma no silenciada, para que no quede oculta. ── */
+         * salta cualquier alarma, para que no quede oculta. ── */
         /* Cuenta cualquier alarma activa, silenciada o no: la pantalla tiene que
          * enseñarla (lo que se calla es el pitido). */
         bool any_alarm = alarm_s1 || alarm_r1 || alarm_soc || ui_get_freezer_alarm();
@@ -1515,8 +1429,9 @@ static void overview_render(ui_overview_view_t *ov)
                 else
                     snprintf(fbuf, sizeof(fbuf), " %.1f", t);
                 /* Color: rojo si supera umbral, blanco si OK.
-                 * Parpadeo (alfa 30% / 100%) si la alarma esta activa y
-                 * sin mutear, para que destaque sobre la barra inferior. */
+                 * Parpadeo (alfa 30% / 100%) si la alarma esta activa, para
+                 * que destaque sobre la barra inferior. El parpadeo NO mira si
+                 * esta silenciada: lo que se calla es el pitido. */
                 col = over ? UI_COLOR_RED : UI_COLOR_TEXT;
                 opa = (over && ov->blink_phase)
                     ? LV_OPA_30 : LV_OPA_COVER;
@@ -1625,7 +1540,9 @@ static void overview_destroy(ui_device_view_t *view)
     ui_overview_view_t *ov = (ui_overview_view_t *)view;
     if (ov->camper_tick_timer)   { lv_timer_del(ov->camper_tick_timer);   ov->camper_tick_timer   = NULL; }
     if (ov->fan_rotate_timer)    { lv_timer_del(ov->fan_rotate_timer);    ov->fan_rotate_timer    = NULL; }
-    if (ov->freezer_alarm_timer) { lv_timer_del(ov->freezer_alarm_timer); ov->freezer_alarm_timer = NULL; }
+    /* El temporizador de alarmas NO se borra aqui a proposito: no es de esta
+     * vista, vive en alarma_estado.c y tiene que seguir evaluando (y pitando)
+     * con la vista fuera. Si no, destruir la vista dejaria las alarmas mudas. */
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
 }
