@@ -185,9 +185,15 @@ void create_ausente_card(lv_obj_t *cont)
       * para que, si algun dia crece, se corte en vez de volver a partirse en
       * dos -- que es justo lo que se venia a quitar. */
     lv_label_set_long_mode(aus_hint, LV_LABEL_LONG_DOT);
+    /* El texto decia "4 toques arriba a la izquierda" y el gesto acepta
+     * CUALQUIERA de las 4 esquinas desde que se hizo asi a proposito (si el
+     * tactil tiene una zona muerta en una esquina, sigue habiendo salida; ver
+     * ausente_mode.c). El cartel es lo unico que lee quien esta atrapado en
+     * modo ausente, asi que tiene que decir el gesto de verdad: "en cualquier
+     * esquina" (82 caracteres, cabe de sobra en la linea). */
     lv_label_set_text(aus_hint,
                       "Apaga la pantalla y vigila (arranca en 10 s). "
-                      "Salir: 4 toques arriba a la izquierda.");
+                      "Salir: 4 toques en cualquier esquina.");
 }
 
 void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)

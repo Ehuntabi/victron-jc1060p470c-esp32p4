@@ -22,7 +22,10 @@ static lv_obj_t   *s_countdown_label   = NULL;
 static lv_obj_t   *s_guard_overlay     = NULL;  /* negro pantalla completa en modo activo */
 static int         s_secs              = 0;
 
-/* Gesto de salida: 4 toques en la esquina superior izquierda en <3 s. */
+/* Gesto de salida: 4 toques en CUALQUIERA de las 4 esquinas, en <3 s (el
+ * porque de aceptar las cuatro esta en corner_tap_cb, mas abajo). El cartel de
+ * la tarjeta "Modo ausente" (ui/settings/settings_sound.c) tiene que decir esto
+ * mismo: decia "arriba a la izquierda" hasta el 15-sep-2026. */
 #define CORNER_PX      130
 #define TAP_WINDOW_MS  3000
 #define TAP_COUNT      4
