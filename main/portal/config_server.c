@@ -107,8 +107,9 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
     char q[24] = {0};
     httpd_req_get_url_query_str(req, q, sizeof(q));
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
-    if (strstr(q, "off") || strstr(q, "on")) {
-        bool on = strstr(q, "on") != NULL;   /* "off" contiene "o" pero no "on" */
+    bool on  = !strncmp(q, "on",  2) && (q[2] == '\0' || q[2] == '=');
+    bool off = !strncmp(q, "off", 3) && (q[3] == '\0' || q[3] == '=');
+    if (on || off) {
         bool done = false, accepted = false;
         if (bsp_display_lock(300)) {
             accepted = ausente_request(on);   /* on: cuenta atras+vigilancia; off: cancela/sale */
@@ -340,9 +341,8 @@ static esp_err_t post_save(httpd_req_t *req) {
     }
     body[received] = '\0';
     
-    /* LOGD (no LOGI): el body lleva key=<AES Victron> y log_capture persiste
-     * los INFO a la SD -> no volcar la clave en claro. */
-    ESP_LOGD(TAG, "Received form data: %s", body);
+    /* El body NO se loguea (ni siquiera en LOGD): lleva key=<AES Victron> y
+     * log_capture persiste los INFO a la SD -> no volcar la clave en claro. */
     
     // Parse form data: mac=XXXXXXXXXXXX&key=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
     char mac_str[13] = {0};
@@ -562,7 +562,7 @@ static esp_err_t handle_dashboard(httpd_req_t *req)
 static esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 {
     httpd_resp_set_status(req, "302 Temporary Redirect");
-    httpd_resp_set_hdr(req, "Location", "/");
+    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/");
     httpd_resp_send(req, "Redirecting to captive portal", HTTPD_RESP_USE_STRLEN);
     ESP_LOGI(TAG, "Redirecting %s → /", req->uri);
     return ESP_OK;
@@ -653,11 +653,6 @@ static esp_err_t handle_captura(httpd_req_t *req) {
         char val[8];
         if (httpd_query_key_value(query, "n", val, sizeof(val)) == ESP_OK) n = atoi(val);
     }
-    const char *name = ui_tour_goto_screen(n);
-    if (!name) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "n fuera de rango (usa /capturas)");
-        return ESP_FAIL;
-    }
     /* Dos pantallas ensenan en claro lo que el nivel ESTRICTO protege de
      * verdad: "wifi" (la clave que exige /keys y /ota) y "victron_keys" (las
      * 8 claves AES de los Victron emparejados, en un textarea SIN
@@ -665,9 +660,18 @@ static esp_err_t handle_captura(httpd_req_t *req) {
      * este arreglo (08-sep-2026, commit 93aceca) solo cubrio "wifi" y dejo
      * "victron_keys" exactamente igual de expuesta por el mismo atajo:
      * bastaba con estar en el Wi-Fi para sacarle una foto a las claves AES
-     * que /keys protege con contrasena de verdad. Corregido el mismo dia. */
-    if (!strcmp(name, "wifi") || !strcmp(name, "victron_keys")) {
+     * que /keys protege con contrasena de verdad. Corregido el mismo dia.
+     *
+     * El chequeo va ANTES de ui_tour_goto_screen: la pantalla fisica no debe
+     * navegar a esas paginas antes de exigir las credenciales estrictas
+     * (si fallan, el 401 ya va enviado y no se navega). */
+    if (ui_tour_screen_needs_strict_auth(n)) {
         REQUIRE_AUTH_STRICT(req);
+    }
+    const char *name = ui_tour_goto_screen(n);
+    if (!name) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "n fuera de rango (usa /capturas)");
+        return ESP_FAIL;
     }
     uint8_t *bmp = NULL;
     size_t len = 0;

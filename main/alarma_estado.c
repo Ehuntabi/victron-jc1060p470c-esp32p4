@@ -106,6 +106,12 @@ static void evaluar(const alarma_tipo_t t, const bool condicion, const uint32_t 
          * el estado se rearma solo mientras la condicion NO se cumple, asi que
          * no puede envenenar a las alarmas que nunca han estado activas (el
          * fallo que se arreglo auditando el 13-sep-2026). */
+        /* Al recuperarse, cortar el pitido en curso: si estaba activa, el
+         * patron seguia sonando hasta ~4,4 s despues de recuperada. */
+        bool estaba_activa = a->activa;
+        if (estaba_activa) {
+            audio_cancel_playback();
+        }
         a->activa     = false;
         a->silenciada = false;
         a->desde_ms   = 0;

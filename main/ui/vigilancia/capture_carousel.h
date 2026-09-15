@@ -14,6 +14,11 @@ extern "C" {
 const char *ui_tour_goto_screen(int idx);
 int ui_tour_screen_count(void);
 
+/* true si la pantalla idx pinta la clave Wi-Fi o las claves Victron en claro
+ * ("wifi"/"victron_keys" en TOUR_SET_NAMES). Lo consulta el handler HTTP
+ * /captura ANTES de navegar (ver ui_tour_goto_screen). */
+bool ui_tour_screen_needs_strict_auth(int idx);
+
 /* Carrusel de captura a demanda: recorre las pantallas de datos, guarda un
  * JPEG de cada una en la SD (sobrescribe) y termina. Lo dispara el switch
  * de Settings->Display; el switch se apaga solo al acabar. */

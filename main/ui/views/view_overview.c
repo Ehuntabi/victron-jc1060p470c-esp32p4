@@ -1412,9 +1412,7 @@ static void overview_render(ui_overview_view_t *ov)
         const frigo_state_t *fs = &fs_copy;
         if (fs && ov->lbl_freezer_temp) {
             char fbuf[16];
-            float thr = alerts_get_freezer_temp_c();
-            bool over = fs->T_Congelador > -120.0f
-                        && fs->T_Congelador > thr;
+            bool over = alarma_activa(ALARMA_CONGELADOR);
             lv_color_t col;
             lv_opa_t opa;
             if (fs->T_Congelador > -120.0f) {

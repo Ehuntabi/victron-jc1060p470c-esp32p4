@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 #include <lvgl.h>
 #include <stdio.h>
+#include <string.h>
 
 #define TOUR_DIR        "/sdcard/screenshots"
 #define TOUR_SETTLE_MS        1500   /* dejar que la vista se actualice/dibuje */
@@ -315,4 +316,20 @@ const char *ui_tour_goto_screen(int idx)
 
     tour_settle();
     return name;
+}
+
+/* Predicado para el handler HTTP /captura (config_server.c): true si la
+ * pantalla idx pinta en claro lo que el nivel ESTRICTO protege ("wifi", la
+ * clave del Wi-Fi, y "victron_keys", las claves AES de los Victron). El
+ * handler lo consulta ANTES de ui_tour_goto_screen: una vez navegada la
+ * pantalla fisica ya es tarde para exigir las credenciales estrictas.
+ * Consulta la MISMA tabla de nombres que ui_tour_goto_screen, asi que no hay
+ * que mantener dos listas sincronizadas. */
+bool ui_tour_screen_needs_strict_auth(int idx)
+{
+    if (idx < TOUR_I_SETSUB0 || idx >= ui_tour_screen_count()) return false;
+    int s = idx - TOUR_I_SETSUB0;
+    if (s >= (int)(sizeof(TOUR_SET_NAMES) / sizeof(TOUR_SET_NAMES[0]))) return false;
+    return !strcmp(TOUR_SET_NAMES[s], "wifi") ||
+           !strcmp(TOUR_SET_NAMES[s], "victron_keys");
 }

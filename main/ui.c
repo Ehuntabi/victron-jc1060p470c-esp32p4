@@ -887,6 +887,7 @@ static void idle_to_live_timer_cb(lv_timer_t *t)
     /* Cerrar overlays si quedaran abiertos (chart frigo, histórico batería) */
     ui_close_chart_screen();
     ui_close_battery_history_screen();
+    ui_close_solar_history_screen();
     /* Detalle de card abierto -> volver a la principal tras 1 min sin tocar. */
     ui_close_card_detail();
     /* Modales huerfanos: se crean en lv_layer_top() (visible por encima de
@@ -1319,7 +1320,7 @@ ui_state_t *ui_get_state(void) { return &g_ui; }
  * (subiendo >=N min + T>umbral) en main.c::frigo_update_cb. Es la unica
  * fuente de verdad: la vista Overview lo lee via ui_get_freezer_alarm()
  * en lugar de re-evaluar el umbral por su cuenta. */
-static bool s_freezer_alarm_active = false;
+static volatile bool s_freezer_alarm_active = false;
 
 void ui_set_freezer_alarm(ui_state_t *ui, bool active)
 {

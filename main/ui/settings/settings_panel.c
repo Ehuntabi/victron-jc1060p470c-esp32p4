@@ -351,7 +351,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->capture_status_lbl,
-                      "Guarda las 8 pantallas de datos en la SD");
+                      "Guarda una captura de cada pantalla (Live, históricos y Ajustes) en la SD");
 
     ui->lbl_about_sd = lv_label_create(card_cap);
     lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20_es, 0);

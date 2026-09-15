@@ -105,9 +105,17 @@ void ui_close_solar_history_screen(void);
 const char *ui_tour_goto_screen(int idx);
 int ui_tour_screen_count(void);
 
-/* Carrusel de captura a demanda: recorre las 8 pantallas de datos (6 vistas +
- * 2 graficos), guarda un BMP de cada una en la SD (sobrescribe) y termina. Lo
- * dispara el switch de Settings->Display; el switch se apaga solo al acabar. */
+/* true si la pantalla idx es de las que pintan la clave Wi-Fi o las claves
+ * Victron en claro: el handler /captura la consulta ANTES de navegar (ver
+ * ui/vigilancia/capture_carousel.c). */
+bool ui_tour_screen_needs_strict_auth(int idx);
+
+/* Carrusel de captura a demanda: recorre las pantallas del tour (Live,
+ * historicos y Ajustes; salta wifi y victron_keys, que pintan claves en
+ * claro), guarda un JPEG de cada una en la SD (sobrescribe) y termina. Lo
+ * dispara el switch de Settings->Tarjeta SD; el switch se apaga solo al
+ * acabar. */
+
 void ui_start_capture_carousel(void);
 bool ui_capture_carousel_running(void);
 

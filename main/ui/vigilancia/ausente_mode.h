@@ -2,7 +2,7 @@
  *
  * Apaga la pantalla y la MANTIENE apagada (precedencia maxima sobre auto-brillo,
  * franja nocturna y screensaver). El toque normal no la despierta. Se sale con
- * 4 toques en la esquina superior izquierda.
+ * 4 toques en CUALQUIERA de las 4 esquinas (ver ausente_mode.c).
  *
  * Activacion: switch en Settings -> "Sonido y avisos". Al activar hay una cuenta
  * atras de 10 s (cancelable apagando el switch) antes de entrar.

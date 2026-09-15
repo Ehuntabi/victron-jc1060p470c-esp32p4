@@ -94,6 +94,7 @@ static void destroy_guard(void)
 static void activate(void)
 {
     s_state = AUS_ACTIVE;
+    settings_ausente_sync_switch(true);   /* si se armo por HTTP, el switch de Ajustes debe quedar ON */
     clear_countdown();
     create_guard();
     brightness_apply_now();  /* -> night_mode_timer_cb pone brillo 0 (ausente_is_active) */
