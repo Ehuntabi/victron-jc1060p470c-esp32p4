@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Impide commitear dependencies.lock con una ruta ABSOLUTA dentro.
+#
+# idf.py reconfigure lo reescribe poniendo la ruta local del componente
+# (/home/<quien-sea>/...). En este equipo compila igual, pero en el runner de
+# GitHub esa carpeta no existe y el build muere en la configuracion con
+# "The path field in the manifest does not point to a directory".
+#
+# Versionado en el repo el 15-sep-2026 (auditoria): antes vivia solo en
+# .git/hooks de esta maquina y un clon limpio naceria sin el cerrojo.
+# Activarlo en un clon nuevo:  git config core.hooksPath .githooks
+malo=$(git diff --cached --name-only | grep -x "dependencies.lock" || true)
+[ -z "$malo" ] && exit 0
+if git show ":dependencies.lock" | grep -qE "path: /"; then
+    echo "ABORTADO: dependencies.lock lleva una ruta ABSOLUTA y eso rompe el CI." >&2
+    echo "  Arreglalo con:  sed -i 's|path: /.*/components/|path: components/|' dependencies.lock" >&2
+    exit 1
+fi
+exit 0

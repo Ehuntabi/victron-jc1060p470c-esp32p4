@@ -26,7 +26,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REPO="Ehuntabi/victron-jc1060p470c-esp32p4"
-IDF_EXPORT="$HOME/.espressif/esp-idf-5.4/export.sh"
+IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.4/export.sh}"
 APP_BIN="build/joint_spl_145_control.bin"
 # Directorio unico de releases (firmware P4 + app Flutter): solo la ULTIMA
 # version de cada uno, para no liarse entre varios .bin/.apk sueltos por el

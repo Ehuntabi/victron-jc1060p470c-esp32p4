@@ -108,15 +108,20 @@ En GitHub Actions esa ruta no existe y **el CI falla** con
 Ha pasado ya **tres veces** (commits `e3f710d`, `314a41b`, `edd2a8a`), una de
 ellas desde otro equipo (`/home/db3/...`).
 
-**Antes de commitear, comprobar siempre:**
+**Protecciones (auditadas el 15-sep-2026, antes solo existian de forma local):**
 
-```bash
-grep -n "path: /" dependencies.lock   # no debe devolver nada
-```
+1. **Hook versionado en `.githooks/pre-commit`**: aborta el commit si el
+   `dependencies.lock` que va a entrar lleva una ruta absoluta. En un clon
+   nuevo hay que activarlo UNA vez: `git config core.hooksPath .githooks`
+   (este repo ya lo tiene puesto).
+2. **Bit `skip-worktree`** (local, no versionable): `git ls-files -v` lo muestra
+   como `S dependencies.lock`; hace que git ignore el churn que los builds de
+   este equipo le meten al fichero.
 
-Y si aparece, dejarla relativa (`path: components/espressif__esp_hosted`) **y
-commitear SIN volver a compilar**: un build posterior la reescribe y te comes el
-fallo igual, que es justo lo que pasó el 21-ago-2026.
+El chequeo rapido sigue siendo util: `grep -n "path: /" dependencies.lock` —
+pero ojo, en este equipo devuelve resultado SIN que haya problema (el build
+reescribe el fichero y el skip-worktree lo esconde de git); lo que decide de
+verdad es el hook, que mira lo que SE VA A COMMITEAR.
 
 ## Convenciones del proyecto
 - Estética card-based aplicada en Settings (cada página con su color de borde)
