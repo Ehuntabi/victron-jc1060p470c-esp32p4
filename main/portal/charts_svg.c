@@ -403,7 +403,7 @@ esp_err_t handle_data_frigo(httpd_req_t *req)
         httpd_resp_send_chunk(req,
             "</head><body style='font-family:sans-serif;background:#111;color:#eee;padding:20px'>"
             "<h2>Sin datos</h2><p>No hay datos disponibles ni en SD ni en RAM.</p>"
-            "<a href='/data' style='color:#00BFFF'>Volver</a></body></html>", -1);
+            "<a href='http://192.168.4.1/data' style='color:#00BFFF'>Volver</a></body></html>", -1);
         httpd_resp_send_chunk(req, NULL, 0);
         return ESP_OK;
     }
@@ -431,7 +431,7 @@ esp_err_t handle_data_frigo(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>FRIGO</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/frigo.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/frigo.tar'>Descargar todo (.tar)</a></div>"
+        "<div class='bar'><a href='http://192.168.4.1/data'>&larr; Datos</a> <a href='" PORTAL_HEAVY_BASE "/data/frigo.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/frigo.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#00BFFF'></i>Aletas</span>"
         "<span><i class='dot' style='background:#FF4444'></i>Congelador</span>"
@@ -712,7 +712,7 @@ esp_err_t handle_data_bateria(httpd_req_t *req)
         httpd_resp_send_chunk(req,
             "</head><body style='font-family:sans-serif;background:#111;color:#eee;padding:20px'>"
             "<h2>Sin datos</h2><p>No hay CSV de bateria en SD todavia.</p>"
-            "<a href='/data' style='color:#00BFFF'>Volver</a></body></html>", -1);
+            "<a href='http://192.168.4.1/data' style='color:#00BFFF'>Volver</a></body></html>", -1);
         httpd_resp_send_chunk(req, NULL, 0);
         return ESP_OK;
     }
@@ -739,7 +739,7 @@ esp_err_t handle_data_bateria(httpd_req_t *req)
         ".bar a{color:#00BFFF;text-decoration:none;margin:0 8px}"
         "</style></head><body>"
         "<h2>BATERIA</h2>"
-        "<div class='bar'><a href='/data'>&larr; Datos</a> <a href='/data/bateria.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/bateria.tar'>Descargar todo (.tar)</a></div>"
+        "<div class='bar'><a href='http://192.168.4.1/data'>&larr; Datos</a> <a href='" PORTAL_HEAVY_BASE "/data/bateria.csv'>Descargar CSV (hoy)</a> <a href='" PORTAL_HEAVY_BASE "/data/bateria.tar'>Descargar todo (.tar)</a></div>"
         "<div class='legend'>"
         "<span><i class='dot' style='background:#4FC3F7'></i>BatteryMonitor</span>"
         "<span><i class='dot' style='background:#FFD54F'></i>SolarCharger</span>"
@@ -814,8 +814,8 @@ esp_err_t handle_data_index(httpd_req_t *req)
           "<a href='/keys'>Keys</a>"
         "</nav>"
         "<h1>Logs historicos</h1>"
-        "<a class='btn' href='/data/frigo'>FRIGO</a>"
-        "<a class='btn' href='/data/bateria'>BATERIA</a>"
+        "<a class='btn' href='" PORTAL_HEAVY_BASE "/data/frigo'>FRIGO</a>"
+        "<a class='btn' href='" PORTAL_HEAVY_BASE "/data/bateria'>BATERIA</a>"
         "<h2>Volcado por WiFi: elige la carpeta a descargar (.tar)</h2>"
         "<div class='dl'>"
           /* .tar sirve desde la instancia httpd "pesada" (puerto separado,

@@ -173,6 +173,7 @@ _Static_assert(offsetof(mini_msg_t, crc32) == 36,
                "el CRC32 ya no esta al final de la struct: build_msg() en "
                "udp_tx.c y la comprobacion en udp_rx.c asumen los bytes "
                "[0..crc32) como el area protegida");
+_Static_assert(offsetof(mini_msg_t, alarmas) == 34, "mini_proto: alarmas en offset 34");
 
 #ifdef __cplusplus
 }

@@ -782,7 +782,7 @@ esp_err_t config_server_start(void) {
     cfg_heavy.recv_wait_timeout = 30;
     cfg_heavy.max_open_sockets = 4;
     cfg_heavy.lru_purge_enable = true;
-    cfg_heavy.max_uri_handlers = 16;
+    cfg_heavy.max_uri_handlers = 20;  /* 17 con las graficas/CSV (antes 16, auditoria 15-sep 2.H10) */
     cfg_heavy.max_resp_headers = 16;
     esp_err_t herr_heavy = httpd_start(&server_heavy, &cfg_heavy);
     if (herr_heavy != ESP_OK) {
@@ -838,16 +838,22 @@ esp_err_t config_server_start(void) {
      * (Dashboard, Logs, Keys). */
     httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
     httpd_register_uri_handler(server, &uri_data);
+    /* Las graficas y sus CSV van en la instancia PESADA (8081), como los
+     * .tar: leer y parsear un CSV de ~1,5 MB en la tarea del 80 dejaba mudo
+     * /api/state durante segundos, que es justo lo que la pesada vino a
+     * resolver (auditoria 15-sep-2026, 2.H10). Los enlaces de las paginas
+     * apuntan ya a PORTAL_HEAVY_BASE; la app pide el CSV al 8081 desde la
+     * 1.4.15. */
     httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };
-    httpd_register_uri_handler(server, &uri_data_frigo);
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo);
     httpd_uri_t uri_data_frigo_csv = { .uri = "/data/frigo.csv", .method = HTTP_GET, .handler = handle_data_frigo_csv };
-    httpd_register_uri_handler(server, &uri_data_frigo_csv);
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo_csv);
     httpd_uri_t uri_data_ne185v_csv = { .uri = "/data/ne185v.csv", .method = HTTP_GET, .handler = handle_data_ne185v_csv };
-    httpd_register_uri_handler(server, &uri_data_ne185v_csv);
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_ne185v_csv);
     httpd_uri_t uri_data_bat = { .uri = "/data/bateria", .method = HTTP_GET, .handler = handle_data_bateria };
-    httpd_register_uri_handler(server, &uri_data_bat);
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_bat);
     httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };
-    httpd_register_uri_handler(server, &uri_data_bat_csv);
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_bat_csv);
     httpd_uri_t uri_data_frigo_tar = { .uri = "/data/frigo.tar", .method = HTTP_GET, .handler = handle_data_frigo_tar };
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo_tar);
     httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
