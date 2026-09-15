@@ -1381,22 +1381,21 @@ static void overview_render(ui_overview_view_t *ov)
         if (fs && ov->arc_fan) {
             uint8_t p = fs->fan_percent;
             if (p > 100) p = 100;
-            lv_arc_set_value(ov->arc_fan, p);
-            /* Color del nivel en dos tramos: gris 0x8A93A6 (0 %) -> naranja
-             * 0xFF9800 (50 %) -> rojo 0xFF4444 (100 %). */
-            uint8_t r, g, b;
-            if (p < 50) {
-                r = 0x8A + ((int)(0xFF - 0x8A) * p) / 50;
-                g = 0x93 + ((int)(0x98 - 0x93) * p) / 50;
-                b = 0xA6 + ((int)(0x00 - 0xA6) * p) / 50;
-            } else {
-                int q = p - 50;
-                r = 0xFF;
-                g = 0x98 + ((int)(0x44 - 0x98) * q) / 50;
-                b = 0x00 + ((int)(0x44 - 0x00) * q) / 50;
-            }
-            lv_obj_set_style_arc_color(ov->arc_fan, lv_color_make(r, g, b),
-                                       LV_PART_INDICATOR);
+            lv_arc_set_value(ov->arc_fan, p);   /* la velocidad se ve en la LONGITUD del aro */
+            /* El COLOR del aro es el chivato del excedente solar (peticion del
+             * usuario, 15-sep-2026): verde INTENSO = el ventilador esta
+             * tirando AHORA del sol que sobra; gris claro = no (la espera de
+             * excedente ya la dice el cartel ambar de la tarjeta). Antes el
+             * color iba por la velocidad (gris->naranja->rojo) y no podia
+             * avisar del sol; la velocidad se sigue viendo en la longitud del
+             * aro y en el aspa. Antes habia un segundo chivato "12V sol" en la
+             * barra inferior: fuera (dos chivatos para lo mismo era ruido).
+             * El gris es CLARO (0xC7D0DC) y no el del fondo (0x8A93A6) para
+             * que el relleno siga distinguiendose de la pista. */
+            lv_color_t c = frigo_solar_get_active()
+                ? lv_color_hex(0x00E676)
+                : lv_color_hex(0xC7D0DC);
+            lv_obj_set_style_arc_color(ov->arc_fan, c, LV_PART_INDICATOR);
         }
     }
 
