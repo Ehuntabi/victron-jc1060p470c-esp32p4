@@ -74,8 +74,6 @@ typedef struct {
     lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
     lv_obj_t *img_fan;           /* icono ventilador (animado, debajo 230V) */
     lv_obj_t *arc_fan;           /* aro-gauge del PWM 0..100 % alrededor del ventilador */
-    lv_obj_t *alarm_hint;        /* aviso flotante "toca X para silenciar" */
-    char      alarm_hint_txt[64];/* ultimo texto puesto (para no rehacerlo cada render) */
     int       fan_angle_deci;    /* angulo actual rotacion (0..3599) */
     /* ── Icono del altavoz de cada alarma ──────────────────────────────
      * Uno por tarjeta que puede estar en alarma, oculto mientras su alarma no
@@ -295,16 +293,11 @@ static lv_obj_t *create_node_card(lv_obj_t *parent, const lv_img_dsc_t *img,
  * El ESTADO (condicion activa, silencio, temporizaciones y pitido) ya NO vive
  * aqui: se mudo a main/alarma_estado.c el 14-sep-2026, cuando la cabina 3,5"
  * paso a poder silenciarlas y la telemetria UDP tuvo que publicar cuales estan
- * activas. Esta vista es ahora UN consumidor mas: pinta el parpadeo, el aviso y
+ * activas. Esta vista es ahora UN consumidor mas: pinta el parpadeo y
  * el icono del altavoz, y llama a alarma_silenciar()/alarma_alternar_silencio()
- * cuando se toca. Ver el porque en la cabecera de alarma_estado.h.
- *
- * Estado agregado de alarmas (cualquiera activa, silenciada o no), para que el
- * salvapantallas pueda interrumpir la rotacion. Lo actualiza overview_render. */
-static volatile bool s_ov_alarm_active = false;
-static bool          s_ov_prev_alarm   = false;
-
-bool ui_overview_alarm_active(void) { return s_ov_alarm_active; }
+ * cuando se toca. Ver el porque en la cabecera de alarma_estado.h. El aviso
+ * flotante y la interrupcion del salvapantallas viven en alarma_estado.c (su
+ * timer corre aunque esta vista este oculta). */
 
 /* ── Icono del altavoz, en la esquina de la tarjeta en alarma ───────────────
  * Mismo gesto y mismo dibujo que en la cabina 3,5" (pedido del usuario,
@@ -409,35 +402,10 @@ static void alarm_mute_freezer_cb(lv_event_t *e)
     if (ov) ui_show_chart_screen(ov->base.ui);
 }
 
-/* Aviso flotante de las alarmas: dice cual es y que se toca para callarla.
- * Existe por un caso real: el 13-sep-2026 al usuario le sono la alarma de agua
- * en reserva desde el mediodia y no supo pararla. El gesto de tocar el tanque
- * (o la card de bateria, o la temperatura del congelador) YA la silenciaba,
- * pero nada lo decia: ni en pantalla ni en el manual. Con este aviso, ademas de
- * parpadeo y pitido, hay un texto que dice exactamente que hacer.
- *
- * NO es clickable a proposito: flota por encima de todo y un rectangulo pulsable
- * ahi robaria pulsaciones a lo que hay debajo (la barra inferior y los botones
- * de la card camper). Es solo informativo: dice QUE tocar (el deposito, la card
- * de la bateria o la temperatura del congelador), que es el gesto que silencia.
- *
- * Vive en lv_layer_top(), no en la vista, para que se vea tambien cuando el
- * usuario esta en Ajustes o en una pantalla de detalle: antes solo existia
- * dentro del Overview y ahi la alarma pitaba sin decir nada. */
-
-/* Texto del aviso: la primera alarma activa, o NULL si no hay ninguna. Se
- * evalua en el render, que es donde se conocen los cuatro estados. */
-static const char *alarm_hint_text(bool alarm_s1, bool alarm_r1, bool alarm_soc)
-{
-    /* Se enseña SIEMPRE que la alarma este activa, silenciada o no: silenciar
-     * corta el sonido, no la señal visual (decidido el 13-sep-2026). Si esta
-     * silenciada, el texto lo dice, para que se sepa que sigue pasando. */
-    if (alarm_s1)  return alarma_silenciada(ALARMA_AGUA) ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
-    if (alarm_r1)  return alarma_silenciada(ALARMA_GRISES) ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
-    if (alarm_soc) return alarma_silenciada(ALARMA_BATERIA) ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
-    if (ui_get_freezer_alarm()) return alarma_silenciada(ALARMA_CONGELADOR) ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
-    return NULL;
-}
+/* Aviso flotante de las alarmas: se movio a alarma_estado.c (ver alli). Aqui
+ * solo queda el gesto que silencia: tocar el tanque (o la card de bateria, o
+ * la temperatura del congelador) YA la silenciaba, y el aviso global dice
+ * exactamente eso. */
 
 static void overview_camper_tick_cb(lv_timer_t *t)
 {
@@ -892,22 +860,9 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
 
-    /* Aviso flotante de alarma. Vive en lv_layer_top() para que se vea tambien
-     * desde Ajustes o una pantalla de detalle (la alarma sigue sonando alli), y
-     * NO es clickable: flotando por encima de todo, un rectangulo pulsable
-     * robaria pulsaciones a la barra inferior y a los botones de abajo. Solo
-     * informa: dice cual es la alarma y que hay que tocar para callarla. */
-    ov->alarm_hint = lv_label_create(lv_layer_top());
-    lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(ov->alarm_hint, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_text_font(ov->alarm_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ov->alarm_hint, lv_color_hex(0xFFD54F), 0);
-    lv_obj_set_style_bg_color(ov->alarm_hint, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(ov->alarm_hint, LV_OPA_70, 0);
-    lv_obj_set_style_pad_all(ov->alarm_hint, 8, 0);
-    lv_obj_set_style_radius(ov->alarm_hint, 8, 0);
-    lv_obj_align(ov->alarm_hint, LV_ALIGN_TOP_MID, 0, 8);   /* arriba: no tapa los botones de abajo */
+    /* (El aviso flotante de alarma ya no se crea aqui: vive en
+     * alarma_estado.c, sobre lv_layer_top(), para verse desde cualquier
+     * pantalla aunque esta vista no se dibuje.) */
 
     /* Icono del altavoz de cada tarjeta que puede estar en alarma. Se crean
      * aqui (despues de las tarjetas, para que queden por encima del dibujo) y
@@ -1336,22 +1291,9 @@ static void overview_render(ui_overview_view_t *ov)
             lv_obj_set_style_opa(ov->tank_r1, opa, 0);
         }
 
-        /* Aviso flotante: aqui ya se conocen las cuatro alarmas (agua, aguas
-         * grises, bateria y congelador). Aparece mientras haya alguna activa
-         * (silenciada o no: silenciar no la esconde) y dice cual es y que hay
-         * que tocar para callarla. El texto se cambia solo cuando cambia de
-         * verdad: lv_label_set_text_fmt no compara y este render corre varias
-         * veces por segundo. */
-        if (ov->alarm_hint) {
-            const char *cual = alarm_hint_text(alarm_s1, alarm_r1, alarm_soc);
-            const char *txt = cual ? cual : "";
-            if (strcmp(txt, ov->alarm_hint_txt) != 0) {
-                snprintf(ov->alarm_hint_txt, sizeof(ov->alarm_hint_txt), "%s", txt);
-                if (cual) lv_label_set_text(ov->alarm_hint, cual);
-            }
-            if (cual) lv_obj_clear_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
-            else      lv_obj_add_flag(ov->alarm_hint, LV_OBJ_FLAG_HIDDEN);
-        }
+        /* Aviso flotante e interrupcion del salvapantallas: viven en
+         * alarma_estado.c, que evalua las cuatro alarmas en su propio timer
+         * de 500 ms (independiente de que esta vista se dibuje). */
         /* Parpadeo visual del card de bateria */
         if (ov->card_bat) {
             lv_opa_t opa = (alarm_soc && ov->blink_phase)
@@ -1363,17 +1305,6 @@ static void overview_render(ui_overview_view_t *ov)
          * refresh_mute_iconos): se enseña solo si esa alarma esta activa, y
          * cambia de dibujo segun este sonando o silenciada. */
         refresh_mute_iconos(ov);
-
-        /* ── Feature A: interrumpir la rotacion del salvapantallas cuando
-         * salta cualquier alarma, para que no quede oculta. ── */
-        /* Cuenta cualquier alarma activa, silenciada o no: la pantalla tiene que
-         * enseñarla (lo que se calla es el pitido). */
-        bool any_alarm = alarm_s1 || alarm_r1 || alarm_soc || ui_get_freezer_alarm();
-        s_ov_alarm_active = any_alarm;
-        if (any_alarm && !s_ov_prev_alarm) {
-            ui_alarm_interrupt_screensaver();
-        }
-        s_ov_prev_alarm = any_alarm;
 
         /* Indicador 230 V grande */
         if (ov->pill_shore) {

@@ -54,6 +54,10 @@ static const char *TAG = "camera";
 static volatile uint8_t s_luma       = 0;
 static volatile bool    s_luma_valid = false;
 
+/* true cuando camera_init() llego al final con exito (camara util). Lo lee el
+ * modo ausente via camera_ready() antes de armarse. */
+static volatile bool s_ready = false;
+
 bool camera_get_luma(uint8_t *out_luma)
 {
     if (!s_luma_valid) return false;
@@ -1387,5 +1391,16 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
      * Idle si no hay capturas pendientes; con SD no montada reintenta. */
     xTaskCreate(vig_sd_drain_task, "vig_drain", 6144, NULL, 2, NULL);
 
+    /* Marca "camara util": lo consulta el modo ausente antes de armarse, para
+     * no prometer vigilancia con una camara que no arranco (main.c aisla el
+     * fallo de camera_init en silencio). No hay desinicializacion en este
+     * firmware; si algun dia la hay, limpiar este flag ahi. */
+    s_ready = true;
+
     return ESP_OK;
+}
+
+bool camera_ready(void)
+{
+    return s_ready;
 }

@@ -22,10 +22,16 @@ extern "C" {
  * necesita la SD para guardar las fotos (via vig_sd_drain_task en camera.c);
  * armar igual dejaria "modo ausente ACTIVO" en el log mientras cada foto
  * fallaba en silencio al no encontrar donde escribirla (solo un WARN en
- * el log de la camara, invisible para quien confia en que esto vigila).
- * on=false: cancela la cuenta atras (si pendiente) o sale del modo (si
- * activo); siempre devuelve true. */
+ * el log de la camara, invisible para quien confia en que esto vigila) --
+ * o si la camara no llego a arrancar (camera_init fallo): sin camara no hay
+ * vigilancia. on=false: cancela la cuenta atras (si pendiente) o sale del
+ * modo (si activo); siempre devuelve true. */
 bool ausente_request(bool on);
+
+/* Motivo del ultimo rechazo de ausente_request(true), o NULL si el ultimo
+ * intento fue aceptado. Distingue "sin SD" de "camara no responde" para que
+ * cada llamador (dialog del switch, handler /ausente) lo explique bien. */
+const char *ausente_rechazo_razon(void);
 
 /* true cuando el modo esta plenamente activo (pantalla apagada). */
 bool ausente_is_active(void);

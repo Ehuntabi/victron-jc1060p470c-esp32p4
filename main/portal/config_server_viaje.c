@@ -1436,31 +1436,8 @@ static estado_viaje_t estado_de(const char *nombre)
     return listo ? V_LISTO : V_EN_CURSO;      /* sin resumen: nunca se cerro */
 }
 
-/* Escapa lo minimo para meter texto arbitrario en HTML (contenido Y dentro de
- * un atributo entrecomillado con '): & < > " '. ent->d_name es el nombre de
- * carpeta del viaje, que viene en ultima instancia del destino que se teclea
- * en la 3.5" (texto libre) -- sin esto se incrustaba tal cual en <b> y en el
- * href='/data/viaje.tar?v=...', asi que un nombre con < > o ' rompia el HTML
- * o el atributo (XSS almacenado si llega a contener algo ejecutable; hoy
- * requiere ya tener acceso al satelite o a la SD para forzar ese nombre, pero
- * no deberia depender de eso). out debe ser al menos 4x mayor que in por si
- * cada caracter se convierte en la entidad mas larga (&amp;). Detectado por
- * el usuario el 09-sep-2026. */
-static void html_escape(const char *in, char *out, size_t out_len)
-{
-    size_t o = 0;
-    for (size_t i = 0; in[i] != '\0' && o + 6 < out_len; i++) {
-        switch (in[i]) {
-            case '&':  memcpy(out + o, "&amp;",  5); o += 5; break;
-            case '<':  memcpy(out + o, "&lt;",   4); o += 4; break;
-            case '>':  memcpy(out + o, "&gt;",   4); o += 4; break;
-            case '"':  memcpy(out + o, "&quot;", 6); o += 6; break;
-            case '\'': memcpy(out + o, "&#39;",  5); o += 5; break;
-            default:   out[o++] = in[i]; break;
-        }
-    }
-    out[o] = '\0';
-}
+/* El escape HTML de nombres (html_escape) se movio a config_server_internal.h
+ * para compartirlo con la galeria de vigilancia: ver alli el comentario. */
 
 esp_err_t handle_data_viajes(httpd_req_t *req)
 {

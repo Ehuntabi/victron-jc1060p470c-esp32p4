@@ -58,12 +58,23 @@ static void load_audio_prefs(void)
 static void save_audio_prefs(void)
 {
     nvs_handle_t h;
-    if (nvs_open("audio", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_i8(h, "vol", (int8_t)s_volume);
-        nvs_set_u8(h, "mute", s_muted ? 1 : 0);
-        nvs_commit(h);
-        nvs_close(h);
+    if (nvs_open("audio", NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "no pude abrir NVS de audio: volumen/mute no persisten");
+        return;
     }
+    esp_err_t err = nvs_set_i8(h, "vol", (int8_t)s_volume);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_set_i8(vol) fallo: %s", esp_err_to_name(err));
+    }
+    err = nvs_set_u8(h, "mute", s_muted ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_set_u8(mute) fallo: %s", esp_err_to_name(err));
+    }
+    err = nvs_commit(h);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_commit(audio) fallo: %s", esp_err_to_name(err));
+    }
+    nvs_close(h);
 }
 
 esp_err_t audio_set_volume(int vol)

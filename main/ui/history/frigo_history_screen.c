@@ -104,6 +104,7 @@ static int s_frigo_loaded_n   = 0;
  * 08-sep-2026. */
 static TaskHandle_t s_frigo_loader_task = NULL;
 static int          s_frigo_req_idx = -1;
+static volatile bool s_frigo_req_dates = false; /* pedido de re-listar las fechas de la SD */
 
 static void frigo_chart_load_day(void);
 static void frigo_paint_day(void);
@@ -325,15 +326,14 @@ void ui_show_chart_screen(ui_state_t *ui)
         lv_label_set_text(l, "--:--");
     }
 
-    /* Inicializar navegacion: listar fechas SD y mostrar HOY */
-    s_frigo_n_dates = log_browser_list_dates("/sdcard/frigo",
-                                             s_frigo_dates, LOG_BROWSER_MAX_DATES);
-    if (s_frigo_n_dates > 0) {
-        char today[11];
-        today_ymd(today);
-        if (strcmp(s_frigo_dates[s_frigo_n_dates - 1], today) == 0)
-            s_frigo_n_dates--;
-    }
+    /* Listar las fechas de la SD lo hace frigo_loader_task: opendir/readdir
+     * son I/O de SD real y aqui estamos en la tarea LVGL -- congelaria la UI
+     * hasta que la tarjeta responda (ver el comentario de frigo_chart_load_day).
+     * El listado llega solo, unos ms despues: mientras tanto navegar hacia
+     * atras no ofrece dias (s_frigo_n_dates=0) y HOY, que no depende de la
+     * lista, carga igual. */
+    s_frigo_n_dates = 0;
+    s_frigo_req_dates = true;
     s_frigo_day_idx = -1;
     s_frigo_loaded_idx = -2;   /* re-listado de fechas: invalidar cache del CSV */
     /* Lector de dias historicos en su propia tarea: no toca la SD desde el
@@ -345,6 +345,10 @@ void ui_show_chart_screen(ui_state_t *ui)
             ESP_LOGE(TAG_UI, "no se pudo crear frigo_loader: los dias historicos no cargaran");
         }
     }
+    /* Despertar a la tarea para el re-listado de fechas: frigo_chart_load_day
+     * solo notifica si pide leer un dia, y con el reloj sin hora NO lo pide
+     * (rama de RAM); sin este notify el listado nunca llegaria. */
+    if (s_frigo_loader_task) xTaskNotifyGive(s_frigo_loader_task);
     frigo_chart_load_day();
 
     /* Gestures para navegar entre dias */
@@ -595,6 +599,23 @@ static void frigo_loader_task(void *arg)
     (void)arg;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        /* Re-listado de fechas pedido al abrir la pantalla: es I/O de SD
+         * (opendir/readdir) y se hace AQUI, fuera del hilo de LVGL -- antes
+         * corria dentro de ui_show_chart_screen y congelaba la UI mientras la
+         * tarjeta respondia. El filtro de "hoy" se mueve con el listado: hoy
+         * se navega como -1, no como ultima fecha. */
+        if (s_frigo_req_dates) {
+            s_frigo_req_dates = false;
+            int n = log_browser_list_dates("/sdcard/frigo",
+                                           s_frigo_dates, LOG_BROWSER_MAX_DATES);
+            if (n > 0) {
+                char today[11];
+                today_ymd(today);
+                if (strcmp(s_frigo_dates[n - 1], today) == 0) n--;
+            }
+            s_frigo_n_dates = n;
+        }
 
         int idx = s_frigo_req_idx;
         while (idx >= -1 && idx < s_frigo_n_dates && idx != s_frigo_loaded_idx) {

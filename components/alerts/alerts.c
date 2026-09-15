@@ -53,11 +53,19 @@ void alerts_init(void)
 static void save_int(const char *k, int32_t v)
 {
     nvs_handle_t h;
-    if (nvs_open(NS, NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_i32(h, k, v);
-        nvs_commit(h);
-        nvs_close(h);
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGW(TAG, "no pude abrir NVS para %s: el valor no persiste", k);
+        return;
     }
+    esp_err_t err = nvs_set_i32(h, k, v);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_set_i32(%s) fallo: %s", k, esp_err_to_name(err));
+    }
+    err = nvs_commit(h);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "nvs_commit(%s) fallo: %s", k, esp_err_to_name(err));
+    }
+    nvs_close(h);
 }
 
 int   alerts_get_freezer_minutes(void) { return s_freezer_min; }

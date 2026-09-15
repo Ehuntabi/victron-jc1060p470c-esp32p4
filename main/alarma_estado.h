@@ -24,9 +24,11 @@
  *
  * Hilos: los dos booleanos por alarma son volatile y se escriben con
  * asignaciones de un byte, asi que leerlos desde otra tarea (udp_tx, el portal)
- * no necesita cerrojo. Nada de aqui toca LVGL: por eso se puede llamar desde
- * cualquier tarea. El aviso en pantalla lo sigue pintando view_overview, que es
- * quien tiene los widgets, leyendo de aqui.
+ * no necesita cerrojo. Las llamadas de aqui no tocan LVGL, salvo el propio
+ * temporizador de evaluacion (lv_timer, corre en la tarea LVGL), que ademas
+ * pinta el aviso flotante sobre lv_layer_top() e interrumpe el salvapantallas
+ * -- antes eso vivia en view_overview.c y solo funcionaba con el Overview
+ * dibujandose.
  */
 #pragma once
 

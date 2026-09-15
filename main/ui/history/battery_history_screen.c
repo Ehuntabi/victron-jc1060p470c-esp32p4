@@ -119,6 +119,7 @@ static float s_bh_tot_dis[BH_SRC_COUNT] = {0};
  * cerrojo de LVGL tomado y comprobando ese indice, no hay carrera. */
 static TaskHandle_t   s_bh_loader_task = NULL;
 static volatile int   s_bh_req_idx     = -2;   /* dia pedido a la tarea */
+static volatile bool  s_bh_req_dates   = false; /* pedido de re-listar las fechas de la SD */
 
 static void bh_chart_load_day(void);
 static void bh_paint_hist_day(void);
@@ -437,15 +438,14 @@ void ui_show_battery_history_screen(ui_state_t *ui)
         lv_label_set_text(l, "--:--");
     }
 
-    /* Listar fechas SD y arrancar en HOY */
-    s_bh_n_dates = log_browser_list_dates("/sdcard/bateria",
-                                          s_bh_dates, LOG_BROWSER_MAX_DATES);
-    if (s_bh_n_dates > 0) {
-        char today[11];
-        today_ymd(today);
-        if (strcmp(s_bh_dates[s_bh_n_dates - 1], today) == 0)
-            s_bh_n_dates--;
-    }
+    /* Listar las fechas de la SD lo hace bh_loader_task: opendir/readdir son
+     * I/O de SD real y aqui estamos en la tarea LVGL -- congelaria la UI hasta
+     * que la tarjeta responda (ver el comentario de bh_chart_load_day). El
+     * listado llega solo, unos ms despues: mientras tanto navegar hacia atras
+     * no ofrece dias (s_bh_n_dates=0) y HOY, que no depende de la lista,
+     * carga igual. */
+    s_bh_n_dates = 0;
+    s_bh_req_dates = true;
     s_bh_day_idx = -1;
     s_bh_loaded_idx = -2;   /* al abrir la pantalla, releer (ver bh_step_day) */
     /* Lector de dias historicos: se crea una vez y vive lo que la aplicacion
@@ -698,6 +698,23 @@ static void bh_loader_task(void *arg)
     (void)arg;
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        /* Re-listado de fechas pedido al abrir la pantalla: es I/O de SD
+         * (opendir/readdir) y se hace AQUI, fuera del hilo de LVGL -- antes
+         * corria dentro de ui_show_battery_history_screen y congelaba la UI
+         * mientras la tarjeta respondia. El filtro de "hoy" se mueve con el
+         * listado: hoy se navega como -1, no como ultima fecha. */
+        if (s_bh_req_dates) {
+            s_bh_req_dates = false;
+            int n = log_browser_list_dates("/sdcard/bateria",
+                                           s_bh_dates, LOG_BROWSER_MAX_DATES);
+            if (n > 0) {
+                char today[11];
+                today_ymd(today);
+                if (strcmp(s_bh_dates[n - 1], today) == 0) n--;
+            }
+            s_bh_n_dates = n;
+        }
 
         int idx = s_bh_req_idx;
         while (idx >= -1 && idx < s_bh_n_dates && idx != s_bh_loaded_idx) {

@@ -14,6 +14,7 @@
 #include "alerts.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <lvgl.h>
 
 /* === SoC umbrales (dropdowns) === */
@@ -120,15 +121,20 @@ static void ausente_switch_cb(lv_event_t *e)
     lv_obj_t *sw = lv_event_get_target(e);
     bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
     if (!ausente_request(on)) {
-        /* Rechazado (sin SD montada, ver ausente_mode.c): el switch no
-         * puede quedar en ON mintiendo sobre un modo que no llego a
-         * armarse. */
+        /* Rechazado (sin SD montada o camara que no responde, ver
+         * ausente_mode.c): el switch no puede quedar en ON mintiendo sobre
+         * un modo que no llego a armarse. El motivo concreto lo da
+         * ausente_rechazo_razon(). */
         lv_obj_clear_state(sw, LV_STATE_CHECKED);
-        ui_show_info_dialog(LV_SYMBOL_WARNING "  Modo ausente",
-            "No se puede activar: la tarjeta SD\nno esta montada (se solto en\n"
-            "Ajustes -> Autocaravana), y sin ella\nla vigilancia no tendria "
-            "donde\nguardar las fotos.\n\nReinicia la pantalla para volver\n"
-            "a montarla.");
+        const char *r = ausente_rechazo_razon();
+        if (r) {
+            char txt[280];
+            snprintf(txt, sizeof(txt), "No se puede activar: %s", r);
+            ui_show_info_dialog(LV_SYMBOL_WARNING "  Modo ausente", txt);
+        } else {
+            ui_show_info_dialog(LV_SYMBOL_WARNING "  Modo ausente",
+                "No se puede activar el modo ausente.");
+        }
     }
 }
 

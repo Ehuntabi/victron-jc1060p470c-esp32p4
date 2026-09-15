@@ -13,6 +13,13 @@ extern void settings_ausente_sync_switch(bool on);
 
 static const char *TAG = "ausente";
 
+/* Motivo del ultimo rechazo de ausente_request(true), o NULL si el ultimo
+ * intento fue aceptado. Los textos distinguen "sin SD" de "camara no
+ * responde"; los usan el dialog del switch (settings_sound.c) y el handler
+ * /ausente (portal/config_server.c) para explicar el NO. */
+static const char *s_rechazo = NULL;
+const char *ausente_rechazo_razon(void) { return s_rechazo; }
+
 typedef enum { AUS_OFF, AUS_PENDING, AUS_ACTIVE } aus_state_t;
 static volatile aus_state_t s_state = AUS_OFF;
 
@@ -133,8 +140,25 @@ bool ausente_request(bool on)
         if (!datalogger_sd_montada()) {
             ESP_LOGW(TAG, "modo ausente RECHAZADO: SD no montada (soltar "
                           "tarjeta?), no habria donde guardar la vigilancia");
+            s_rechazo = "la tarjeta SD no esta montada\n(se solto en Ajustes -> "
+                        "Autocaravana), y sin ella la vigilancia no tendria "
+                        "donde guardar las fotos.\nReinicia la pantalla para "
+                        "volver a montarla.";
             return false;
         }
+        /* La SD guarda las fotos, pero si la camara no llego a arrancar
+         * (camera_init fallo y main.c lo aisla en silencio) el modo ausente
+         * prometeria una vigilancia que no existe. Rechazarlo con aviso
+         * claro, igual que sin SD. */
+        if (!camera_ready()) {
+            ESP_LOGW(TAG, "modo ausente RECHAZADO: la camara no responde "
+                          "(camera_init fallo), no vigilaria nada");
+            s_rechazo = "la camara no responde\n(fallo al arrancar): el modo "
+                        "ausente no vigilaria nada.\nReinicia la pantalla y "
+                        "reintenta.";
+            return false;
+        }
+        s_rechazo = NULL;
         s_state = AUS_PENDING;
         s_secs  = 10;
 

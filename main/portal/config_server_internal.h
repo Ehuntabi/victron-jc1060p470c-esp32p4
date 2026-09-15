@@ -53,3 +53,27 @@ void cfg_dns_stop(void);
 #define REQUIRE_AUTH_STRICT(req) do { \
     if (check_basic_auth_strict(req) != ESP_OK) return ESP_OK; \
 } while (0)
+
+/* Escape HTML de texto libre (nombres de fichero/carpeta que vienen de la SD,
+ * o el destino de viaje que se teclea en la 3,5"): sustituye & < > " ' por sus
+ * entidades para que no rompan el HTML ni los atributos (XSS almacenado si el
+ * nombre llegara a contener algo ejecutable). Antes era static en
+ * config_server_viaje.c; se sube aqui para usarla tambien en la galeria de
+ * vigilancia (config_server_vigilancia.c) sin duplicarla. out debe ser al
+ * menos 4x mayor que in por si cada caracter se convierte en la entidad mas
+ * larga (&amp;). */
+static inline void html_escape(const char *in, char *out, size_t out_len)
+{
+    size_t o = 0;
+    for (size_t i = 0; in[i] != '\0' && o + 6 < out_len; i++) {
+        switch (in[i]) {
+            case '&':  memcpy(out + o, "&amp;",  5); o += 5; break;
+            case '<':  memcpy(out + o, "&lt;",   4); o += 4; break;
+            case '>':  memcpy(out + o, "&gt;",   4); o += 4; break;
+            case '"':  memcpy(out + o, "&quot;", 6); o += 6; break;
+            case '\'': memcpy(out + o, "&#39;",  5); o += 5; break;
+            default:   out[o++] = in[i]; break;
+        }
+    }
+    out[o] = '\0';
+}

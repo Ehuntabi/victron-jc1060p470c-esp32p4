@@ -21,6 +21,11 @@ extern "C" {
  */
 esp_err_t camera_init(i2c_master_bus_handle_t i2c);
 
+/* true si camera_init() termino con exito y la camara esta util. El modo
+ * ausente lo comprueba antes de armarse: sin camara no hay vigilancia, y
+ * camera_init puede fallar sin que el resto del firmware se entere. */
+bool camera_ready(void);
+
 /* Luminosidad ambiente media del ultimo frame (0-255, suavizada). Devuelve
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);

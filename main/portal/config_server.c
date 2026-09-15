@@ -116,12 +116,20 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
             bsp_display_unlock();
             done = true;
         }
-        httpd_resp_sendstr(req, !done ? "No pude tomar el lock de pantalla, reintenta"
-                                : (on && !accepted) ? "Rechazado: la SD no esta montada "
-                                                       "(se solto en Ajustes), sin ella la "
-                                                       "vigilancia no tendria donde guardar"
-                                : on ? "Modo ausente/vigilancia activado"
-                                     : "Modo ausente desactivado");
+        /* El rechazo distingue "sin SD" de "camara no responde" via
+         * ausente_rechazo_razon() (ver ausente_mode.c). */
+        char msg[256];
+        if (!done) {
+            snprintf(msg, sizeof(msg), "No pude tomar el lock de pantalla, reintenta");
+        } else if (on && !accepted) {
+            const char *r = ausente_rechazo_razon();
+            snprintf(msg, sizeof(msg), "Rechazado: %s", r ? r : "motivo desconocido");
+        } else if (on) {
+            snprintf(msg, sizeof(msg), "Modo ausente/vigilancia activado");
+        } else {
+            snprintf(msg, sizeof(msg), "Modo ausente desactivado");
+        }
+        httpd_resp_sendstr(req, msg);
     } else {
         httpd_resp_sendstr(req, "Usa /ausente?on para activar vigilancia, /ausente?off para salir.");
     }

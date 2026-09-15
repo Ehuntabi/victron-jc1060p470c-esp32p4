@@ -16,7 +16,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "fonts/fonts_es.h"        /* lv_font_montserrat_20_es: la fuente del aviso */
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "alarma";
 
@@ -193,10 +195,90 @@ static void evaluar_todo(uint32_t ahora_ms)
     evaluar(ALARMA_CONGELADOR, congelador, ahora_ms);
 }
 
+/* ── Aviso flotante de alarma, en lv_layer_top() ─────────────────────────────
+ * Antes esto vivia DENTRO de overview_render(): el texto solo se refrescaba
+ * cuando la vista Overview se dibujaba, y su tick se salta cuando el root esta
+ * oculto o el salvapantallas rota. Resultado (auditoria): con el usuario en
+ * Ajustes y sin trafico BLE que forzara renders, la alarma pitaba sin que se
+ * viera NADA en pantalla. Desde aqui lo hace el propio timer de 500 ms, asi
+ * que el aviso se ve desde cualquier pantalla. Mismo diseno y posicion que el
+ * original: fuente 20_es, texto ambar sobre negro, arriba al centro (no tapa
+ * la barra inferior) y NO clickable (flotando por encima de todo, un
+ * rectangulo pulsable robaria toques a lo que hay debajo). Solo informa: dice
+ * cual es la alarma y que hay que tocar para callarla. El parpadeo de las
+ * tarjetas sigue en la vista Overview. */
+static lv_obj_t *s_aviso = NULL;
+static char      s_aviso_txt[64];   /* ultimo texto puesto: no rehacerlo cada tick */
+
+/* Texto del aviso: la primera alarma activa, o NULL si no hay ninguna. Usa el
+ * estado local s_al[] (recien evaluado en este mismo tick), igual que el
+ * resto de consumidores. */
+static const char *alarm_hint_text(void)
+{
+    /* Se enseña SIEMPRE que la alarma este activa, silenciada o no: silenciar
+     * corta el sonido, no la señal visual (decidido el 13-sep-2026). Si esta
+     * silenciada, el texto lo dice, para que se sepa que sigue pasando. */
+    if (alarma_activa(ALARMA_AGUA))  return alarma_silenciada(ALARMA_AGUA)  ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
+    if (alarma_activa(ALARMA_GRISES)) return alarma_silenciada(ALARMA_GRISES) ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
+    if (alarma_activa(ALARMA_BATERIA)) return alarma_silenciada(ALARMA_BATERIA) ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
+    if (alarma_activa(ALARMA_CONGELADOR)) return alarma_silenciada(ALARMA_CONGELADOR) ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
+    return NULL;
+}
+
+/* Creacion perezosa del label: la primera vez que hace falta. Estilos y
+ * posicion copiados del aviso que existia en view_overview.c. */
+static void aviso_crear(void)
+{
+    if (s_aviso) return;
+    s_aviso = lv_label_create(lv_layer_top());
+    lv_obj_add_flag(s_aviso, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(s_aviso, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(s_aviso, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_text_font(s_aviso, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_aviso, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_bg_color(s_aviso, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_aviso, LV_OPA_70, 0);
+    lv_obj_set_style_pad_all(s_aviso, 8, 0);
+    lv_obj_set_style_radius(s_aviso, 8, 0);
+    lv_obj_align(s_aviso, LV_ALIGN_TOP_MID, 0, 8);   /* arriba: no tapa los botones de abajo */
+}
+
+static bool s_prev_any_alarm = false;
+
 static void tick_cb(lv_timer_t *t)
 {
     (void)t;
     evaluar_todo((uint32_t)lv_tick_get());
+
+    /* Flanco ascendente de "alguna alarma activa" (silenciada o no: la pantalla
+     * tiene que enseñarla, lo que se calla es el pitido): si el salvapantallas
+     * esta rotando, se interrumpe y salta a Live+Overview para que la alarma
+     * sea visible. Antes lo hacia overview_render(); al estar aqui vale desde
+     * cualquier pantalla. */
+    bool any = alarma_estado_bits() != 0;
+    if (any && !s_prev_any_alarm) {
+        ui_alarm_interrupt_screensaver();
+    }
+    s_prev_any_alarm = any;
+
+    /* Aviso flotante: pintarlo/ocultarlo y cambiar el texto solo cuando cambie
+     * de verdad (lv_label_set_text no compara y este tick corre 2 veces por
+     * segundo). Se muestra aunque la alarma este SILENCIADA y se oculta cuando
+     * no queda ninguna activa. Todo corre en la tarea LVGL (es un lv_timer). */
+    const char *cual = alarm_hint_text();
+    const char *txt = cual ? cual : "";
+    if (strcmp(txt, s_aviso_txt) != 0) {
+        snprintf(s_aviso_txt, sizeof(s_aviso_txt), "%s", txt);
+        if (cual) {
+            aviso_crear();
+            lv_label_set_text(s_aviso, cual);
+        }
+    }
+    if (cual) {
+        if (s_aviso) lv_obj_clear_flag(s_aviso, LV_OBJ_FLAG_HIDDEN);
+    } else if (s_aviso) {
+        lv_obj_add_flag(s_aviso, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void alarma_estado_init(void)
@@ -272,6 +354,15 @@ uint8_t alarma_estado_bits(void)
         if (s_al[i].activa) bits |= s_bit[i];
     }
     return bits;
+}
+
+/* API conservada para el salvapantallas (settings_panel.c): antes la
+ * actualizaba overview_render() con sus propios estados locales
+ * (s_ov_alarm_active); ahora es una vista de la mascara del estado
+ * compartido, que este fichero ya mantiene al dia en cada tick. */
+bool ui_overview_alarm_active(void)
+{
+    return alarma_estado_bits() != 0;
 }
 
 int alarma_silenciar_mask(uint8_t mask)

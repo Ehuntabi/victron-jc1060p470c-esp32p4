@@ -380,6 +380,30 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
                        "Basic realm=\"Victron Display\"");
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "Auth required");
+
+    /* Drenar el body que quede por leer, con tope TOTAL de 8 s (esp_timer).
+     * El porqué: un cliente sin credenciales que anuncia un Content-Length
+     * enorme y gotea el cuerpo poco a poco (slowloris) dejaba al purge de la
+     * sesion del framework esperando ese body para siempre -- esp_http_server
+     * es de UNA sola tarea, asi que la instancia httpd entera quedaba muda
+     * para todos. Si al caducar el plazo sigue quedando body, se cierra la
+     * sesion para que el purge no se quede colgado.
+     * El 401 solo se envia cuando faltan credenciales, asi que el flujo OTA
+     * con credenciales correctas no pasa por aqui y no cambia nada. */
+    if (req->content_len > 0) {
+        char drena[256];
+        int64_t tope_us = esp_timer_get_time() + 8 * 1000000;   /* 8 s */
+        while (req->content_len > 0 && esp_timer_get_time() < tope_us) {
+            size_t quiero = sizeof(drena);
+            if (req->content_len < quiero) quiero = req->content_len;
+            int r = httpd_req_recv(req, drena, quiero);
+            if (r <= 0) break;
+        }
+        if (req->content_len > 0) {
+            ESP_LOGW(TAG, "401 con body sin drenar (cliente lento): cierro la sesion");
+            httpd_sess_trigger_close(req->handle, httpd_req_to_sockfd(req));
+        }
+    }
     return ESP_FAIL;
 }
 

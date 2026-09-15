@@ -264,7 +264,9 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
         httpd_resp_sendstr_chunk(req, "<p>Aun no hay capturas. Activa el modo ausente y muevete "
                                       "delante de la camara.</p>");
     } else {
-        char line[400];
+        /* 800 y no 400: nm/fn pasan por html_escape y en el peor caso cada
+         * caracter crece x6 (dos usos por linea). */
+        char line[800];
         for (int i = 0; i < n; i++) {
             struct tm tmv; localtime_r(&ts[i], &tmv);
             char when[40];
@@ -288,13 +290,24 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
             const char *nm = sd_names[i];
             const char *slash = strrchr(nm, '/');
             const char *fn = slash ? slash + 1 : nm;
+            /* nm y fn vienen de readdir de la SD: cualquier caracter vale y
+             * aqui se incrustan en atributos HTML. Escaparlos ANTES del
+             * snprintf (html_escape, compartida via config_server_internal.h):
+             * un nombre con & < > o comillas rompia el HTML o inyectaba
+             * etiquetas (XSS almacenado). Las rodajas de fecha salen de fn_esc,
+             * no de fn crudo, para que tampoco ellas puedan soltar caracteres
+             * sin escapar. */
+            char nm_esc[VIG_NAME_LEN * 6];
+            char fn_esc[VIG_NAME_LEN * 6];
+            html_escape(nm, nm_esc, sizeof(nm_esc));
+            html_escape(fn, fn_esc, sizeof(fn_esc));
             /* href a la foto completa de siempre; src a la miniatura --
              * handle_vigilancia_thumb cae a la foto completa si no
              * encuentra miniatura (capturas de antes de este cambio). */
             snprintf(line, sizeof(line),
                      "<div class=cap><div class=t>%.4s-%.2s-%.2s %.2s:%.2s:%.2s &middot; tarjeta</div>"
                      "<a href='/vigilancia/%s'><img src='/vigilancia_thumb/%s' loading=lazy></a></div>",
-                     fn, fn + 4, fn + 6, fn + 9, fn + 11, fn + 13, nm, nm);
+                     fn_esc, fn_esc + 4, fn_esc + 6, fn_esc + 9, fn_esc + 11, fn_esc + 13, nm_esc, nm_esc);
             httpd_resp_sendstr_chunk(req, line);
         }
         char foot[240];
