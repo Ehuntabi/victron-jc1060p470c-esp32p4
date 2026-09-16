@@ -337,6 +337,19 @@ static void cfg_srv_ap_probe_req(void *arg, esp_event_base_t base,
     wifi_event_ap_probe_req_rx_t *e = (wifi_event_ap_probe_req_rx_t *)data;
     ESP_LOGI(TAG, "Probe REQ rssi=%d MAC=%02x:%02x:%02x:%02x:%02x:%02x",
              e->rssi, e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5]);
+    /* Despertar el portal YA, mientras el movil todavia se esta asociando: si
+     * el HTTP estaba dormido (auto-off de 15 min), su arranque tarda un par de
+     * segundos (SPIFFS + NVS) y la primera peticion del navegador se lo
+     * encontraba parado -- el "a veces conecta y otras no" (16-sep-2026). El
+     * arranque va por la cola de trabajos, no aqui: esto corre en la tarea de
+     * eventos del sistema y config_server_start monta SPIFFS y lee NVS.
+     * Se rearma tambien el auto-off: si nadie llega a asociarse, que se vuelva
+     * a dormir (los moviles sondear constantemente y no deben tenerlo
+     * despierto para siempre). */
+    if (!config_server_is_running()) {
+        cfg_job_post(CFG_JOB_START);
+    }
+    ap_off_timer_arm();
 }
 
 static void dhcp_set_captiveportal_url(void)
