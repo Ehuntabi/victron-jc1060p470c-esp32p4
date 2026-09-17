@@ -7,7 +7,7 @@ metadata:
   originSessionId: 64ed8cac-6e51-4a9f-be24-926d3c876304
 ---
 
-Todos los proyectos ESP32-P4 del usuario usan **ESP-IDF v5.4.4** (no 5.4.1, no 5.5.x): victron, victron_mini, esp_hosted_slave, waveshare_7b, uart_bridge, victronsolardisplayesp-multi-device_pantalla_3.5.
+Todos los proyectos ESP32-P4 del usuario usan **ESP-IDF v5.4.4** (no 5.4.1, no 5.5.x): victron, esp_hosted_slave, waveshare_7b, uart_bridge, victronsolardisplayesp-multi-device_pantalla_3.5.
 
 **Install activo unico (estado 2026-05-25):**
 - Path: `/home/jc/.espressif/esp-idf-5.4` (en tag v5.4.4)

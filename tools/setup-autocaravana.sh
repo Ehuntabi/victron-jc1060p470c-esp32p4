@@ -69,19 +69,17 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-step "3. Clonar/actualizar los 3 repos victron"
+step "3. Clonar/actualizar los repos victron"
 
 mkdir -p "$JOINT_DIR"
 cd "$JOINT_DIR"
 
 declare -A REPOS_SSH=(
   ["victron"]="git@github.com:Ehuntabi/victron-jc1060p470c-esp32p4.git"
-  ["victron_mini"]="git@github.com:Ehuntabi/victron-mini-c6-esp-now.git"
   ["victronsolardisplayesp-multi-device_pantalla_3.5"]="git@github.com:Ehuntabi/victron-display-3.5-esp32-s3.git"
 )
 declare -A REPOS_HTTPS=(
   ["victron"]="https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4.git"
-  ["victron_mini"]="https://github.com/Ehuntabi/victron-mini-c6-esp-now.git"
   ["victronsolardisplayesp-multi-device_pantalla_3.5"]="https://github.com/Ehuntabi/victron-display-3.5-esp32-s3.git"
 )
 
@@ -168,10 +166,9 @@ if ! grep -q "alias get_idf" ~/.bashrc; then
 # === Victron autocaravana setup (Claude 2026-06-16) ===
 alias get_idf='. $HOME/.espressif/esp-idf-5.4/export.sh'
 alias victron='cd ~/joint/victron && get_idf'
-alias victron_mini='cd ~/joint/victron_mini && get_idf'
 alias pantalla='cd ~/joint/victronsolardisplayesp-multi-device_pantalla_3.5 && get_idf'
 EOF
-  ok "aliases anadidos a ~/.bashrc (get_idf, victron, victron_mini, pantalla)"
+  ok "aliases anadidos a ~/.bashrc (get_idf, victron, pantalla)"
   warn "Recargar bash: source ~/.bashrc o abrir terminal nueva"
 fi
 

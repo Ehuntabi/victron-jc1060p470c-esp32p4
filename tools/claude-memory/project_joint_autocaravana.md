@@ -12,7 +12,6 @@ metadata:
 ```
 ~/joint/
 ├── victron/                                                  # Pantalla 7" ESP32-P4+C6 (activo, principal)
-├── victron_mini/                                             # Variante mini
 ├── victronsolardisplayesp-multi-device_pantalla_3.5/         # Pantalla 3.5" ESP32-S3 (funciona OK Orion)
 ├── analizador_logico_centralita/                             # Trabajo con analizador logico centralita
 ├── control_luz_armario/                                      # Control luz interior
@@ -27,6 +26,6 @@ metadata:
 - Builds ESP-IDF: el `build/` puede tener CMakeCache.txt con paths absolutos viejos `/home/jc/victron/...`. Si CMake falla tras el move -> `rm -rf build/` (NO fullclean!) para regenerar caches manteniendo sdkconfig - ver [[feedback-sdkconfig-known-good-tag]]
 - Repos GitHub:
   - victron 7": git@github.com:Ehuntabi/victron-jc1060p470c-esp32p4.git
-  - victron_mini: git@github.com:Ehuntabi/victron-mini-c6-esp-now.git
+  - victron_mini: RETIRADO el 17-sep-2026 (repo de GitHub y copia local borrados)
   - pantalla 3.5": git@github.com:Ehuntabi/victron-display-3.5-esp32-s3.git
 - Relacionado: [[project-victron-esp-idf]] - ESP-IDF 5.4.4 estricto para todos

@@ -3,7 +3,7 @@
 Documentación completa para continuar el desarrollo de los proyectos Victron
 desde el portátil mientras estás en la autocaravana durante una semana.
 
-**Tag de referencia (estado a 2026-06-16)**: `pre-autocaravana-2026-06-16` en los 3 repos.
+**Tag de referencia (estado a 2026-06-16)**: `pre-autocaravana-2026-06-16` en los repos activos.
 Para volver al estado de salida si rompes algo: `git checkout pre-autocaravana-2026-06-16`.
 
 ---
@@ -15,7 +15,6 @@ Para volver al estado de salida si rompes algo: `git checkout pre-autocaravana-2
 | Proyecto | Hardware | Target | Repo GitHub |
 |---|---|---|---|
 | `victron` (pantalla 7") | Guition JC1060P470C ESP32-P4 + C6 (SDIO) | esp32p4 | `Ehuntabi/victron-jc1060p470c-esp32p4` |
-| `victron_mini` | ESP32-C6 (sensor remoto ESP-NOW) | esp32c6 | `Ehuntabi/victron-mini-c6-esp-now` |
 | `pantalla_3.5` | ESP32-S3 (display 3.5") | esp32s3 | `Ehuntabi/victron-display-3.5-esp32-s3` |
 
 ---
@@ -43,12 +42,12 @@ bash /tmp/victron-bootstrap/tools/setup-autocaravana.sh
 **C) Si no tienes acceso a internet** (autocaravana sin wifi):
 - Copia `setup-autocaravana.sh` por USB al portátil antes de salir
 - Ejecuta `bash /ruta/al/script.sh`
-- En este caso necesitas también clonar los 3 repos con USB antes de salir (mira sección 6)
+- En este caso necesitas también clonar los 2 repos con USB antes de salir (mira sección 6)
 
 El script hace, sin sudo:
 - Verifica dependencias (git, python3, cmake, etc.)
 - Comprueba grupo `dialout` (necesario para acceso serie)
-- Clona los 3 repos en `~/joint/`
+- Clona los 2 repos en `~/joint/`
 - Instala ESP-IDF 5.4.4 en `~/.espressif/esp-idf-5.4/` para targets `esp32p4,esp32c6,esp32s3`
 - Añade aliases útiles a `~/.bashrc`
 
@@ -63,7 +62,6 @@ source ~/.bashrc        # cargar aliases nuevos
 Aliases creados:
 - `get_idf` → carga el entorno ESP-IDF en la shell actual
 - `victron` → cd al proyecto + get_idf
-- `victron_mini` → cd al mini + get_idf
 - `pantalla` → cd a pantalla_3.5 + get_idf
 
 ---
@@ -133,9 +131,12 @@ get_idf      # alias que ejecuta . ~/.espressif/esp-idf-5.4/export.sh
    - Si los 5 OK y aún no llega → mirar logs `[DIAG]` (victron_ble.c líneas 231-263)
    - Hipótesis fuerte: problema esp_hosted SDIO en P4+C6, NO el parser
 
-### 3.2 `victron_mini` (ESP32-C6 sensor remoto)
+### 3.2 `victron_mini` (ESP32-C6 sensor remoto) - RETIRADO
 
-Estado limpio, sin pendientes obvios. Funciona como sensor ESP-NOW.
+Dado de baja el 17-sep-2026: el sensor C6 dejo de tener sentido (la P4
+lee los Victron por BLE directo y la pantalla de cabina es la 3,5").
+El repositorio de GitHub y la copia local se borraron; aqui queda solo
+el aviso. `mini_proto.h` ya lo daba por descartado.
 
 ### 3.3 `pantalla_3.5` (ESP32-S3)
 
@@ -235,7 +236,6 @@ Si NO tienes wifi durante el viaje:
 # Crear paquete completo offline
 mkdir -p /tmp/viaje-autocaravana
 cp -r ~/joint/victron /tmp/viaje-autocaravana/
-cp -r ~/joint/victron_mini /tmp/viaje-autocaravana/
 cp -r ~/joint/victronsolardisplayesp-multi-device_pantalla_3.5 /tmp/viaje-autocaravana/
 cp -r ~/.espressif /tmp/viaje-autocaravana/dot-espressif
 # (~/.espressif sera 1-2 GB con todo el toolchain)
@@ -432,7 +432,6 @@ Tipos: `feat`, `fix`, `refactor`, `docs`, `chore`, `diag` (diagnostic logging), 
 
 ### 9.1 Cable serie para flashear
 - ESP32-P4 (victron): USB-C directo. Puerto `/dev/ttyACM*` (CDC nativo)
-- ESP32-C6 (victron_mini): USB-C directo a través del chip USB-Serial. Puerto `/dev/ttyUSB*` típicamente
 - ESP32-S3 (pantalla_3.5): igual que P4, USB-C directo. Puerto `/dev/ttyACM*` o `/dev/ttyUSB*` según hardware
 
 ### 9.2 Si el ESP no entra en modo flash automaticamente
@@ -462,7 +461,7 @@ Si encuentras un bug serio que no sabes resolver:
 ## 11. Checklist rápido pre-viaje (hacer hoy desde el PC principal)
 
 - [x] Commit + push 17 commits pendientes en `victron`
-- [x] Tag `pre-autocaravana-2026-06-16` en los 3 repos
+- [x] Tag `pre-autocaravana-2026-06-16` en los repos activos
 - [x] Script `tools/setup-autocaravana.sh` creado
 - [x] Documento `AUTOCARAVANA-SETUP.md` (este) creado
 - [ ] Llevar cable USB-C de calidad (datos, no solo carga)
