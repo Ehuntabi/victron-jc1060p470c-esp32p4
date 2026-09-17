@@ -4,11 +4,11 @@
  *   - 7"       : ~/joint/victron/main/net/mini_proto.h
  *   - 35cabina : ~/joint/35cabina/main/net/mini_proto.h
  *
- * El satelite viejo, el mini C6 1.47" (~/joint/victron_mini), esta DESCARTADO
- * desde el 20-ago-2026: la 35cabina lo sustituye. Ya NO condiciona el diseno de
- * este protocolo, que puede crecer por encima de los 32 bytes heredados. Aviso
- * practico por si alguno sigue enchufado: subir MINI_PROTO_VERSION lo deja mudo
- * (rechaza las versiones que no conoce).
+ * El satelite viejo, el mini C6 1.47" (victron_mini, retirado el 17-sep-2026)
+ * esta DESCARTADO desde el 20-ago-2026: la 35cabina lo sustituye. Ya NO
+ * condiciona el diseno de este protocolo, que puede crecer por encima de los
+ * 32 bytes heredados. Aviso practico por si alguno sigue enchufado: subir
+ * MINI_PROTO_VERSION lo deja mudo (rechaza las versiones que no conoce).
  *
  * Cambios en el struct requieren bump de MINI_PROTO_VERSION y recompilar los dos.
  *
