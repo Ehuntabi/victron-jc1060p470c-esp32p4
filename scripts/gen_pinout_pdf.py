@@ -11,7 +11,7 @@ ni una línea de contenido, solo se pasa a PDF.
 Motor: WeasyPrint, que es el que permite encabezado con la sección en la que
 estás, pie con "Página N de M" y que el <thead> de las tablas se repita al
 partir de página. Si en este intérprete no está WeasyPrint se busca el python
-del manual (~/joint/manual/.venv) y, si tampoco, se cae a chromium headless
+del manual (~/joint/documentacion/manual/.venv) y, si tampoco, se cae a chromium headless
 (como se hacía antes: sin encabezado ni pie).
 """
 import os
@@ -24,7 +24,11 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 HTML = RAIZ / "docs" / "pinout_guition_jc1060p470c_i.html"
 PDF = RAIZ / "docs" / "pinout_guition_jc1060p470c_i.pdf"
-VENV = Path.home() / "joint" / "manual" / ".venv" / "bin" / "python3"
+# El python con WeasyPrint vive en la documentacion (antes estaba en ~/joint/manual,
+# que ahora es un enlace). Se prueban los dos por si acaso.
+VENVS = [Path.home() / "joint" / "documentacion" / "manual" / ".venv" / "bin" / "python3",
+         Path.home() / "joint" / "manual" / ".venv" / "bin" / "python3"]
+VENV = next((v for v in VENVS if v.exists()), VENVS[0])
 
 
 def prepara(html):
