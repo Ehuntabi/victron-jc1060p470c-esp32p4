@@ -15,6 +15,7 @@ del manual (~/joint/manual/.venv) y, si tampoco, se cae a chromium headless
 (como se hacía antes: sin encabezado ni pie).
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -26,9 +27,38 @@ PDF = RAIZ / "docs" / "pinout_guition_jc1060p470c_i.pdf"
 VENV = Path.home() / "joint" / "manual" / ".venv" / "bin" / "python3"
 
 
+def prepara(html):
+    """Dos retoques de maqueta, ninguno de contenido:
+      · a cada <h2> le saca el numero a una etiqueta (<span class="num">) y le pone id,
+      · rellena el indice de la portada con esas secciones y su numero de pagina
+        (el numero lo pone target-counter() desde el propio PDF)."""
+    def h2(m):
+        attrs, texto = m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()
+        mm = re.match(r"(\d+)\.\s+(.*)$", texto)
+        if not mm:
+            return m.group(0)
+        return '<h2%s id="sec-%s"><span class="num">%s</span> %s</h2>' % (
+            attrs, mm.group(1), mm.group(1), mm.group(2))
+
+    html = re.sub(r"<h2([^>]*)>(.*?)</h2>", h2, html, flags=re.S)
+    entradas = re.findall(
+        r'<h2[^>]*id="sec-(\d+)"[^>]*><span class="num">\d+</span>(.*?)</h2>',
+        html, re.S)
+    filas = "".join(
+        '<div class="linea"><span class="n">%s</span>'
+        '<a class="t" href="#sec-%s">%s</a>'
+        '<a class="p" href="#sec-%s"></a></div>'
+        % (n, n, re.sub(r"<[^>]+>", "", titulo).strip(), n)
+        for n, titulo in entradas)
+    html = html.replace('<div class="toc" id="toc"></div>',
+                        '<div class="toc">%s</div>' % filas)
+    return html
+
+
 def con_weasyprint():
     from weasyprint import HTML as WHTML
-    WHTML(filename=str(HTML), base_url=str(HTML.parent)).write_pdf(str(PDF))
+    doc = prepara(HTML.read_text(encoding="utf8"))
+    WHTML(string=doc, base_url=str(HTML.parent)).write_pdf(str(PDF))
     print("OK (weasyprint) -> %s (%d bytes)" % (PDF, PDF.stat().st_size))
 
 

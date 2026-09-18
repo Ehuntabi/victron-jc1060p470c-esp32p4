@@ -4,132 +4,225 @@
 <meta charset="UTF-8">
 <title>Pinout y conexiones — Guition JC1060P470C_I</title>
 <style>
-  /* ── página ─────────────────────────────────────────────────────────── */
+  /* ══ página ══════════════════════════════════════════════════════════════ */
   @page {
     size: A4;
-    margin: 20mm 17mm 16mm 17mm;
+    margin: 19mm 17mm 15mm 17mm;
     @top-left {
       content: "Pinout y conexiones · Guition JC1060P470C_I";
-      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.6pt;
-      color: #7b8794; letter-spacing: .02em;
-      vertical-align: bottom; padding-bottom: 3.5mm;
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.4pt;
+      color: #8996a3; letter-spacing: .02em;
+      vertical-align: bottom; padding-bottom: 3.2mm;
     }
+    @top-center { content: ""; vertical-align: bottom; padding-bottom: 3.2mm; }
     @top-right {
       content: string(seccion);
-      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.6pt;
-      color: #7b8794; letter-spacing: .02em;
-      vertical-align: bottom; padding-bottom: 3.5mm;
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.4pt;
+      color: #0e3a5c; font-weight: 600; letter-spacing: .02em;
+      vertical-align: bottom; padding-bottom: 3.2mm;
     }
     @bottom-center {
       content: "Página " counter(page) " de " counter(pages);
-      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 8pt;
-      color: #5b6b7c; vertical-align: top; padding-top: 3.5mm;
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.8pt;
+      color: #8996a3; vertical-align: top; padding-top: 3.2mm;
     }
   }
-  /* la portadilla no lleva encabezado */
-  @page :first { @top-left { content: none } @top-right { content: none } }
+  @page :first {
+    margin: 0;
+    @top-left { content: none } @top-center { content: none }
+    @top-right { content: none } @bottom-center { content: none }
+  }
 
-  /* ── texto ──────────────────────────────────────────────────────────── */
-  html { font-size: 9.9pt; }
+  /* ══ texto ═══════════════════════════════════════════════════════════════ */
+  html { font-size: 9.8pt; }
   body {
     font-family: "Noto Sans", "DejaVu Sans", sans-serif;
-    font-size: 9.9pt; line-height: 1.42; color: #1f2a36; margin: 0;
+    font-size: 9.8pt; line-height: 1.45; color: #1b2733; margin: 0;
   }
-  strong { color: #12293d; }
+  strong { color: #10283c; font-weight: 600; }
   em { color: #33475b; }
   code {
-    font-family: "DejaVu Sans Mono", monospace; font-size: 8.7pt;
-    background: #eef3f8; border: .4pt solid #dbe6f0; border-radius: .8mm;
-    padding: 0 .7mm; color: #14344f;
+    font-family: "DejaVu Sans Mono", monospace; font-size: 8.5pt;
+    background: #f2f6fa; border: .4pt solid #dde7ef; border-radius: .7mm;
+    padding: 0 .7mm; color: #123a58;
   }
 
-  /* ── cabecera del documento ─────────────────────────────────────────── */
-  h1 {
-    font-size: 22pt; line-height: 1.12; color: #0b3d64; letter-spacing: -.012em;
-    margin: 0 0 1.6mm 0; padding-top: 4.5mm; border-top: 2.4pt solid #0b3d64;
+  /* ══ portada ═════════════════════════════════════════════════════════════ */
+  .portada { height: 297mm; box-sizing: border-box; }
+  .banda {
+    background: #0e3a5c; color: #ffffff;
+    padding: 21mm 20mm 9mm 20mm;
   }
-  h1 + p { font-size: 11.2pt; color: #2a5b86; margin: 0 0 3.5mm 0; }
-  .meta {
-    font-size: 8.4pt; color: #5b6b7c; text-align: left; line-height: 1.5;
-    border-top: .6pt solid #d7e2ec; border-bottom: .6pt solid #d7e2ec;
-    padding: 2mm 0; margin: 0 0 7mm 0;
+  .banda .etiqueta {
+    font-size: 8.6pt; letter-spacing: .3em; text-transform: uppercase;
+    color: #9dc3de; margin-bottom: 5mm;
+  }
+  .banda h1 {
+    font-size: 30pt; line-height: 1.06; letter-spacing: -.015em;
+    margin: 0 0 4mm 0; color: #ffffff; font-weight: 600;
+  }
+  .banda .sub { margin: 0; font-size: 10.4pt; color: #cfe2f0; }
+  .portada-cuerpo { padding: 8mm 20mm 0 20mm; }
+  .portada-rejilla {
+    display: grid; grid-template-columns: 44% 1fr; gap: 9mm; align-items: start;
+  }
+  .portada-foto { width: 100%; }
+  .portada-foto img {
+    width: 100%; border: .5pt solid #dde7ef; border-radius: 1mm;
+    padding: 1.5mm; background: #ffffff;
+  }
+  .pie-foto { font-size: 7.6pt; color: #8996a3; margin-top: 1.6mm; }
+  table.ficha { width: 100%; border-collapse: collapse; font-size: 8.6pt; }
+  table.ficha td { padding: 1.35mm 0; border-bottom: .4pt solid #e3eaf1; vertical-align: top; }
+  table.ficha td:first-child {
+    width: 32%; color: #6b7a88; font-size: 7.9pt; text-transform: uppercase;
+    letter-spacing: .04em; padding-right: 2.5mm;
+  }
+  table.ficha tr:last-child td { border-bottom: none; }
+  h2.toc-titulo {
+    font-size: 11.4pt; color: #0e3a5c; margin: 7mm 0 2.6mm 0;
+    padding-bottom: 1.4mm; border-bottom: 1.4pt solid #0e3a5c;
+    string-set: none;
+  }
+  .toc { columns: 2; column-gap: 9mm; }
+  .toc .linea {
+    display: flex; align-items: baseline; font-size: 8.9pt;
+    margin-bottom: 1.15mm; break-inside: avoid;
+  }
+  .toc .n {
+    flex: none; width: 6.5mm; color: #0e3a5c; font-weight: 600; font-size: 8.4pt;
+  }
+  .toc .t {
+    flex: 1; color: #1b2733; text-decoration: none;
+    border-bottom: .4pt dotted #ccd8e2; padding-bottom: .5mm;
+  }
+  .toc .p {
+    flex: none; width: 7mm; text-align: right; text-decoration: none;
+    color: #6b7a88; font-size: 8.2pt;
+  }
+  .toc .p::after { content: target-counter(attr(href), page); }
+  .url { white-space: nowrap; }
+  .portada .meta {
+    margin-top: 7mm; padding-top: 3mm; border-top: .5pt solid #dde7ef;
+    font-size: 7.9pt; color: #8996a3; line-height: 1.5;
   }
 
-  /* ── secciones ──────────────────────────────────────────────────────── */
-  .sec { margin: 0 0 5.5mm 0; }
+  /* ══ secciones ═══════════════════════════════════════════════════════════ */
+  .sec { margin: 0 0 6mm 0; }
   h2 {
     string-set: seccion content(text);
-    font-size: 13pt; line-height: 1.2; color: #0b3d64;
-    margin: 7.5mm 0 2.6mm 0; padding-bottom: 1.3mm;
-    border-bottom: 1.1pt solid #0b3d64;
+    font-size: 13.4pt; line-height: 1.2; color: #0e3a5c; font-weight: 600;
+    margin: 8mm 0 3mm 0; padding-bottom: 1.6mm;
+    border-bottom: 1.2pt solid #0e3a5c;
     break-after: avoid; page-break-after: avoid;
+  }
+  h2 .num {
+    display: inline-block; min-width: 6.4mm; margin-right: 2.4mm;
+    background: #0e3a5c; color: #ffffff; text-align: center;
+    font-size: 9.6pt; font-weight: 600; border-radius: .9mm;
+    padding: .5mm 1.3mm;
   }
   .sec:first-of-type h2 { margin-top: 0; }
   h3 {
-    font-size: 10.7pt; color: #12628f; margin: 4.5mm 0 1.6mm 0;
+    font-size: 10.4pt; color: #14567f; font-weight: 600;
+    margin: 4.5mm 0 1.5mm 0;
     break-after: avoid; page-break-after: avoid;
   }
-  p { margin: 2mm 0; }
+  p { margin: 2.1mm 0; }
 
-  /* ── listas ─────────────────────────────────────────────────────────── */
-  ul, ol { margin: 2mm 0 3mm 0; padding-left: 5.4mm; }
-  ul li, ol li { margin: 0 0 1.1mm 0; }
-  li::marker { color: #0f6cb5; }
+  /* ══ listas ══════════════════════════════════════════════════════════════ */
+  ul, ol { margin: 2mm 0 3mm 0; padding-left: 5.2mm; }
+  ul li, ol li { margin: 0 0 1.15mm 0; }
+  li::marker { color: #4a90c2; }
 
-  /* ── tablas ─────────────────────────────────────────────────────────── */
-  table {
-    border-collapse: collapse; width: 100%;
-    margin: 2.2mm 0 3.8mm 0; font-size: 9pt;
-  }
-  thead { display: table-header-group; }        /* el encabezado se repite */
+  /* ══ tablas (filetes horizontales, sin rejilla) ══════════════════════════ */
+  table { border-collapse: collapse; width: 100%; margin: 2.4mm 0 4mm 0; font-size: 8.9pt; }
+  thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
   th {
-    background: #0b3d64; color: #ffffff; font-weight: 600; font-size: 8.4pt;
-    letter-spacing: .03em; text-align: left; padding: 1.7mm 2.1mm;
-    border: .4pt solid #0b3d64;
+    background: #eef3f8; color: #0e3a5c; font-weight: 600; font-size: 7.9pt;
+    text-transform: uppercase; letter-spacing: .05em; text-align: left;
+    padding: 1.7mm 2mm 1.5mm 2mm; border-bottom: 1pt solid #0e3a5c;
+    border-top: .4pt solid #c9d8e4;
   }
   td {
-    padding: 1.6mm 2.1mm; border: .4pt solid #d7e2ec; vertical-align: top;
+    padding: 1.6mm 2mm; border-bottom: .4pt solid #e3eaf1; vertical-align: top;
     font-variant-numeric: tabular-nums;
   }
-  tbody tr:nth-child(even) { background: #f5f9fc; }
-  tbody td:first-child { color: #12293d; }
+  tbody tr:nth-child(even) { background: #f8fbfd; }
+  tbody tr:last-child td { border-bottom: .4pt solid #c9d8e4; }
+  tbody td:first-child { color: #10283c; }
 
-  /* ── avisos ─────────────────────────────────────────────────────────── */
+  /* ══ avisos ══════════════════════════════════════════════════════════════ */
   .nota, .ok, .new {
-    padding: 2.1mm 2.7mm; margin: 2.5mm 0 3.5mm 0; border-radius: 1mm;
-    font-size: 9.4pt; break-inside: avoid; page-break-inside: avoid;
+    padding: 2.2mm 2.8mm; margin: 2.6mm 0 3.6mm 0;
+    font-size: 9.2pt; break-inside: avoid; page-break-inside: avoid;
+    border-left: 2.6pt solid #c9d8e4; background: #f8fbfd; border-radius: 0 1mm 1mm 0;
   }
-  .nota { background: #fff8e1; border-left: 2.6pt solid #ffa726; }
-  .ok   { background: #e8f5e9; border-left: 2.6pt solid #2e7d32; }
-  .new  { background: #e3f2fd; border-left: 2.6pt solid #1976d2; }
+  .nota { border-left-color: #e8a500; background: #fffdf5; }
+  .ok   { border-left-color: #2e7d32; background: #f6fbf6; }
+  .new  { border-left-color: #1976d2; background: #f5f9fe; }
 
-  /* ── imágenes ───────────────────────────────────────────────────────── */
+  /* ══ imágenes ════════════════════════════════════════════════════════════ */
   img { max-width: 100%; height: auto; }
-  img.jp1 { max-width: 56%; display: block; margin: 3mm auto; break-inside: avoid; }
+  .sec img {
+    border: .5pt solid #dde7ef; border-radius: 1mm; padding: 1.4mm; background: #ffffff;
+  }
+  img.jp1 { max-width: 58%; display: block; margin: 3mm auto; break-inside: avoid; }
   .jp1-grid {
-    display: grid; grid-template-columns: 60% 1fr; gap: 5mm; align-items: start;
+    display: grid; grid-template-columns: 58% 1fr; gap: 5mm; align-items: start;
     break-inside: avoid;
   }
-  .jp1-grid img.jp1 { max-width: 100%; max-height: 182mm; margin: 0; }
-  .jp1-grid table { font-size: 8.5pt; margin: 0; }
+  .jp1-grid img.jp1 { max-width: 100%; max-height: 180mm; margin: 0; }
+  .jp1-grid table { font-size: 8.4pt; margin: 0; }
   .jp1-grid th, .jp1-grid td { padding: 1.3mm 1.8mm; }
   .keep { break-inside: avoid; page-break-inside: avoid; }
 
   .reco-compact { font-size: 9pt; }
   .reco-compact li { margin: 0; }
-  .small { font-size: 8.7pt; color: #5b6b7c; }
-  .footer-page { font-size: 8.5pt; color: #7b8794; margin-top: 4mm; text-align: center; }
+  .small { font-size: 8.6pt; color: #5b6b7c; }
+  .footer-page { font-size: 8.4pt; color: #8996a3; margin-top: 4mm; text-align: center; }
 </style>
 </head>
 <body>
 
-<h1>Pinout y conexiones</h1>
-<p><strong>Guition JC1060P470C_I</strong> · ESP32-P4 + ESP32-C6 (Wi-Fi/BT) · DSI 1024×600 · touch GT911</p>
-<div class="meta">
-Generado a partir del código del firmware <strong>joint_spl_145_control</strong> (ESP32-P4 / Guition JC1060P470C_I).<br>
-Última revisión: 17 septiembre 2026, contrastado con el código de la <strong>v2.32</strong> · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
-</div>
+<section class="portada">
+  <div class="banda">
+    <div class="etiqueta">Guition JC1060P470C_I</div>
+    <h1>Pinout y conexiones</h1>
+    <p class="sub">ESP32-P4 + ESP32-C6 (Wi-Fi/BT) &middot; display DSI 7" 1024×600 &middot; touch GT911</p>
+  </div>
+  <div class="portada-cuerpo">
+    <div class="portada-rejilla">
+      <div class="portada-foto">
+        <img src="vista_trasera_placa.png" alt="Cara trasera de la placa JC1060P470C_I">
+        <div class="pie-foto">Cara trasera: numeración de conectores del fabricante</div>
+      </div>
+      <table class="ficha">
+        <tbody>
+          <tr><td>SoC principal</td><td>ESP32-P4, RISC-V dual-core 400&nbsp;MHz</td></tr>
+          <tr><td>Memoria</td><td>32&nbsp;MB PSRAM &middot; 16&nbsp;MB flash</td></tr>
+          <tr><td>Radio</td><td>ESP32-C6 por SDIO (Wi-Fi 2,4&nbsp;GHz + BT 5&nbsp;LE)</td></tr>
+          <tr><td>Pantalla</td><td>IPS 7" 1024×600, MIPI-DSI 2 carriles (JD9165BA)</td></tr>
+          <tr><td>Táctil</td><td>GT911 capacitivo (I²C)</td></tr>
+          <tr><td>Almacenamiento</td><td>microSD, SDMMC slot 0 (IOMUX)</td></tr>
+          <tr><td>Audio</td><td>ES8311 + amplificador NS4150</td></tr>
+          <tr><td>Reloj</td><td>RTC RX8025T con pila CR1220</td></tr>
+          <tr><td>Cámara</td><td>OV02C10 de 2&nbsp;MP (MIPI-CSI)</td></tr>
+          <tr><td>Alimentación</td><td>5&nbsp;V DC, ~600&nbsp;mA (pico ~1&nbsp;A)</td></tr>
+          <tr><td>Expansión</td><td>JP1 2×13 (2,54&nbsp;mm) &middot; RS-485 J4 &middot; I²C CN5</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 class="toc-titulo">Contenido</h2>
+    <div class="toc" id="toc"></div>
+    <div class="meta">
+      Generado a partir del código del firmware <strong>joint_spl_145_control</strong> (ESP32-P4 / Guition JC1060P470C_I).<br>
+      Última revisión: 17 septiembre 2026, contrastado con el código de la <strong>v2.32</strong> &middot;
+      Repo: <span class="url">github.com/Ehuntabi/victron-jc1060p470c-esp32p4</span>
+    </div>
+  </div>
+</section>
 
 <div class="sec">
 <h2>1. Resumen del módulo</h2>
@@ -267,30 +360,30 @@ errónea de mayo-2026 que dejó de funcionar la lectura. Respuesta de 20 bytes (
 <div class="sec">
 <h2>11. GPS u-blox NEO-M9N (UART2)</h2>
 
-<div class="nota"><strong>Anadido el 23-ago-2026.</strong> El modulo se conecta al
-<strong>JP1</strong>, que es donde quedaban pines libres. UART2 era el unico puerto serie
-sin usar: UART0 es la consola de depuracion y UART1 el NE185 por RS-485.</div>
+<div class="nota"><strong>Añadido el 23-ago-2026.</strong> El módulo se conecta al
+<strong>JP1</strong>, que es donde quedaban pines libres. UART2 era el único puerto serie
+sin usar: UART0 es la consola de depuración y UART1 el NE185 por RS-485.</div>
 
-<table><thead><tr><th>Funcion</th><th>Pin P4</th><th>Conector</th><th>Notas</th></tr></thead><tbody><tr><td>UART2 RX</td><td>GPIO 3</td><td>JP1</td><td>Recibe del <strong>TX del modulo</strong></td></tr><tr><td>UART2 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Hacia el RX del modulo. Hoy NO se usa: solo haria falta para configurarlo por UBX. Se reserva para que otro periferico no lo ocupe</td></tr><tr><td>Alimentacion</td><td>3,3 V y GND</td><td>JP1</td><td>El NEO-M9N es de 3,3 V, igual que el P4: <strong>no hace falta adaptar niveles</strong></td></tr>
+<table><thead><tr><th>Función</th><th>Pin P4</th><th>Conector</th><th>Notas</th></tr></thead><tbody><tr><td>UART2 RX</td><td>GPIO 3</td><td>JP1</td><td>Recibe del <strong>TX del módulo</strong></td></tr><tr><td>UART2 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Hacia el RX del módulo. Hoy NO se usa: solo haría falta para configurarlo por UBX. Se reserva para que otro periférico no lo ocupe</td></tr><tr><td>Alimentación</td><td>3,3 V y GND</td><td>JP1</td><td>El NEO-M9N es de 3,3 V, igual que el P4: <strong>no hace falta adaptar niveles</strong></td></tr>
 
 
 
 
 </tbody></table>
 
-<p><strong>38400 baudios 8N1</strong>, y no es un numero al azar: es el de fabrica de la serie
-M9. Los u-blox M8 anteriores venian a 9600, asi que probar a 9600 y no ver nada es el error
-tipico con estos modulos. El firmware solo ESCUCHA (NMEA); no manda comandos UBX, porque
-cambian entre versiones del firmware del propio modulo.</p>
+<p><strong>38400 baudios 8N1</strong>, y no es un número al azar: es el de fabrica de la serie
+M9. Los u-blox M8 anteriores venían a 9600, así que probar a 9600 y no ver nada es el error
+típico con estos módulos. El firmware solo ESCUCHA (NMEA); no manda comandos UBX, porque
+cambian entre versiones del firmware del propio módulo.</p>
 
 <p class="small">Historia del pin 9, por si aparece en documentos viejos: el GPIO 2 estuvo
-reservado para un medidor <strong>PZEM</strong> que se retiro del firmware y cuyo divisor
-resistivo <strong>nunca llego a soldarse</strong> (confirmado 23-ago-2026). El pin esta
+reservado para un medidor <strong>PZEM</strong> que se retiró del firmware y cuyo divisor
+resistivo <strong>nunca llegó a soldarse</strong> (confirmado 23-ago-2026). El pin está
 limpio; sus esquemas se borraron del repo para que no confundan.</p>
 
 <p class="small">Se comprueba el <strong>checksum</strong> de cada trama: con la velocidad
-equivocada o con ruido en el cable llegarian lineas que parecen NMEA con numeros creibles
-dentro, y una posicion inventada es peor que no tener posicion. Software en
+equivocada o con ruido en el cable llegarían líneas que parecen NMEA con números creíbles
+dentro, y una posición inventada es peor que no tener posición. Software en
 <code>main/gps/gps.c</code>; pantalla en Ajustes &rarr; GPS, con las tramas en crudo para
 diagnosticar.</p>
 
@@ -404,7 +497,7 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
 
 <ul class="reco-compact">
 <li><strong>Alimentación:</strong> 3.3 V en pines 1, 3, 18; 5 V (VOUT-BAT) en pines 2, 4. GND en 5/6/16.</li>
-<li><strong>UART libre extra:</strong> ninguno. UART2 era el ultimo y lo ocupa el GPS (pines 9 y 11). Quedan sueltos los GPIOs 20, 32, 33, 45 y 46, pero no forman un puerto serie completo.</li>
+<li><strong>UART libre extra:</strong> ninguno. UART2 era el último y lo ocupa el GPS (pines 9 y 11). Quedan sueltos los GPIOs 20, 32, 33, 45 y 46, pero no forman un puerto serie completo.</li>
 <li><strong>ADC:</strong> GPIO 20 (pin 17) tiene ADC1 CH4 disponible. <strong>PWM:</strong> cualquier GPIO libre (LEDC, 8 canales).</li>
 <li><strong>Reasignables si no usas el frigo:</strong> GPIO 1 (pin 7, relé solar), GPIO 4 (pin 13) y GPIO 5 (pin 15).</li>
 <li><strong>Niveles:</strong> 3.3 V TTL. Para 5 V o RS-232/RS-485 usar level-shifter/transceiver externo.</li>
