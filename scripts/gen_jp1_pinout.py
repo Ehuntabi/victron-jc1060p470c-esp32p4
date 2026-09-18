@@ -5,11 +5,9 @@ Uso:
     python3 scripts/gen_jp1_pinout.py       # escribe docs/jp1_pinout.png
 
 Si modificas la tabla PINS de abajo, ejecuta este script y luego
-re-exporta el PDF con chromium para que la imagen embebida quede al día:
+regenera el PDF para que la imagen embebida quede al día:
 
-    chromium --headless --disable-gpu --no-pdf-header-footer \\
-        --print-to-pdf=docs/pinout_guition_jc1060p470c_i.pdf \\
-        file://$(pwd)/docs/pinout_guition_jc1060p470c_i.html
+    python3 scripts/gen_pinout_pdf.py
 """
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path

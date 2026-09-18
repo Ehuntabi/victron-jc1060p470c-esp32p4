@@ -4,88 +4,122 @@
 <meta charset="UTF-8">
 <title>Pinout y conexiones — Guition JC1060P470C_I</title>
 <style>
-  @page { size: A4; margin: 14mm 14mm; }
+  /* ── página ─────────────────────────────────────────────────────────── */
+  @page {
+    size: A4;
+    margin: 20mm 17mm 16mm 17mm;
+    @top-left {
+      content: "Pinout y conexiones · Guition JC1060P470C_I";
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.6pt;
+      color: #7b8794; letter-spacing: .02em;
+      vertical-align: bottom; padding-bottom: 3.5mm;
+    }
+    @top-right {
+      content: string(seccion);
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 7.6pt;
+      color: #7b8794; letter-spacing: .02em;
+      vertical-align: bottom; padding-bottom: 3.5mm;
+    }
+    @bottom-center {
+      content: "Página " counter(page) " de " counter(pages);
+      font-family: "Noto Sans", "DejaVu Sans", sans-serif; font-size: 8pt;
+      color: #5b6b7c; vertical-align: top; padding-top: 3.5mm;
+    }
+  }
+  /* la portadilla no lleva encabezado */
+  @page :first { @top-left { content: none } @top-right { content: none } }
+
+  /* ── texto ──────────────────────────────────────────────────────────── */
+  html { font-size: 9.9pt; }
   body {
-    font-family: "DejaVu Sans", "Helvetica", sans-serif;
-    font-size: 10pt;
-    line-height: 1.35;
-    color: #222;
+    font-family: "Noto Sans", "DejaVu Sans", sans-serif;
+    font-size: 9.9pt; line-height: 1.42; color: #1f2a36; margin: 0;
   }
-  h1 {
-    font-size: 20pt;
-    text-align: center;
-    color: #0d47a1;
-    margin: 0;
-  }
-  h1 + p { text-align: center; font-size: 11pt; color: #555; margin: 4px 0 0 0; }
-  h2 {
-    font-size: 13pt;
-    color: #1565c0;
-    border-bottom: 1px solid #bbdefb;
-    padding-bottom: 2px;
-    margin: 16px 0 6px 0;
-    page-break-after: avoid;
-    break-after: avoid-page;
-  }
-  h3 {
-    font-size: 11pt;
-    color: #1976d2;
-    margin: 10px 0 4px 0;
-    page-break-after: avoid;
-    break-after: avoid-page;
-  }
+  strong { color: #12293d; }
+  em { color: #33475b; }
   code {
-    font-family: "DejaVu Sans Mono", monospace;
-    font-size: 9pt;
-    background: #f0f3f7;
-    padding: 0 3px;
-    border-radius: 2px;
+    font-family: "DejaVu Sans Mono", monospace; font-size: 8.7pt;
+    background: #eef3f8; border: .4pt solid #dbe6f0; border-radius: .8mm;
+    padding: 0 .7mm; color: #14344f;
   }
+
+  /* ── cabecera del documento ─────────────────────────────────────────── */
+  h1 {
+    font-size: 22pt; line-height: 1.12; color: #0b3d64; letter-spacing: -.012em;
+    margin: 0 0 1.6mm 0; padding-top: 4.5mm; border-top: 2.4pt solid #0b3d64;
+  }
+  h1 + p { font-size: 11.2pt; color: #2a5b86; margin: 0 0 3.5mm 0; }
+  .meta {
+    font-size: 8.4pt; color: #5b6b7c; text-align: left; line-height: 1.5;
+    border-top: .6pt solid #d7e2ec; border-bottom: .6pt solid #d7e2ec;
+    padding: 2mm 0; margin: 0 0 7mm 0;
+  }
+
+  /* ── secciones ──────────────────────────────────────────────────────── */
+  .sec { margin: 0 0 5.5mm 0; }
+  h2 {
+    string-set: seccion content(text);
+    font-size: 13pt; line-height: 1.2; color: #0b3d64;
+    margin: 7.5mm 0 2.6mm 0; padding-bottom: 1.3mm;
+    border-bottom: 1.1pt solid #0b3d64;
+    break-after: avoid; page-break-after: avoid;
+  }
+  .sec:first-of-type h2 { margin-top: 0; }
+  h3 {
+    font-size: 10.7pt; color: #12628f; margin: 4.5mm 0 1.6mm 0;
+    break-after: avoid; page-break-after: avoid;
+  }
+  p { margin: 2mm 0; }
+
+  /* ── listas ─────────────────────────────────────────────────────────── */
+  ul, ol { margin: 2mm 0 3mm 0; padding-left: 5.4mm; }
+  ul li, ol li { margin: 0 0 1.1mm 0; }
+  li::marker { color: #0f6cb5; }
+
+  /* ── tablas ─────────────────────────────────────────────────────────── */
   table {
-    border-collapse: collapse;
-    margin: 5px 0;
-    width: 100%;
-    font-size: 9.5pt;
+    border-collapse: collapse; width: 100%;
+    margin: 2.2mm 0 3.8mm 0; font-size: 9pt;
   }
-  th, td {
-    border: 1px solid #cfd8dc;
-    padding: 3px 7px;
-    text-align: left;
-    vertical-align: top;
-  }
+  thead { display: table-header-group; }        /* el encabezado se repite */
+  tr { break-inside: avoid; page-break-inside: avoid; }
   th {
-    background: #e3f2fd;
-    color: #0d47a1;
-    font-weight: 600;
+    background: #0b3d64; color: #ffffff; font-weight: 600; font-size: 8.4pt;
+    letter-spacing: .03em; text-align: left; padding: 1.7mm 2.1mm;
+    border: .4pt solid #0b3d64;
   }
+  td {
+    padding: 1.6mm 2.1mm; border: .4pt solid #d7e2ec; vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:nth-child(even) { background: #f5f9fc; }
+  tbody td:first-child { color: #12293d; }
+
+  /* ── avisos ─────────────────────────────────────────────────────────── */
   .nota, .ok, .new {
-    padding: 6px 10px;
-    margin: 6px 0;
-    border-radius: 3px;
-    font-size: 9.5pt;
+    padding: 2.1mm 2.7mm; margin: 2.5mm 0 3.5mm 0; border-radius: 1mm;
+    font-size: 9.4pt; break-inside: avoid; page-break-inside: avoid;
   }
-  .keep { page-break-inside: avoid; }
-  .sec  { break-inside: avoid; page-break-inside: avoid; }
+  .nota { background: #fff8e1; border-left: 2.6pt solid #ffa726; }
+  .ok   { background: #e8f5e9; border-left: 2.6pt solid #2e7d32; }
+  .new  { background: #e3f2fd; border-left: 2.6pt solid #1976d2; }
+
+  /* ── imágenes ───────────────────────────────────────────────────────── */
+  img { max-width: 100%; height: auto; }
+  img.jp1 { max-width: 56%; display: block; margin: 3mm auto; break-inside: avoid; }
   .jp1-grid {
-    display: grid;
-    grid-template-columns: 60% 1fr;
-    gap: 10px;
-    align-items: start;
+    display: grid; grid-template-columns: 60% 1fr; gap: 5mm; align-items: start;
+    break-inside: avoid;
   }
   .jp1-grid img.jp1 { max-width: 100%; max-height: 182mm; margin: 0; }
   .jp1-grid table { font-size: 8.5pt; margin: 0; }
-  .jp1-grid th, .jp1-grid td { padding: 2px 5px; }
+  .jp1-grid th, .jp1-grid td { padding: 1.3mm 1.8mm; }
+  .keep { break-inside: avoid; page-break-inside: avoid; }
+
   .reco-compact { font-size: 9pt; }
   .reco-compact li { margin: 0; }
-  .nota { background: #fff8e1; border-left: 3px solid #ffa726; }
-  .ok   { background: #e8f5e9; border-left: 3px solid #2e7d32; }
-  .new  { background: #e3f2fd; border-left: 3px solid #1976d2; }
-  ul, ol { margin: 4px 0; padding-left: 22px; }
-  ul li, ol li { margin: 1px 0; }
-  .meta { text-align: center; font-size: 9pt; color: #666; }
-  .footer-page { font-size: 8.5pt; color: #888; margin-top: 12px; text-align: center; }
-  img.jp1 { max-width: 56%; display: block; margin: 6px auto; }
-  .small { font-size: 9pt; }
+  .small { font-size: 8.7pt; color: #5b6b7c; }
+  .footer-page { font-size: 8.5pt; color: #7b8794; margin-top: 4mm; text-align: center; }
 </style>
 </head>
 <body>
@@ -93,8 +127,8 @@
 <h1>Pinout y conexiones</h1>
 <p><strong>Guition JC1060P470C_I</strong> · ESP32-P4 + ESP32-C6 (Wi-Fi/BT) · DSI 1024×600 · touch GT911</p>
 <div class="meta">
-Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / Guition JC1060P470C_I).<br>
-Última revisión: 19 julio 2026 · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
+Generado a partir del código del firmware <strong>joint_spl_145_control</strong> (ESP32-P4 / Guition JC1060P470C_I).<br>
+Última revisión: 17 septiembre 2026, contrastado con el código de la <strong>v2.32</strong> · Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 </div>
 
 <div class="sec">
@@ -116,60 +150,60 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 </div><!--/sec-->
 <div class="sec">
 <h2>2. Display MIPI-DSI (panel JD9165BA)</h2>
-<table>
-<tr><th>Función</th><th>Pin ESP32-P4</th><th>Notas</th></tr>
-<tr><td>Backlight (PWM)</td><td>GPIO 23</td><td>LEDC timer 1 / canal 1</td></tr>
-<tr><td>Reset panel</td><td>GPIO 0 (NC en firmware)</td><td>LCD_RST va a GPIO 0 en el esquemático, pero GPIO 0 es <em>strapping</em> → el firmware lo deja sin conectar (<code>BSP_LCD_RST = NC</code>), sin reset por software. <strong>GPIO 27 NO es el reset del panel: es la RX del NE185.</strong></td></tr>
-<tr><td>MIPI-DSI clk + data</td><td>PHY interno</td><td>2 lanes, bitrate 750 Mbps, dotclk 52 MHz</td></tr>
-<tr><td>LDO PHY DSI</td><td>LDO ch 3</td><td>2500 mV → VDD_MIPI_DPHY</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin ESP32-P4</th><th>Notas</th></tr></thead><tbody><tr><td>Backlight (PWM)</td><td>GPIO 23</td><td>LEDC timer 1 / canal 1</td></tr><tr><td>Reset panel</td><td>GPIO 0 (NC en firmware)</td><td>LCD_RST va a GPIO 0 en el esquemático, pero GPIO 0 es <em>strapping</em> → el firmware lo deja sin conectar (<code>BSP_LCD_RST = NC</code>), sin reset por software. <strong>GPIO 27 NO es el reset del panel: es la RX del NE185.</strong></td></tr><tr><td>MIPI-DSI clk + data</td><td>PHY interno</td><td>2 lanes, bitrate 750 Mbps, dotclk 51 MHz (el dtsi pide 51,2; con 52 cuelga el init del JD9165)</td></tr><tr><td>LDO PHY DSI</td><td>LDO ch 3</td><td>2500 mV → VDD_MIPI_DPHY</td></tr>
+
+
+
+
+
+</tbody></table>
 <p class="small">Resolución 1024×600, RGB565. Buffer LVGL: 50 líneas en PSRAM. Conector físico #15 (FPC 30P 0.5 mm).</p>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>3. Touch capacitivo GT911 (I2C)</h2>
-<table>
-<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
-<tr><td>I2C SDA</td><td>GPIO 7</td><td>Bus I2C_NUM_1, 400 kHz, compartido</td></tr>
-<tr><td>I2C SCL</td><td>GPIO 8</td><td></td></tr>
-<tr><td>TOUCH INT</td><td>GPIO 47</td><td>Interrupción</td></tr>
-<tr><td>TOUCH RST</td><td>GPIO 48</td><td>Activo bajo</td></tr>
-<tr><td>Dirección</td><td>0x14 / 0x5D</td><td>Detección automática</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin</th><th>Notas</th></tr></thead><tbody><tr><td>I2C SDA</td><td>GPIO 7</td><td>Bus I2C_NUM_1, 400 kHz, compartido</td></tr><tr><td>I2C SCL</td><td>GPIO 8</td><td></td></tr><tr><td>TOUCH INT</td><td>GPIO 47</td><td>Interrupción</td></tr><tr><td>TOUCH RST</td><td>GPIO 48</td><td>Activo bajo</td></tr><tr><td>Dirección</td><td>0x14 / 0x5D</td><td>Detección automática</td></tr>
+
+
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
 <h2 style="page-break-before: always; break-before: page;">4. RTC RX8025T (I2C, addr 0x32)</h2>
-<table>
-<tr><th>Función</th><th>Pin / Reg</th><th>Notas</th></tr>
-<tr><td>I2C SDA / SCL</td><td>GPIO 7 / 8</td><td>Bus compartido</td></tr>
-<tr><td>Vcc</td><td>3.3 V</td><td>Backup CR1220</td></tr>
-<tr><td>Reg. tiempo</td><td>0x00–0x06</td><td>BCD: SEC, MIN, HOUR, WEEK, DAY, MONTH, YEAR</td></tr>
-<tr><td>Reg. CONTROL</td><td>0x0F</td><td>bit 6 = STOP oscilador</td></tr>
-<tr><td>Reg. FLAG</td><td>0x0E</td><td>bit 1 = VLF (Voltage Low Flag)</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin / Reg</th><th>Notas</th></tr></thead><tbody><tr><td>I2C SDA / SCL</td><td>GPIO 7 / 8</td><td>Bus compartido</td></tr><tr><td>Vcc</td><td>3.3 V</td><td>Backup CR1220</td></tr><tr><td>Reg. tiempo</td><td>0x00–0x06</td><td>BCD: SEC, MIN, HOUR, WEEK, DAY, MONTH, YEAR</td></tr><tr><td>Reg. CONTROL</td><td>0x0F</td><td>bit 6 = STOP oscilador</td></tr><tr><td>Reg. FLAG</td><td>0x0E</td><td>bit 1 = VLF (Voltage Low Flag)</td></tr>
+
+
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>5. microSD (SDMMC slot 0, IOMUX)</h2>
-<table>
-<tr><th>Función</th><th>Pin</th></tr>
-<tr><td>CLK / CMD</td><td>GPIO 43 / 44</td></tr>
-<tr><td>D0..D3</td><td>GPIO 39 / 40 / 41 / 42</td></tr>
-<tr><td>TF_VCC</td><td>LDO ch 4 (3.3 V) — <code>esp_ldo_acquire_channel(4)</code> antes del mount</td></tr>
-<tr><td>Pull-ups</td><td>Internos (SDMMC_SLOT_FLAG_INTERNAL_PULLUP)</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin</th></tr></thead><tbody><tr><td>CLK / CMD</td><td>GPIO 43 / 44</td></tr><tr><td>D0..D3</td><td>GPIO 39 / 40 / 41 / 42</td></tr><tr><td>TF_VCC</td><td>LDO ch 4 (3.3 V) — <code>esp_ldo_acquire_channel(4)</code> antes del mount</td></tr><tr><td>Pull-ups</td><td>Internos (SDMMC_SLOT_FLAG_INTERNAL_PULLUP)</td></tr>
+
+
+
+
+
+</tbody></table>
 <p class="small">FATFS con LFN heap mode. Montado en <code>/sdcard</code>. Logs en <code>/sdcard/frigo/</code> y <code>/sdcard/bateria/</code>.</p>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>6. ESP32-C6 — Wi-Fi/BT vía SDIO (slot 1)</h2>
-<table>
-<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
-<tr><td>CLK / CMD</td><td>GPIO 18 / 19</td><td>40 MHz</td></tr>
-<tr><td>D0..D3</td><td>GPIO 14 / 15 / 16 / 17</td><td></td></tr>
-<tr><td>Slave RESET</td><td>GPIO 54</td><td>esp_hosted reset al ESP32-C6</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin</th><th>Notas</th></tr></thead><tbody><tr><td>CLK / CMD</td><td>GPIO 18 / 19</td><td>40 MHz</td></tr><tr><td>D0..D3</td><td>GPIO 14 / 15 / 16 / 17</td><td></td></tr><tr><td>Slave RESET</td><td>GPIO 54</td><td>esp_hosted reset al ESP32-C6</td></tr>
+
+
+
+
+</tbody></table>
 <div class="nota">
 <strong>NO usar GPIO 14–19 ni 54 para otros fines.</strong> Son la conexión SDIO al radio.
 </div>
@@ -177,28 +211,28 @@ Generado a partir del código del firmware VictronSolarDisplay (port ESP32-P4 / 
 </div><!--/sec-->
 <div class="sec">
 <h2>7. Audio — codec ES8311 + amp NS4150</h2>
-<table>
-<tr><th>Función</th><th>Pin</th><th>Notas</th></tr>
-<tr><td>I2S MCLK / BCLK / LRCK / DOUT</td><td>GPIO 13 / 12 / 10 / 9</td><td></td></tr>
-<tr><td>PA_CTRL (NS4150)</td><td>GPIO 11</td><td>Activar amp (active high)</td></tr>
-<tr><td>I2C codec</td><td>GPIO 7 / 8</td><td>Misma I2C que touch + RTC, addr 0x18</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin</th><th>Notas</th></tr></thead><tbody><tr><td>I2S MCLK / BCLK / LRCK / DOUT</td><td>GPIO 13 / 12 / 10 / 9</td><td></td></tr><tr><td>PA_CTRL (NS4150)</td><td>GPIO 11</td><td>Activar amp (active high)</td></tr><tr><td>I2C codec</td><td>GPIO 7 / 8</td><td>Misma I2C que touch + RTC, addr 0x18</td></tr>
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>8. Frigorífico — sensores y ventilador</h2>
-<table>
-<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup a 3.3 V: <b>4.7 kΩ</b> con cable corto. Con <b>cable largo (~2 m)</b> bajar a <b>1 kΩ</b> (más capacidad de bus → 4.7 kΩ se queda flojo y falla la lectura).</td></tr>
-<tr><td>Ventilador PWM</td><td>GPIO 5</td><td>JP1 pin 15</td><td>LEDC 18 kHz (MOSFET D4184, &le;20 kHz, inaudible), control por T_Aletas</td></tr></table>
+<table><thead><tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr></thead><tbody><tr><td>1-Wire DS18B20</td><td>GPIO 4</td><td>JP1 pin 13</td><td>Pullup a 3.3 V: <b>4.7 kΩ</b> con cable corto. Con <b>cable largo (~2 m)</b> bajar a <b>1 kΩ</b> (más capacidad de bus → 4.7 kΩ se queda flojo y falla la lectura).</td></tr><tr><td>Ventilador PWM</td><td>GPIO 5</td><td>JP1 pin 15</td><td>LEDC 18 kHz, duty por <strong>T_Aletas</strong> (mínimo 30&nbsp;%, arranque con un pulso al 100&nbsp;%). Ataque: P4 &rarr; optoacoplador <strong>PC817</strong> &rarr; MOSFET <strong>IRLR7843</strong> (con 1N4148 de rueda libre). 18 kHz queda fuera del oído de la mayoría de adultos, pero <strong>no subir la frecuencia sin cambiar el opto</strong>: a 25 kHz el ciclo baja a 40&nbsp;µs y el control se degrada a duty bajo</td></tr>
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>9. Modo excedente solar — relé piloto del frigo (GPIO 1)</h2>
-<table>
-<tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>Relé piloto excedente solar</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Nivel alto = relé energizado. Inyecta 13 V a la bobina del relé tocho que activa el D+ en marcha del frigo trivalente. Máquina de estados en <code>components/frigo/frigo_solar.c</code>, <code>#define FRIGO_SOLAR_RELAY_GPIO 1</code>.</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin</th><th>Conector</th><th>Notas</th></tr></thead><tbody><tr><td>Relé piloto excedente solar</td><td>GPIO 1</td><td>JP1 pin 7</td><td>Nivel alto = relé energizado. Inyecta 13 V a la bobina del relé tocho que activa el D+ en marcha del frigo trivalente. Máquina de estados en <code>components/frigo/frigo_solar.c</code>, <code>#define FRIGO_SOLAR_RELAY_GPIO 1</code>.</td></tr>
+
+
+</tbody></table>
 </div><!--/sec-->
 <div class="sec">
 <h2>10. NE185 RS-485 directo (UART1, MAX485 onboard)</h2>
@@ -208,21 +242,25 @@ derivador Nordelettronica NE185 a través del transceptor <strong>MAX485 (U8) in
 la placa Guition</strong>. Sustituye al panel NE187 retirado. <strong>No hace falta caja
 ni hardware externo</strong>: solo un cable de 4 hilos del NE185 al conector J4.
 </div>
-<table>
-<tr><th>Función</th><th>Pin P4</th><th>Conexión</th><th>Notas</th></tr>
-<tr><td>UART1 TX</td><td>GPIO 26</td><td>pin D del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
-<tr><td>UART1 RX</td><td>GPIO 27</td><td>pin R del MAX485 onboard (U8)</td><td>38400 8N1</td></tr>
-<tr><td>DE/RE</td><td>—</td><td>controlados por NAND (U7) auto-direccion</td><td>NO hace falta GPIO extra</td></tr>
-<tr><td>Bus RS-485</td><td>—</td><td>Conector J4 (MX 1.25 4P, conector #11)</td><td>Pines A, B, GND, +5V</td></tr>
-</table>
+<table><thead><tr><th>Función</th><th>Pin P4</th><th>Conexión</th><th>Notas</th></tr></thead><tbody><tr><td>UART1 TX</td><td>GPIO 26</td><td>pin D del MAX485 onboard (U8)</td><td>38400 8N1</td></tr><tr><td>UART1 RX</td><td>GPIO 27</td><td>pin R del MAX485 onboard (U8)</td><td>38400 8N1</td></tr><tr><td>DE/RE</td><td>—</td><td>controlados por NAND (U7) auto-direccion</td><td>NO hace falta GPIO extra</td></tr><tr><td>Bus RS-485</td><td>—</td><td>Conector J4 (MX 1.25 4P, conector #11)</td><td>Pines A, B, GND, +5V</td></tr>
+
+
+
+
+
+</tbody></table>
 <p class="small">
-Protocolo (38400 8N1, master): comando init <code>FF 40 00 80 BF</code>, idle
-<code>FF 40 00 C0 BF</code> cada 5 s, toggle luz interior <code>FF 01 00 C0 C0</code>,
-luz exterior <code>FF 02 00 C0 C1</code>, bomba <code>FF 04 00 C0 C3</code>. Trama de
-respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
-<code>(sum bytes 0..17) mod 128 == ((b[18..19]) mod 128) - 2</code>. API publica:
-<code>ne185_init</code>, <code>ne185_get(ne185_data_t *)</code>,
-<code>ne185_send_cmd('i'/'o'/'p')</code>.
+Protocolo (38400 8N1, master, un frame cada <strong>100 ms</strong>): en reposo alterna
+<code>FF 40 00 00 3F</code> (1 de cada 16 frames) con <code>FF 00 00 00 FF</code>, que es la
+misma alternancia que manda el NE187; con <code>FF 40</code> solo, el NE185 degrada a la trama
+sin tanques. Pulsos de botón: luz interior <code>FF 01 00 C0 C0</code>, luz exterior
+<code>FF 02 00 C0 C1</code>, bomba <code>FF 04 00 C0 C3</code> (8 frames de hold + 5 de reposo).
+El antiguo <code>init FF 40 00 80 BF</code> está <strong>descartado</strong>: era la corrección
+errónea de mayo-2026 que dejó de funcionar la lectura. Respuesta de 20 bytes (eco del comando en
+0..4, <code>b[6]=0x02</code> como constante estructural que descarta tramas parásitas,
+<code>b[16]</code> bit 0 = 220 V conectados) con checksum
+<code>b[19] = (suma de b[5..18]) &amp; 0xFF</code>. API publica: <code>ne185_init</code>,
+<code>ne185_get(ne185_data_t *)</code>, <code>ne185_send_cmd('i'/'o'/'p')</code>.
 </p>
 
 </div><!--/sec-->
@@ -233,12 +271,12 @@ respuesta de 20 bytes con cabeceras 0xFF en posiciones 0 y 14, checksum
 <strong>JP1</strong>, que es donde quedaban pines libres. UART2 era el unico puerto serie
 sin usar: UART0 es la consola de depuracion y UART1 el NE185 por RS-485.</div>
 
-<table>
-<tr><th>Funcion</th><th>Pin P4</th><th>Conector</th><th>Notas</th></tr>
-<tr><td>UART2 RX</td><td>GPIO 3</td><td>JP1</td><td>Recibe del <strong>TX del modulo</strong></td></tr>
-<tr><td>UART2 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Hacia el RX del modulo. Hoy NO se usa: solo haria falta para configurarlo por UBX. Se reserva para que otro periferico no lo ocupe</td></tr>
-<tr><td>Alimentacion</td><td>3,3 V y GND</td><td>JP1</td><td>El NEO-M9N es de 3,3 V, igual que el P4: <strong>no hace falta adaptar niveles</strong></td></tr>
-</table>
+<table><thead><tr><th>Funcion</th><th>Pin P4</th><th>Conector</th><th>Notas</th></tr></thead><tbody><tr><td>UART2 RX</td><td>GPIO 3</td><td>JP1</td><td>Recibe del <strong>TX del modulo</strong></td></tr><tr><td>UART2 TX</td><td>GPIO 2</td><td>JP1 pin 9</td><td>Hacia el RX del modulo. Hoy NO se usa: solo haria falta para configurarlo por UBX. Se reserva para que otro periferico no lo ocupe</td></tr><tr><td>Alimentacion</td><td>3,3 V y GND</td><td>JP1</td><td>El NEO-M9N es de 3,3 V, igual que el P4: <strong>no hace falta adaptar niveles</strong></td></tr>
+
+
+
+
+</tbody></table>
 
 <p><strong>38400 baudios 8N1</strong>, y no es un numero al azar: es el de fabrica de la serie
 M9. Los u-blox M8 anteriores venian a 9600, asi que probar a 9600 y no ver nada es el error
@@ -257,11 +295,11 @@ dentro, y una posicion inventada es peor que no tener posicion. Software en
 diagnosticar.</p>
 
 <h2>12. LDO internos del ESP32-P4</h2>
-<table>
-<tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr>
-<tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr>
-<tr><td>LDO ch 4</td><td>3300 mV</td><td>TF_VCC microSD</td><td>Activado por <code>datalogger_init()</code> antes del mount</td></tr>
-</table>
+<table><thead><tr><th>Canal</th><th>Tensión</th><th>Carga</th><th>Notas</th></tr></thead><tbody><tr><td>LDO ch 3</td><td>2500 mV</td><td>VDD_MIPI_DPHY</td><td>Activado por <code>bsp_display_new()</code></td></tr><tr><td>LDO ch 4</td><td>3300 mV</td><td>TF_VCC microSD</td><td>Activado por <code>datalogger_init()</code> antes del mount</td></tr>
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
@@ -270,64 +308,64 @@ diagnosticar.</p>
 <li><strong>I2C bus</strong> (I2C_NUM_1, 400 kHz, SDA=7 / SCL=8): GT911 (0x14/0x5D), RX8025T (0x32), ES8311 (0x18). Sin colisiones.</li>
 <li><strong>SDMMC</strong>: dos slots. Slot 0 IOMUX (GPIO 39–44) → microSD. Slot 1 GPIO matrix (GPIO 14–19) → ESP32-C6. Paralelos sin conflicto.</li>
 <li><strong>UARTs</strong>: UART0 consola debug (GPIO 37/38 internos). UART1 NE185 RS-485 via MAX485 onboard (GPIO 26/27 → conector J4). UART2 <strong>GPS NEO-M9N</strong> (GPIO 3 RX / GPIO 2 TX &rarr; JP1). GPIO 1 (JP1 pin 7) = relé excedente solar.</li>
-<li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (552 KB) + allocs grandes.</li>
+<li><strong>PSRAM</strong>: 32 MB. Framebuffer DPI + buffers LVGL + ring buffer histórico batería (~945 KB) + allocs grandes.</li>
 </ul>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>14. Mapa global de pines GPIO</h2>
-<table>
-<tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr>
-<tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr>
-<tr style="background:#fff8e1;"><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr>
-<tr style="background:#fff8e1;"><td>2</td><td>UART2 TX</td><td><strong>GPS NEO-M9N</strong> (JP1 pin 9) — reservado, hoy sin usar</td></tr>
-<tr style="background:#fff8e1;"><td>3</td><td>UART2 RX</td><td><strong>GPS NEO-M9N</strong> (JP1) — 38400 8N1</td></tr>
-<tr style="background:#fff8e1;"><td>4</td><td>1-Wire</td><td><strong>DS18B20 frigo</strong> (JP1 pin 13, pullup 4.7 kΩ; 1 kΩ si cable ~2 m)</td></tr>
-<tr style="background:#fff8e1;"><td>5</td><td>LEDC PWM</td><td><strong>PWM Ventilador frigo</strong> (JP1 pin 15, 18 kHz)</td></tr>
-<tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr>
-<tr><td>8</td><td>I2C SCL</td><td></td></tr>
-<tr><td>9</td><td>I2S DOUT</td><td>Codec ES8311</td></tr>
-<tr><td>10</td><td>I2S LRCK</td><td></td></tr>
-<tr><td>11</td><td>PA_CTRL</td><td>NS4150 amp</td></tr>
-<tr><td>12</td><td>I2S BCLK</td><td></td></tr>
-<tr><td>13</td><td>I2S MCLK</td><td></td></tr>
-<tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr>
-<tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr>
-<tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr>
-<tr style="background:#fff8e1;"><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr>
-<tr style="background:#fff8e1;"><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr>
-<tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr>
-<tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr>
-<tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr>
-<tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
-</table>
+<table><thead><tr><th>GPIO</th><th>Función</th><th>Periférico / Notas</th></tr></thead><tbody><tr><td>0</td><td>NC (strapping)</td><td>LCD_RST del JD9165BA según esquemático, pero el firmware lo deja sin conectar (GPIO 0 es strapping; <code>BSP_LCD_RST = NC</code>)</td></tr><tr style="background:#fff8e1;"><td>1</td><td>GPIO out</td><td><strong>Relé excedente solar</strong> del frigo (JP1 pin 7)</td></tr><tr style="background:#fff8e1;"><td>2</td><td>UART2 TX</td><td><strong>GPS NEO-M9N</strong> (JP1 pin 9) — reservado, hoy sin usar</td></tr><tr style="background:#fff8e1;"><td>3</td><td>UART2 RX</td><td><strong>GPS NEO-M9N</strong> (JP1) — 38400 8N1</td></tr><tr style="background:#fff8e1;"><td>4</td><td>1-Wire</td><td><strong>DS18B20 frigo</strong> (JP1 pin 13, pullup 4.7 kΩ; 1 kΩ si cable ~2 m)</td></tr><tr style="background:#fff8e1;"><td>5</td><td>LEDC PWM</td><td><strong>PWM Ventilador frigo</strong> (JP1 pin 15, 18 kHz)</td></tr><tr><td>7</td><td>I2C SDA</td><td>GT911 + RX8025T + ES8311</td></tr><tr><td>8</td><td>I2C SCL</td><td></td></tr><tr><td>9</td><td>I2S DOUT</td><td>Codec ES8311</td></tr><tr><td>10</td><td>I2S LRCK</td><td></td></tr><tr><td>11</td><td>PA_CTRL</td><td>NS4150 amp</td></tr><tr><td>12</td><td>I2S BCLK</td><td></td></tr><tr><td>13</td><td>I2S MCLK</td><td></td></tr><tr><td>14–17</td><td>SDIO D0–D3</td><td>ESP32-C6 esp_hosted (no usar)</td></tr><tr><td>18 / 19</td><td>SDIO CLK / CMD</td><td>ESP32-C6 (no usar)</td></tr><tr><td>23</td><td>LEDC PWM</td><td>Backlight LCD</td></tr><tr style="background:#fff8e1;"><td>26</td><td>UART1 TX</td><td><strong>NE185 RS-485</strong> — pin D del MAX485 onboard (U8) → conector J4</td></tr><tr style="background:#fff8e1;"><td>27</td><td>UART1 RX</td><td><strong>NE185 RS-485</strong> — pin R del MAX485 onboard (U8) → conector J4</td></tr><tr><td>39–44</td><td>SDMMC</td><td>microSD slot 0 IOMUX</td></tr><tr><td>47</td><td>GPIO in</td><td>Touch GT911 INT</td></tr><tr><td>48</td><td>GPIO out</td><td>Touch GT911 RST</td></tr><tr><td>54</td><td>GPIO out</td><td>Reset ESP32-C6</td></tr>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</tbody></table>
 <p class="small"><span style="background:#fff8e1;padding:1px 6px;border:1px solid #e6d9a8;">Resaltados</span> = los que a&ntilde;ade <strong>este proyecto</strong> con cableado externo (frigo, rel&eacute; solar, NE185 y GPS). El resto es hardware propio de la placa Guition.</p>
 <p class="small">Pines no listados → libres para periféricos adicionales (los del JP1 vivos: 20, 32, 45 y 46 — el 2 y el 3 los ocupa ya el GPS).</p>
 
 </div><!--/sec-->
 <div class="sec">
 <h2>15. Conectores físicos del módulo</h2>
-<table>
-<tr><th>#</th><th>Conector</th><th>Función</th></tr>
-<tr><td>1</td><td>BOOT button</td><td>Pulsador BOOT del ESP32-P4</td></tr>
-<tr><td>2</td><td>Reset button</td><td>EN/RESET del ESP32-P4</td></tr>
-<tr><td>3</td><td>MX 1.25 2P</td><td>Salida altavoz</td></tr>
-<tr><td>4</td><td>TF card slot</td><td>microSD slot 0 IOMUX</td></tr>
-<tr><td>5</td><td>MX 1.25 2P</td><td>Entrada batería Li-ion 3.7 V</td></tr>
-<tr><td>6</td><td>Battery button</td><td>On/off batería</td></tr>
-<tr><td>7</td><td>USB-C FS</td><td>Programación + 5 V</td></tr>
-<tr><td>8</td><td>MX 1.25 4P (J5)</td><td>Alimentación 5 V (UART1, no usar)</td></tr>
-<tr><td>9</td><td>USB-C HS</td><td>USB 2.0 HS + 5 V</td></tr>
-<tr><td>10</td><td>MX 1.25 4P</td><td>UART externo</td></tr>
-<tr><td>11</td><td>MX 1.25 4P (J4)</td><td>RS-485 con MAX485 onboard</td></tr>
-<tr><td>12</td><td>SH 1.0 4P (CN5)</td><td>I2C externo</td></tr>
-<tr><td>13</td><td>RJ45</td><td>Ethernet 100 Mbps</td></tr>
-<tr><td>14</td><td>Battery holder</td><td>CR1220 del RTC</td></tr>
-<tr><td>15</td><td>FPC 30P 0.5</td><td>MIPI-DSI 2 lanes</td></tr>
-<tr><td>16</td><td>JC-ESP32P4-M3</td><td>Módulo SoC principal</td></tr>
-<tr><td>17</td><td>FPC 6P 0.5</td><td>Touch GT911</td></tr>
-<tr><td>18</td><td>Pin Header 2×13 (JP1)</td><td>Expansión GPIO 2.54 mm</td></tr>
-</table>
+<table><thead><tr><th>#</th><th>Conector</th><th>Función</th></tr></thead><tbody><tr><td>1</td><td>BOOT button</td><td>Pulsador BOOT del ESP32-P4</td></tr><tr><td>2</td><td>Reset button</td><td>EN/RESET del ESP32-P4</td></tr><tr><td>3</td><td>MX 1.25 2P</td><td>Salida altavoz</td></tr><tr><td>4</td><td>TF card slot</td><td>microSD slot 0 IOMUX</td></tr><tr><td>5</td><td>MX 1.25 2P</td><td>Entrada batería Li-ion 3.7 V</td></tr><tr><td>6</td><td>Battery button</td><td>On/off batería</td></tr><tr><td>7</td><td>USB-C FS</td><td>Programación + 5 V</td></tr><tr><td>8</td><td>MX 1.25 4P (J5)</td><td>Alimentación 5 V (UART1, no usar)</td></tr><tr><td>9</td><td>USB-C HS</td><td>USB 2.0 HS + 5 V</td></tr><tr><td>10</td><td>MX 1.25 4P</td><td>UART externo</td></tr><tr><td>11</td><td>MX 1.25 4P (J4)</td><td>RS-485 con MAX485 onboard</td></tr><tr><td>12</td><td>SH 1.0 4P (CN5)</td><td>I2C externo</td></tr><tr><td>13</td><td>RJ45</td><td>Ethernet 100 Mbps</td></tr><tr><td>14</td><td>Battery holder</td><td>CR1220 del RTC</td></tr><tr><td>15</td><td>FPC 30P 0.5</td><td>MIPI-DSI 2 lanes</td></tr><tr><td>16</td><td>JC-ESP32P4-M3</td><td>Módulo SoC principal</td></tr><tr><td>17</td><td>FPC 6P 0.5</td><td>Touch GT911</td></tr><tr><td>18</td><td>Pin Header 2×13 (JP1)</td><td>Expansión GPIO 2.54 mm</td></tr>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="keep" style="page-break-before: always; break-before: page;">
@@ -342,26 +380,26 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
 
 <div class="jp1-grid">
   <img class="jp1" src="jp1_pinout.png" alt="JP1 pinout">
-  <table>
-  <tr><th>Pin</th><th>Señal</th><th>Estado</th></tr>
-  <tr><td>1, 3, 18</td><td>VCC3V3</td><td>Alim 3.3 V</td></tr>
-  <tr><td>2, 4</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr>
-  <tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr>
-  <tr><td>8</td><td>NC</td><td>No conectado</td></tr>
-  <tr><td>7</td><td>GPIO 1</td><td><strong>Relé excedente solar</strong> (frigo)</td></tr>
-  <tr><td>9</td><td>GPIO 2</td><td><strong>GPS NEO-M9N</strong> — UART2 TX (reservado, hoy sin usar)</td></tr>
-  <tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr>
-  <tr><td>11</td><td>GPIO 3</td><td><strong>GPS NEO-M9N</strong> — UART2 RX, 38400 8N1</td></tr>
-  <tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr>
-  <tr><td>13</td><td>GPIO 4</td><td><strong>Frigo DS18B20</strong></td></tr>
-  <tr><td>14</td><td>GPIO 45</td><td>Libre</td></tr>
-  <tr><td>15</td><td>GPIO 5</td><td><strong>Frigo PWM Ventilador</strong></td></tr>
-  <tr><td>17</td><td>GPIO 20</td><td>Libre (único ADC1 CH4 disponible)</td></tr>
-  <tr><td>19</td><td>GPIO 32</td><td>Libre</td></tr>
-  <tr><td>21</td><td>GPIO 33</td><td>Libre (queda fuera del IDC 2x10)</td></tr>
-  <tr><td>20, 22, 24, 26</td><td>—</td><td>Radio ESP32-C6</td></tr>
-  <tr><td>23, 25</td><td>—</td><td>I²C externo (ES I²C)</td></tr>
-  </table>
+  <table><thead><tr><th>Pin</th><th>Señal</th><th>Estado</th></tr></thead><tbody><tr><td>1, 3, 18</td><td>VCC3V3</td><td>Alim 3.3 V</td></tr><tr><td>2, 4</td><td>VOUT-BAT</td><td>5 V bidireccional</td></tr><tr><td>5, 6, 16</td><td>GND</td><td>Masa</td></tr><tr><td>8</td><td>NC</td><td>No conectado</td></tr><tr><td>7</td><td>GPIO 1</td><td><strong>Relé excedente solar</strong> (frigo)</td></tr><tr><td>9</td><td>GPIO 2</td><td><strong>GPS NEO-M9N</strong> — UART2 TX (reservado, hoy sin usar)</td></tr><tr><td>10</td><td>GPIO 47</td><td>Touch INT (interno)</td></tr><tr><td>11</td><td>GPIO 3</td><td><strong>GPS NEO-M9N</strong> — UART2 RX, 38400 8N1</td></tr><tr><td>12</td><td>GPIO 46</td><td>Libre</td></tr><tr><td>13</td><td>GPIO 4</td><td><strong>Frigo DS18B20</strong></td></tr><tr><td>14</td><td>GPIO 45</td><td>Libre</td></tr><tr><td>15</td><td>GPIO 5</td><td><strong>Frigo PWM Ventilador</strong></td></tr><tr><td>17</td><td>GPIO 20</td><td>Libre (único ADC1 CH4 disponible)</td></tr><tr><td>19</td><td>GPIO 32</td><td>Libre</td></tr><tr><td>21</td><td>GPIO 33</td><td>Libre (queda fuera del IDC 2x10)</td></tr><tr><td>20, 22, 24, 26</td><td>—</td><td>Radio ESP32-C6</td></tr><tr><td>23, 25</td><td>—</td><td>I²C externo (ES I²C)</td></tr>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  </tbody></table>
 </div>
 
 <ul class="reco-compact">
@@ -375,13 +413,13 @@ GPIO 33, radio del ESP32-C6 e I²C externo) quedan fuera del conector y no son a
 
 <div class="sec">
 <h2>17. CN5 — I²C externo (SH 1.0 4P)</h2>
-<table>
-<tr><th>Pin</th><th>Señal</th></tr>
-<tr><td>1</td><td>GND</td></tr>
-<tr><td>2</td><td>ESP_3V3</td></tr>
-<tr><td>3</td><td>ES_I2C_SCL</td></tr>
-<tr><td>4</td><td>ES_I2C_SDA</td></tr>
-</table>
+<table><thead><tr><th>Pin</th><th>Señal</th></tr></thead><tbody><tr><td>1</td><td>GND</td></tr><tr><td>2</td><td>ESP_3V3</td></tr><tr><td>3</td><td>ES_I2C_SCL</td></tr><tr><td>4</td><td>ES_I2C_SDA</td></tr>
+
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
@@ -395,15 +433,15 @@ TLV62569 (DC-DC) → VCC3V3 (3.3 V). Si solo batería, IP5306 hace boost 3.7→5
 </div><!--/sec-->
 <div class="sec">
 <h2>19. Cámara (MIPI-CSI — OV02C10)</h2>
-<table>
-<tr><th>Característica</th><th>Detalle</th></tr>
-<tr><td>Sensor</td><td><strong>OmniVision OV02C10</strong> — 2 MP (1920×1080). El esquemático Guition cita SC2336, pero la placa real lleva <strong>OV02C10</strong> (detect en 0x36).</td></tr>
-<tr><td>Interfaz</td><td>MIPI-CSI 2 carriles (CSI_A: CLK + DATA0 + DATA1) → controlador CSI nativo del ESP32-P4</td></tr>
-<tr><td>Conector</td><td>FPC 0.5 mm, 15 pines (CSI_Camera)</td></tr>
-<tr><td>Control</td><td>I²C / SCCB en dirección <strong>0x36</strong></td></tr>
-<tr><td>Variante</td><td>Incluida en JC1060P470C_<strong>I_W</strong>(_Y): viene con cámara (y Ethernet)</td></tr>
-<tr><td>Software</td><td>ESP-IDF <code>esp_video</code> + <strong>driver local <code>ov02c10</code></strong>. <strong>Implementada y en uso</strong>: streaming, auto-brillo del display por luminancia y captura de foto/snapshot JPEG (con bloqueo SD↔cámara).</td></tr>
-</table>
+<table><thead><tr><th>Característica</th><th>Detalle</th></tr></thead><tbody><tr><td>Sensor</td><td><strong>OmniVision OV02C10</strong> — 2 MP (1920×1080). El esquemático Guition cita SC2336, pero la placa real lleva <strong>OV02C10</strong> (detect en 0x36).</td></tr><tr><td>Interfaz</td><td>MIPI-CSI 2 carriles (CSI_A: CLK + DATA0 + DATA1) → controlador CSI nativo del ESP32-P4</td></tr><tr><td>Conector</td><td>FPC 0.5 mm, 15 pines (CSI_Camera)</td></tr><tr><td>Control</td><td>I²C / SCCB en dirección <strong>0x36</strong></td></tr><tr><td>Variante</td><td>Incluida en JC1060P470C_<strong>I_W</strong>(_Y): viene con cámara (y Ethernet)</td></tr><tr><td>Software</td><td>ESP-IDF <code>esp_video</code> + <strong>driver local <code>ov02c10</code></strong>. <strong>Implementada y en uso</strong>: streaming, auto-brillo del display por luminancia y captura de foto/snapshot JPEG (con bloqueo SD↔cámara).</td></tr>
+
+
+
+
+
+
+
+</tbody></table>
 
 </div><!--/sec-->
 <div class="sec">
