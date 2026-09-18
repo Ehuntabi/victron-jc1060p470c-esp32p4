@@ -63,7 +63,10 @@ NETS = {                         # columna -> (net, color)
 
 
 def x_de(letra):
-    return len(COLUMNAS) - 1 - COLUMNAS.index(letra)
+    """Columna (0..13) de una letra. En la plantilla las letras van N..A de
+    izquierda a derecha, o sea que A es la columna de la DERECHA: la x de una
+    letra es su indice en COLUMNAS (restarlo espejaba la placa)."""
+    return COLUMNAS.index(letra)
 
 
 def dibuja_placa(ax):
@@ -97,7 +100,7 @@ def dibuja_placa(ax):
                 rotation=90, color="white", fontweight="bold", zorder=8,
                 bbox=dict(facecolor=color, edgecolor="none",
                           boxstyle="round,pad=0.22"))
-    ax.set_xlim(-3.6, cols - 1 + 1.6)
+    ax.set_xlim(-1.9, cols - 1 + 5.0)
     ax.set_ylim(FILAS - 1 + 1.7, -3.6)
     ax.set_aspect("equal")
     ax.set_axis_off()
@@ -119,8 +122,8 @@ def conector(ax, letras, filas, titulo, color):
         for y in filas:
             pad(ax, x, y, color)
     ym = (y0 + y1) / 2
-    ax.annotate(titulo, xy=(min(xs) - 0.5, ym), xytext=(-2.3, ym),
-                ha="right", va="center", fontsize=8.2, color=color,
+    ax.annotate(titulo, xy=(max(xs) + 0.5, ym), xytext=(max(xs) + 2.6, ym),
+                ha="left", va="center", fontsize=8.2, color=color,
                 fontweight="bold", zorder=10,
                 arrowprops=dict(arrowstyle="-", color=color, linewidth=1.0))
 
@@ -164,7 +167,7 @@ def main():
              "el cobre va por debajo · releva al NE187 como maestro del bus",
              ha="center", fontsize=8.4, color=C_GRIS)
 
-    ax = fig.add_axes([0.03, 0.05, 0.32, 0.84])
+    ax = fig.add_axes([0.03, 0.05, 0.34, 0.84])
     dibuja_placa(ax)
     conector(ax, ["A", "B", "C", "D"], [0, 1], "Mazo del\nNE185", C_RAIL)
     conector(ax, ["E", "B", "C", "D"], [5, 6], "Al 7\"\n(J4)", "#14567f")
