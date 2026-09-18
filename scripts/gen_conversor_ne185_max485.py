@@ -46,8 +46,8 @@ C_RAIL = "#0e3a5c"
 C_GRIS = "#5b6b7c"
 C_12V = "#d63b3b"
 C_A = "#2e9e4f"
-C_B = "#8a8f98"
-C_GND = "#1a1a1a"
+C_B = "#ffffff"
+C_GND = "#000000"
 C_5V = "#e07b00"
 C_RES = "#24557f"
 
@@ -76,14 +76,14 @@ def dibuja_placa(ax):
         color = C_TIRA_USADA if letra in NETS else C_TIRA
         ax.add_patch(Rectangle((c - 0.27, -0.34), 0.54, FILAS - 1 + 0.68,
                                facecolor=color, edgecolor="none", zorder=2))
-        if letra in NETS:                      # el riel, con su color (GND negra, +12 V roja...)
+        if letra in NETS:                      # el riel, a color solido (GND negra, +12 V roja...)
             ax.add_patch(Rectangle((c - 0.27, -0.34), 0.54, FILAS - 1 + 0.68,
-                                   facecolor=NETS[letra][1], alpha=0.80,
+                                   facecolor=NETS[letra][1], alpha=1.0,
                                    edgecolor="none", zorder=2.5))
     for f in range(FILAS):
         for c in range(cols):
             ax.add_patch(Circle((c, f), 0.16, facecolor=C_HOLE,
-                                edgecolor="#707070", linewidth=0.3, zorder=3))
+                                edgecolor="#b9c2cb", linewidth=0.35, zorder=3))
     for c, letra in enumerate(COLUMNAS):
         usado = letra in NETS
         for y in (-1.05, FILAS - 1 + 1.05):
@@ -98,10 +98,13 @@ def dibuja_placa(ax):
                 color=C_RAIL if usado else "#98a4b0")
     # nombre del net encima de cada riel (en vertical, para que no se solapen)
     for letra, (net, color) in NETS.items():
+        oscuro = color.lower() in ("#ffffff", "#fff")
         ax.text(x_de(letra), -2.75, net, ha="center", va="center", fontsize=7.4,
-                rotation=90, color="white", fontweight="bold", zorder=8,
-                bbox=dict(facecolor=color, edgecolor="white", linewidth=0.6,
-                          boxstyle="round,pad=0.22"))
+                rotation=90, color=C_TXT if oscuro else "white",
+                fontweight="bold", zorder=8,
+                bbox=dict(facecolor=color,
+                          edgecolor="#b9c2cb" if oscuro else "white",
+                          linewidth=0.6, boxstyle="round,pad=0.22"))
     ax.set_xlim(-3.4, cols - 1 + 1.0)
     ax.set_ylim(FILAS - 1 + 1.6, -4.1)
     ax.set_aspect("equal")
@@ -232,8 +235,10 @@ def main():
     y = 0.84
     for color, txt in lineas:
         if color:
-            ax3.plot([0.0, 0.022], [y + 0.012, y + 0.012], color=color,
-                     linewidth=3.0, transform=ax3.transAxes, clip_on=False)
+            ax3.add_patch(Rectangle((0.004, y - 0.004), 0.018, 0.030,
+                                    facecolor=color, edgecolor="#b9c2cb",
+                                    linewidth=0.5, transform=ax3.transAxes,
+                                    clip_on=False, zorder=5))
         ax3.text(0.045 if color else 0.0, y, txt, fontsize=7.9, color=C_TXT,
                  transform=ax3.transAxes, va="top")
         y -= 0.105
