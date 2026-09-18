@@ -14,6 +14,12 @@ extern "C" {
    Tambien hace un primer barrido pasados 5s. */
 void log_cleanup_init(int max_days_keep);
 
+/* Retencion SOLO para las sesiones de vigilancia (/sdcard/vigilancia).
+   Son carpetas de hasta ~35 MB por sesion, asi que se guardan menos dias que
+   los CSV de datos (que ocupan ~570 KB al dia). 0 = usar la retencion general.
+   Llamar despues de log_cleanup_init(). */
+void log_cleanup_set_vigilancia_days(int max_days);
+
 /* Devuelve cuantos ficheros estan a punto de ser borrados (con antiguedad >= max_days - 1).
    Usar para detectar si hay que mostrar aviso al arrancar. */
 int log_cleanup_files_pending_warning(int max_days_keep);

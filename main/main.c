@@ -628,7 +628,13 @@ static void init_telemetry(void)
          * verdad arranco. */
         battery_history_set_heartbeat_cb(bh_flush_heartbeat);
     }
-    log_cleanup_init(60); /* Borrar logs > 60 dias */
+    /* Retencion de logs (18-sep-2026): los CSV de datos (bateria/frigo/ne185v)
+     * ocupan ~570 KB al dia, asi que se guardan 120 dias -- un viaje de 3 meses
+     * cabe entero (con 60 se perdian los primeros 30 dias en marcha). Las
+     * sesiones de vigilancia son otra cosa (hasta ~35 MB cada una): se quedan
+     * en 60 dias, que fue la retencion que se decidio el 24-ago-2026. */
+    log_cleanup_init(120);                 /* datos: viajes de hasta 4 meses */
+    log_cleanup_set_vigilancia_days(60);   /* camaras: como estaba */
     if (log_cleanup_task_handle()) log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat);
     alerts_init();
     energy_today_init();

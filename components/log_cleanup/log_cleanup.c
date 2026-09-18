@@ -27,6 +27,10 @@ static const char *TAG = "log_cleanup";
 static const char *DIRS[] = { "/sdcard/frigo", "/sdcard/bateria", "/sdcard/ne185v" };
 #define NUM_DIRS (sizeof(DIRS)/sizeof(DIRS[0]))
 
+/* Retencion propia de las sesiones de vigilancia (0 = la misma que los datos).
+   Vive aqui arriba porque log_cleanup_run_now() la consulta. */
+static int s_max_days_vig = 0;
+
 /* Parsea YYYY-MM-DD.csv y devuelve epoch a las 00:00 de ese dia, o 0 si no parsea */
 static time_t parse_csv_date(const char *fname)
 {
@@ -118,12 +122,16 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
  * .jpg dentro (unos 60-120 KB cada uno, o sea hasta ~35 MB por sesion). El tope
  * es POR SESION y las sesiones no tienen limite: nada las borraba nunca, y la
  * tarjeta acabaria llena -- y con ella el cuaderno de viaje (auditoria del
- * 24-ago-2026; retencion elegida por el usuario: 60 dias, la misma que el
+ * 24-ago-2026; retencion elegida por el usuario: 60 dias (los datos pasaron a
+ * 120 el 18-sep-2026 -- ver log_cleanup_set_vigilancia_days). Antes era la misma que el
  * resto).
  *
  * Son pruebas de un allanamiento, asi que 60 dias y no menos: si a los dos
  * meses no las has mirado, ya no las vas a mirar. */
 #define VIG_DIR "/sdcard/vigilancia"
+/* Las miniaturas de esas mismas capturas (mismo esquema sesion/fichero.jpg).
+ * Hasta el 18-sep-2026 NO las limpiaba nadie: crecian para siempre. */
+#define VIG_THUMBS_DIR "/sdcard/vigilancia_thumbs"
 
 static time_t parse_sesion_date(const char *nombre)
 {
@@ -138,7 +146,7 @@ static time_t parse_sesion_date(const char *nombre)
     return mktime(&tm);
 }
 
-static int borrar_sesiones_vigilancia(int max_days)
+static int borrar_sesiones_dir(const char *dir, int max_days)
 {
     time_t now = time(NULL);
     if (now < 1700000000) return 0;          /* sin fecha fiable no se borra nada */
@@ -149,7 +157,7 @@ static int borrar_sesiones_vigilancia(int max_days)
         ESP_LOGW(TAG, "vigilancia: tarjeta ocupada, lo dejo para la proxima");
         return 0;
     }
-    DIR *dp = opendir(VIG_DIR);
+    DIR *dp = opendir(dir);
     if (!dp) { camera_sd_bus_unlock(); return 0; }
 
     int borradas = 0;
@@ -192,7 +200,12 @@ int log_cleanup_run_now(int max_days_keep)
     for (size_t i = 0; i < NUM_DIRS; ++i) {
         total += process_dir(DIRS[i], max_days_keep, false, false);
     }
-    total += borrar_sesiones_vigilancia(max_days_keep);
+    /* La vigilancia puede tener su propia retencion: son carpetas de hasta
+     * ~35 MB por sesion, asi que no tiene sentido que sigan la de los CSV de
+     * datos (que ocupan ~570 KB al dia). Si nadie la fija, se usa la general. */
+    int dias_vig = s_max_days_vig > 0 ? s_max_days_vig : max_days_keep;
+    total += borrar_sesiones_dir(VIG_DIR, dias_vig);
+    total += borrar_sesiones_dir(VIG_THUMBS_DIR, dias_vig);
     if (total > 0) ESP_LOGI(TAG, "Borrados %d ficheros antiguos", total);
     return total;
 }
@@ -249,6 +262,11 @@ static void initial_cleanup_cb(void *arg)
 TaskHandle_t log_cleanup_task_handle(void)
 {
     return s_cleanup_task_handle;
+}
+
+void log_cleanup_set_vigilancia_days(int max_days)
+{
+    s_max_days_vig = max_days;
 }
 
 void log_cleanup_init(int max_days_keep)
