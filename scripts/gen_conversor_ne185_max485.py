@@ -76,9 +76,9 @@ def dibuja_placa(ax):
         color = C_TIRA_USADA if letra in NETS else C_TIRA
         ax.add_patch(Rectangle((c - 0.27, -0.34), 0.54, FILAS - 1 + 0.68,
                                facecolor=color, edgecolor="none", zorder=2))
-        if letra in NETS:                      # tinte del net, para verlo de un vistazo
+        if letra in NETS:                      # el riel, con su color (GND negra, +12 V roja...)
             ax.add_patch(Rectangle((c - 0.27, -0.34), 0.54, FILAS - 1 + 0.68,
-                                   facecolor=NETS[letra][1], alpha=0.30,
+                                   facecolor=NETS[letra][1], alpha=0.80,
                                    edgecolor="none", zorder=2.5))
     for f in range(FILAS):
         for c in range(cols):
@@ -96,15 +96,21 @@ def dibuja_placa(ax):
         ax.text(-0.85, f, str(num), ha="right", va="center", fontsize=6.0,
                 zorder=5, fontweight="bold" if usado else "normal",
                 color=C_RAIL if usado else "#98a4b0")
+    # nombre del net encima de cada riel (en vertical, para que no se solapen)
+    for letra, (net, color) in NETS.items():
+        ax.text(x_de(letra), -2.75, net, ha="center", va="center", fontsize=7.4,
+                rotation=90, color="white", fontweight="bold", zorder=8,
+                bbox=dict(facecolor=color, edgecolor="white", linewidth=0.6,
+                          boxstyle="round,pad=0.22"))
     ax.set_xlim(-3.4, cols - 1 + 1.0)
-    ax.set_ylim(FILAS - 1 + 1.6, -1.9)
+    ax.set_ylim(FILAS - 1 + 1.6, -4.1)
     ax.set_aspect("equal")
     ax.set_axis_off()
 
 
 def pad(ax, x, y, color):
-    ax.add_patch(Circle((x, y), 0.28, facecolor=color, edgecolor="#152332",
-                        linewidth=0.5, zorder=7))
+    ax.add_patch(Circle((x, y), 0.28, facecolor=color, edgecolor="white",
+                        linewidth=0.9, zorder=7))
 
 
 def marca(ax, x, y, numero, color):
