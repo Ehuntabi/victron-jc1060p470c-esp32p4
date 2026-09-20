@@ -23,8 +23,14 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color)
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    /* Sombra exterior suave para sensación de elevación */
-    lv_obj_set_style_shadow_width(card, 14, 0);
+    /* Sombra exterior suave para sensación de elevación.
+     * Radio 8 y no 14: LVGL difumina en la CPU y el coste va con el radio al
+     * CUADRADO (14^2=196 frente a 8^2=64, tres veces mas barato por tarjeta y
+     * por repintado). El 20-sep-2026 un repintado completo con muchas tarjetas
+     * (galeria de capturas abierta encima) tuvo al taskLVGL mas de 5 s dentro de
+     * shadow_blur_corner y el watchdog reinicio la pantalla. Visualmente la
+     * sombra sigue ahi, solo mas ceñida. */
+    lv_obj_set_style_shadow_width(card, 8, 0);
     lv_obj_set_style_shadow_color(card, lv_color_black(), 0);
     lv_obj_set_style_shadow_opa(card, LV_OPA_50, 0);
     lv_obj_set_style_shadow_spread(card, 0, 0);
@@ -33,9 +39,13 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color)
     return card;
 }
 
+/* El pulso de aviso anima la OPACIDAD DEL BORDE, no la de la sombra: animar la
+ * sombra obliga a LVGL a redifuminarla en CADA fotograma de la animacion (y con
+ * radio 14 eso es carisimo justo cuando mas se nota, en las alertas). El borde
+ * se repinta sin desenfoque y el aviso se ve igual. */
 static void card_pulse_anim_cb(void *card, int32_t v)
 {
-    lv_obj_set_style_shadow_opa((lv_obj_t *)card, (lv_opa_t)v, 0);
+    lv_obj_set_style_border_opa((lv_obj_t *)card, (lv_opa_t)v, 0);
 }
 
 void ui_card_pulse(lv_obj_t *card)
@@ -47,7 +57,8 @@ void ui_card_pulse(lv_obj_t *card)
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, card);
-    lv_anim_set_values(&a, LV_OPA_50, LV_OPA_COVER);
+    /* De opaco a tenue y vuelta (playback): el borde "late" sin tocar la sombra */
+    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_40);
     lv_anim_set_time(&a, 250);
     lv_anim_set_playback_time(&a, 350);
     lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
