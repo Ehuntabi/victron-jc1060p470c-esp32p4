@@ -2047,12 +2047,6 @@ CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES=y
 CONFIG_LWIP_TIMERS_ONDEMAND=y
 CONFIG_LWIP_ND6=y
 # CONFIG_LWIP_FORCE_ROUTER_FORWARDING is not set
-# 10 era el limite EXACTO: 2 servidores HTTP con max_open_sockets=4 (8) + el DNS
-# de cautivo (1) + el DHCP (1) = 10, sin un solo socket de margen. En cuanto la
-# app polleaba a la vez que un navegador o una descarga, el accept fallaba con
-# ENFILE ("httpd_accept_conn: error in accept (23)") y la peticion se perdia: la
-# conexion "a veces no se conseguia". Con 20 hay margen para la app, el portal y
-# una descarga a la vez. */
 CONFIG_LWIP_MAX_SOCKETS=20
 # CONFIG_LWIP_USE_ONLY_LWIP_SELECT is not set
 # CONFIG_LWIP_SO_LINGER is not set

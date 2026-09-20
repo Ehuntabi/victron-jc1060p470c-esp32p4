@@ -146,6 +146,15 @@ CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER=y
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=8192
 # CONFIG_ESP_VIDEO_ENABLE_DVP_VIDEO_DEVICE is not set
 
+# Pool de sockets. 10 (el valor por defecto de IDF) era el limite EXACTO: 2
+# servidores HTTP con max_open_sockets=4 (8) + el DNS de cautivo (1) + el DHCP
+# (1) = 10, sin un solo socket de margen. En cuanto la app polleaba a la vez que
+# un navegador o una descarga, accept() fallaba con ENFILE y la peticion se
+# perdia: la conexion "a veces no se conseguia". Con 20 hay margen.
+# (Esto tiene que estar AQUI y no solo en el sdkconfig: si algun dia se regenera
+# el sdkconfig de cero, los defaults son lo unico que se aplica.)
+CONFIG_LWIP_MAX_SOCKETS=20
+
 # ── Servidor HTTP (config web + API de la app Android) ────────────────────────
 # Buffer de cabeceras de peticion. El default 512 se queda corto en el login
 # Basic-Auth desde navegador movil (User-Agent + Accept + cookies + Authorization
