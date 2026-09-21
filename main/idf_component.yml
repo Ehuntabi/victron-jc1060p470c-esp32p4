@@ -24,7 +24,10 @@ dependencies:
   espressif/ds18b20: '>=0.1.0'
   espressif/esp_codec_dev: ^1.3.0
   # Camara MIPI-CSI OV02C10 (auto-brillo + vigilancia). esp_video arrastra
-  # esp_cam_sensor + esp_ipa. CLAVADO a 2.2.0: la 2.3.0 rompe la captura RAW en
-  # IDF 5.4.4 (llama a esp_isp_new_processor con salida RAW, que el ISP del 5.4.4
-  # rechaza; el bypass real requiere IDF>=5.5.0). NO subir sin IDF>=5.5.
-  espressif/esp_video: '==2.2.0'
+  # esp_cam_sensor + esp_ipa.
+  # SUBIDO a 2.5.0 el 21-sep-2026, junto con el salto a IDF 5.5.5: a partir de la
+  # 2.3.0 el componente necesita IDF>=5.5 (llama a esp_isp_new_processor con
+  # salida RAW, que el ISP del 5.4.4 rechaza). Trae esp_cam_sensor 2.6, esp_ipa
+  # 2.4 y, con el, los modelos de AWB nuevos (entre ellos el de temperatura de
+  # color FIJA), que es lo que hace falta para el color en penumbra.
+  espressif/esp_video: '==2.5.0'
