@@ -635,6 +635,13 @@ static void init_telemetry(void)
      * en 60 dias, que fue la retencion que se decidio el 24-ago-2026. */
     log_cleanup_init(120);                 /* datos: viajes de hasta 4 meses */
     log_cleanup_set_vigilancia_days(60);   /* camaras: como estaba */
+    /* El aviso de "se van a borrar N ficheros" NO se hace aqui: el recorrido de
+     * directorios de log_cleanup es de lo mas hambriento de pila de ESP-IDF y
+     * main_task tiene ~3,5 KB. Puesto aqui, la placa se caia con
+     * "Guru Meditation Error: Core 0 panic'ed (Stack protection fault)" justo
+     * despues de arrancar la camara (lo cazo la bateria de pruebas del
+     * 21-sep-2026, con coredump incluido). Va dentro de la tarea de limpieza,
+     * que tiene 6144 B y ya hace ese mismo recorrido. */
     if (log_cleanup_task_handle()) log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat);
     alerts_init();
     energy_today_init();

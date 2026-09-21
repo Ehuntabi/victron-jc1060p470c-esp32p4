@@ -239,6 +239,18 @@ void log_cleanup_set_heartbeat_cb(log_cleanup_heartbeat_cb_t cb) { s_hb_cb = cb;
 static void cleanup_task(void *arg)
 {
     (void)arg;
+    if (s_hb_cb) s_hb_cb();
+    /* Aviso ANTES del primer barrido: cuanto se va a borrar por antiguedad.
+     * (Aqui si: esta tarea tiene 6144 B y el recorrido de directorios es de lo
+     * mas hambriento de pila que hay; llamarlo desde main_task reventaba.) */
+    {
+        int pend = log_cleanup_files_pending_warning(s_max_days_cached > 0 ? s_max_days_cached : 120);
+        if (pend > 0) {
+            ESP_LOGW(TAG, "se borraran %d ficheros con mas de %d dias en el primer barrido "
+                          "(esto es solo el aviso, todavia no borra nada)",
+                     pend, s_max_days_cached > 0 ? s_max_days_cached : 120);
+        }
+    }
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (s_hb_cb) s_hb_cb();   /* latido watchdog: ver log_cleanup_set_heartbeat_cb */
@@ -276,9 +288,9 @@ void log_cleanup_init(int max_days_keep)
     /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
      * el 08-sep-2026: la SD (fopen/fprintf/fclose, y aqui ademas recorrer
      * directorios) es de lo mas hambriento de pila de ESP-IDF. Sin formateo
-     * de float -> 4096 basta, sin llegar al tope de 6144 que necesita
-     * viaje_tick_task (%.6f). */
-    if (xTaskCreate(cleanup_task, "log_cleanup_task", 4096, NULL,
+     * de float -> se penso que 4096 bastaba. SUBIDA A 6144 el 21-sep-2026: el
+     * stackwatch midio 1652 bytes libres (60% usado). */
+    if (xTaskCreate(cleanup_task, "log_cleanup_task", 6144, NULL,
                      tskIDLE_PRIORITY + 2, &s_cleanup_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de limpieza: sin barrido periodico");
     }

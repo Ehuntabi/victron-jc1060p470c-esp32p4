@@ -442,9 +442,10 @@ static void start_flush_timer(void)
 {
     /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
      * el 08-sep-2026: fopen/fprintf/fclose es de lo mas hambriento de pila de
-     * ESP-IDF. Formateo de float ligero aqui (solo %.1f) -> 4096 basta, sin
-     * llegar al tope de 6144 que necesita viaje_tick_task (%.6f). */
-    if (xTaskCreate(flush_task, "dl_flush_task", 4096, NULL,
+     * ESP-IDF. Formateo de float ligero aqui (solo %.1f) -> se penso que 4096
+     * bastaba. SUBIDA A 6144 el 21-sep-2026: el stackwatch midio 1152 bytes
+     * libres (72% usado); con eso, un camino de error desborda. */
+    if (xTaskCreate(flush_task, "dl_flush_task", 6144, NULL,
                      tskIDLE_PRIORITY + 2, &s_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
         return;

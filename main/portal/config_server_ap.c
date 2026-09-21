@@ -564,7 +564,8 @@ esp_err_t wifi_ap_init(void)
         esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_PROBEREQRECVED,
                                     cfg_srv_ap_probe_req, NULL);
     }
-    esp_netif_t *ap_netif = s_ap_netif;
+    /* (aqui habia un 'esp_netif_t *ap_netif = s_ap_netif;' que no usaba
+     * nadie: la auditoria del 21-sep-2026 lo quito por codigo muerto) */
 
     esp_err_t wm = esp_wifi_set_mode(WIFI_MODE_AP);
     if (wm != ESP_OK) {

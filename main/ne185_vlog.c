@@ -265,9 +265,11 @@ esp_err_t ne185_vlog_init(void)
 
     /* 3072 causo un bootloop real en bh_flush_task (mismo patron, misma SD)
      * el 08-sep-2026: fopen/fprintf/fclose es de lo mas hambriento de pila de
-     * ESP-IDF. Sin formateo de float aqui -> 4096 basta, sin llegar al tope
-     * de 6144 que necesita viaje_tick_task (%.6f). */
-    if (xTaskCreate(vlog_flush_task, "ne185_vlog_flush", 4096, NULL,
+     * ESP-IDF. Sin formateo de float aqui -> se penso que 4096 bastaba.
+     * SUBIDA A 6144 el 21-sep-2026: el stackwatch midio que llegaba a dejar
+     * solo 888 bytes libres (78% de la pila usada). Con eso, un camino de error
+     * o un log largo desborda y reinicia. */
+    if (xTaskCreate(vlog_flush_task, "ne185_vlog_flush", 6144, NULL,
                      tskIDLE_PRIORITY + 2, &s_vlog_flush_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "No se pudo crear la tarea de flush: sin volcado periodico a SD");
     }
