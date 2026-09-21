@@ -8,16 +8,16 @@
             "min_counted": 100,
             "range": {
                 "green": {
-                    "max": 190,
-                    "min": 81
+                    "max": 230,
+                    "min": 60
                 },
                 "rg": {
-                    "max": 0.9096,
-                    "min": 0.573
+                    "max": 0.8,
+                    "min": 0.35
                 },
                 "bg": {
-                    "max": 0.9634,
-                    "min": 0.5368
+                    "max": 0.9,
+                    "min": 0.4
                 }
             },
             "green_luma_env": "dummy_awb_luma",
