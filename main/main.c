@@ -493,7 +493,14 @@ static void init_display_ui(void)
     /* Bump LVGL task stack 7168 -> 12288 B. Margen para draw recursion +
      * assert handler en escenarios pesados (modales anidados, etc).
      * Coste ~5 KB en RAM interna (de ~474 KB libres tras LV_MEM_CUSTOM). */
-    cfg.lvgl_port_cfg.task_stack = 12288;
+    /* SUBIDA de 12288 a 20480 el 21-sep-2026, con medida: la bateria de pruebas
+     * recorrio las pantallas (chart, historico de bateria, historico solar y el
+     * cartel de OTA) con el cerrojo de LVGL y el peor caso consumio 11052 B de
+     * pila. Con 12288 quedaban ~1,2 KB de margen, y eso en la placa de reserva
+     * con los historicos VACIOS: con datos reales (graficas con muchos puntos) el
+     * camino es mas profundo. El sintoma de quedarse corto es un reinicio
+     * ("Guru Meditation Error: Stack protection fault") al abrir un historico. */
+    cfg.lvgl_port_cfg.task_stack = 20480;
     bsp_display_start_with_config(&cfg);
     bsp_display_brightness_set(80);
 
