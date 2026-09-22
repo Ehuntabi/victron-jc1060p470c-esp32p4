@@ -51,7 +51,7 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto)
     lv_obj_set_style_border_color(c, lv_color_hex(COL_BORDE), 0);
     lv_obj_set_style_border_width(c, 1, 0);
     lv_obj_set_style_radius(c, 8, 0);
-    lv_obj_set_style_pad_all(c, 10, 0);
+    lv_obj_set_style_pad_all(c, 8, 0);
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
 
     if (titulo) {
@@ -157,7 +157,7 @@ static void refresco_cb(lv_timer_t *t)
      * las del anillo (~40 lineas), que se salian de la tarjeta y estiraban la
      * pagina hasta y=1387 (medido con la sonda el 22-sep-2026). Ocho lineas
      * entran de sobra y siguen valiendo para ver si el modulo habla. */
-    const int VISIBLES = 8;
+    const int VISIBLES = 6;
     for (int i = (GPS_CRUDO_N > VISIBLES ? GPS_CRUDO_N - VISIBLES : 0); i < GPS_CRUDO_N; i++) {
         char l[96];
         gps_crudo_get(i, l, sizeof(l));
@@ -173,8 +173,8 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
     lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(page, 8, 0);    /* compactado: tiene que entrar sin desplazar */
-    lv_obj_set_style_pad_row(page, 8, 0);
+    lv_obj_set_style_pad_all(page, 4, 0);    /* medido con sonda: sobraban 45 px */
+    lv_obj_set_style_pad_row(page, 4, 0);
     style_settings_scrollbar(page);
 
     /* ── Estado: la franja de arriba ─────────────────────────────── */
@@ -224,7 +224,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * por abajo sin avisar (ya paso al anadir el recorrido). */
     lv_obj_set_size(fila, lv_pct(100), 230);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(fila, 8, 0);
+    lv_obj_set_style_pad_column(fila, 6, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *cpos = tarjeta(fila, "POSICION", lv_pct(100));
@@ -246,7 +246,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_align(s_hora, LV_ALIGN_TOP_LEFT, 0, 30);
 
     /* ── Tramas en crudo ─────────────────────────────────────────── */
-    lv_obj_t *ctr = tarjeta(page, "TRAMAS EN CRUDO", 210);
+    lv_obj_t *ctr = tarjeta(page, "TRAMAS EN CRUDO", 170);   /* medido: con 180 aun sobraban 3 px */
     s_crudo = lv_label_create(ctr);
     /* Letra 14 y no menos: es la mas pequena que hay compilada, y una trama
      * NMEA entera tiene que caber en una linea para poder leerla. No hay
