@@ -695,7 +695,11 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
             if (row) {
                 lv_obj_t *value = lv_obj_get_child(row, 0);
                 lv_obj_t *unit  = lv_obj_get_child(row, 1);
-                if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_32, 0);
+                /* 24, LA MISMA que el valor de Autonomia (que bajo a 24
+                 * porque "12h 30m" no cabia). Con 32 y 24 juntas, las dos
+                 * cifras y sus rotulos quedaban a distinta altura y la fila
+                 * parecia torcida (visto en la captura del 22-sep-2026). */
+                if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_24_es, 0);
                 if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_20_es, 0);
             }
             lv_obj_set_style_translate_y(metrics[i], 56, 0);
@@ -919,7 +923,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_border_width(card_fridge, 2, 0);
         lv_obj_set_style_radius(card_fridge, UI_RADIUS_CARD, 0);
         lv_obj_set_style_pad_hor(card_fridge, 14, 0);
-        lv_obj_set_style_pad_ver(card_fridge, 6, 0);
+        /* Abajo 14 y no 6: el aro del ventilador (92 px) quedaba pegado al
+         * borde inferior de la tarjeta (se veia en la captura del 22-sep). */
+        lv_obj_set_style_pad_top(card_fridge, 6, 0);
+        lv_obj_set_style_pad_bottom(card_fridge, 14, 0);
         lv_obj_set_style_pad_gap(card_fridge, 14, 0);
         lv_obj_set_layout(card_fridge, LV_LAYOUT_FLEX);
         /* Disposicion vertical: Congelador (icono+texto+temp) arriba y el
@@ -996,13 +1003,13 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
          * 50 naranja -> 100 rojo) lo lleva el aro; la aspa queda neutra. */
         lv_obj_t *fan_wrap = lv_obj_create(card_fridge);
         lv_obj_remove_style_all(fan_wrap);
-        lv_obj_set_size(fan_wrap, 96, 96);
+        lv_obj_set_size(fan_wrap, 92, 92);
         lv_obj_clear_flag(fan_wrap, LV_OBJ_FLAG_SCROLLABLE);
 
         /* Aro: gauge de 270 grados abierto por abajo (hueco centrado en las
          * 6 en punto), se llena en sentido horario desde abajo-izquierda. */
         ov->arc_fan = lv_arc_create(fan_wrap);
-        lv_obj_set_size(ov->arc_fan, 96, 96);
+        lv_obj_set_size(ov->arc_fan, 92, 92);
         lv_obj_center(ov->arc_fan);
         lv_arc_set_bg_angles(ov->arc_fan, 135, 45);
         lv_arc_set_range(ov->arc_fan, 0, 100);

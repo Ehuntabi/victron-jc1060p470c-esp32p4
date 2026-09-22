@@ -1,5 +1,6 @@
 /* ui.c */
 #include "ui.h"
+#include "ui/widgets/ui_card.h"
 #include "gps/gps.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
@@ -365,8 +366,15 @@ void ui_init(void) {
     lv_obj_set_style_radius(tab_btns, 2, LV_PART_INDICATOR);
     /* Quitar borde inferior por defecto del tabview */
     lv_obj_set_style_border_width(tab_btns, 0, 0);
+    /* Fondo de las dos pestanas = el de la paleta (22-sep-2026): antes lo ponia
+     * el tema y quedaba mas claro que las tarjetas, o sea al reves de lo que
+     * hace falta para que estas se despeguen. */
     ui->tab_live  = lv_tabview_add_tab(ui->tabview, LV_SYMBOL_HOME "  Live");
+    lv_obj_set_style_bg_color(ui->tab_live, UI_COLOR_BG, 0);
+    lv_obj_set_style_bg_opa(ui->tab_live, LV_OPA_COVER, 0);
     ui->tab_settings = lv_tabview_add_tab(ui->tabview, LV_SYMBOL_SETTINGS "  Settings");
+    lv_obj_set_style_bg_color(ui->tab_settings, UI_COLOR_BG, 0);
+    lv_obj_set_style_bg_opa(ui->tab_settings, LV_OPA_COVER, 0);
 
     ui->tab_settings_index = lv_obj_get_index(ui->tab_settings);
 

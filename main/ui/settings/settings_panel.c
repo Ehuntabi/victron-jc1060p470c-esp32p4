@@ -555,8 +555,10 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_size(menu, lv_pct(100), lv_pct(100));
     lv_obj_center(menu);
     /* Fondo coherente con el resto de pestanas */
-    lv_obj_set_style_bg_color(menu, lv_color_black(), 0);
-    lv_obj_set_style_bg_color(lv_menu_get_main_header(menu), lv_color_black(), 0);
+    /* Fondo del menu = el de la paleta (22-sep-2026). Iba en negro puro: mas
+     * oscuro que el fondo de las vistas y sin relacion con la paleta. */
+    lv_obj_set_style_bg_color(menu, UI_COLOR_BG, 0);
+    lv_obj_set_style_bg_color(lv_menu_get_main_header(menu), UI_COLOR_BG, 0);
     lv_obj_set_style_text_color(lv_menu_get_main_header(menu), lv_color_white(), 0);
     ui->settings_menu = menu;
     s_settings_menu = menu;  /* referencia static para diálogos modales */
@@ -618,8 +620,11 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_about = lv_menu_page_create(menu, "ACERCA DE Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
-    lv_obj_set_style_pad_all(main_page, 16, 0);
+    /* Horizontal 12 (unificado con las vistas y las subpaginas, 22-sep-2026);
+     * el vertical sigue apretado: es lo que hace que el contenido entre. */
+    lv_obj_set_style_pad_hor(main_page, 12, 0);
     lv_obj_set_style_pad_top(main_page, 4, 0);      /* menos hueco arriba: sube el contenido */
+    lv_obj_set_style_pad_bottom(main_page, 8, 0);
     lv_obj_set_style_pad_row(main_page, 12, 0);
     lv_obj_set_style_pad_column(main_page, 12, 0);
     lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
@@ -627,8 +632,9 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Subpagina Autocaravana: mismo layout de 2 columnas que el menu principal. */
-    lv_obj_set_style_pad_all(page_autocaravana, 16, 0);
+    lv_obj_set_style_pad_hor(page_autocaravana, 12, 0);
     lv_obj_set_style_pad_top(page_autocaravana, 4, 0);
+    lv_obj_set_style_pad_bottom(page_autocaravana, 8, 0);
     lv_obj_set_style_pad_row(page_autocaravana, 12, 0);
     lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
     lv_obj_set_layout(page_autocaravana, LV_LAYOUT_FLEX);

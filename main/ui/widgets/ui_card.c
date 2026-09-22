@@ -243,6 +243,11 @@ void ui_metric_set(lv_obj_t *metric, const char *value_str,
         lv_label_set_text(value, value_str ? value_str : "--");
         /* Si el caller pasa color "negro/cero" mantenemos blanco como default */
         if (value_color.full == 0) value_color = UI_COLOR_TEXT;
+        /* SIN DATO = GRIS APAGADO (22-sep-2026). Antes un "--" se pintaba con
+         * el mismo color que un dato de verdad y en la pantalla no se sabia si
+         * el aparato estaba a cero o simplemente no habia dato. */
+        if (!value_str || !value_str[0] || strcmp(value_str, "--") == 0)
+            value_color = UI_COLOR_TEXT_DIM;
         lv_obj_set_style_text_color(value, value_color, 0);
     }
     if (unit) lv_label_set_text(unit, unit_str ? unit_str : "");
@@ -686,7 +691,9 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
          * (anula el width pct(100)/flex_grow genericos, que lo hacian seguir
          * el ancho del titulo) y el LED rojo lo rellena. */
         lv_obj_set_flex_grow(tank, 0);
-        lv_obj_set_size(tank, 56, 56);
+        /* 64 y no 56: mas cerca del alto del deposito de agua limpia, para que
+         * los dos se lean como el mismo tipo de chisme. */
+        lv_obj_set_size(tank, 64, 64);
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_CENTER,
@@ -694,9 +701,11 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         lv_obj_t *led = lv_obj_create(tank);
         lv_obj_remove_style_all(led);
         lv_obj_set_size(led, lv_pct(100), lv_pct(100));
-        lv_obj_set_style_radius(led, 4, 0);
-        lv_obj_set_style_bg_color(led, UI_COLOR_RED, 0);
-        lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
+        lv_obj_set_style_radius(led, 8, 0);
+        lv_obj_set_style_bg_color(led, UI_COLOR_TEXT_DIM, 0);
+        /* Apagado (nivel 0) se queda en un rojo muy tenue; lleno, rojo vivo
+         * (lo sube ui_tank_set). Antes 20 %: ni se veia ni dejaba de verse. */
+        lv_obj_set_style_bg_opa(led, LV_OPA_10, 0);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
     } else {
@@ -810,7 +819,10 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
         lv_obj_t *led = lv_obj_get_child(tank, 0);
         if (led) {
             bool full = (level_0_to_3 != 0 && level_0_to_3 != 0xFF);
-            lv_obj_set_style_bg_opa(led, full ? LV_OPA_COVER : LV_OPA_20, 0);
+            /* Gris tenue = cabe mas; ROJO vivo = lleno (es un aviso, no un
+             * nivel: el NE185 de las grises solo da lleno/no lleno). */
+            lv_obj_set_style_bg_color(led, full ? UI_COLOR_RED : UI_COLOR_TEXT_DIM, 0);
+            lv_obj_set_style_bg_opa(led, full ? LV_OPA_COVER : LV_OPA_30, 0);
         }
         return;
     }

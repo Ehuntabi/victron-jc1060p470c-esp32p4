@@ -9,9 +9,11 @@ extern "C" {
 #endif
 
 /* ── Paleta semántica (estilo Venus OS) ─────────────────────────── */
-#define UI_COLOR_BG           lv_color_hex(0x06080C)  /* casi negro con sutil azulado */
-#define UI_COLOR_CARD         lv_color_hex(0x141821)  /* card oscuro frio */
-#define UI_COLOR_CARD_BORDER  lv_color_hex(0x2D3340)
+#define UI_COLOR_BG           lv_color_hex(0x0A0D13)  /* fondo de pagina (22-sep-2026: antes
+                                                        * 0x06080C, se confundia con la tarjeta) */
+#define UI_COLOR_CARD         lv_color_hex(0x1B2230)  /* card, mas clara que el fondo (antes
+                                                        * 0x141821: se veian casi iguales) */
+#define UI_COLOR_CARD_BORDER  lv_color_hex(0x39424F)
 #define UI_COLOR_TEXT         lv_color_hex(0xFFFFFF)
 #define UI_COLOR_TEXT_DIM     lv_color_hex(0x8A93A6)
 #define UI_COLOR_CYAN         lv_color_hex(0x4FC3F7)

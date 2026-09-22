@@ -836,7 +836,9 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *lbl_solar_sec = lv_label_create(row_solar_hdr);
     lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
-    lv_label_set_text(lbl_solar_sec, "Aprovechar excedente solar");
+    /* Con el icono delante, como el resto de tarjetas (22-sep-2026): era la
+     * unica de la pestana sin el. */
+    lv_label_set_text(lbl_solar_sec, LV_SYMBOL_CHARGE "  Aprovechar excedente solar");
 
     lv_obj_t *sw_solar = lv_switch_create(row_solar_hdr);
     lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
