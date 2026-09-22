@@ -90,6 +90,28 @@ if [ ! -f "$IDF_EXPORT" ]; then
 fi
 # shellcheck disable=SC1090
 . "$IDF_EXPORT" >/dev/null 2>&1
+
+# ── 2b) parches al IDF (idempotente) ────────────────────────────────────────
+# El IDF que se usa para publicar lleva un arreglo OFICIAL de Espressif que aún
+# no está en la version fijada. Sin el, un fallo de RAM DMA al hablar con la SD
+# no devuelve error: revienta con "Load access fault" (memcpy desde NULL).
+# Ver patches/LEEME.md. Si el IDF ya lo lleva (o el dia que se suba a 5.5.6+),
+# esto no hace nada.
+PARCHE_IDF="$PWD/patches/idf-5.5.5-spi-null-memcpy.patch"
+if [ -f "$PARCHE_IDF" ] && [ -n "${IDF_PATH:-}" ]; then
+  if grep -q 'buffer_to_rcv && trans_buf->buffer_to_rcv' \
+       "$IDF_PATH/components/esp_driver_spi/src/gpspi/spi_master.c" 2>/dev/null; then
+    echo "[ok] el IDF ya lleva el arreglo del memcpy con NULL (no hay que parchear)"
+  elif git -C "$IDF_PATH" apply --check "$PARCHE_IDF" 2>/dev/null; then
+    git -C "$IDF_PATH" apply "$PARCHE_IDF"
+    echo "[ok] parche aplicado al IDF: $(basename "$PARCHE_IDF")"
+  else
+    echo "ERROR: el IDF no lleva el arreglo del memcpy con NULL y el parche no aplica."
+    echo "       Revisa $PARCHE_IDF y el estado de $IDF_PATH (git -C \"\$IDF_PATH\" status)."
+    exit 1
+  fi
+fi
+
 # Anti-gotcha (ESP-IDF cachea la versión/fecha en el configure de CMake y no la
 # refresca en builds incrementales -> el About mostraba datos viejos). Doble
 # seguro: 'reconfigure' re-ejecuta CMake recapturando `git describe`, y borrar el

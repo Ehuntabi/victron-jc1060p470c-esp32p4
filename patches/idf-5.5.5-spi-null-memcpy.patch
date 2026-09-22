@@ -1,0 +1,47 @@
+commit 6c1f0e7b59510909542c492bd1273ca9980bbfdb
+Author: Eric Wang <eric@rwx.one>
+Date:   Tue Jul 28 13:29:17 2026 -0700
+
+    fix(driver_spi): avoid NULL memcpy when private DMA buffer setup fails
+    
+    Closes https://github.com/espressif/esp-idf/pull/18898
+
+diff --git a/components/esp_driver_spi/src/gpspi/spi_master.c b/components/esp_driver_spi/src/gpspi/spi_master.c
+index ef2d171e84..2c3f3ab502 100644
+--- a/components/esp_driver_spi/src/gpspi/spi_master.c
++++ b/components/esp_driver_spi/src/gpspi/spi_master.c
+@@ -1178,7 +1178,7 @@ static SPI_MASTER_ISR_ATTR void uninstall_priv_desc(spi_trans_priv_t* trans_buf)
+ 
+     // copy data from temporary DMA-capable buffer back to trans_desc buffer and free the temporary one.
+     void *orig_rx_buffer = (trans_desc->flags & SPI_TRANS_USE_RXDATA) ? trans_desc->rx_data : trans_desc->rx_buffer;
+-    if (trans_buf->buffer_to_rcv != orig_rx_buffer) {
++    if (trans_buf->buffer_to_rcv && trans_buf->buffer_to_rcv != orig_rx_buffer) {
+         memcpy(orig_rx_buffer, trans_buf->buffer_to_rcv, (trans_desc->rxlength + 7) / 8);
+         free(trans_buf->buffer_to_rcv);
+     }
+diff --git a/components/esp_driver_spi/src/gpspi/spi_slave.c b/components/esp_driver_spi/src/gpspi/spi_slave.c
+index 00f318b267..44e51c3bd7 100644
+--- a/components/esp_driver_spi/src/gpspi/spi_slave.c
++++ b/components/esp_driver_spi/src/gpspi/spi_slave.c
+@@ -414,7 +414,7 @@ static void SPI_SLAVE_ISR_ATTR spi_slave_uninstall_priv_trans(spi_host_device_t
+         if (trans->tx_buffer && (trans->tx_buffer != priv_trans->tx_buffer)) {
+             free(priv_trans->tx_buffer);
+         }
+-        if (trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
++        if (priv_trans->rx_buffer && (trans->rx_buffer != priv_trans->rx_buffer)) {
+             memcpy(trans->rx_buffer, priv_trans->rx_buffer, (trans->length + 7) / 8);
+             free(priv_trans->rx_buffer);
+         }
+diff --git a/components/esp_driver_spi/src/gpspi/spi_slave_hd.c b/components/esp_driver_spi/src/gpspi/spi_slave_hd.c
+index 2cc2e9b050..382f0ea701 100644
+--- a/components/esp_driver_spi/src/gpspi/spi_slave_hd.c
++++ b/components/esp_driver_spi/src/gpspi/spi_slave_hd.c
+@@ -685,7 +685,7 @@ static void s_spi_slave_hd_destroy_priv_trans(spi_host_device_t host, spi_slave_
+ {
+ #if SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE
+     spi_slave_hd_data_t *orig_trans = priv_trans->trans;
+-    if (priv_trans->aligned_buffer != orig_trans->data) {
++    if (priv_trans->aligned_buffer && priv_trans->aligned_buffer != orig_trans->data) {
+         if (chan == SPI_SLAVE_CHAN_RX) {
+             memcpy(orig_trans->data, priv_trans->aligned_buffer, orig_trans->trans_len);
+         }
