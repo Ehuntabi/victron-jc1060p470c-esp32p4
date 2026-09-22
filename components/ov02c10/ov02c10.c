@@ -1464,69 +1464,11 @@ static esp_err_t ov02c10_set_para_value(esp_cam_sensor_device_t *dev, uint32_t i
      return ESP_OK;
  }
  
- static int ov02c10_get_sysclk(esp_cam_sensor_device_t *dev)
- {
-     /* calculate sysclk */
-     int xvclk = dev->cur_format->xclk / 10000;
-     int sysclk = 0;
-     uint8_t temp1, temp2;
-     int pre_div02x, div_cnt7b, sdiv0, pll_rdiv, bit_div2x, sclk_div, VCO;
-     const int pre_div02x_map[] = {2, 2, 4, 6, 8, 3, 12, 5, 16, 2, 2, 2, 2, 2, 2, 2};
-     const int sdiv0_map[] = {16, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-     const int pll_rdiv_map[] = {1, 2};
-     const int bit_div2x_map[] = {2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 5, 2, 2, 2, 2, 2};
-     const int sclk_div_map[] = {1, 2, 4, 1};
+ /* ov02c10_get_sysclk(): no la llamaba nadie (auditoria 21-sep-2026). */
  
-     ov02c10_read(dev->sccb_handle, 0x3037, &temp1);
-     temp2 = temp1 & 0x0f;
-     pre_div02x = pre_div02x_map[temp2];
-     temp2 = (temp1 >> 4) & 0x01;
-     pll_rdiv = pll_rdiv_map[temp2];
-     ov02c10_read(dev->sccb_handle, 0x3036, &temp1);
+ /* ov02c10_get_hts(): no la llamaba nadie (auditoria 21-sep-2026). */
  
-     div_cnt7b = temp1;
- 
-     VCO = xvclk * 2 / pre_div02x * div_cnt7b;
-     ov02c10_read(dev->sccb_handle, 0x3035, &temp1);
-     temp2 = temp1 >> 4;
-     sdiv0 = sdiv0_map[temp2];
-     ov02c10_read(dev->sccb_handle, 0x3034, &temp1);
-     temp2 = temp1 & 0x0f;
-     bit_div2x = bit_div2x_map[temp2];
-     ov02c10_read(dev->sccb_handle, 0x3106, &temp1);
-     temp2 = (temp1 >> 2) & 0x03;
-     sclk_div = sclk_div_map[temp2];
-     sysclk = VCO * 2 / sdiv0 / pll_rdiv / bit_div2x / sclk_div;
-     return sysclk;
- }
- 
- static int ov02c10_get_hts(esp_cam_sensor_device_t *dev)
- {
-     /* read HTS from register settings */
-     int hts = 0;
-     uint8_t temp1, temp2;
- 
-     ov02c10_read(dev->sccb_handle, 0x380c, &temp1);
-     ov02c10_read(dev->sccb_handle, 0x380d, &temp2);
-     hts = (temp1 << 8) + temp2;
-     ESP_LOGI(TAG,"hts = 0x%x",hts);
-     return hts;
- }
- 
- static int ov02c10_get_vts(esp_cam_sensor_device_t *dev)
- {
-     /* read VTS from register settings */
-     int vts = 0;
-     uint8_t temp1, temp2;
- 
-     /* total vertical size[15:8] high byte */
-     ov02c10_read(dev->sccb_handle, 0x380e, &temp1);
-     ov02c10_read(dev->sccb_handle, 0x380f, &temp2);
- 
-     vts = (temp1 << 8) + temp2;
-     ESP_LOGI(TAG,"vts = 0x%x",vts);
-     return vts;
- }
+ /* ov02c10_get_vts(): no la llamaba nadie (auditoria 21-sep-2026). */
  
 //  static int ov02c10_get_light_freq(esp_cam_sensor_device_t *dev)
 //  {
