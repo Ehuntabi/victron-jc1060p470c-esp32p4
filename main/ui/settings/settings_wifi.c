@@ -121,8 +121,8 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_all(cont, 8, 0);    /* compactado 22-sep-2026: */
+    lv_obj_set_style_pad_gap(cont, 10, 0);   /* la pagina tiene que caber */
 
     /* === Card 1: Punto de acceso (mitad ancho, lado izdo) === */
     lv_obj_t *card1 = lv_obj_create(cont);
@@ -133,8 +133,8 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
-    lv_obj_set_style_pad_all(card1, 16, 0);
-    lv_obj_set_style_pad_gap(card1, 12, 0);
+    lv_obj_set_style_pad_all(card1, 10, 0);  /* en 600 px sin deslizar  */
+    lv_obj_set_style_pad_gap(card1, 8, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
@@ -182,6 +182,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     ui->wifi.ssid = lv_textarea_create(ssid_row);
     lv_obj_set_style_text_font(ui->wifi.ssid, &lv_font_montserrat_24_es, 0);
+    /* Altura fija y contenida: por defecto el campo venia alto y era lo que
+     * estiraba la fila de arriba (idea del usuario, 22-sep-2026). */
+    lv_obj_set_height(ui->wifi.ssid, 42);
     lv_textarea_set_one_line(ui->wifi.ssid, true);
     lv_obj_set_width(ui->wifi.ssid, 350);
     /* Tope 802.11: SSID max 32 caracteres. Sin esto se podia teclear un SSID
@@ -229,6 +232,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_center(lbl_toggle);
 
     ui->wifi.password = lv_textarea_create(pass_row);
+    lv_obj_set_height(ui->wifi.password, 42);
     lv_obj_set_style_text_font(ui->wifi.password, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_password_mode(ui->wifi.password, true);
     lv_textarea_set_one_line(ui->wifi.password, true);
@@ -249,6 +253,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * reiniciar ni tocar el interruptor del punto de acceso. */
     lv_obj_t *btn_save = lv_btn_create(card1);
     lv_obj_set_width(btn_save, lv_pct(100));
+    lv_obj_set_height(btn_save, 38);
     lv_obj_set_style_bg_color(btn_save, lv_color_hex(0x2E7D32), 0);
     lv_obj_add_event_cb(btn_save, wifi_save_cb, LV_EVENT_CLICKED, ui);
     lv_obj_t *lbl_save = lv_label_create(btn_save);
@@ -278,26 +283,34 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card2, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card2, 1, 0);
     lv_obj_set_style_radius(card2, 12, 0);
-    lv_obj_set_style_pad_all(card2, 16, 0);
-    lv_obj_set_style_pad_gap(card2, 24, 0);
+    lv_obj_set_style_pad_all(card2, 10, 0);
+    lv_obj_set_style_pad_gap(card2, 8, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
+    /* DOS COLUMNAS (22-sep-2026, idea del usuario): el desplegable de la pagina
+     * inicial a la izquierda y el portal web con su boton a la derecha. Ademas de
+     * gustarle mas, resuelve el problema de raiz: al ir lado a lado no compiten por
+     * el alto y no pueden pisarse (era lo que se veia como "DashPortalweb"). */
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_ROW);
     /* Reparte las dos filas en vertical: desplegable arriba, Reactivar abajo,
      * de modo que llenen la card (misma altura que "Punto de acceso"). */
-    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* START + separacion fija en vez de SPACE_BETWEEN (22-sep-2026). Con
+     * SPACE_BETWEEN, si la tarjeta se queda mas corta que su contenido, LVGL
+     * apila los hijos unos encima de otros: el sintoma era el desplegable
+     * pisando el texto. Con START y un hueco fijo eso no puede pasar. */
+    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
     /* Fila 1: titulo + desplegable de pagina inicial */
     lv_obj_t *card2_row1 = lv_obj_create(card2);
     lv_obj_remove_style_all(card2_row1);
-    lv_obj_set_width(card2_row1, lv_pct(100));
+    lv_obj_set_width(card2_row1, lv_pct(62));   /* izquierda: titulo + desplegable */
     lv_obj_set_height(card2_row1, LV_SIZE_CONTENT);
     lv_obj_set_layout(card2_row1, LV_LAYOUT_FLEX);
     /* COLUMN: el desplegable baja a la linea de debajo del titulo para que no
      * se corte en la card estrecha (pct 49). */
     lv_obj_set_flex_flow(card2_row1, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(card2_row1, 10, 0);
+    lv_obj_set_style_pad_gap(card2_row1, 6, 0);
 
     lv_obj_t *card2_title = lv_label_create(card2_row1);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
@@ -306,8 +319,10 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
     lv_obj_t *dd_portal = lv_dropdown_create(card2_row1);
-    lv_obj_set_width(dd_portal, lv_pct(100));
+    lv_obj_set_width(dd_portal, lv_pct(75));   /* mas estrecho (lo pidio el usuario) */
     lv_dropdown_set_options(dd_portal, "Keys\nLogs\nDashboard");
+    lv_obj_set_style_text_font(dd_portal, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_font(lv_dropdown_get_list(dd_portal), &lv_font_montserrat_24_es, 0);
     {
         nvs_handle_t h;
         uint8_t v = 2; /* default: Dashboard */
@@ -326,10 +341,15 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * que reasociar el movil ni reiniciar el display. */
     lv_obj_t *card2_row2 = lv_obj_create(card2);
     lv_obj_remove_style_all(card2_row2);
-    lv_obj_set_width(card2_row2, lv_pct(100));
+    lv_obj_set_width(card2_row2, lv_pct(36));   /* derecha: portal web + Reactivar */
     lv_obj_set_height(card2_row2, LV_SIZE_CONTENT);
     lv_obj_set_layout(card2_row2, LV_LAYOUT_FLEX);
+    /* LADO A LADO, no apilados: la sonda de solapamientos midio que la etiqueta
+     * 'Portal web' y el boton 'Reactivar' caian en el mismo rectangulo
+     * (etiqueta 734,380-893,408 sobre boton 637,380-989,419). */
     lv_obj_set_flex_flow(card2_row2, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2_row2, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_flex_align(card2_row2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card2_react_title = lv_label_create(card2_row2);
@@ -338,8 +358,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text(card2_react_title, LV_SYMBOL_REFRESH "  Portal web");
 
     lv_obj_t *btn_react = lv_btn_create(card2_row2);
-    lv_obj_set_height(btn_react, 44);
-    lv_obj_set_style_pad_hor(btn_react, 16, 0);
+    lv_obj_set_height(btn_react, 40);
+    lv_obj_set_width(btn_react, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_hor(btn_react, 10, 0);   /* boton mas recogido (lo pidio el usuario) */
     lv_obj_set_style_radius(btn_react, 8, 0);
     lv_obj_set_style_bg_color(btn_react, lv_color_hex(0x4FC3F7), 0);
     lv_obj_t *btn_lbl = lv_label_create(btn_react);
@@ -366,7 +387,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card4, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card4, 1, 0);
     lv_obj_set_style_radius(card4, 12, 0);
-    lv_obj_set_style_pad_all(card4, 16, 0);
+    lv_obj_set_style_pad_all(card4, 10, 0);
     lv_obj_set_style_pad_gap(card4, 6, 0);
     lv_obj_set_layout(card4, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card4, LV_FLEX_FLOW_COLUMN);

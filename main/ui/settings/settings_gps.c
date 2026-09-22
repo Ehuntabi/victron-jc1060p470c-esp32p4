@@ -51,7 +51,7 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto)
     lv_obj_set_style_border_color(c, lv_color_hex(COL_BORDE), 0);
     lv_obj_set_style_border_width(c, 1, 0);
     lv_obj_set_style_radius(c, 8, 0);
-    lv_obj_set_style_pad_all(c, 14, 0);
+    lv_obj_set_style_pad_all(c, 10, 0);
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
 
     if (titulo) {
@@ -153,7 +153,12 @@ static void refresco_cb(lv_timer_t *t)
     char buf[GPS_CRUDO_N * 96];
     size_t u = 0;
     buf[0] = 0;
-    for (int i = 0; i < GPS_CRUDO_N; i++) {
+    /* Solo las ULTIMAS tramas: la tarjeta mide 210 px y antes se le metian todas
+     * las del anillo (~40 lineas), que se salian de la tarjeta y estiraban la
+     * pagina hasta y=1387 (medido con la sonda el 22-sep-2026). Ocho lineas
+     * entran de sobra y siguen valiendo para ver si el modulo habla. */
+    const int VISIBLES = 8;
+    for (int i = (GPS_CRUDO_N > VISIBLES ? GPS_CRUDO_N - VISIBLES : 0); i < GPS_CRUDO_N; i++) {
         char l[96];
         gps_crudo_get(i, l, sizeof(l));
         if (!l[0]) continue;
@@ -168,8 +173,8 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
     lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(page, 16, 0);
-    lv_obj_set_style_pad_row(page, 12, 0);
+    lv_obj_set_style_pad_all(page, 8, 0);    /* compactado: tiene que entrar sin desplazar */
+    lv_obj_set_style_pad_row(page, 8, 0);
     style_settings_scrollbar(page);
 
     /* ── Estado: la franja de arriba ─────────────────────────────── */
@@ -219,7 +224,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * por abajo sin avisar (ya paso al anadir el recorrido). */
     lv_obj_set_size(fila, lv_pct(100), 230);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(fila, 12, 0);
+    lv_obj_set_style_pad_column(fila, 8, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *cpos = tarjeta(fila, "POSICION", lv_pct(100));
@@ -249,6 +254,9 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(s_crudo, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_crudo, lv_color_hex(COL_APAGADO), 0);
     lv_label_set_text(s_crudo, "(nada todavia)");
+    lv_obj_set_width(s_crudo, lv_pct(100));
+    /* Recortar, no envolver: asi una trama larga no ocupa dos lineas ni descoloca */
+    lv_label_set_long_mode(s_crudo, LV_LABEL_LONG_CLIP);
     lv_obj_align(s_crudo, LV_ALIGN_TOP_LEFT, 0, 28);
 
     static lv_timer_t *t;
