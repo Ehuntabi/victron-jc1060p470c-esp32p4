@@ -507,8 +507,10 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
     lv_obj_set_style_border_width(card_auto, 1, 0);
     lv_obj_set_style_radius(card_auto, 12, 0);
-    lv_obj_set_style_pad_all(card_auto, 16, 0);
-    lv_obj_set_style_pad_gap(card_auto, 10, 0);
+    /* 16 -> 12 (22-sep-2026): la linea de abajo de esta tarjeta, que es la ultima
+     * de la pagina Autocaravana, se cortaba por muy poco. */
+    lv_obj_set_style_pad_all(card_auto, 12, 0);
+    lv_obj_set_style_pad_gap(card_auto, 8, 0);
     lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_BETWEEN,

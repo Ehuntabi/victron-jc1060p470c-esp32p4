@@ -508,8 +508,8 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_layout(tab, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(tab, 16, 0);
-    lv_obj_set_style_pad_gap(tab, 16, 0);
+    lv_obj_set_style_pad_all(tab, 10, 0);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
     lv_obj_set_scroll_dir(tab, LV_DIR_VER);
 
     /* === Card 1: Sensores DS18B20 (azul) ===
@@ -523,7 +523,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card_sensors, 1, 0);
     lv_obj_set_style_radius(card_sensors, 12, 0);
-    lv_obj_set_style_pad_all(card_sensors, 16, 0);
+    lv_obj_set_style_pad_all(card_sensors, 12, 0);
     lv_obj_set_style_pad_gap(card_sensors, 8, 0);
     lv_obj_set_layout(card_sensors, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_sensors, LV_FLEX_FLOW_COLUMN);
@@ -573,7 +573,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card_fan, 1, 0);
     lv_obj_set_style_radius(card_fan, 12, 0);
-    lv_obj_set_style_pad_all(card_fan, 16, 0);
+    lv_obj_set_style_pad_all(card_fan, 12, 0);
     /* pad_gap recortado (era 24) para que el borde inferior de esta card
      * quede mas cerca del de la card de sensores; sigue separando bien
      * Auto/OFF de Min/Max (antes de esto, 12). */
@@ -817,8 +817,8 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
     lv_obj_set_style_border_width(card_solar, 1, 0);
     lv_obj_set_style_radius(card_solar, 12, 0);
-    lv_obj_set_style_pad_all(card_solar, 16, 0);
-    lv_obj_set_style_pad_gap(card_solar, 16, 0);
+    lv_obj_set_style_pad_all(card_solar, 10, 0);   /* compactado 22-sep-2026: */
+    lv_obj_set_style_pad_gap(card_solar, 8, 0);    /* se cortaba por abajo */
     lv_obj_set_layout(card_solar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_solar, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card_solar, LV_FLEX_ALIGN_START,
@@ -851,7 +851,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_soc, 16, 0);
+    lv_obj_set_style_pad_gap(row_soc, 10, 0);
 
     /* SoC de activacion (paso 1 %, rango 80..100). */
     lv_obj_t *col_solon = lv_obj_create(row_soc);
