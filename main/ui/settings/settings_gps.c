@@ -175,6 +175,13 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(page, 4, 0);    /* medido con sonda: sobraban 45 px */
     lv_obj_set_style_pad_row(page, 4, 0);
+    /* 16 por la derecha: la barra de scroll (8 px de ancho + 6 de pad_right, ver
+     * style_settings_scrollbar) vive en x=1010..1018, y las tarjetas, con solo 4
+     * de margen, llegaban a 1020: le pasaban por debajo y la barra se comia su
+     * borde derecho. Se vio al medir la captura del 22-sep (borde en 1017 con la
+     * barra empezando en 1010; en la figura anterior el borde quedaba en 1005, o
+     * sea limpio). Arriba y abajo el margen sigue en 4. */
+    lv_obj_set_style_pad_right(page, 16, 0);
     style_settings_scrollbar(page);
 
     /* ── Estado: la franja de arriba ─────────────────────────────── */
