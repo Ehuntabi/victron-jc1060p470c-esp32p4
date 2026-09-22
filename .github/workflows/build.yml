@@ -20,6 +20,16 @@ jobs:
           target: esp32p4
           path: '.'
 
+      # Tests que no necesitan hardware y verificador de reglas (auditoria 21-sep-2026).
+      # El verificador va DESPUES del build a proposito: comprueba las opciones
+      # criticas dentro del sdkconfig.h que se acaba de generar, que es donde se
+      # descubrio que la IPA nunca estuvo encendida.
+      - name: Test del protocolo mini_proto
+        run: bash test/run.sh
+      - name: Verificador de reglas (opciones criticas, pilas, cadenas, clave)
+        run: bash test/auditar.sh
+
+
   # mini_proto.h se mantiene sincronizado A MANO entre este repo y 35cabina
   # (protocolo UDP compartido, ver la cabecera del fichero). Sin esto, editar
   # solo una copia no falla hasta que los dos aparatos se rechazan los

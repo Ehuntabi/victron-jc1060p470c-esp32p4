@@ -339,7 +339,7 @@ void ui_init(void) {
     if (!s_beep_queue) {
         s_beep_queue = xQueueCreate(1, sizeof(uint8_t));
         if (s_beep_queue) {
-            xTaskCreate(ui_beep_task, "ui_beep", 3072, NULL, 4, NULL);
+            xTaskCreate(ui_beep_task, "ui_beep", 4096, NULL, 4, NULL);
         }
     }
 
@@ -710,7 +710,7 @@ void ui_on_panel_data(const victron_data_t *d) {
             snprintf(product_info, sizeof(product_info), "0x%04X", (unsigned)d->product_id);
         }
     } else {
-        strcpy(product_info, "--");
+        snprintf(product_info, sizeof(product_info), "%s", "--");
     }
 
     ensure_device_layout(ui, d->type);
@@ -1102,7 +1102,7 @@ void ui_set_ble_mac(const uint8_t *mac) {
         return;
     }
 
-    strcpy(ui->current_device_mac, mac_str);
+    snprintf(ui->current_device_mac, sizeof(ui->current_device_mac), "%s", mac_str);
     ui_settings_panel_set_mac(ui, mac_str);
     lvgl_port_unlock();
 }
@@ -1416,7 +1416,7 @@ void ui_update_wifi_ssid(ui_state_t *ui)
         if (nvs_get_str(h, "ssid", ssid, &len) != ESP_OK) ssid[0] = '\0';
         nvs_close(h);
     }
-    if (ssid[0] == '\0') strcpy(ssid, "VictronConfig");
+    if (ssid[0] == '\0') snprintf(ssid, sizeof(ssid), "%s", "VictronConfig");
 
     if (lvgl_port_lock(50)) {
         lv_textarea_set_text(ui->wifi.ssid, ssid);

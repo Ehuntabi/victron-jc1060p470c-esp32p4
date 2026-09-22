@@ -46,3 +46,12 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
 )
 
 target_link_options(__idf_main PRIVATE "-Wl,--defsym=hal_disable_nan_tsf=0")
+
+# ── Analisis estatico (auditoria 21-sep-2026) ──────────────────────────────────
+# -fanalyzer de gcc 13 busca fugas, dobles libres, usos despues de free, NULL sin
+# comprobar y desbordamientos. Es lento, asi que se activa solo cuando se pide:
+#     ANALYZE=1 bash scripts/build_p4.sh build
+if(DEFINED ENV{ANALYZE})
+    target_compile_options(${COMPONENT_LIB} PRIVATE -fanalyzer -Wanalyzer-too-complex)
+    message(STATUS "main: analisis estatico -fanalyzer ACTIVADO")
+endif()

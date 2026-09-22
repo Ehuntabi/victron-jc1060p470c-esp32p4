@@ -684,16 +684,8 @@ bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
 }
 
 /* Fija un control V4L2 del sensor (exposicion/ganancia) y loguea el resultado. */
-static void cam_set_ctrl(int fd, uint32_t id, int32_t val, const char *name)
-{
-    struct v4l2_ext_control c = { .id = id, .value = val };
-    struct v4l2_ext_controls cs = { .ctrl_class = V4L2_CTRL_CLASS_USER, .count = 1, .controls = &c };
-    if (ioctl(fd, VIDIOC_S_EXT_CTRLS, &cs) == 0) {
-        ESP_LOGI(TAG, "ctrl %s=%ld OK", name, (long)val);
-    } else {
-        ESP_LOGW(TAG, "ctrl %s=%ld no aplicado (errno=%d)", name, (long)val, errno);
-    }
-}
+/* cam_set_ctrl(): no la llamaba nadie (auditoria 21-sep-2026: lo dijeron
+ * el compilador y el analizador estatico). */
 
 /* ── Vigilancia por movimiento (modo ausente) ───────────────────────────────
  * Rejilla de luma muestreada del frame; se compara con la anterior contando

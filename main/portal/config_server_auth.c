@@ -201,7 +201,7 @@ void http_auth_init(void)
         }
         esp_err_t err;
         if (need_default_user) {
-            strcpy(user, "victron");
+            snprintf(user, sizeof(user), "%s", "victron");
             err = nvs_set_str(h, "http_user", user);
             if (err != ESP_OK) ESP_LOGW(TAG, "http_user por defecto no se pudo fijar en NVS: %s", esp_err_to_name(err));
         }

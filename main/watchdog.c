@@ -197,7 +197,7 @@ static void wd_zero_count_writer_task(void *arg)
  * un hang de clase flash se pierde solo el diagnostico, no el reinicio. */
 static void wd_force_reset(uint8_t reason_code)
 {
-    xTaskCreate(wd_reason_writer_task, "wd_reason", 3072,
+    xTaskCreate(wd_reason_writer_task, "wd_reason", 4096,
                 (void *)(uintptr_t)reason_code, tskIDLE_PRIORITY + 1, NULL);
     bsp_display_brightness_set(0);
     vTaskDelay(pdMS_TO_TICKS(100));

@@ -289,7 +289,7 @@ void alarma_estado_init(void)
         ESP_LOGE(TAG, "sin cola para el pitido: las alarmas no sonaran");
         return;
     }
-    if (xTaskCreate(alarma_task, "alarma", 3072, NULL, 4, NULL) != pdPASS) {
+    if (xTaskCreate(alarma_task, "alarma", 4096, NULL, 4, NULL) != pdPASS) {
         ESP_LOGE(TAG, "no puedo crear la tarea del pitido");
         vQueueDelete(s_cola_pitido);
         s_cola_pitido = NULL;

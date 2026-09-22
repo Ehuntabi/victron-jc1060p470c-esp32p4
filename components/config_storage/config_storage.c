@@ -393,8 +393,8 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
         // Initialize empty devices (solo en RAM si no se va a persistir)
         for (size_t i = 0; i < VICTRON_MAX_DEVICES; ++i) {
             memset(&stored_devices[i], 0, sizeof(victron_device_config_t));
-            strcpy(stored_devices[i].mac_address, "00:00:00:00:00:00");
-            strcpy(stored_devices[i].device_name, "");
+            snprintf(stored_devices[i].mac_address, sizeof(stored_devices[i].mac_address), "%s", "00:00:00:00:00:00");
+            snprintf(stored_devices[i].device_name, sizeof(stored_devices[i].device_name), "%s", "");
             stored_devices[i].enabled = false;
         }
         if (persist) {
@@ -423,8 +423,8 @@ esp_err_t load_victron_devices(victron_device_config_t *devices_out,
             devices_out[i].device_name[31] = '\0';
         } else {
             memset(&devices_out[i], 0, sizeof(victron_device_config_t));
-            strcpy(devices_out[i].mac_address, "00:00:00:00:00:00");
-            strcpy(devices_out[i].device_name, "");
+            snprintf(devices_out[i].mac_address, sizeof(devices_out[i].mac_address), "%s", "00:00:00:00:00:00");
+            snprintf(devices_out[i].device_name, sizeof(devices_out[i].device_name), "%s", "");
             devices_out[i].enabled = false;
         }
     }
@@ -457,8 +457,8 @@ esp_err_t save_victron_devices(const victron_device_config_t *devices,
             stored_devices[i].mac_address[17] = '\0';
             stored_devices[i].device_name[31] = '\0';
         } else {
-            strcpy(stored_devices[i].mac_address, "00:00:00:00:00:00");
-            strcpy(stored_devices[i].device_name, "");
+            snprintf(stored_devices[i].mac_address, sizeof(stored_devices[i].mac_address), "%s", "00:00:00:00:00:00");
+            snprintf(stored_devices[i].device_name, sizeof(stored_devices[i].device_name), "%s", "");
             memset(stored_devices[i].aes_key, 0, 16);
             stored_devices[i].enabled = false;
         }
@@ -523,7 +523,7 @@ esp_err_t add_victron_device(const uint8_t mac[6], const uint8_t aes_key[16])
         }
 
         // Add to the end of the list
-        strcpy(devices[count].mac_address, mac_str);
+        snprintf(devices[count].mac_address, sizeof(devices[count].mac_address), "%s", mac_str);
         memcpy(devices[count].aes_key, aes_key, 16);
         snprintf(devices[count].device_name, sizeof(devices[count].device_name), 
                  "Device %02X%02X", mac[4], mac[5]);

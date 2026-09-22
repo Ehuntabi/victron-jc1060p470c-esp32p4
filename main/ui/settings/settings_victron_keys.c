@@ -290,7 +290,7 @@ void victron_config_load(ui_state_t *ui)
         if (ui->victron_config.key_textareas[i]) {
             char hex_key[33] = {0};
             for (int j = 0; j < 16; ++j) {
-                sprintf(hex_key + j * 2, "%02X", devices[i].aes_key[j]);
+                snprintf(hex_key + j * 2, 3, "%02X", devices[i].aes_key[j]);  /* 2 hex + NUL */
             }
             lv_textarea_set_text(ui->victron_config.key_textareas[i], hex_key);
         }

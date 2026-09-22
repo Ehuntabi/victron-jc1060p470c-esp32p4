@@ -196,3 +196,14 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 # y las interrupciones respiran entre uno y otro. 2026-08-04.
 CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS=y
 CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS_MAX_LEN=0x20000
+
+# ── Consumo: lo que se puede y lo que no (medido 21-sep-2026) ─────────────────
+# El P4 corre a 360 MHz FIJOS: no tiene DFS (bajar frecuencia automaticamente),
+# y su unica gestion de energia es el light sleep, que hay que probar aparte con
+# la camara MIPI-CSI, el SDIO del C6 y el USB-serie. Por eso NO se activa
+# CONFIG_PM_ENABLE (ademas haria falta meter el componente esp_pm en el build:
+# sin el, el ajuste se descarta en silencio).
+# Lo que SI manda en el consumo de esta placa es la RETROILUMINACION del panel de
+# 7": a pleno rendimiento son 125-250 mA a 12 V (1,5-3 W), y es lo que mas gasta
+# cuando la placa esta ociosa. Por eso el brillo por defecto y el del
+# salvapantallas son bajos (ver config_storage.c y la pantalla de Ajustes).
