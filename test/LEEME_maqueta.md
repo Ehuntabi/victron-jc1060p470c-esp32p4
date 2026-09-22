@@ -40,3 +40,24 @@ contenedores con scroll**, así que se alcanza deslizando: nada queda cortado.
   crecer; por eso conviene repetirlo con datos reales.
 - Solo cubre las pantallas que se abren por código. **Ajustes, galería, modo
   ausente y los diálogos se abren con el dedo**: ahí la comprobación es mirarlos.
+
+---
+
+## Sonda de altura (`alto_pagina_hook.c`)
+
+Versión ligera y rápida: abre cada página de Ajustes, busca la que lleva el
+cartel **"TRAMAS EN CRUDO"** (esa es la del GPS) y dice **hasta qué `y` llega su
+contenido**. El panel mide 600 px de alto, así que cualquier valor por encima de
+599 significa que hay que desplazar.
+
+Es la que se usó el 22-sep-2026 para dejar el GPS sin desplazamiento:
+
+| Medida | Contenido hasta | Resultado |
+|---|---|---|
+| Antes | y = 1387 | sobraba más de una pantalla (las ~40 tramas NMEA se salían de su tarjeta) |
+| Primer recorte | y = 644 | sobraban 45 px |
+| Segundo recorte | y = 602 | sobraban 3 px |
+| Tercero | y = 592 | **entra, con 7 px de margen** |
+
+No compara parejas de objetos (eso es lo que hace `solapes_hook.c` y es más
+lento), así que se puede dejar puesto sin que la interfaz vaya lenta.
