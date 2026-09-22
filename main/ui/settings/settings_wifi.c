@@ -271,7 +271,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * El desplegable de pagina inicial y, JUSTO DEBAJO, el boton para
      * reactivar el portal web (antes era una card independiente a lo ancho). */
     lv_obj_t *card2 = lv_obj_create(cont);
-    lv_obj_set_width(card2, lv_pct(49));
+    lv_obj_set_width(card2, lv_pct(100));  /* el portal, a lo ancho, debajo */
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
@@ -359,7 +359,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                       web_pass, sizeof(web_pass));
 
     lv_obj_t *card4 = lv_obj_create(cont);
-    lv_obj_set_width(card4, lv_pct(100));
+    lv_obj_set_width(card4, lv_pct(49));   /* el ACCESO va arriba, junto al AP */
     lv_obj_set_height(card4, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card4, lv_color_hex(0x1E1E1E), 0);
     lv_obj_set_style_bg_opa(card4, LV_OPA_COVER, 0);
@@ -416,12 +416,19 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                       "clave, y se leen aqui. Ojo: la web va por HTTP sin cifrar, "
                       "protegida solo por la clave Wi-Fi de arriba, no por esta.");
 
-    /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
+    /* Igualar la altura de la card de ACCESO (la que va al lado) a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */
+    /* INTERCAMBIO pedido por el usuario (22-sep-2026): arriba, junto al punto de
+     * acceso, va la tarjeta de ACCESO (usuario y clave, que es lo que hace
+     * falta para entrar desde el movil); la pagina inicial del portal queda
+     * debajo a ancho completo. Es solo el orden del hijo en el contenedor
+     * (flex ROW_WRAP): card1 + card4 arriba, card2 debajo. */
+    lv_obj_move_to_index(card4, 1);
+
     lv_obj_update_layout(cont);
     lv_coord_t h_ap = lv_obj_get_height(card1);
-    if (h_ap > lv_obj_get_height(card2)) {
-        lv_obj_set_height(card2, h_ap);
+    if (h_ap > lv_obj_get_height(card4)) {
+        lv_obj_set_height(card4, h_ap);
     }
 }
 

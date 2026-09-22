@@ -26,7 +26,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REPO="Ehuntabi/victron-jc1060p470c-esp32p4"
-IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.4/export.sh}"
+# OJO: esto apuntaba a esp-idf-5.4 y por ahi se colaron las publicaciones de la
+# v2.37 a la v2.43: el CI compilaba con 5.5.5 (correcto) pero los .bin que se
+# publicaban los hace ESTE script, y salian con IDF 5.4.4 y el esp_video viejo
+# (el arbol build/ arrastraba objetos de 5.4 y no se recompilaba el componente).
+# Detectado el 22-sep-2026 al ver que el About de la placa decia 5.4.4.
+# Ademas de corregir la ruta, mas abajo se COMPRUEBA la version dentro del .bin
+# antes de publicar: si no coincide, aborta.
+IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.5/export.sh}"
 APP_BIN="build/joint_spl_145_control.bin"
 # Directorio unico de releases (firmware P4 + app Flutter): solo la ULTIMA
 # version de cada uno, para no liarse entre varios .bin/.apk sueltos por el
@@ -87,9 +94,24 @@ fi
 # refresca en builds incrementales -> el About mostraba datos viejos). Doble
 # seguro: 'reconfigure' re-ejecuta CMake recapturando `git describe`, y borrar el
 # .obj obliga a recompilar esp_app_desc con la fecha/versión de ahora.
-idf.py reconfigure >/dev/null 2>&1 || true
-find build -name esp_app_desc.c.obj -delete 2>/dev/null || true
+# Build DESDE CERO. El incremental no basta: con el arbol de build/ viejo se
+# mezclan objetos compilados con otra version de IDF y el binario sale diciendo
+# una version que no es la que se esta usando (fue justo lo que paso).
+# Unos minutos mas por publicacion, a cambio de que lo que se publica sea lo
+# que se cree que es.
+rm -rf build
 idf.py build
+
+# ── 3b) la version de ESP-IDF que lleva DENTRO el binario == la que se usa ─────
+IDF_VER="$(idf.py --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+EN_BIN="$(strings "$APP_BIN" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ')"
+echo "[info] ESP-IDF en uso: $IDF_VER · versiones dentro del .bin: $EN_BIN"
+case "$EN_BIN" in
+  *"$IDF_VER"*) echo "[ok] el binario lleva el IDF con el que se ha compilado" ;;
+  *) echo "ERROR: el .bin NO lleva $IDF_VER (lleva: $EN_BIN)."
+     echo "       Casi seguro es un arbol de build mezclado: borra build/ y repite."
+     exit 1 ;;
+esac
 
 # ── 4) imagen fusionada para el release ──────────────────────────────────────
 # Limpiar ANTES de generar la nueva: el patron de un release anterior en
