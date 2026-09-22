@@ -54,12 +54,26 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 static void portal_page_cb(lv_event_t *e);
 static void reactivate_portal_cb(lv_event_t *e);
 static void ap_switch_cb(lv_event_t *e);
+static void wifi_pintar_ip_ap(ui_state_t *ui);
 
 /* Namespace NVS donde vive la configuracion Wi-Fi. */
 #define WIFI_NAMESPACE "wifi"
 static void wifi_save_cb(lv_event_t *e);
 static lv_obj_t *s_wifi_estado = NULL;   /* respuesta del boton Guardar */
 void password_toggle_btn_event_cb(lv_event_t *e);
+
+/* Pinta la IP del AP donde toca, o "--" si el AP esta apagado. */
+static void wifi_pintar_ip_ap(ui_state_t *ui)
+{
+    if (!ui || !ui->wifi.ap_ip) return;
+    esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    esp_netif_ip_info_t ip_info = {0};
+    if (ap && esp_netif_get_ip_info(ap, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+        lv_label_set_text_fmt(ui->wifi.ap_ip, "IP: " IPSTR, IP2STR(&ip_info.ip));
+    } else {
+        lv_label_set_text(ui->wifi.ap_ip, "IP: -- (AP apagado)");
+    }
+}
 
 static void ap_switch_cb(lv_event_t *e)
 {
@@ -68,7 +82,6 @@ static void ap_switch_cb(lv_event_t *e)
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
     bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
 
-    (void)ui;
     /* Guardar el nuevo estado en NVS y aplicarlo EN CALIENTE: antes esto solo
      * escribia NVS y sacaba un modal "hay que reiniciar". wifi_ap_init() ya
      * estaba escrita para re-invocarse (flags de init separados, netif creado
@@ -85,6 +98,7 @@ static void ap_switch_cb(lv_event_t *e)
 
     ui_wifi_set_enabled_cache(checked);   /* el icono de la barra cachea el flag */
     config_server_request_wifi_apply();
+    wifi_pintar_ip_ap(ui);   /* encender/apagar cambia la IP del AP (o la deja en --) */
 }
 
 void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
@@ -143,6 +157,15 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     if (ap_enabled) lv_obj_add_state(sw_ap, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_ap, ap_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
     ui->wifi.ap_enable = sw_ap;
+
+    /* IP del punto de acceso: es la direccion a la que hay que entrar desde el
+     * movil para el portal, asi que va AQUI, con el AP, y no en Acerca de
+     * (sugerencia del usuario, 22-sep-2026). Se actualiza al crear la tarjeta y
+     * cada vez que se enciende o apaga el AP. */
+    ui->wifi.ap_ip = lv_label_create(card1);
+    lv_obj_set_style_text_font(ui->wifi.ap_ip, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(ui->wifi.ap_ip, lv_color_hex(0xB0BEC5), 0);
+    wifi_pintar_ip_ap(ui);   /* que se vea ya al entrar, no solo al tocar el interruptor */
 
     /* SSID row: label + input */
     lv_obj_t *ssid_row = lv_obj_create(card1);
@@ -366,6 +389,13 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *c4_hint = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
+    lv_obj_set_width(c4_hint, lv_pct(100));
+    lv_label_set_long_mode(c4_hint, LV_LABEL_LONG_WRAP);
+    /* Ancho completo de la tarjeta y que envuelva sola: antes el texto llevaba
+     * los saltos de linea escritos a mano y quedaba una columna estrecha con
+     * medio ancho de tarjeta vacio (lo vio el usuario, 22-sep-2026). */
+    lv_obj_set_width(c4_hint, lv_pct(100));
+    lv_label_set_long_mode(c4_hint, LV_LABEL_LONG_WRAP);
     /* OJO con este texto, que ya ha mentido una vez (auditado el 14-sep-2026).
      *
      * El 2026-08-07 esto eran DOS niveles: la web abierta y solo /ota, /keys y
@@ -382,10 +412,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * (poniendo PORTAL_REQUIRE_BASIC_AUTH a 0) hay que cambiar ESTE texto a la
      * vez: son la misma decision contada en dos sitios. */
     lv_label_set_text(c4_hint,
-                      "La web, la app del movil y Actualizar (/ota) piden\n"
-                      "este usuario y clave. Se leen aqui. Ojo: la web es HTTP\n"
-                      "sin cifrar, protegida solo por la clave Wi-Fi de arriba,\n"
-                      "no por esta.");
+                      "La web, la app del movil y Actualizar (/ota) piden este usuario y "
+                      "clave, y se leen aqui. Ojo: la web va por HTTP sin cifrar, "
+                      "protegida solo por la clave Wi-Fi de arriba, no por esta.");
 
     /* Igualar la altura de la card "Pagina inicial portal" a la de "Punto de
      * acceso" (la mas alta) para que ambas queden simetricas lado a lado. */

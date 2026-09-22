@@ -83,16 +83,9 @@ static void about_refresh_dynamic(ui_state_t *ui)
             "RAM libre: int %u KB  |  PSRAM %u KB",
             (unsigned)(free_int / 1024), (unsigned)(free_spi / 1024));
     }
-    /* IP */
-    if (ui->lbl_about_ip) {
-        esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-        esp_netif_ip_info_t ip_info = {0};
-        if (ap && esp_netif_get_ip_info(ap, &ip_info) == ESP_OK) {
-            lv_label_set_text_fmt(ui->lbl_about_ip, "IP AP: " IPSTR, IP2STR(&ip_info.ip));
-        } else {
-            lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
-        }
-    }
+    /* La IP del punto de acceso se movio a Ajustes -> WiFi, a la tarjeta del
+     * propio AP, que es donde tiene sentido buscarla (idea del usuario,
+     * 22-sep-2026). Aqui solo se queda el estado de la placa. */
 }
 
 static void about_timer_cb(lv_timer_t *t)
@@ -216,10 +209,6 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     ui->lbl_about_heap = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
-
-    ui->lbl_about_ip = lv_label_create(card2);
-    lv_obj_set_style_text_font(ui->lbl_about_ip, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(ui->lbl_about_ip, "IP AP: --");
 
     /* Diagnostico de salud: causa del ultimo reset + total de resets WDT/panic */
     s_lbl_wd = lv_label_create(card2);
