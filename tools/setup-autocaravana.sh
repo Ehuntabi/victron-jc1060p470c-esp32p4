@@ -13,9 +13,9 @@
 set -uo pipefail
 
 JOINT_DIR="$HOME/joint"
-IDF_DIR="$HOME/.espressif/esp-idf-5.4"
+IDF_DIR="$HOME/.espressif/esp-idf-5.5"
 IDF_TARGETS="esp32p4,esp32c6,esp32s3"
-IDF_BRANCH="v5.4.4"
+IDF_BRANCH="v5.5.5"
 
 # Colores
 RED='\033[0;31m'
@@ -116,7 +116,7 @@ for name in "${!REPOS_SSH[@]}"; do
 done
 
 # -----------------------------------------------------------------------------
-step "4. Instalar ESP-IDF 5.4.4 (sin sudo, en \$HOME/.espressif/)"
+step "4. Instalar ESP-IDF 5.5.5 (sin sudo, en \$HOME/.espressif/)"
 
 if [ -d "$IDF_DIR" ] && [ -f "$IDF_DIR/export.sh" ]; then
   ok "ESP-IDF ya existe en $IDF_DIR"
@@ -164,7 +164,7 @@ if ! grep -q "alias get_idf" ~/.bashrc; then
   cat >> ~/.bashrc <<'EOF'
 
 # === Victron autocaravana setup (Claude 2026-06-16) ===
-alias get_idf='. $HOME/.espressif/esp-idf-5.4/export.sh'
+alias get_idf='. $HOME/.espressif/esp-idf-5.5/export.sh'
 alias victron='cd ~/joint/victron && get_idf'
 alias pantalla='cd ~/joint/victronsolardisplayesp-multi-device_pantalla_3.5 && get_idf'
 EOF

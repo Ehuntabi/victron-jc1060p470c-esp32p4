@@ -30,7 +30,7 @@ en bring-up (Fase 1).
   reset/PWDN y el MCLK estan bien.
 
 ## esp_video / esp_cam_sensor
-- `esp_video` v2.2.0 (idf >= 5.4, compatible con 5.4.4). Driver: `esp_cam_sensor` -> SC2336.
+- `esp_video` v2.2.0 (idf >= 5.4, compatible con 5.5.5). Driver: `esp_cam_sensor` -> SC2336.
 - Acceso por API V4L2 (open device, set format a baja resolucion, dequeue/enqueue buffers).
 
 ## Referencias

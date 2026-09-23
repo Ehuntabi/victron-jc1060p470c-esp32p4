@@ -21,7 +21,7 @@ Repo: github.com/Ehuntabi/victron-jc1060p470c-esp32p4
   es el de fabrica de la serie M9; los M8 venian a 9600. Solo se escucha NMEA
 
 ## Stack
-- ESP-IDF v5.4.4
+- ESP-IDF v5.5.5 (la que usan el CI y release.sh)
 - LVGL para la UI
 - Workspace: ~/joint/victron
 
@@ -40,7 +40,7 @@ panel JD9165, pero no es parte del componente) vive en
 cambio de layout privado de IDF.
 
 ## Comandos habituales
-- Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.4/export.sh`
+- Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.5/export.sh`
 - Compilar: `idf.py build`
 - Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
 - Monitor: `idf.py -p /dev/ttyACM0 monitor`
@@ -56,7 +56,7 @@ cambio de layout privado de IDF.
 ## CI
 - `.github/workflows/build.yml` (2026-08-14): compila con `idf.py build`
   en cada push/PR via `espressif/esp-idf-ci-action@v1` (docker
-  `espressif/idf:v5.4.4`, target `esp32p4`). Solo pilla errores de
+  `espressif/idf:v5.5.5`, target `esp32p4`). Solo pilla errores de
   COMPILACION, no sustituye probar en la placa.
 - Job `mini_proto_sync` (07-sep-2026): compara byte a byte
   `main/net/mini_proto.h` contra la copia de `Ehuntabi/35cabina` (protocolo

@@ -1,3 +1,5 @@
+> **Nota de vigencia (23-sep-2026):** este documento es un plan histórico de junio; el proyecto va por **ESP-IDF v5.5.5** y el sensor es **OV02C10** (no SC2336). Lo que manda es el README y el código.
+
 # Hito 1: Camara viva + auto-brillo — Plan de implementacion
 
 > **Para ejecutores agenticos:** SUB-SKILL REQUERIDA: usar superpowers:subagent-driven-development

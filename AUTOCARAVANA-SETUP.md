@@ -10,7 +10,7 @@ Para volver al estado de salida si rompes algo: `git checkout pre-autocaravana-2
 
 ## 0. Resumen ejecutivo
 
-3 proyectos, todos ESP-IDF v5.4.4:
+3 proyectos, todos ESP-IDF v5.5.5:
 
 | Proyecto | Hardware | Target | Repo GitHub |
 |---|---|---|---|
@@ -48,7 +48,7 @@ El script hace, sin sudo:
 - Verifica dependencias (git, python3, cmake, etc.)
 - Comprueba grupo `dialout` (necesario para acceso serie)
 - Clona los 2 repos en `~/joint/`
-- Instala ESP-IDF 5.4.4 en `~/.espressif/esp-idf-5.4/` para targets `esp32p4,esp32c6,esp32s3`
+- Instala ESP-IDF 5.5.5 en `~/.espressif/esp-idf-5.5/` para targets `esp32p4,esp32c6,esp32s3`
 - Añade aliases útiles a `~/.bashrc`
 
 Si algo falla sin sudo, el script te lo dice claro y sigue con lo que puede.
@@ -93,7 +93,7 @@ idf.py flash monitor   # rebuild incremental + flash + monitor en uno
 ### Si pierdes el entorno (terminal nueva):
 
 ```bash
-get_idf      # alias que ejecuta . ~/.espressif/esp-idf-5.4/export.sh
+get_idf      # alias que ejecuta . ~/.espressif/esp-idf-5.5/export.sh
 ```
 
 ---
@@ -249,7 +249,7 @@ tar czf /tmp/viaje.tar.gz -C /tmp viaje-autocaravana
 tar xzf /media/$USER/USB/viaje.tar.gz -C ~
 mv ~/viaje-autocaravana/dot-espressif ~/.espressif
 mv ~/viaje-autocaravana/* ~/joint/
-. ~/.espressif/esp-idf-5.4/export.sh   # cargar entorno
+. ~/.espressif/esp-idf-5.5/export.sh   # cargar entorno
 ```
 
 ### 6.3 Desarrollo offline:

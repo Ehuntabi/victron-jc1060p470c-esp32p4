@@ -14,12 +14,12 @@
  *     consecutivos a 60ms para procesar el toggle. NE187 los envia mientras
  *     el usuario tiene el dedo en el boton (~4 frames = 240ms).
  *
- *  3. CADENCIA 60ms. Igual que NE187 (16Hz). La UI ve cambios al instante.
+ *  3. CADENCIA 100 ms (ver NE185_POLL_MS mas abajo). La UI ve cambios al instante.
  *
  *  4. LOOP SINCRONO. cmd -> wait_tx_done -> read 20 bytes -> parse. Sin race.
  *
  *  5. CHECKSUM CORREGIDO (derivado de tramas reales):
- *        b19 = (b5 + b9 + b14 + b15 + 0xB1) & 0xFF
+ *        b19 = suma(b5..b18) & 0xFF   (el checksum viejo era b5+b9+b14+b15+0xB1)
  *     La formula anterior era del repo class142 (NE334), no aplicaba.
  *
  *  6. Quitado check buf[14] == 0xFF (byte 14 es sensor variable, no marcador).

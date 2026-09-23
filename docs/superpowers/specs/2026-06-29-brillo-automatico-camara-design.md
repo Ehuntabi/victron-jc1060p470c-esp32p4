@@ -1,3 +1,5 @@
+> **Nota de vigencia (23-sep-2026):** este documento es un plan histórico de junio; el proyecto va por **ESP-IDF v5.5.5** y el sensor es **OV02C10** (no SC2336). Lo que manda es el README y el código.
+
 # Capacidades de camara (SC2336) — Hito 1: camara viva + auto-brillo
 
 Fecha: 2026-06-29

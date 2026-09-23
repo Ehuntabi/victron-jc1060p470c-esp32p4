@@ -268,7 +268,7 @@ Se conmuta desde **Settings → Logs → botón "MASTER MODE" ⟷ "SNIFF ON"**
    bias**, poner el P4 en **MASTER MODE**. Los tanques deben salir en Overview.
 
 > En el portátil el puerto es **/dev/ttyACM0** (no ttyACM1). Build/flash con
-> `. ~/.espressif/esp-idf-5.4/export.sh` (ESP-IDF v5.4.4).
+> `. ~/.espressif/esp-idf-5.5/export.sh` (ESP-IDF v5.5.5).
 
 ---
 

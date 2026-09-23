@@ -72,5 +72,5 @@ if [ "${1:-}" != "--no-claude" ] && command -v claude >/dev/null 2>&1; then
   exec claude
 else
   echo "[empiezo] LISTO. Para compilar/flashear:"
-  echo "    . ~/.espressif/esp-idf-5.4/export.sh && idf.py build && idf.py -p /dev/ttyACM0 flash monitor"
+  echo "    . ~/.espressif/esp-idf-5.5/export.sh && idf.py build && idf.py -p /dev/ttyACM0 flash monitor"
 fi

@@ -1,1 +1,1 @@
-ESP-IDF v5.4.4-dirty
+ESP-IDF v5.5.5

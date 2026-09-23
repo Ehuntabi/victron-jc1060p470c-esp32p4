@@ -56,7 +56,7 @@ Port realizado por **[Ehuntabi](https://github.com/Ehuntabi)**.
 | **SoC principal** | ESP32-P4 (RISC-V dual core 400 MHz, 32 MB PSRAM, 16 MB Flash) |
 | **SoC WiFi/BT** | ESP32-C6 (SDIO vía esp_hosted: CLK=18, CMD=19, D0..D3=14..17) |
 | **RTC** | RX8025T (I²C 0x32, SDA=7 / SCL=8 compartido con GT911 y ES8311) + pila CR1220 |
-| **microSD** | SDMMC slot 0 IOMUX (CLK=43, CMD=44, D0..D3=39..42), LDO interno ch 4 (3.3 V) |
+| **microSD** | **SPI3 (SDSPI)**, no SDMMC (ver `components/datalogger/datalogger.c`) |
 | **Sensores temperatura** | DS18B20 1-Wire en **GPIO 4** (JP1 pin 13, pullup 4.7 kΩ) |
 | **Ventilador frigo** | PWM LEDC en **GPIO 5** (JP1 pin 15), 18 kHz. El pin 15 ataca, a través de un optoacoplador **PC817**, un MOSFET **IRLR7843** con resistencia en serie en puerta, resistencia de pull-down y diodo **1N4148** de rueda libre |
 | **Audio** | Codec ES8311 + amplificador NS4150 (PA_CTRL=11, I²S MCLK=13/BCLK=12/LRCK=10/DOUT=9) |
@@ -129,7 +129,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 
 #### Display satélite de cabina (UDP + HTTP)
 - El satélite es la **3,5" de la cabina** (`~/joint/35cabina`).
-- Broadcast **UDP** (1 Hz) desde el AP del 7" (`192.168.4.255:4242`). Payload compacto (**38 bytes, versión 4**, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador), aguas del NE185, `epoch_local` (el reloj, que el satélite no tiene) y `gps_estado`. Protocolo compartido en `main/net/mini_proto.h`, **byte a byte idéntico** en los dos firmwares. Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
+- Broadcast **UDP** (1 Hz) desde el AP del 7" (`192.168.4.255:4242`). Payload compacto (**40 bytes, versión 5**, CRC32) con SoC/V/A de batería, canal auxiliar del shunt (batería motor), frigo (temperatura + ventilador), aguas del NE185, `epoch_local` (el reloj, que el satélite no tiene) y `gps_estado`. Protocolo compartido en `main/net/mini_proto.h`, **byte a byte idéntico** en los dos firmwares. Es "plan B" porque `esp_hosted` no exporta ESP-NOW.
 - **Solo se manda lo FRESCO** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), no lo que hubo alguna vez: si el SmartShunt deja de hablar, a los 30 s se manda el centinela de "no hay dato" y el satélite lo enseña apagado. Mandar el último valor conocido sería un dato viejo con pinta de actual, que es peor que no tener dato.
 - **La vuelta va por HTTP**, no por UDP: el satélite le manda a la P4 los apuntes del cuaderno con `POST /api/viaje` (ver abajo). Por TCP se sabe con certeza que han llegado.
 
@@ -158,7 +158,7 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Backup horario del epoch del sistema en NVS (`rtc_backup/epoch`).
 
 #### Qué se borra solo de la tarjeta
-- **Logs diarios a 60 días** (`log_cleanup.c`): `/sdcard/frigo`, `/sdcard/bateria` y `/sdcard/ne185v` (este último escribe una línea por minuto y no lo limpiaba nadie hasta el 24-ago-2026). Solo borra ficheros con el nombre exacto `AAAA-MM-DD.csv`, y **nunca hoy ni ayer** aunque se le pida menos retención, para no chocar con una escritura en curso. Si el reloj no tiene fecha fiable, **aborta** en vez de borrar a ciegas.
+- **Logs diarios a 120 días** (`log_cleanup.c`; las fotos de vigilancia siguen a 60): `/sdcard/frigo`, `/sdcard/bateria` y `/sdcard/ne185v` (este último escribe una línea por minuto y no lo limpiaba nadie hasta el 24-ago-2026). Solo borra ficheros con el nombre exacto `AAAA-MM-DD.csv`, y **nunca hoy ni ayer** aunque se le pida menos retención, para no chocar con una escritura en curso. Si el reloj no tiene fecha fiable, **aborta** en vez de borrar a ciegas.
 - **Fotos de vigilancia a 60 días**: son carpetas de sesión `/sdcard/vigilancia/AAAAMMDD_HHMMSS/` con hasta 300 JPEG dentro — unos 60-120 KB cada uno, o sea **hasta ~35 MB por sesión**. El tope de 300 es POR SESIÓN y las sesiones no tienen límite: nada las borraba, y al llenarse la tarjeta se lleva por delante el cuaderno de viaje. Retención elegida por el usuario; son pruebas de un allanamiento y por eso 60 días y no menos.
 - **NO se toca nunca**: `/sdcard/viajes`, `/sdcard/vehiculo` ni `/sdcard/config_backup`. Eso es justo lo que hay que conservar.
 
@@ -202,13 +202,13 @@ Páginas con cards de borde de color, dropdown scrollable cuando hay overflow, s
 - Sincronización automática de hora (`<img>` GET → `/settime`, compatible captive portal).
 
 #### Backup/restore de configuración
-- Exporta brightness, view_mode, zona horaria, modo nocturno, screensaver, alerts, dispositivos Victron (MAC + AES + nombre) y flag debug a `/sdcard/config_backup.json` con cJSON.
+- Exporta brightness, view_mode, zona horaria, modo nocturno, screensaver, alerts y flag debug. **OJO: las claves AES de los Victron NO se exportan a propósito** (el respaldo es un fichero de texto en la SD) a `/sdcard/config_backup.json` con cJSON.
 - Importa desde el mismo fichero. La contraseña Wi-Fi **no** se exporta por seguridad.
 - Botones Exportar/Importar en Settings → About.
 
 ### Compilación
 
-Requisitos: **ESP-IDF v5.4.4 exactamente**, target esp32p4. Otras versiones rompen el panel DSI.
+Requisitos: **ESP-IDF v5.5.5 exactamente**, target esp32p4 (es la que usan el CI, `release.sh` y los `.bin` publicados).
 
 ```bash
 git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
@@ -333,7 +333,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 
 #### Cabin satellite display (UDP + HTTP)
 - The satellite is the **3.5" cabin display** (`~/joint/35cabina`).
-- **UDP** broadcast (1 Hz) from the 7" AP (`192.168.4.255:4242`). Compact payload (**38 bytes, version 4**, CRC32) with battery SoC/V/A, shunt aux channel (starter battery), fridge (temperature + fan), NE185 water levels, `epoch_local` (the clock the satellite doesn't have) and `gps_estado`. Shared protocol in `main/net/mini_proto.h`, **byte-for-byte identical** in both firmwares. It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
+- **UDP** broadcast (1 Hz) from the 7" AP (`192.168.4.255:4242`). Compact payload (**40 bytes, version 5**, CRC32) with battery SoC/V/A, shunt aux channel (starter battery), fridge (temperature + fan), NE185 water levels, `epoch_local` (the clock the satellite doesn't have) and `gps_estado`. Shared protocol in `main/net/mini_proto.h`, **byte-for-byte identical** in both firmwares. It's "plan B" because `esp_hosted` doesn't export ESP-NOW.
 - **Only FRESH data is sent** (`bat_fresh`, `dcdc_fresh`, `cd.fresh`), never "we had it once": if the SmartShunt goes quiet, after 30 s the no-data sentinel is sent and the satellite greys it out. Sending the last known value would be stale data wearing a current-data face, which is worse than no data at all.
 - **The return path is HTTP**, not UDP: the satellite posts trip notes to the P4 with `POST /api/viaje` (see below). Over TCP you know for certain they arrived.
 
@@ -347,7 +347,7 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Hourly NVS backup of the system epoch (`rtc_backup/epoch`).
 
 #### What gets deleted from the card automatically
-- **Daily logs after 60 days** (`log_cleanup.c`): `/sdcard/frigo`, `/sdcard/bateria` and `/sdcard/ne185v` (the latter writes one line per minute and nothing cleaned it until 2026-08-24). Only files named exactly `YYYY-MM-DD.csv`, and **never today or yesterday** even if asked for a shorter retention, so it can't race an in-flight write. If the clock has no trustworthy date it **aborts** instead of deleting blindly.
+- **Daily logs after 120 days** (`log_cleanup.c`; surveillance photos stay at 60): `/sdcard/frigo`, `/sdcard/bateria` and `/sdcard/ne185v` (the latter writes one line per minute and nothing cleaned it until 2026-08-24). Only files named exactly `YYYY-MM-DD.csv`, and **never today or yesterday** even if asked for a shorter retention, so it can't race an in-flight write. If the clock has no trustworthy date it **aborts** instead of deleting blindly.
 - **Surveillance photos after 60 days**: session folders `/sdcard/vigilancia/YYYYMMDD_HHMMSS/` holding up to 300 JPEGs — 60-120 KB each, i.e. **up to ~35 MB per session**. The 300 cap is PER SESSION and sessions were unbounded: nothing ever deleted them, and a full card takes the trip notebook down with it.
 - **Never touched**: `/sdcard/viajes`, `/sdcard/vehiculo` or `/sdcard/config_backup`. That's exactly what must be kept.
 
@@ -390,13 +390,13 @@ Pages with role-coloured cards, scrollbar visible on overflow, separators betwee
 - Automatic time sync via `<img>` GET → `/settime` (captive-portal compatible).
 
 #### Configuration backup/restore
-- Exports brightness, view_mode, timezone, night mode, screensaver, alerts, Victron devices (MAC + AES + name) and debug flag to `/sdcard/config_backup.json` via cJSON.
+- Exports brightness, view_mode, timezone, night mode, screensaver, alerts and debug flag. **NOTE: Victron AES keys are deliberately NOT exported** (the backup is plain text on the SD card) to `/sdcard/config_backup.json` via cJSON.
 - Imports from the same file. The Wi-Fi password is **not** exported for safety.
 - Export/Import buttons in Settings → About.
 
 ### Build
 
-Requirements: **ESP-IDF v5.4.4 exactly**, target esp32p4. Other versions break the DSI panel.
+Requirements: **ESP-IDF v5.5.5 exactly**, target esp32p4 (the one used by CI, `release.sh` and the published `.bin`s).
 
 ```bash
 git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4

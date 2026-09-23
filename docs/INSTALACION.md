@@ -198,4 +198,4 @@ En **macOS** y **Linux** el driver ya viene incluido; no se instala nada.
 
 ---
 
-> **Para desarrolladores:** si tienes ESP-IDF v5.4.4 y el código fuente, puedes compilar y grabar directamente con `idf.py -p <PUERTO> flash`. La imagen fusionada del release es para instalar **sin** compilar nada.
+> **Para desarrolladores:** si tienes ESP-IDF v5.5.5 y el código fuente, puedes compilar y grabar directamente con `idf.py -p <PUERTO> flash`. La imagen fusionada del release es para instalar **sin** compilar nada.
