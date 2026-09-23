@@ -1,3 +1,4 @@
+#include "fonts/fonts_es.h"
 #include "ausente_mode.h"
 #include "esp_log.h"
 #include <lvgl.h>

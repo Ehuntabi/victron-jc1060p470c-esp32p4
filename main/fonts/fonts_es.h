@@ -27,6 +27,21 @@ extern const lv_font_t lv_font_inter_semibold_24;
 #define lv_font_montserrat_28_es lv_font_inter_28_es
 #define lv_font_montserrat_46    lv_font_inter_46
 
+/* v3.8: y tambien los nombres SIN sufijo. Hasta hoy, quien escribia
+ * `lv_font_montserrat_24` (sin _es) obtenia la Montserrat DE LVGL, que solo trae
+ * ASCII: el texto salia sin acentos y en OTRA tipografia que el resto de la
+ * pantalla. Paso en la pagina de GPS (por eso estaba toda escrita sin acentos:
+ * "POSICION", "Sin senal del modulo"), en el panel del frigo, en la galeria y en
+ * el modo ausente. Los ficheros lv_font_inter_* ya llevan la Montserrat como
+ * fallback, asi que los simbolos LV_SYMBOL_* se siguen viendo.
+ * El 32 no tiene Inter equivalente: se queda en el 28 del resto de valores
+ * grandes de la misma tarjeta (el SOC de la pila y su tension). */
+#define lv_font_montserrat_14 lv_font_inter_14_es
+#define lv_font_montserrat_20 lv_font_inter_20_es
+#define lv_font_montserrat_24 lv_font_inter_24_es
+#define lv_font_montserrat_28 lv_font_inter_28_es
+#define lv_font_montserrat_32 lv_font_inter_28_es
+
 #ifdef __cplusplus
 }
 #endif

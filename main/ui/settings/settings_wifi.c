@@ -128,7 +128,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *card1 = lv_obj_create(cont);
     lv_obj_set_width(card1, lv_pct(49));
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
@@ -278,7 +278,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *card2 = lv_obj_create(cont);
     lv_obj_set_width(card2, lv_pct(100));  /* el portal, a lo ancho, debajo */
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card2, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card2, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card2, 1, 0);
@@ -382,7 +382,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *card4 = lv_obj_create(cont);
     lv_obj_set_width(card4, lv_pct(49));   /* el ACCESO va arriba, junto al AP */
     lv_obj_set_height(card4, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card4, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card4, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card4, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card4, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card4, 1, 0);

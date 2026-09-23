@@ -1,4 +1,6 @@
 #include "gallery.h"
+#include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_CARD) */
+#include "fonts/fonts_es.h"     /* tipografia unica de la app (Inter con acentos) */
 
 #include <string.h>
 #include <strings.h>
@@ -514,7 +516,7 @@ static void gallery_show_delete_confirm(const char *msg)
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 560, 240);
     lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
@@ -636,7 +638,8 @@ void ui_gallery_open(void)
     lv_obj_remove_style_all(scr);
     lv_obj_set_size(scr, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_pos(scr, 0, 0);
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+        /* v3.8: fondo de pagina de la paleta, no negro puro (coherencia con el resto) */
+    lv_obj_set_style_bg_color(scr, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_move_foreground(scr);

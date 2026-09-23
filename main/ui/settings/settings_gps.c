@@ -18,6 +18,7 @@
 #include "settings_panel.h"
 #include "settings_common.h"
 #include "ui/widgets/ui_card.h"     /* paleta compartida (UI_COLOR_CARD / _BORDER) */
+#include "fonts/fonts_es.h"     /* tipografia unica de la app (Inter con acentos) */
 #include "gps/gps.h"
 #include "data/trip_computer.h"
 
@@ -39,7 +40,7 @@
 #define COL_MORADO   0xB388FF
 
 static lv_obj_t *s_punto;      /* circulo de color del estado */
-static lv_obj_t *s_estado;     /* "Posicion fijada" / ... */
+static lv_obj_t *s_estado;     /* "Posición fijada" / ... */
 static lv_obj_t *s_nota;       /* la linea de debajo: que hacer */
 static lv_obj_t *s_sats;       /* el numero grande */
 static lv_obj_t *s_sats_lbl;   /* "satelites" / "a la vista" */
@@ -96,28 +97,28 @@ static void refresco_cb(lv_timer_t *t)
     uint32_t col;
     if (!g.hay_datos) {
         col = COL_ROJO;
-        lv_label_set_text(s_estado, "Sin senal del modulo");
+        lv_label_set_text(s_estado, "Sin señal del módulo");
         lv_label_set_text(s_nota, "Revisa el cable: RX en GPIO 3, TX en GPIO 2.\n"
-                                  "Si no llega ni una trama, no es cuestion de esperar.");
+                                  "Si no llega ni una trama, no es cuestión de esperar.");
         lv_label_set_text(s_sats, "--");
-        lv_label_set_text(s_sats_lbl, "SATELITES");
+        lv_label_set_text(s_sats_lbl, "SATÉLITES");
     } else if (!g.hay_fix) {
         col = COL_AMBAR;
-        lv_label_set_text(s_estado, "Buscando satelites");
+        lv_label_set_text(s_estado, "Buscando satélites");
         lv_label_set_text(s_nota, "Al aire libre tarda uno o dos minutos la primera vez.\n"
                                   "Bajo techo o entre edificios puede no llegar a fijar.");
         lv_label_set_text_fmt(s_sats, "%u", (unsigned)g.satelites);
         lv_label_set_text(s_sats_lbl, "A LA VISTA");
     } else {
         col = COL_VERDE;
-        lv_label_set_text(s_estado, "Posicion fijada");
+        lv_label_set_text(s_estado, "Posición fijada");
         uint32_t n = gps_sincronizaciones();
-        if (n == 0) lv_label_set_text(s_nota, "El reloj todavia no se ha puesto en hora con el GPS.");
+        if (n == 0) lv_label_set_text(s_nota, "El reloj todavía no se ha puesto en hora con el GPS.");
         else        lv_label_set_text_fmt(s_nota, "Reloj puesto en hora con el GPS %lu vez%s.\n"
                                                   "Se repasa cada 6 horas.",
                                           (unsigned long)n, n == 1 ? "" : "es");
         lv_label_set_text_fmt(s_sats, "%u", (unsigned)g.satelites);
-        lv_label_set_text(s_sats_lbl, "SATELITES");
+        lv_label_set_text(s_sats_lbl, "SATÉLITES");
     }
     lv_obj_set_style_bg_color(s_punto, lv_color_hex(col), 0);
     /* El marco de la franja de arriba es el mismo aviso que el punto y el
@@ -141,10 +142,10 @@ static void refresco_cb(lv_timer_t *t)
      * resta es la perdida. */
     char pot[72];
     if (g.snr_cuantos > 0) {
-        snprintf(pot, sizeof(pot), "Senal      %u dB-Hz el mejor, %u de media (%u sat.)",
+        snprintf(pot, sizeof(pot), "Señal      %u dB-Hz el mejor, %u de media (%u sat.)",
                  (unsigned)g.snr_mejor, (unsigned)g.snr_medio, (unsigned)g.snr_cuantos);
     } else {
-        snprintf(pot, sizeof(pot), "Senal      -- (ningun satelite a la vista)");
+        snprintf(pot, sizeof(pot), "Señal      -- (ningún satélite a la vista)");
     }
 
     if (g.hay_fix) {
@@ -180,7 +181,7 @@ static void refresco_cb(lv_timer_t *t)
         if (w < 0 || (size_t)w >= sizeof(buf) - u) break;
         u += (size_t)w;
     }
-    lv_label_set_text(s_crudo, u ? buf : "(nada todavia)");
+    lv_label_set_text(s_crudo, u ? buf : "(nada todavía)");
 }
 
 void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
@@ -238,7 +239,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(s_sats_lbl, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_sats_lbl, lv_color_hex(COL_APAGADO), 0);
     lv_obj_set_style_text_letter_space(s_sats_lbl, 2, 0);
-    lv_label_set_text(s_sats_lbl, "SATELITES");
+    lv_label_set_text(s_sats_lbl, "SATÉLITES");
     lv_obj_align(s_sats_lbl, LV_ALIGN_TOP_RIGHT, 0, 56);
 
     /* ── Posicion y hora, repartiendose el ancho ─────────────────── */
@@ -256,7 +257,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_column(fila, 6, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *cpos = tarjeta(fila, "POSICION", lv_pct(100), COL_AZUL);
+    lv_obj_t *cpos = tarjeta(fila, "POSICIÓN", lv_pct(100), COL_AZUL);
     lv_obj_set_flex_grow(cpos, 3);
     s_pos = lv_label_create(cpos);
     lv_obj_set_style_text_font(s_pos, &lv_font_montserrat_24, 0);
@@ -284,7 +285,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * tipografia de ancho fijo en el firmware, asi que no quedaran alineadas. */
     lv_obj_set_style_text_font(s_crudo, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_crudo, lv_color_hex(COL_APAGADO), 0);
-    lv_label_set_text(s_crudo, "(nada todavia)");
+    lv_label_set_text(s_crudo, "(nada todavía)");
     lv_obj_set_width(s_crudo, lv_pct(100));
     /* Recortar, no envolver: asi una trama larga no ocupa dos lineas ni descoloca */
     lv_label_set_long_mode(s_crudo, LV_LABEL_LONG_CLIP);

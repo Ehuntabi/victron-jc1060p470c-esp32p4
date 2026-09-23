@@ -32,7 +32,7 @@ extern "C" {
 
 /* ── Card contenedor con borde de color por rol ─────────────────── */
 /* Devuelve un objeto LVGL configurado como card vertical (flex column,
- * pad UI_PAD_CARD, gap UI_GAP_CARD, bg UI_COLOR_CARD, border de 2 px del
+ * pad UI_PAD_CARD, gap UI_GAP_CARD, bg UI_COLOR_CARD, border de 3 px del
  * color indicado, radius UI_RADIUS_CARD). El caller añade hijos. */
 lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color);
 
@@ -60,13 +60,13 @@ lv_obj_t *ui_card_set_title_img(lv_obj_t *card, const lv_img_dsc_t *img_src,
 lv_obj_t *ui_metric_create(lv_obj_t *parent, const char *label_text);
 
 /* Variante compacta para cards estrechas (default_battery 31% ancho, etc.):
- * label font_14, valor font_24, unidad font_14. Mismo layout y API que
- * ui_metric_set. */
+ * rotulo font_24, valor font_46, unidad font_24 (aprovecha el alto que sobre
+ * al no compartir fila). Mismo layout y API que ui_metric_set. */
 lv_obj_t *ui_metric_create_compact(lv_obj_t *parent, const char *label_text);
 
 /* Variante grande para cards que ocupan todo el ancho de pantalla:
- * label font_24, valor font_46 (sin acentos, glifos solo ASCII), unidad
- * font_24. Para los valores numéricos típicos (12.84, +1.2, etc.). */
+ * rotulo font_24, valor font_46, unidad font_24. Para los valores numéricos
+ * típicos (12.84, +1.2, etc.); desde la v3.8 el 46 es Inter, con acentos. */
 lv_obj_t *ui_metric_create_large(lv_obj_t *parent, const char *label_text);
 
 /* Actualiza valor y unidad de una métrica creada con ui_metric_create.

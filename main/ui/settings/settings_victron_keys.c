@@ -91,7 +91,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 600, 280);
     lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
@@ -710,7 +710,7 @@ static void victron_show_confirm_modal(const char *msg,
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 560, 240);
     lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
     lv_obj_set_style_border_width(dlg, 2, 0);

@@ -8,6 +8,7 @@
  */
 #include "settings_panel.h"
 #include "settings_common.h"
+#include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_CARD) */
 #include "ui/vigilancia/ausente_mode.h"
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
@@ -145,7 +146,7 @@ void create_ausente_card(lv_obj_t *cont)
     lv_obj_t *card_aus = lv_obj_create(cont);
     lv_obj_set_width(card_aus, lv_pct(100));
     lv_obj_set_height(card_aus, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_aus, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_aus, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_aus, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card_aus, 1, 0);
@@ -220,7 +221,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card1 = lv_obj_create(cont);
     lv_obj_set_width(card1, lv_pct(100));
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card1, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card1, lv_color_hex(0xFF7043), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
@@ -300,7 +301,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card2 = lv_obj_create(cont);
     lv_obj_set_width(card2, lv_pct(100));
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card2, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card2, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
     lv_obj_set_style_border_width(card2, 1, 0);
@@ -375,7 +376,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card3 = lv_obj_create(cont);
     lv_obj_set_width(card3, lv_pct(100));
     lv_obj_set_height(card3, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card3, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card3, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card3, 1, 0);

@@ -183,7 +183,7 @@ static void ov_show_state_info(uint8_t state)
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 600, 280);
     lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(dlg, ov_state_color(state), 0);
     lv_obj_set_style_border_width(dlg, 3, 0);

@@ -1,5 +1,6 @@
 #include "fonts/fonts_es.h"
 #include "ui/widgets/lv_font_thermometer.h"
+#include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_CARD) */
 #include "frigo_panel.h"
 #include "alerts.h"
 #include "esp_lvgl_port.h"
@@ -405,7 +406,7 @@ static void mostrar_aviso_sondas(uint8_t flags)
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 600, 280);
     lv_obj_center(dlg);
-    lv_obj_set_style_bg_color(dlg, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(dlg, lv_color_hex(0xFFBB33), 0);  /* ambar: atencion */
     lv_obj_set_style_border_width(dlg, 2, 0);
@@ -518,7 +519,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *card_sensors = lv_obj_create(tab);
     lv_obj_set_width(card_sensors, lv_pct(49));
     lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_sensors, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_sensors, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card_sensors, 1, 0);
@@ -568,7 +569,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *card_fan = lv_obj_create(tab);
     lv_obj_set_width(card_fan, lv_pct(49));
     lv_obj_set_height(card_fan, LV_SIZE_CONTENT);  /* ajusta al contenido, sin marco sobrante */
-    lv_obj_set_style_bg_color(card_fan, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_fan, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card_fan, 1, 0);
@@ -812,7 +813,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *card_solar = lv_obj_create(tab);
     lv_obj_set_width(card_solar, lv_pct(100));
     lv_obj_set_height(card_solar, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_solar, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_solar, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_solar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
     lv_obj_set_style_border_width(card_solar, 1, 0);

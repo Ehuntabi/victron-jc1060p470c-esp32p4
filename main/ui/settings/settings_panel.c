@@ -317,7 +317,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *card_cap = lv_obj_create(cont);
     lv_obj_set_width(card_cap, lv_pct(100));
     lv_obj_set_height(card_cap, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_cap, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_cap, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
     lv_obj_set_style_border_width(card_cap, 1, 0);
@@ -362,7 +362,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *card_view = lv_obj_create(cont);
     lv_obj_set_width(card_view, lv_pct(100));
     lv_obj_set_height(card_view, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_view, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_view, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_view, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_view, lv_color_hex(0x26C6DA), 0);  /* cyan */
     lv_obj_set_style_border_width(card_view, 1, 0);
@@ -413,7 +413,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *card_bak = lv_obj_create(cont);
     lv_obj_set_width(card_bak, lv_pct(100));
     lv_obj_set_height(card_bak, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_bak, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_bak, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
     lv_obj_set_style_border_width(card_bak, 1, 0);
@@ -502,7 +502,7 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_t *card_auto = lv_obj_create(cont);
     lv_obj_set_width(card_auto, lv_pct(100));
     lv_obj_set_height(card_auto, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_auto, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_auto, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
     lv_obj_set_style_border_width(card_auto, 1, 0);
@@ -705,14 +705,10 @@ void ui_settings_panel_init(ui_state_t *ui,
             lv_obj_add_event_cb(cont_vk, victron_keys_clicked_cb, LV_EVENT_CLICKED, ui);
         }
     }
-    /* Cards de entrada de Autocaravana un poco menos negras que las del menu
-     * principal (estilo compartido = 0x1A1A1A), para distinguir el submenu. */
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(page_autocaravana); i++) {
-        lv_obj_set_style_bg_color(lv_obj_get_child(page_autocaravana, i),
-                                  lv_color_hex(0x2E2E38), 0);
-    }
+    /* v3.8: fuera el tinte propio del submenu (0x2E2E38): todas las entradas
+     * de Ajustes usan el mismo fondo de la paleta. */
     settings_menu_add_entry(ui, main_page, menu, page_gps,
-        "GPS",           "Posicion, satelites y puesta en hora",
+        "GPS",           "Posición, satélites y puesta en hora",
         LV_SYMBOL_GPS,        0x4CD964, populate_gps);
     s_page_gps_idx = (int)s_page_ctx_count - 1;
     settings_menu_add_entry(ui, main_page, menu, page_about,
@@ -1179,8 +1175,11 @@ static void settings_btn_styles_init(void)
      * icono coloreado, no del fondo de la card. */
     lv_style_init(&s_settings_btn_style);
     lv_style_set_bg_opa(&s_settings_btn_style, LV_OPA_COVER);
-    lv_style_set_bg_color(&s_settings_btn_style, lv_color_hex(0x1A1A1A));
-    lv_style_set_border_color(&s_settings_btn_style, lv_color_hex(0x2A2A2A));
+    /* v3.8: el fondo de las entradas del menu es el de la paleta, el mismo que
+     * el de las tarjetas de dentro: antes eran dos grises propios (0x1A1A1A con
+     * borde 0x2A2A2A) y se notaba al entrar en una pagina. */
+    lv_style_set_bg_color(&s_settings_btn_style, UI_COLOR_CARD);
+    lv_style_set_border_color(&s_settings_btn_style, UI_COLOR_CARD_BORDER);
     lv_style_set_border_width(&s_settings_btn_style, 1);
     lv_style_set_radius(&s_settings_btn_style, 12);
     lv_style_set_pad_all(&s_settings_btn_style, 0);
@@ -1189,7 +1188,7 @@ static void settings_btn_styles_init(void)
 
     /* Pressed: simplemente un poco mas claro, sin pisar el color de rol. */
     lv_style_init(&s_settings_btn_pressed_style);
-    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x2D2D2D));
+    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x2A3446));  /* paleta, un punto mas clara al pulsar */
     s_settings_styles_inited = true;
 }
 

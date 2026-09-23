@@ -13,6 +13,7 @@
  */
 #include "settings_panel.h"
 #include "settings_common.h"
+#include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_CARD) */
 #include "fonts/fonts_es.h"
 
 #include <stdio.h>
@@ -139,7 +140,7 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_t *card_trip = lv_obj_create(cont);
     lv_obj_set_width(card_trip, lv_pct(100));
     lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_trip, lv_color_hex(0x1E1E1E), 0);
+    lv_obj_set_style_bg_color(card_trip, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
     lv_obj_set_style_border_width(card_trip, 1, 0);

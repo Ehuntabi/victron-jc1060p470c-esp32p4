@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_BG / _CARD) */
 #include "fonts/fonts_es.h"
 #include "audio_es8311.h"
 #include "freertos/FreeRTOS.h"
@@ -244,7 +245,8 @@ void ui_show_battery_history_screen(ui_state_t *ui)
 
     lv_obj_t *prev = lv_scr_act();
     lv_obj_t *scr = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+        /* v3.8: fondo de pagina de la paleta, no negro puro (coherencia con el resto) */
+    lv_obj_set_style_bg_color(scr, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     s_bh_screen = scr;
     s_bh_prev_screen = prev;
@@ -380,7 +382,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
      * casi toda la pantalla, deslizar donde es natural no cambiaba de dia. */
     lv_obj_add_flag(chart, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
-    lv_obj_set_style_bg_color(chart, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_color(chart, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(chart, lv_color_hex(0x333333), 0);
     lv_chart_set_div_line_count(chart, 5, 8);
