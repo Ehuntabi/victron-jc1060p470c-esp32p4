@@ -663,7 +663,7 @@ void ui_gallery_open(void)
 
     s_lbl_hint = lv_label_create(scr);
     lv_obj_set_style_text_font(s_lbl_hint, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(s_lbl_hint, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_lbl_hint, UI_COLOR_YELLOW, 0);
     lv_obj_set_style_text_align(s_lbl_hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(s_lbl_hint, "");
     lv_obj_center(s_lbl_hint);

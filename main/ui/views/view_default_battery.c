@@ -155,7 +155,7 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_obj_set_style_pad_all(view->spark_chart, 0, 0);
     lv_obj_clear_flag(view->spark_chart, LV_OBJ_FLAG_SCROLLABLE);
     view->spark_ser = lv_chart_add_series(view->spark_chart,
-                                          lv_color_hex(0x4FC3F7),
+                                          UI_COLOR_CYAN,
                                           LV_CHART_AXIS_PRIMARY_Y);
 
     /* ── Card Solar (verde) ─────────────────────────────────────── */

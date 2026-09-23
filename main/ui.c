@@ -144,7 +144,7 @@ static void volume_icon_timer_cb(lv_timer_t *t)
     if (muted != last_muted) {
         lv_label_set_text(ui->lbl_volume, muted ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
         lv_obj_set_style_text_color(ui->lbl_volume,
-            muted ? lv_color_hex(0xFF4444) : lv_color_white(), 0);
+            muted ? UI_COLOR_RED : lv_color_white(), 0);
         last_muted = muted;
     }
     /* Refresca wifi icon. Leer NVS solo UNA vez y cachear en RAM: hacerlo en cada
@@ -360,7 +360,7 @@ void ui_init(void) {
     /* Color de texto en estado activo: blanco */
     lv_obj_set_style_text_color(tab_btns, lv_color_white(), LV_PART_ITEMS | LV_STATE_CHECKED);
     /* Indicador (linea bajo el activo) en azul */
-    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x4FC3F7), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(tab_btns, UI_COLOR_CYAN, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_height(tab_btns, 4, LV_PART_INDICATOR);
     lv_obj_set_style_radius(tab_btns, 2, LV_PART_INDICATOR);
@@ -491,7 +491,7 @@ void ui_init(void) {
             nvs_close(h);
         }
         lv_obj_set_style_text_color(ui->lbl_wifi,
-            en ? lv_color_hex(0x4FC3F7) : lv_color_hex(0x666666), 0);
+            en ? UI_COLOR_CYAN : lv_color_hex(0x666666), 0);
     }
     /* (Indicador "12V sol" de la barra inferior QUITADO el 15-sep-2026:
      * ahora el chivato del excedente solar es el COLOR del aro del
@@ -643,7 +643,7 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     if (ui->lbl_ble) {
         lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
-        lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x00C851), 0);
+        lv_obj_set_style_text_color(ui->lbl_ble, UI_COLOR_GREEN, 0);
     }
     s_last_ble_data_us = esp_timer_get_time();
 

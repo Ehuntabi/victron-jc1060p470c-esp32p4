@@ -473,7 +473,7 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     /* Temperatura, justificada a la derecha (termina junto al selector) */
     lv_obj_t *lbl_val = lv_label_create(row);
     lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_val, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(lbl_val, UI_COLOR_CYAN, 0);
     lv_obj_set_width(lbl_val, 95);   /* holgado: el Congelador llega a "-18.5 °C" (signo -) */
     lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(lbl_val, "-- \xc2\xb0""C");
@@ -521,9 +521,9 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_height(card_sensors, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_sensors, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_sensors, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_sensors, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_style_border_width(card_sensors, 1, 0);
-    lv_obj_set_style_radius(card_sensors, 12, 0);
+    lv_obj_set_style_border_color(card_sensors, UI_COLOR_CYAN, 0);
+    lv_obj_set_style_border_width(card_sensors, 2, 0);
+    lv_obj_set_style_radius(card_sensors, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_sensors, 12, 0);
     lv_obj_set_style_pad_gap(card_sensors, 8, 0);
     lv_obj_set_layout(card_sensors, LV_LAYOUT_FLEX);
@@ -536,9 +536,9 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * dibuja el fallback a Montserrat que llevan las fuentes de texto. */
     lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
     lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(lbl_sec1, UI_COLOR_CYAN, 0);
     lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
-    ui_card_wrap_title(card_sensors, lbl_sec1, lv_color_hex(0x4FC3F7));
+    ui_card_wrap_title(card_sensors, lbl_sec1, UI_COLOR_CYAN);
 
     /* Filas sensores */
     make_sensor_row(card_sensors, ui, "Aletas:",
@@ -557,7 +557,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * la pantalla encendida, sin tener que reiniciar. */
     lv_obj_t *btn_buscar = lv_btn_create(card_sensors);
     lv_obj_set_height(btn_buscar, 48);
-    lv_obj_set_style_bg_color(btn_buscar, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_bg_color(btn_buscar, UI_COLOR_CYAN, 0);
     lv_obj_set_style_radius(btn_buscar, 10, 0);
     lv_obj_add_event_cb(btn_buscar, buscar_sondas_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *lbl_buscar = lv_label_create(btn_buscar);
@@ -572,9 +572,9 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_height(card_fan, LV_SIZE_CONTENT);  /* ajusta al contenido, sin marco sobrante */
     lv_obj_set_style_bg_color(card_fan, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_fan, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_fan, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card_fan, 1, 0);
-    lv_obj_set_style_radius(card_fan, 12, 0);
+    lv_obj_set_style_border_color(card_fan, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(card_fan, 2, 0);
+    lv_obj_set_style_radius(card_fan, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_fan, 12, 0);
     /* pad_gap recortado (era 24) para que el borde inferior de esta card
      * quede mas cerca del de la card de sensores; sigue separando bien
@@ -592,7 +592,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *lbl_fan_sec = lv_label_create(card_fan);
     /* El LV_SYMBOL_REFRESH lo dibuja el fallback a Montserrat. */
     lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(lbl_fan_sec, UI_COLOR_GREEN, 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     /* Valor real del PWM del ventilador (%). Vira gris->naranja->rojo igual que
      * el aro-gauge de la vista principal, para que ambas representaciones del
@@ -605,7 +605,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_width(s_lbl_fan, 110);
     lv_obj_set_style_text_align(s_lbl_fan, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(s_lbl_fan, "-- %");
-    ui_card_wrap_title_with(card_fan, lbl_fan_sec, lv_color_hex(0x00C851), s_lbl_fan);
+    ui_card_wrap_title_with(card_fan, lbl_fan_sec, UI_COLOR_GREEN, s_lbl_fan);
 
     /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
     lv_obj_t *row_mode = lv_obj_create(card_fan);
@@ -638,7 +638,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *sep = lv_obj_create(card_fan);
     lv_obj_remove_style_all(sep);
     lv_obj_set_size(sep, lv_pct(85), 1);
-    lv_obj_set_style_bg_color(sep, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(sep, UI_COLOR_GREEN, 0);
     lv_obj_set_style_bg_opa(sep, LV_OPA_30, 0);
 
     /* Fila T_Min y T_Max: dos columnas lado a lado (min | max); cada
@@ -664,7 +664,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     lv_obj_t *lbl_tmin = lv_label_create(col_min);
     lv_obj_set_style_text_font(lbl_tmin, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_tmin, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(lbl_tmin, UI_COLOR_CYAN, 0);
     lv_label_set_text(lbl_tmin, "Min:");
 
     lv_obj_t *sel_min = lv_obj_create(col_min);
@@ -695,7 +695,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_tmin_p = lv_btn_create(sel_min);
     lv_obj_set_size(s_btn_tmin_p, 44, 44);
     lv_obj_set_style_radius(s_btn_tmin_p, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_tmin_p, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_p, UI_COLOR_CYAN, 0);
     lv_obj_t *lbl_mp = lv_label_create(s_btn_tmin_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
@@ -756,7 +756,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *sep2 = lv_obj_create(card_fan);
     lv_obj_remove_style_all(sep2);
     lv_obj_set_size(sep2, lv_pct(85), 1);
-    lv_obj_set_style_bg_color(sep2, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(sep2, UI_COLOR_GREEN, 0);
     lv_obj_set_style_bg_opa(sep2, LV_OPA_30, 0);
 
     /* PWM min - suelo de arranque del ventilador (calibracion del MOSFET).
@@ -772,7 +772,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     lv_obj_t *lbl_fanmin = lv_label_create(col_fanmin);
     lv_obj_set_style_text_font(lbl_fanmin, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_fanmin, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(lbl_fanmin, UI_COLOR_GREEN, 0);
     lv_label_set_text(lbl_fanmin, "PWM min:");
 
     s_btn_fanmin_m = lv_btn_create(col_fanmin);
@@ -795,7 +795,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_fanmin_p = lv_btn_create(col_fanmin);
     lv_obj_set_size(s_btn_fanmin_p, 44, 44);
     lv_obj_set_style_radius(s_btn_fanmin_p, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_fanmin_p, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_fmp = lv_label_create(s_btn_fanmin_p);
     lv_label_set_text(lbl_fmp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_fmp, &lv_font_montserrat_24, 0);
@@ -814,8 +814,8 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(card_solar, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_solar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
-    lv_obj_set_style_border_width(card_solar, 1, 0);
-    lv_obj_set_style_radius(card_solar, 12, 0);
+    lv_obj_set_style_border_width(card_solar, 2, 0);
+    lv_obj_set_style_radius(card_solar, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_solar, 10, 0);   /* compactado 22-sep-2026: */
     lv_obj_set_style_pad_gap(card_solar, 8, 0);    /* se cortaba por abajo */
     lv_obj_set_layout(card_solar, LV_LAYOUT_FLEX);
@@ -831,7 +831,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_label_set_text(lbl_solar_sec, LV_SYMBOL_CHARGE "  Aprovechar excedente solar");
 
     lv_obj_t *sw_solar = lv_switch_create(card_solar);
-    lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sw_solar, UI_COLOR_GREEN, LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
     ui_card_wrap_title_with(card_solar, lbl_solar_sec, lv_color_hex(0xE0900A), sw_solar);
@@ -875,7 +875,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *btn_solon_p = lv_btn_create(col_solon);
     lv_obj_set_size(btn_solon_p, 44, 44);
     lv_obj_set_style_radius(btn_solon_p, 8, 0);
-    lv_obj_set_style_bg_color(btn_solon_p, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(btn_solon_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_sop = lv_label_create(btn_solon_p);
     lv_label_set_text(lbl_sop, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_sop, &lv_font_montserrat_24, 0);
@@ -911,7 +911,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *btn_soloff_p = lv_btn_create(col_soloff);
     lv_obj_set_size(btn_soloff_p, 44, 44);
     lv_obj_set_style_radius(btn_soloff_p, 8, 0);
-    lv_obj_set_style_bg_color(btn_soloff_p, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(btn_soloff_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_sfp = lv_label_create(btn_soloff_p);
     lv_label_set_text(lbl_sfp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_sfp, &lv_font_montserrat_24, 0);

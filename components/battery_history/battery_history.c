@@ -18,7 +18,6 @@ static void bh_flush_to_sd_impl(void);
 static bool bh_flush_to_sd_dated(time_t file_date);
 static void bh_reset_for_new_day(void);
 static const char *TAG = "bathist";
-#define NVS_NS "bathist"
 #define BH_LOG_DIR "/sdcard/bateria"
 /* 10 min y no 1 (24-ago-2026). Este era el que mas escribia de todo el aparato:
  * muestrea cada 10 s, asi que en cada vuelco SIEMPRE tenia algo pendiente y

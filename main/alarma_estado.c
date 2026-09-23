@@ -5,6 +5,7 @@
  * congelador), el silencio por alarma, y el pitido de 5 s cada 5 minutos.
  */
 #include "alarma_estado.h"
+#include "ui/widgets/ui_card.h"   /* paleta: colores por nombre */
 #include "net/mini_proto.h"      /* MINI_ALARM_*, el bitmask que viaja */
 #include "ui.h"                  /* ui_get_freezer_alarm() */
 #include "data/dashboard_state.h" /* SoC y su frescura (alarma de bateria) */
@@ -235,7 +236,7 @@ static void aviso_crear(void)
     lv_obj_add_flag(s_aviso, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(s_aviso, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_text_font(s_aviso, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_aviso, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_aviso, UI_COLOR_YELLOW, 0);
     lv_obj_set_style_bg_color(s_aviso, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(s_aviso, LV_OPA_70, 0);
     lv_obj_set_style_pad_all(s_aviso, 8, 0);

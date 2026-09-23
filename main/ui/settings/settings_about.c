@@ -189,9 +189,9 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card2, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_border_width(card2, 1, 0);
-    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_border_color(card2, UI_COLOR_ORANGE, 0);
+    lv_obj_set_style_border_width(card2, 2, 0);
+    lv_obj_set_style_radius(card2, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card2, 12, 0);
     lv_obj_set_style_pad_gap(card2, 6, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
@@ -199,9 +199,9 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card2_title = lv_label_create(card2);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_REFRESH "  Estado");
-    ui_card_wrap_title(card2, card2_title, lv_color_hex(0xFF9800));
+    ui_card_wrap_title(card2, card2_title, UI_COLOR_ORANGE);
 
     ui->lbl_about_uptime = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20_es, 0);
@@ -220,7 +220,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
      * 13-sep-2026). */
     lv_obj_set_width(s_lbl_wd, lv_pct(100));
     lv_label_set_long_mode(s_lbl_wd, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_color(s_lbl_wd, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_lbl_wd, UI_COLOR_YELLOW, 0);
     about_refresh_wd_label();
 
     /* Poner a cero el contador de reinicios por vigilante/fallo. La fecha y el
@@ -243,8 +243,8 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_bg_color(card3, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card3, lv_color_hex(0x666666), 0);
-    lv_obj_set_style_border_width(card3, 1, 0);
-    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_border_width(card3, 2, 0);
+    lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card3, 12, 0);
     lv_obj_set_style_pad_gap(card3, 4, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
@@ -258,7 +258,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Boton Reiniciar pequeno en la esquina */
     lv_obj_t *btn_reboot_hdr = lv_btn_create(card3);
     lv_obj_set_size(btn_reboot_hdr, 130, 40);
-    lv_obj_set_style_bg_color(btn_reboot_hdr, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_bg_color(btn_reboot_hdr, UI_COLOR_RED_DARK, 0);
     lv_obj_set_style_radius(btn_reboot_hdr, 8, 0);
     lv_obj_t *lbl_reboot_hdr = lv_label_create(btn_reboot_hdr);
     lv_label_set_text(lbl_reboot_hdr, LV_SYMBOL_POWER "  Reiniciar");

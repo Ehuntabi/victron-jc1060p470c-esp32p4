@@ -1,4 +1,5 @@
 #include "splash.h"
+#include "ui/widgets/ui_card.h"   /* paleta: colores por nombre */
 #include "icons/icons.h"
 #include "fonts/fonts_es.h"
 #include "config_storage.h"
@@ -55,13 +56,13 @@ bool splash_show(void)
     /* Texto principal */
     lv_obj_t *title = lv_label_create(s_screen);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, "Joint SPL 145 Control");
 
     /* Sub-texto */
     lv_obj_t *sub = lv_label_create(s_screen);
     lv_obj_set_style_text_font(sub, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(sub, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(sub, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(sub, "Iniciando...");
 
     /* Barra de progreso */
@@ -70,7 +71,7 @@ bool splash_show(void)
     lv_bar_set_range(s_bar, 0, 100);
     lv_bar_set_value(s_bar, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_bar, lv_color_hex(0x2D3340), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(s_bar, lv_color_hex(0xFF9800), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_bar, UI_COLOR_ORANGE, LV_PART_INDICATOR);
     lv_obj_set_style_radius(s_bar, 6, LV_PART_MAIN);
     lv_obj_set_style_radius(s_bar, 6, LV_PART_INDICATOR);
 

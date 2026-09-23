@@ -295,10 +295,26 @@ static void arreglar_cabecera_si_hace_falta(const char *path)
 
     fclose(o);
     fclose(f);
-    if (remove(path) == 0 && rename(tmp, path) == 0)
+    /* Cambio de fichero con RESPALDO (23-sep-2026). Antes era remove(path) +
+     * rename(tmp, path): si el rename fallaba despues del remove (FAT llena,
+     * tarjeta arrancada a mitad...), el CSV del dia ya estaba borrado y solo
+     * quedaba el .tmp con otro nombre. Ahora se aparta el original, se pone el
+     * nuevo y solo entonces se borra el respaldo; si el segundo paso falla, se
+     * devuelve el original a su sitio y no se pierde nada. */
+    char bak[84];
+    bool hay_bak = snprintf(bak, sizeof(bak), "%s.bak", path) < (int)sizeof(bak);
+    if (hay_bak) remove(bak);                       /* resto de un intento anterior */
+    if (hay_bak && rename(path, bak) != 0) {        /* 1) apartar el original */
+        ESP_LOGW(TAG, "no he podido apartar %s; se queda como estaba", path);
+        remove(tmp);
+    } else if (rename(tmp, path) != 0) {            /* 2) poner el nuevo */
+        ESP_LOGW(TAG, "no he podido poner el CSV nuevo en %s", path);
+        if (hay_bak) rename(bak, path);             /* 3) devolver el original */
+        remove(tmp);
+    } else {
+        if (hay_bak) remove(bak);                   /* 4) ya sobra el respaldo */
         ESP_LOGI(TAG, "cabecera del CSV actualizada (formato viejo): %s", path);
-    else
-        ESP_LOGW(TAG, "no he podido actualizar la cabecera de %s", path);
+    }
 }
 
 static void flush_pending_to_sd_impl(void)

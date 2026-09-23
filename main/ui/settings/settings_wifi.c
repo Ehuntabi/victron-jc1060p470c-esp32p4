@@ -130,9 +130,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_style_border_width(card1, 1, 0);
-    lv_obj_set_style_radius(card1, 12, 0);
+    lv_obj_set_style_border_color(card1, UI_COLOR_CYAN, 0);
+    lv_obj_set_style_border_width(card1, 2, 0);
+    lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card1, 8, 0);  /* en 600 px sin deslizar  */
     lv_obj_set_style_pad_gap(card1, 8, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
@@ -141,15 +141,15 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     /* Interruptor + cabecera centrada: el switch va en la cabecera, equilibrado
      * por un espaciador (la tarjeta no crece). */
     lv_obj_t *sw_ap = lv_switch_create(card1);
-    lv_obj_set_style_bg_color(sw_ap, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sw_ap, UI_COLOR_CYAN, LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ap_enabled) lv_obj_add_state(sw_ap, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_ap, ap_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_obj_t *card1_title = lv_label_create(card1);
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(card1_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(card1_title, LV_SYMBOL_WIFI "  Punto de acceso");
-    ui_card_wrap_title_with(card1, card1_title, lv_color_hex(0x4FC3F7), sw_ap);
+    ui_card_wrap_title_with(card1, card1_title, UI_COLOR_CYAN, sw_ap);
 
     /* Switch ON/OFF */
     ui->wifi.ap_enable = sw_ap;
@@ -276,9 +276,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card2, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card2, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card2, 1, 0);
-    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_border_color(card2, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(card2, 2, 0);
+    lv_obj_set_style_radius(card2, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card2, 10, 0);
     lv_obj_set_style_pad_gap(card2, 8, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
@@ -310,9 +310,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_t *card2_hdr = lv_label_create(card2);
     lv_obj_set_style_text_font(card2_hdr, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card2_hdr, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(card2_hdr, UI_COLOR_GREEN, 0);
     lv_label_set_text(card2_hdr, LV_SYMBOL_LIST "  Portal web");
-    ui_card_wrap_title(card2, card2_hdr, lv_color_hex(0x00C851));
+    ui_card_wrap_title(card2, card2_hdr, UI_COLOR_GREEN);
 
     /* Fila 1: desplegable de pagina inicial (el titulo ya esta en la cabecera) */
     lv_obj_t *card2_row1 = lv_obj_create(card2_body);
@@ -369,7 +369,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     lv_obj_t *card2_react_title = lv_label_create(card2_row2);
     lv_obj_set_style_text_font(card2_react_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card2_react_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(card2_react_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(card2_react_title, LV_SYMBOL_REFRESH "  Portal web");
 
     lv_obj_t *btn_react = lv_btn_create(card2_row2);
@@ -377,7 +377,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_width(btn_react, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_hor(btn_react, 10, 0);   /* boton mas recogido (lo pidio el usuario) */
     lv_obj_set_style_radius(btn_react, 8, 0);
-    lv_obj_set_style_bg_color(btn_react, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_bg_color(btn_react, UI_COLOR_CYAN, 0);
     lv_obj_t *btn_lbl = lv_label_create(btn_react);
     lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(btn_lbl, lv_color_hex(0x0A0A0A), 0);
@@ -399,9 +399,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_height(card4, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card4, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card4, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card4, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card4, 1, 0);
-    lv_obj_set_style_radius(card4, 12, 0);
+    lv_obj_set_style_border_color(card4, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(card4, 2, 0);
+    lv_obj_set_style_radius(card4, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card4, 10, 0);
     lv_obj_set_style_pad_gap(card4, 6, 0);
     lv_obj_set_layout(card4, LV_LAYOUT_FLEX);
@@ -409,9 +409,9 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     lv_obj_t *c4_title = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(c4_title, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(c4_title, UI_COLOR_GREEN, 0);
     lv_label_set_text(c4_title, LV_SYMBOL_SETTINGS "  Acceso a Actualizar y Claves");
-    ui_card_wrap_title(card4, c4_title, lv_color_hex(0x00C851));
+    ui_card_wrap_title(card4, c4_title, UI_COLOR_GREEN);
 
     lv_obj_t *c4_user = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_user, &lv_font_montserrat_20_es, 0);
@@ -495,7 +495,7 @@ static void wifi_save_cb(lv_event_t *e)
     if (ssid == NULL || ssid[0] == '\0') {
         ESP_LOGW(TAG_SETTINGS, "SSID vacio: no se guarda");
         if (s_wifi_estado) {
-            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_RED, 0);
             lv_label_set_text(s_wifi_estado, "El nombre de la red no puede estar vacio");
         }
         return;
@@ -507,7 +507,7 @@ static void wifi_save_cb(lv_event_t *e)
         ESP_LOGW(TAG_SETTINGS, "SSID de %u caracteres: no se guarda (max 32)",
                  (unsigned)strlen(ssid));
         if (s_wifi_estado) {
-            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_RED, 0);
             lv_label_set_text(s_wifi_estado, "El nombre de la red no puede pasar de 32 caracteres");
         }
         return;
@@ -524,7 +524,7 @@ static void wifi_save_cb(lv_event_t *e)
     if (pass_len < 8) {
         ESP_LOGW(TAG_SETTINGS, "clave WPA2 de %u caracteres: no se guarda", (unsigned)pass_len);
         if (s_wifi_estado) {
-            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_RED, 0);
             lv_label_set_text(s_wifi_estado, "La clave Wi-Fi necesita al menos 8 caracteres (WPA2)");
         }
         return;
@@ -534,7 +534,7 @@ static void wifi_save_cb(lv_event_t *e)
     if (pass_len > 63) {
         ESP_LOGW(TAG_SETTINGS, "clave WPA2 de %u caracteres: no se guarda (max 63)", (unsigned)pass_len);
         if (s_wifi_estado) {
-            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_RED, 0);
             lv_label_set_text(s_wifi_estado, "La clave Wi-Fi no puede pasar de 63 caracteres (WPA2)");
         }
         return;
@@ -553,7 +553,7 @@ static void wifi_save_cb(lv_event_t *e)
     if (err != ESP_OK) {
         ESP_LOGW(TAG_SETTINGS, "Wi-Fi config no persistio: %s", esp_err_to_name(err));
         if (s_wifi_estado) {
-            lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0xFF4444), 0);
+            lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_RED, 0);
             lv_label_set_text(s_wifi_estado, "No se pudo guardar");
         }
         return;

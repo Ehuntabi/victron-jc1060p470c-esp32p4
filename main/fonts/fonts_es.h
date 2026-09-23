@@ -4,6 +4,8 @@
 /* Fuentes Inter-Regular con rango ASCII + acentos españoles + ñ + ¿¡ + °.
  * Generadas con lv_font_conv (range 0x20-0x7F + glifos Latin-1 selectos).
  * Aliasamos los nombres antiguos `lv_font_montserrat_*_es` a las nuevas
+ * (los ficheros lv_font_montserrat_*_es.c se BORRARON el 23-sep-2026: nadie
+ *  referenciaba sus simbolos, solo los nombres, que van por estos alias)
  * `lv_font_inter_*_es` para minimizar cambios en el codigo. */
 
 #include <lvgl.h>
@@ -17,8 +19,6 @@ extern const lv_font_t lv_font_inter_20_es;
 extern const lv_font_t lv_font_inter_24_es;
 extern const lv_font_t lv_font_inter_28_es;
 extern const lv_font_t lv_font_inter_46;
-extern const lv_font_t lv_font_inter_semibold_20;
-extern const lv_font_t lv_font_inter_semibold_24;
 extern const lv_font_t lv_font_inter_semibold_20;
 extern const lv_font_t lv_font_inter_semibold_24;
 

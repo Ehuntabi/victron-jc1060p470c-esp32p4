@@ -138,8 +138,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card1, lv_color_hex(0xBA68C8), 0);
-    lv_obj_set_style_border_width(card1, 1, 0);
-    lv_obj_set_style_radius(card1, 12, 0);
+    lv_obj_set_style_border_width(card1, 2, 0);
+    lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card1, 10, 0);
     lv_obj_set_style_pad_gap(card1, 6, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
@@ -216,8 +216,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_bg_color(card_nm, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_nm, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);
-    lv_obj_set_style_border_width(card_nm, 1, 0);
-    lv_obj_set_style_radius(card_nm, 12, 0);
+    lv_obj_set_style_border_width(card_nm, 2, 0);
+    lv_obj_set_style_radius(card_nm, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_nm, 10, 0);
     lv_obj_set_style_pad_gap(card_nm, 6, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
@@ -335,9 +335,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card3, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card3, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card3, 1, 0);
-    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_border_color(card3, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(card3, 2, 0);
+    lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card3, 10, 0);
     lv_obj_set_style_pad_gap(card3, 6, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
@@ -345,9 +345,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *card3_title = lv_label_create(card3);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(card3_title, UI_COLOR_GREEN, 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
-    ui_card_wrap_title(card3, card3_title, lv_color_hex(0x00C851));
+    ui_card_wrap_title(card3, card3_title, UI_COLOR_GREEN);
 
     ui->view_selection.dropdown = lv_dropdown_create(card3);
     lv_obj_set_width(ui->view_selection.dropdown, lv_pct(100));
@@ -375,9 +375,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card_sp, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_sp, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_sp, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_sp, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_border_width(card_sp, 1, 0);
-    lv_obj_set_style_radius(card_sp, 12, 0);
+    lv_obj_set_style_border_color(card_sp, UI_COLOR_ORANGE, 0);
+    lv_obj_set_style_border_width(card_sp, 2, 0);
+    lv_obj_set_style_radius(card_sp, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_sp, 10, 0);
     lv_obj_set_style_pad_gap(card_sp, 6, 0);
     lv_obj_set_layout(card_sp, LV_LAYOUT_FLEX);
@@ -385,9 +385,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *sp_title = lv_label_create(card_sp);
     lv_obj_set_style_text_font(sp_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(sp_title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(sp_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(sp_title, LV_SYMBOL_IMAGE "  Pantalla de bienvenida");
-    ui_card_wrap_title(card_sp, sp_title, lv_color_hex(0xFF9800));
+    ui_card_wrap_title(card_sp, sp_title, UI_COLOR_ORANGE);
 
     lv_obj_t *sp_dd = lv_dropdown_create(card_sp);
     lv_obj_set_width(sp_dd, lv_pct(100));
@@ -430,13 +430,13 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *card2_title = lv_label_create(title_row);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 
     /* Switch JUNTO al titulo (sin label, mismo estilo que Modo nocturno). */
     ui->screensaver.checkbox = lv_switch_create(title_row);
     lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
-    lv_obj_set_style_bg_color(ui->screensaver.checkbox, lv_color_hex(0xFF9800),
+    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
     lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
@@ -485,9 +485,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     ui->screensaver.slider_brightness = lv_slider_create(row_ss_b);
 
     lv_obj_set_height(ui->screensaver.slider_brightness, 26);
-    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, lv_color_hex(0xFF9800), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, UI_COLOR_ORANGE, LV_PART_INDICATOR);
     lv_obj_set_style_radius(ui->screensaver.slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, lv_color_hex(0xFF9800), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, UI_COLOR_ORANGE, LV_PART_KNOB);
     lv_slider_set_range(ui->screensaver.slider_brightness, 0, ui->brightness);
     if (ui->screensaver.brightness > ui->brightness) ui->screensaver.brightness = ui->brightness;
     /* Pasos de 5: snap del valor inicial al múltiplo más cercano */
@@ -523,7 +523,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *btn_inc = lv_btn_create(cont_to);
     lv_obj_set_size(btn_inc, 40, 40);
-    lv_obj_set_style_bg_color(btn_inc, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_bg_color(btn_inc, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_inc, 8, 0);
     lv_obj_t *lbl_inc = lv_label_create(btn_inc);
     lv_label_set_text(lbl_inc, LV_SYMBOL_PLUS);
@@ -589,7 +589,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *btn_period_inc = lv_btn_create(cont_period);
     lv_obj_set_size(btn_period_inc, 40, 40);
-    lv_obj_set_style_bg_color(btn_period_inc, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_bg_color(btn_period_inc, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_period_inc, 8, 0);
     lv_obj_t *lbl_pinc = lv_label_create(btn_period_inc);
     lv_label_set_text(lbl_pinc, LV_SYMBOL_PLUS);

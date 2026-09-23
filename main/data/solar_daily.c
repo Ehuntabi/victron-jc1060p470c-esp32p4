@@ -86,9 +86,12 @@ static bool anadir_csv(const solar_day_t *d)
     fprintf(f, "%04d-%02d-%02d,%.3f,%.2f,%ld,%.3f\n",
             tm_l.tm_year + 1900, tm_l.tm_mon + 1, tm_l.tm_mday,
             d->kwh, d->horas, (long)d->pico_w, d->kwh_consumo);
-    fclose(f);
+    /* fclose() devuelve error si el ultimo volcado a la SD falla: sin mirarlo,
+     * el dia se daba por guardado y no quedaba ni rastro (auditoria 23-sep). */
+    bool ok = (fclose(f) == 0);
     camera_sd_bus_unlock();
-    return true;
+    if (!ok) ESP_LOGW(TAG, "no he podido cerrar el CSV solar del dia %ld", (long)d->day_id);
+    return ok;
 }
 
 /* Cierra un dia: lo mete en el anillo de historico y lo anade al CSV (o lo

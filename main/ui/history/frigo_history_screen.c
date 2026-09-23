@@ -172,7 +172,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Fecha del log mostrado (centrada arriba) */
     s_frigo_lbl_date = lv_label_create(scr);
     lv_obj_set_style_text_font(s_frigo_lbl_date, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(s_frigo_lbl_date, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_frigo_lbl_date, UI_COLOR_YELLOW, 0);
     lv_label_set_text(s_frigo_lbl_date, "HOY");
     lv_obj_align(s_frigo_lbl_date, LV_ALIGN_TOP_MID, 0, 12);
 
@@ -212,7 +212,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     const char *leyenda[] = {"Aletas", "Congel.", "Exter.", "Fan%", "Sol"};
     lv_color_t colores[]  = {
         lv_color_hex(0x00BFFF),
-        lv_color_hex(0xFF4444),
+        UI_COLOR_RED,
         lv_color_hex(0x44FF44),
         lv_color_hex(0xFFAA00),
         lv_color_hex(0xBB66FF)      /* violeta: el ambar (0xE0900A) se confundia con

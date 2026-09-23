@@ -276,7 +276,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
 
     s_bh_lbl_date = lv_label_create(scr);
     lv_obj_set_style_text_font(s_bh_lbl_date, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(s_bh_lbl_date, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_bh_lbl_date, UI_COLOR_YELLOW, 0);
     lv_label_set_text(s_bh_lbl_date, "HOY (24H)");
     lv_obj_align(s_bh_lbl_date, LV_ALIGN_TOP_MID, 0, 16);
 

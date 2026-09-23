@@ -143,8 +143,8 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_set_style_bg_color(card_trip, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
-    lv_obj_set_style_border_width(card_trip, 1, 0);
-    lv_obj_set_style_radius(card_trip, 12, 0);
+    lv_obj_set_style_border_width(card_trip, 2, 0);
+    lv_obj_set_style_radius(card_trip, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_hor(card_trip, 16, 0);
     lv_obj_set_style_pad_ver(card_trip, 2, 0);     /* menos alto: menos relleno arriba/abajo */
     lv_obj_set_style_pad_gap(card_trip, 4, 0);

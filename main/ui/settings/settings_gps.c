@@ -61,7 +61,7 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto, u
     lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(c, lv_color_hex(acento), 0);
     lv_obj_set_style_border_width(c, 2, 0);
-    lv_obj_set_style_radius(c, 8, 0);
+    lv_obj_set_style_radius(c, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(c, 8, 0);
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
 

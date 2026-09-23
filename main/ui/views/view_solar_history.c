@@ -301,7 +301,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
 
     s_lbl_rotulo = lv_label_create(scr);
     lv_obj_set_style_text_font(s_lbl_rotulo, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(s_lbl_rotulo, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(s_lbl_rotulo, UI_COLOR_YELLOW, 0);
     lv_label_set_text(s_lbl_rotulo, "HOY (24H)");
     lv_obj_align(s_lbl_rotulo, LV_ALIGN_TOP_MID, 0, 16);
 
@@ -344,9 +344,9 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     /* Series: ambar = produccion, azul = consumo (solo se usa en POR DIAS).
      * Se crean antes de fijar point_count, como en el historico de bateria:
      * al reves LVGL redimensiona con cada add_series y se cuelga. */
-    s_ser_a = lv_chart_add_series(chart, lv_color_hex(0xFFD54F), LV_CHART_AXIS_PRIMARY_Y);
+    s_ser_a = lv_chart_add_series(chart, UI_COLOR_YELLOW, LV_CHART_AXIS_PRIMARY_Y);
     vTaskDelay(1);
-    s_ser_b = lv_chart_add_series(chart, lv_color_hex(0x4FC3F7), LV_CHART_AXIS_PRIMARY_Y);
+    s_ser_b = lv_chart_add_series(chart, UI_COLOR_CYAN, LV_CHART_AXIS_PRIMARY_Y);
     vTaskDelay(1);
 
     /* Etiquetas del eje X bajo el chart */

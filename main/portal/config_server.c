@@ -144,10 +144,24 @@ static esp_err_t handle_control(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     char body[80] = {0};
     int total = req->content_len < (int)sizeof(body) - 1 ? req->content_len : (int)sizeof(body) - 1;
-    int got = 0;
+    /* Bucle acotado: tope de esperas SEGUIDAS y plazo total, como en /save y
+     * /api/viaje. Sin esto, un cliente que anuncia Content-Length y luego se
+     * calla (o que va goteando un byte por debajo del timeout) deja girando la
+     * UNICA tarea del httpd y el portal se queda mudo hasta reiniciar.
+     * Auditoria del 23-sep-2026. */
+    const int MAX_ESPERAS = 4;
+    const int64_t plazo_us = 60LL * 1000000LL;
+    const int64_t t0_us = esp_timer_get_time();
+    int esperas = 0, got = 0;
     while (got < total) {
+        if (esp_timer_get_time() - t0_us > plazo_us) {
+            ESP_LOGE(TAG, "/control: plazo agotado con %d/%d bytes, se corta", got, total);
+            return ESP_FAIL;
+        }
         int r = httpd_req_recv(req, body + got, total - got);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
         if (r <= 0) break;
+        esperas = 0;
         got += r;
     }
     body[got] = 0;
@@ -199,23 +213,37 @@ static esp_err_t handle_control(httpd_req_t *req) {
  * la alarma que se quiere callar. Lo manda la cabina con el byte que acaba de
  * recibir en la telemetria, de modo que silencia la que ella ve en pantalla.
  *
- * NO pide autenticacion, igual que /api/viaje: el que puede mandar esto esta ya
- * dentro del SoftAP de la P4 (WPA2), y la orden no hace nada irreversible
- * (calla un pitido). Ponerle Basic Auth solo añadiria un modo de fallo mas
- * (credenciales mal puestas en Ajustes -> silencio que no llega, sin decir por
- * que). Si algun dia esto crece a algo que toque la instalacion, habra que
- * revisarlo.
+ * SI pide autenticacion (23-sep-2026). Antes no la pedia, con el argumento de
+ * que el que puede mandar esto ya esta dentro del SoftAP (WPA2) y la orden no
+ * hace nada irreversible. Dos cosas lo dejan sin base: (1) el AP sale ABIERTO
+ * por un fallo de esp_hosted -- el propio config_server_auth.c lo documenta y
+ * config_server_ap.c para el AP en vez de servirlo sin cifrar; y (2) la cabina
+ * YA manda Basic Auth en /api/viaje, que va por el mismo camino y con las
+ * mismas credenciales (ver net/p4_api.c de la 35cabina), asi que exigirla aqui
+ * no añade ningun modo de fallo nuevo. Era el unico handler del portal sin
+ * REQUIRE_AUTH.
  *
  * Responde {"ok":true,"silenciadas":N}; con N=0 cuando no habia nada que
  * silenciar (la alarma ya no estaba activa), que no es un error: la cabina se
  * entera de que su pantalla iba con retraso respecto a la P4. */
 static esp_err_t handle_api_alarma(httpd_req_t *req) {
+    REQUIRE_AUTH(req);
     char body[96] = {0};
     int total = req->content_len < (int)sizeof(body) - 1 ? req->content_len : (int)sizeof(body) - 1;
-    int got = 0;
+    /* Mismo bucle acotado que /control (ver alli el porque). */
+    const int MAX_ESPERAS = 4;
+    const int64_t plazo_us = 60LL * 1000000LL;
+    const int64_t t0_us = esp_timer_get_time();
+    int esperas = 0, got = 0;
     while (got < total) {
+        if (esp_timer_get_time() - t0_us > plazo_us) {
+            ESP_LOGE(TAG, "/api/alarma: plazo agotado con %d/%d bytes, se corta", got, total);
+            return ESP_FAIL;
+        }
         int r = httpd_req_recv(req, body + got, total - got);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT && ++esperas <= MAX_ESPERAS) continue;
         if (r <= 0) break;
+        esperas = 0;
         got += r;
     }
     body[got] = 0;

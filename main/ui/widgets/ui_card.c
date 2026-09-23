@@ -12,7 +12,9 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color)
     lv_obj_set_style_bg_color(card, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card, border_color, 0);
-    lv_obj_set_style_border_width(card, 3, 0);
+    /* 2 px, el mismo grosor que las tarjetas compactas de Ajustes: un solo
+     * grosor de marco en toda la pantalla (23-sep-2026). */
+    lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card, UI_PAD_CARD, 0);
     lv_obj_set_style_pad_gap(card, UI_GAP_CARD, 0);
@@ -266,21 +268,6 @@ lv_obj_t *ui_metric_create_compact(lv_obj_t *parent, const char *label_text)
     return box;
 }
 
-lv_obj_t *ui_metric_create_large(lv_obj_t *parent, const char *label_text)
-{
-    lv_obj_t *box = ui_metric_create(parent, label_text);
-    /* Aumentar fuentes: title 24, value 46 (ASCII), unit 24 */
-    lv_obj_t *title = lv_obj_get_child(box, 0);
-    lv_obj_t *row   = lv_obj_get_child(box, 1);
-    if (title) lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
-    if (row) {
-        lv_obj_t *value = lv_obj_get_child(row, 0);
-        lv_obj_t *unit  = lv_obj_get_child(row, 1);
-        if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_46, 0);
-        if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_24_es, 0);
-    }
-    return box;
-}
 
 void ui_metric_set(lv_obj_t *metric, const char *value_str,
                    const char *unit_str, lv_color_t value_color)

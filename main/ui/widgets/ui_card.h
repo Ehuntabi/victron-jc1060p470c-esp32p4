@@ -87,11 +87,6 @@ lv_obj_t *ui_metric_create(lv_obj_t *parent, const char *label_text);
  * al no compartir fila). Mismo layout y API que ui_metric_set. */
 lv_obj_t *ui_metric_create_compact(lv_obj_t *parent, const char *label_text);
 
-/* Variante grande para cards que ocupan todo el ancho de pantalla:
- * rotulo font_24, valor font_46, unidad font_24. Para los valores numéricos
- * típicos (12.84, +1.2, etc.); desde la v3.8 el 46 es Inter, con acentos. */
-lv_obj_t *ui_metric_create_large(lv_obj_t *parent, const char *label_text);
-
 /* Actualiza valor y unidad de una métrica creada con ui_metric_create.
  * Si value_color es lv_color_hex(0) se usa UI_COLOR_TEXT. */
 void ui_metric_set(lv_obj_t *metric, const char *value_str,

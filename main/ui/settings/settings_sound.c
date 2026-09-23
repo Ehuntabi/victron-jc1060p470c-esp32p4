@@ -148,9 +148,9 @@ void create_ausente_card(lv_obj_t *cont)
     lv_obj_set_height(card_aus, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_aus, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_aus, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_aus, lv_color_hex(0x4FC3F7), 0);
-    lv_obj_set_style_border_width(card_aus, 1, 0);
-    lv_obj_set_style_radius(card_aus, 12, 0);
+    lv_obj_set_style_border_color(card_aus, UI_COLOR_CYAN, 0);
+    lv_obj_set_style_border_width(card_aus, 2, 0);
+    lv_obj_set_style_radius(card_aus, UI_RADIUS_CARD, 0);
     /* Relleno vertical 8 y separacion 4, IGUAL que las tarjetas vecinas
      * (Energia del viaje, Bombonas). Esta usaba 16 y 8, o sea que era la mas
      * alta de la pagina sin motivo. Entre esto y el texto de una sola linea se
@@ -166,15 +166,15 @@ void create_ausente_card(lv_obj_t *cont)
     /* El interruptor va EN la cabecera (con su espaciador de equilibrio), asi
      * que se crea antes que el titulo y la tarjeta no crece. */
     lv_obj_t *aus_sw = lv_switch_create(card_aus);
-    lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(aus_sw, UI_COLOR_CYAN, LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
     s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
 
     lv_obj_t *aus_title = lv_label_create(card_aus);
     lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
+    lv_obj_set_style_text_color(aus_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
-    ui_card_wrap_title_with(card_aus, aus_title, lv_color_hex(0x4FC3F7), aus_sw);
+    ui_card_wrap_title_with(card_aus, aus_title, UI_COLOR_CYAN, aus_sw);
 
     lv_obj_t *aus_hint = lv_label_create(card_aus);
     lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
@@ -219,8 +219,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card1, lv_color_hex(0xFF7043), 0);
-    lv_obj_set_style_border_width(card1, 1, 0);
-    lv_obj_set_style_radius(card1, 12, 0);
+    lv_obj_set_style_border_width(card1, 2, 0);
+    lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card1, 12, 0);
     lv_obj_set_style_pad_gap(card1, 12, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
@@ -301,9 +301,9 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card2, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card2, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_border_width(card2, 1, 0);
-    lv_obj_set_style_radius(card2, 12, 0);
+    lv_obj_set_style_border_color(card2, UI_COLOR_ORANGE, 0);
+    lv_obj_set_style_border_width(card2, 2, 0);
+    lv_obj_set_style_radius(card2, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card2, 12, 0);
     lv_obj_set_style_pad_gap(card2, 10, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
@@ -312,9 +312,9 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card2_title = lv_label_create(card2);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Batería");
-    ui_card_wrap_title(card2, card2_title, lv_color_hex(0xFF9800));
+    ui_card_wrap_title(card2, card2_title, UI_COLOR_ORANGE);
     /* v3.10: la tarjeta pasa a columna (cabecera centrada arriba) y el contenido
      * de siempre se mete en una fila-cuerpo. */
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
@@ -339,7 +339,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_gap(col_crit, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_crit = lv_label_create(col_crit);
     lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_crit, lv_color_hex(0xFF4444), 0);
+    lv_obj_set_style_text_color(lbl_crit, UI_COLOR_RED, 0);
     lv_label_set_text(lbl_crit, LV_SYMBOL_WARNING " Critico");
     lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
     lv_obj_set_width(dd_crit, 130);
@@ -387,9 +387,9 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card3, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card3, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
-    lv_obj_set_style_border_width(card3, 1, 0);
-    lv_obj_set_style_radius(card3, 12, 0);
+    lv_obj_set_style_border_color(card3, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(card3, 2, 0);
+    lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card3, 12, 0);
     lv_obj_set_style_pad_gap(card3, 10, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
@@ -398,9 +398,9 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card3_title = lv_label_create(card3);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_text_color(card3_title, UI_COLOR_GREEN, 0);
     lv_label_set_text(card3_title, LV_SYMBOL_CHARGE "  Congelador");
-    ui_card_wrap_title(card3, card3_title, lv_color_hex(0x00C851));
+    ui_card_wrap_title(card3, card3_title, UI_COLOR_GREEN);
     /* v3.10: la tarjeta pasa a columna (cabecera centrada arriba) y el contenido
      * de siempre se mete en una fila-cuerpo. */
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);

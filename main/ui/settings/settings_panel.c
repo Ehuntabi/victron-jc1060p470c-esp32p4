@@ -193,7 +193,7 @@ void style_settings_scrollbar(lv_obj_t *page)
 {
     if (!page) return;
     lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_bg_color(page, lv_color_hex(0xFF9800), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(page, UI_COLOR_ORANGE, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(page, LV_OPA_80, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(page, 8, LV_PART_SCROLLBAR);
     lv_obj_set_style_radius(page, 4, LV_PART_SCROLLBAR);
@@ -323,8 +323,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_bg_color(card_cap, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
-    lv_obj_set_style_border_width(card_cap, 1, 0);
-    lv_obj_set_style_radius(card_cap, 12, 0);
+    lv_obj_set_style_border_width(card_cap, 2, 0);
+    lv_obj_set_style_radius(card_cap, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_cap, 12, 0);
     lv_obj_set_style_pad_gap(card_cap, 6, 0);
     lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
@@ -361,8 +361,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_bg_color(card_view, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_view, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_view, lv_color_hex(0x26C6DA), 0);  /* cyan */
-    lv_obj_set_style_border_width(card_view, 1, 0);
-    lv_obj_set_style_radius(card_view, 12, 0);
+    lv_obj_set_style_border_width(card_view, 2, 0);
+    lv_obj_set_style_radius(card_view, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_view, 12, 0);
     lv_obj_set_style_pad_gap(card_view, 6, 0);
     lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
@@ -403,8 +403,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_bg_color(card_bak, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
-    lv_obj_set_style_border_width(card_bak, 1, 0);
-    lv_obj_set_style_radius(card_bak, 12, 0);
+    lv_obj_set_style_border_width(card_bak, 2, 0);
+    lv_obj_set_style_radius(card_bak, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_bak, 12, 0);
     lv_obj_set_style_pad_gap(card_bak, 8, 0);
     lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
@@ -436,7 +436,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *btn_exp = lv_btn_create(bak_row);
     lv_obj_set_size(btn_exp, 200, 50);
-    lv_obj_set_style_bg_color(btn_exp, lv_color_hex(0x00C851), 0);
+    lv_obj_set_style_bg_color(btn_exp, UI_COLOR_GREEN, 0);
     lv_obj_set_style_radius(btn_exp, 10, 0);
     lv_obj_t *lbl_exp = lv_label_create(btn_exp);
     lv_label_set_text(lbl_exp, LV_SYMBOL_UPLOAD "  Exportar");
@@ -445,7 +445,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *btn_imp = lv_btn_create(bak_row);
     lv_obj_set_size(btn_imp, 200, 50);
-    lv_obj_set_style_bg_color(btn_imp, lv_color_hex(0xFF9800), 0);
+    lv_obj_set_style_bg_color(btn_imp, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_imp, 10, 0);
     lv_obj_t *lbl_imp = lv_label_create(btn_imp);
     lv_label_set_text(lbl_imp, LV_SYMBOL_DOWNLOAD "  Importar");
@@ -455,7 +455,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     /* Status label */
     lv_obj_t *bak_status = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_status, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(bak_status, lv_color_hex(0xFFD54F), 0);
+    lv_obj_set_style_text_color(bak_status, UI_COLOR_YELLOW, 0);
     lv_label_set_text(bak_status, "");
 
     lv_obj_set_user_data(btn_exp, bak_status);
@@ -493,8 +493,8 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_set_style_bg_color(card_auto, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
-    lv_obj_set_style_border_width(card_auto, 1, 0);
-    lv_obj_set_style_radius(card_auto, 12, 0);
+    lv_obj_set_style_border_width(card_auto, 2, 0);
+    lv_obj_set_style_radius(card_auto, UI_RADIUS_CARD, 0);
     /* 16 -> 12 (22-sep-2026): la linea de abajo de esta tarjeta, que es la ultima
      * de la pagina Autocaravana, se cortaba por muy poco. */
     lv_obj_set_style_pad_all(card_auto, 6, 0);
@@ -653,7 +653,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_hor(page_autocaravana, 12, 0);
     lv_obj_set_style_pad_top(page_autocaravana, 2, 0);
     lv_obj_set_style_pad_bottom(page_autocaravana, 4, 0);
-    lv_obj_set_style_pad_row(page_autocaravana, 6, 0);
+    lv_obj_set_style_pad_row(page_autocaravana, 4, 0);   /* 2 px menos por hueco: el borde de 2 px de las tarjetas suma 8 en esta pagina */
     lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
     lv_obj_set_layout(page_autocaravana, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(page_autocaravana, LV_FLEX_FLOW_ROW_WRAP);
@@ -1093,7 +1093,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
     if (ui->victron_config.device_type_labels[index]) {
         if (device_type && device_type[0] != '\0') {
             lv_label_set_text_fmt(ui->victron_config.device_type_labels[index], "Device: %s", device_type);
-            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], lv_color_hex(0x00C851), 0); // Green for active
+            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], UI_COLOR_GREEN, 0); // Green for active
         } else {
             lv_label_set_text(ui->victron_config.device_type_labels[index], "Device: --");
             lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
@@ -1104,7 +1104,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
     if (ui->victron_config.product_name_labels[index]) {
         if (product_name && product_name[0] != '\0') {
             lv_label_set_text_fmt(ui->victron_config.product_name_labels[index], "Product: %s", product_name);
-            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], lv_color_hex(0x00C851), 0); // Green for active
+            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], UI_COLOR_GREEN, 0); // Green for active
         } else {
             lv_label_set_text(ui->victron_config.product_name_labels[index], "Product: --");
             lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
@@ -1119,9 +1119,9 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
             if (strstr(error_info, "error") || strstr(error_info, "Error") || strstr(error_info, "ERROR")) {
                 lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0xF44336), 0); // Red for errors
             } else if (strstr(error_info, "Active") || strstr(error_info, "OK") || strstr(error_info, "Connected")) {
-                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0x00C851), 0); // Green for OK
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], UI_COLOR_GREEN, 0); // Green for OK
             } else {
-                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0xFF9800), 0); // Orange for warnings
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], UI_COLOR_ORANGE, 0); // Orange for warnings
             }
         } else {
             lv_label_set_text(ui->victron_config.error_labels[index], "Status: No data");
@@ -1151,7 +1151,7 @@ static void backup_export_cb(lv_event_t *e)
             ? "Exportado a " CONFIG_BACKUP_PATH
             : "ERROR exportando (¿SD montada?)");
         lv_obj_set_style_text_color(status,
-            err == ESP_OK ? lv_color_hex(0x00C851) : lv_color_hex(0xCC3333), 0);
+            err == ESP_OK ? UI_COLOR_GREEN : UI_COLOR_RED_DARK, 0);
     }
 }
 
@@ -1165,7 +1165,7 @@ static void backup_import_cb(lv_event_t *e)
             ? "Importado. Reinicia para aplicar todos los cambios."
             : "ERROR importando (¿fichero existe?)");
         lv_obj_set_style_text_color(status,
-            err == ESP_OK ? lv_color_hex(0x00C851) : lv_color_hex(0xCC3333), 0);
+            err == ESP_OK ? UI_COLOR_GREEN : UI_COLOR_RED_DARK, 0);
     }
 }
 
@@ -1290,7 +1290,7 @@ static settings_page_ctx_t *settings_menu_add_entry(
     settings_btn_styles_init();
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_set_width(cont, lv_pct(48));
-    lv_obj_set_height(cont, 62);
+    lv_obj_set_height(cont, 58);
     settings_card_decor(cont, title, subtitle, icon, accent);
 
     /* Reservar ctx y guardarlo como user_data del page; el handler de
@@ -1355,7 +1355,7 @@ static lv_obj_t *settings_card_btn(lv_obj_t *parent,
     lv_obj_remove_style_all(cont);
     lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_width(cont, lv_pct(95));
-    lv_obj_set_height(cont, 62);
+    lv_obj_set_height(cont, 58);
     settings_card_decor(cont, title, subtitle, icon, accent);
     if (cb) lv_obj_add_event_cb(cont, cb, LV_EVENT_CLICKED, user_data);
     return cont;
