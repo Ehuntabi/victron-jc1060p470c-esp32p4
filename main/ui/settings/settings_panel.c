@@ -715,7 +715,7 @@ void ui_settings_panel_init(ui_state_t *ui,
         LV_SYMBOL_GPS,        0x4CD964, populate_gps);
     s_page_gps_idx = (int)s_page_ctx_count - 1;
     settings_menu_add_entry(ui, main_page, menu, page_about,
-        "Acerca de",     "Sistema, uptime, IP y reinicio",
+        "Acerca de",     "Sistema, uptime y reinicio",
         LV_SYMBOL_LIST,       0x90A4AE, populate_about);
 
 
