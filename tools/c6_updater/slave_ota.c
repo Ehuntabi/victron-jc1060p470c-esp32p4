@@ -94,7 +94,8 @@ static uint8_t *leer_imagen(size_t *tam)
         return NULL;
     }
 
-    if (camera_sd_bus_lock()) {
+    /* El cerrojo del bus SD pide plazo (camera.h): 5 s de sobra para leer 1,2 MB. */
+    if (camera_sd_bus_lock(5000)) {
         FILE *f = fopen(RUTA_IMAGEN, "rb");
         if (!f) {
             ESP_LOGE(TAG, "no puedo abrir %s", RUTA_IMAGEN);
