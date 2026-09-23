@@ -137,25 +137,17 @@ void create_bombona_card(lv_obj_t *cont)
     lv_obj_set_style_border_width(card, 1, 0);
     lv_obj_set_style_radius(card, 12, 0);
     lv_obj_set_style_pad_hor(card, 16, 0);
-    lv_obj_set_style_pad_ver(card, 8, 0);
+    lv_obj_set_style_pad_ver(card, 2, 0);
     lv_obj_set_style_pad_gap(card, 4, 0);
     lv_obj_set_layout(card, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *head = lv_obj_create(card);
-    lv_obj_remove_style_all(head);
-    lv_obj_set_size(head, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(head, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(head, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *title = lv_label_create(head);
+    lv_obj_t *title = lv_label_create(card);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFA726), 0);
     lv_label_set_text(title, LV_SYMBOL_CHARGE "  Bombonas");
 
-    lv_obj_t *btns = lv_obj_create(head);
+    lv_obj_t *btns = lv_obj_create(card);
     lv_obj_remove_style_all(btns);
     lv_obj_set_size(btns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(btns, LV_LAYOUT_FLEX);
@@ -180,6 +172,7 @@ void create_bombona_card(lv_obj_t *cont)
     lv_label_set_text(l2, "Deshacer");
     lv_obj_set_style_text_font(l2, &lv_font_montserrat_20_es, 0);
     lv_obj_center(l2);
+    ui_card_wrap_title_with(card, title, lv_color_hex(0xFFA726), btns);
     lv_obj_add_event_cb(b2, deshacer_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl = lv_label_create(card);

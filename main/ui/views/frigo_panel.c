@@ -532,12 +532,13 @@ void ui_frigo_panel_init(ui_state_t *ui)
     char opts[128];
     build_sensor_options(opts, sizeof(opts), st);
 
-    /* Titulo. Montserrat built-in (no _es) porque Inter no tiene los
-     * LV_SYMBOL_* y el LV_SYMBOL_LIST saldria invisible. */
+    /* Titulo. El nombre sin _es ya es Inter desde la v3.8; el LV_SYMBOL_LIST lo
+     * dibuja el fallback a Montserrat que llevan las fuentes de texto. */
     lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
     lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_sec1, lv_color_hex(0x4FC3F7), 0);
     lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
+    ui_card_wrap_title(card_sensors, lbl_sec1, lv_color_hex(0x4FC3F7));
 
     /* Filas sensores */
     make_sensor_row(card_sensors, ui, "Aletas:",
@@ -588,26 +589,23 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
 
     /* Fila ventilador */
-    lv_obj_t *row_fan_hdr = lv_obj_create(card_fan);
-    lv_obj_remove_style_all(row_fan_hdr);
-    lv_obj_set_style_bg_opa(row_fan_hdr, LV_OPA_TRANSP, 0);
-    lv_obj_set_width(row_fan_hdr, lv_pct(100));
-    lv_obj_set_height(row_fan_hdr, LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_fan_hdr, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_fan_hdr, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_fan_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_t *lbl_fan_sec = lv_label_create(row_fan_hdr);
-    /* Montserrat built-in para que el LV_SYMBOL_REFRESH renderice. */
+    lv_obj_t *lbl_fan_sec = lv_label_create(card_fan);
+    /* El LV_SYMBOL_REFRESH lo dibuja el fallback a Montserrat. */
     lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, lv_color_hex(0x00C851), 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     /* Valor real del PWM del ventilador (%). Vira gris->naranja->rojo igual que
      * el aro-gauge de la vista principal, para que ambas representaciones del
      * ventilador sean coherentes. */
-    s_lbl_fan = lv_label_create(row_fan_hdr);
+    s_lbl_fan = lv_label_create(card_fan);
     lv_obj_set_style_text_font(s_lbl_fan, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(s_lbl_fan, UI_COLOR_TEXT_SOFT, 0);
+    /* Ancho FIJO: el espaciador que centra el titulo se mide con este ancho, y si
+     * cambiara al pasar de "9 %" a "100 %" el titulo bailaria. */
+    lv_obj_set_width(s_lbl_fan, 110);
+    lv_obj_set_style_text_align(s_lbl_fan, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(s_lbl_fan, "-- %");
+    ui_card_wrap_title_with(card_fan, lbl_fan_sec, lv_color_hex(0x00C851), s_lbl_fan);
 
     /* === Segmented control: Modo Auto / OFF / 50% / 100% === */
     lv_obj_t *row_mode = lv_obj_create(card_fan);
@@ -825,26 +823,18 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_align(card_solar, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* Cabecera: titulo a la izquierda y el switch a la derecha, misma linea. */
-    lv_obj_t *row_solar_hdr = lv_obj_create(card_solar);
-    lv_obj_remove_style_all(row_solar_hdr);
-    lv_obj_set_width(row_solar_hdr, lv_pct(100));
-    lv_obj_set_height(row_solar_hdr, LV_SIZE_CONTENT);
-    lv_obj_set_layout(row_solar_hdr, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(row_solar_hdr, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_solar_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *lbl_solar_sec = lv_label_create(row_solar_hdr);
+    lv_obj_t *lbl_solar_sec = lv_label_create(card_solar);
     lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
     /* Con el icono delante, como el resto de tarjetas (22-sep-2026): era la
      * unica de la pestana sin el. */
     lv_label_set_text(lbl_solar_sec, LV_SYMBOL_CHARGE "  Aprovechar excedente solar");
 
-    lv_obj_t *sw_solar = lv_switch_create(row_solar_hdr);
+    lv_obj_t *sw_solar = lv_switch_create(card_solar);
     lv_obj_set_style_bg_color(sw_solar, lv_color_hex(0x00C851), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    ui_card_wrap_title_with(card_solar, lbl_solar_sec, lv_color_hex(0xE0900A), sw_solar);
 
     /* Activar y Cortar en la MISMA linea (dos selectores lado a lado). */
     lv_obj_t *row_soc = lv_obj_create(card_solar);

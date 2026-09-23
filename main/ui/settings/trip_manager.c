@@ -146,27 +146,19 @@ void create_trip_card(lv_obj_t *cont)
     lv_obj_set_style_border_width(card_trip, 1, 0);
     lv_obj_set_style_radius(card_trip, 12, 0);
     lv_obj_set_style_pad_hor(card_trip, 16, 0);
-    lv_obj_set_style_pad_ver(card_trip, 8, 0);     /* menos alto: menos relleno arriba/abajo */
+    lv_obj_set_style_pad_ver(card_trip, 2, 0);     /* menos alto: menos relleno arriba/abajo */
     lv_obj_set_style_pad_gap(card_trip, 4, 0);
     lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *trip_head = lv_obj_create(card_trip);
-    lv_obj_remove_style_all(trip_head);
-    lv_obj_set_size(trip_head, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(trip_head, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(trip_head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(trip_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *trip_title = lv_label_create(trip_head);
+    lv_obj_t *trip_title = lv_label_create(card_trip);
     lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
     lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Energía del viaje");
 
     /* Dos botones sueltos: poner los contadores a cero (normalmente lo hace
      * solo el inicio de viaje de la cabina) y soltar la tarjeta. */
-    lv_obj_t *trip_btns = lv_obj_create(trip_head);
+    lv_obj_t *trip_btns = lv_obj_create(card_trip);
     lv_obj_remove_style_all(trip_btns);
     lv_obj_set_size(trip_btns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(trip_btns, LV_LAYOUT_FLEX);
@@ -191,6 +183,7 @@ void create_trip_card(lv_obj_t *cont)
     lv_label_set_text(lbl_trip_fin, "Soltar tarjeta");
     lv_obj_set_style_text_font(lbl_trip_fin, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_trip_fin);
+    ui_card_wrap_title_with(card_trip, trip_title, lv_color_hex(0x90A4AE), trip_btns);
     lv_obj_add_event_cb(btn_trip_fin, trip_finish_btn_cb, LV_EVENT_CLICKED, NULL);
 
     s_trip_label = lv_label_create(card_trip);

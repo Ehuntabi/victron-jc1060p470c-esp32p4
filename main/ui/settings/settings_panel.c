@@ -313,8 +313,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_all(cont, 10, 0);
+    lv_obj_set_style_pad_gap(cont, 10, 0);
 
     /* === Card Carrusel captura pantalla === */
     lv_obj_t *card_cap = lv_obj_create(cont);
@@ -325,30 +325,23 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
     lv_obj_set_style_border_width(card_cap, 1, 0);
     lv_obj_set_style_radius(card_cap, 12, 0);
-    lv_obj_set_style_pad_all(card_cap, 16, 0);
-    lv_obj_set_style_pad_gap(card_cap, 8, 0);
+    lv_obj_set_style_pad_all(card_cap, 12, 0);
+    lv_obj_set_style_pad_gap(card_cap, 6, 0);
     lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *cap_row = lv_obj_create(card_cap);
-    lv_obj_remove_style_all(cap_row);
-    lv_obj_set_size(cap_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(cap_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(cap_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(cap_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *cap_title = lv_label_create(cap_row);
+    lv_obj_t *cap_title = lv_label_create(card_cap);
     lv_obj_set_style_text_font(cap_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(cap_title, lv_color_hex(0x29B6F6), 0);
     lv_label_set_text(cap_title, LV_SYMBOL_IMAGE "  Carrusel captura pantalla");
 
-    ui->capture_switch = lv_switch_create(cap_row);
+    ui->capture_switch = lv_switch_create(card_cap);
     lv_obj_set_size(ui->capture_switch, 50, 28);
     lv_obj_set_style_bg_color(ui->capture_switch, lv_color_hex(0x29B6F6),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(ui->capture_switch, cb_capture_carousel_cb,
                         LV_EVENT_VALUE_CHANGED, ui);
+    ui_card_wrap_title_with(card_cap, cap_title, lv_color_hex(0x29B6F6), ui->capture_switch);
 
     ui->capture_status_lbl = lv_label_create(card_cap);
     lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
@@ -370,28 +363,18 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_color(card_view, lv_color_hex(0x26C6DA), 0);  /* cyan */
     lv_obj_set_style_border_width(card_view, 1, 0);
     lv_obj_set_style_radius(card_view, 12, 0);
-    lv_obj_set_style_pad_all(card_view, 16, 0);
-    lv_obj_set_style_pad_gap(card_view, 8, 0);
+    lv_obj_set_style_pad_all(card_view, 12, 0);
+    lv_obj_set_style_pad_gap(card_view, 6, 0);
     lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_view, LV_FLEX_FLOW_COLUMN);
 
-    /* Cabecera: titulo a la izquierda, boton a la derecha */
-    lv_obj_t *view_head = lv_obj_create(card_view);
-    lv_obj_remove_style_all(view_head);
-    lv_obj_set_width(view_head, lv_pct(100));
-    lv_obj_set_height(view_head, LV_SIZE_CONTENT);
-    lv_obj_set_layout(view_head, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(view_head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(view_head, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *view_title = lv_label_create(view_head);
+    lv_obj_t *view_title = lv_label_create(card_view);
     lv_obj_set_flex_grow(view_title, 1);
     lv_obj_set_style_text_font(view_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
     lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
 
-    lv_obj_t *btn_gal = lv_btn_create(view_head);
+    lv_obj_t *btn_gal = lv_btn_create(card_view);
     lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
     lv_obj_set_height(btn_gal, 46);
     lv_obj_set_style_pad_hor(btn_gal, 24, 0);
@@ -401,6 +384,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas");
     lv_obj_center(lbl_gal);
+    ui_card_wrap_title_with(card_view, view_title, lv_color_hex(0x26C6DA), btn_gal);
     lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *view_desc = lv_label_create(card_view);
@@ -421,8 +405,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
     lv_obj_set_style_border_width(card_bak, 1, 0);
     lv_obj_set_style_radius(card_bak, 12, 0);
-    lv_obj_set_style_pad_all(card_bak, 16, 0);
-    lv_obj_set_style_pad_gap(card_bak, 12, 0);
+    lv_obj_set_style_pad_all(card_bak, 12, 0);
+    lv_obj_set_style_pad_gap(card_bak, 8, 0);
     lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
 
@@ -430,6 +414,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
     lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Copia de seguridad de la configuracion");
+    ui_card_wrap_title(card_bak, bak_title, lv_color_hex(0x9C27B0));
 
     lv_obj_t *bak_desc = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
@@ -512,23 +497,25 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_set_style_radius(card_auto, 12, 0);
     /* 16 -> 12 (22-sep-2026): la linea de abajo de esta tarjeta, que es la ultima
      * de la pagina Autocaravana, se cortaba por muy poco. */
-    lv_obj_set_style_pad_all(card_auto, 12, 0);
+    lv_obj_set_style_pad_all(card_auto, 6, 0);
     lv_obj_set_style_pad_gap(card_auto, 8, 0);
     lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* v3.10: columna con la cabecera centrada arriba y el interruptor debajo. */
+    lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *auto_title = lv_label_create(card_auto);
-    lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
-    lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
 
     lv_obj_t *auto_sw = lv_switch_create(card_auto);
     lv_obj_set_style_bg_color(auto_sw, lv_color_hex(0xFFAA00),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ne185_get_autostart()) lv_obj_add_state(auto_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(auto_sw, autostart_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *auto_title = lv_label_create(card_auto);
+    lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
+    lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
+    ui_card_wrap_title_with(card_auto, auto_title, lv_color_hex(0xFFAA00), auto_sw);
 }
 
 
@@ -652,23 +639,21 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_column(main_page, 12, 0);
     lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
-    /* El TERCER parametro (track_place) es el que coloca las FILAS de un flujo
-     * ROW_WRAP en el eje cruzado. Iba en CENTER: con la pagina mas alta que su
-     * contenido, el bloque de tarjetas quedaba centrado en vertical y dejaba la
-     * banda vacia de arriba (medido con la sonda: primer hijo en y=93 con
-     * pad_top=4, y el primer contenido en y=108 de la captura). En START el
-     * bloque empieza arriba, como en las vistas. Los dos parametros anteriores
-     * (eje principal y eje cruzado) se probaron el 22-sep SIN EFECTO: en un wrap
-     * el que manda es este. */
-    lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    /* El TERCER parametro (track_place) coloca las FILAS de un flujo ROW_WRAP en
+     * el eje cruzado. En la v3.7 se puso en START para quitar la banda de arriba
+     * (el contenido empezaba en y=108); ahora, con las entradas mas bajas, el
+     * menu dejaba ~140 px muertos abajo y el usuario lo quiere CENTRADO: en
+     * CENTER el bloque queda con el mismo aire arriba y abajo. Horizontal ya esta
+     * centrado: las dos columnas son del 48% con margenes iguales a los lados. */
+    lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Subpagina Autocaravana: mismo layout de 2 columnas que el menu principal.
      * Aqui el vertical se queda en 4: el contenido llega a y=528 de 538 y no
      * cabe un margen mayor sin que aparezca la barra de scroll. */
     lv_obj_set_style_pad_hor(page_autocaravana, 12, 0);
-    lv_obj_set_style_pad_top(page_autocaravana, 4, 0);
-    lv_obj_set_style_pad_bottom(page_autocaravana, 8, 0);
-    lv_obj_set_style_pad_row(page_autocaravana, 12, 0);
+    lv_obj_set_style_pad_top(page_autocaravana, 2, 0);
+    lv_obj_set_style_pad_bottom(page_autocaravana, 4, 0);
+    lv_obj_set_style_pad_row(page_autocaravana, 6, 0);
     lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
     lv_obj_set_layout(page_autocaravana, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(page_autocaravana, LV_FLEX_FLOW_ROW_WRAP);
@@ -1305,7 +1290,7 @@ static settings_page_ctx_t *settings_menu_add_entry(
     settings_btn_styles_init();
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_set_width(cont, lv_pct(48));
-    lv_obj_set_height(cont, 88);
+    lv_obj_set_height(cont, 62);
     settings_card_decor(cont, title, subtitle, icon, accent);
 
     /* Reservar ctx y guardarlo como user_data del page; el handler de
@@ -1370,7 +1355,7 @@ static lv_obj_t *settings_card_btn(lv_obj_t *parent,
     lv_obj_remove_style_all(cont);
     lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_width(cont, lv_pct(95));
-    lv_obj_set_height(cont, 88);
+    lv_obj_set_height(cont, 62);
     settings_card_decor(cont, title, subtitle, icon, accent);
     if (cb) lv_obj_add_event_cb(cont, cb, LV_EVENT_CLICKED, user_data);
     return cont;
@@ -1452,8 +1437,8 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_all(cont, 10, 0);
+    lv_obj_set_style_pad_gap(cont, 10, 0);
 
     lv_obj_t *btn_frigo = settings_card_btn(cont,
         "Nevera",  "Histórico de temperaturas y ventilador",

@@ -122,7 +122,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_all(cont, 8, 0);    /* compactado 22-sep-2026: */
-    lv_obj_set_style_pad_gap(cont, 10, 0);   /* la pagina tiene que caber */
+    lv_obj_set_style_pad_gap(cont, 8, 0);   /* la pagina tiene que caber */
 
     /* === Card 1: Punto de acceso (mitad ancho, lado izdo) === */
     lv_obj_t *card1 = lv_obj_create(cont);
@@ -133,29 +133,25 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card1, lv_color_hex(0x4FC3F7), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
-    lv_obj_set_style_pad_all(card1, 10, 0);  /* en 600 px sin deslizar  */
+    lv_obj_set_style_pad_all(card1, 8, 0);  /* en 600 px sin deslizar  */
     lv_obj_set_style_pad_gap(card1, 8, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
-    /* Header row: titulo + switch on/off */
-    lv_obj_t *card1_header = lv_obj_create(card1);
-    lv_obj_remove_style_all(card1_header);
-    lv_obj_set_size(card1_header, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(card1_header, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card1_header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card1_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *card1_title = lv_label_create(card1_header);
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
-    lv_label_set_text(card1_title, LV_SYMBOL_WIFI "  Punto de acceso");
-
-    /* Switch ON/OFF */
-    lv_obj_t *sw_ap = lv_switch_create(card1_header);
+    /* Interruptor + cabecera centrada: el switch va en la cabecera, equilibrado
+     * por un espaciador (la tarjeta no crece). */
+    lv_obj_t *sw_ap = lv_switch_create(card1);
     lv_obj_set_style_bg_color(sw_ap, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ap_enabled) lv_obj_add_state(sw_ap, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_ap, ap_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    lv_obj_t *card1_title = lv_label_create(card1);
+    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(card1_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(card1_title, LV_SYMBOL_WIFI "  Punto de acceso");
+    ui_card_wrap_title_with(card1, card1_title, lv_color_hex(0x4FC3F7), sw_ap);
+
+    /* Switch ON/OFF */
     ui->wifi.ap_enable = sw_ap;
 
     /* IP del punto de acceso: es la direccion a la que hay que entrar desde el
@@ -300,8 +296,26 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    /* Fila 1: titulo + desplegable de pagina inicial */
-    lv_obj_t *card2_row1 = lv_obj_create(card2);
+    /* v3.10: la tarjeta pasa a columna; las dos columnas de siempre van a una
+     * fila-cuerpo debajo de la cabecera centrada. */
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *card2_body = lv_obj_create(card2);
+    lv_obj_remove_style_all(card2_body);
+    lv_obj_set_size(card2_body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card2_body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2_body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2_body, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_t *card2_hdr = lv_label_create(card2);
+    lv_obj_set_style_text_font(card2_hdr, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(card2_hdr, lv_color_hex(0x00C851), 0);
+    lv_label_set_text(card2_hdr, LV_SYMBOL_LIST "  Portal web");
+    ui_card_wrap_title(card2, card2_hdr, lv_color_hex(0x00C851));
+
+    /* Fila 1: desplegable de pagina inicial (el titulo ya esta en la cabecera) */
+    lv_obj_t *card2_row1 = lv_obj_create(card2_body);
     lv_obj_remove_style_all(card2_row1);
     lv_obj_set_width(card2_row1, lv_pct(62));   /* izquierda: titulo + desplegable */
     lv_obj_set_height(card2_row1, LV_SIZE_CONTENT);
@@ -312,10 +326,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(card2_row1, 6, 0);
 
+    /* Rotulo del desplegable (el titulo de la tarjeta ya esta en la cabecera). */
     lv_obj_t *card2_title = lv_label_create(card2_row1);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card2_title, lv_color_hex(0x00C851), 0);
-    lv_label_set_text(card2_title, LV_SYMBOL_LIST "  Pagina inicial portal");
+    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(card2_title, UI_COLOR_TEXT_SOFT, 0);
+    lv_label_set_text(card2_title, "Página inicial del portal");
 
     /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
     lv_obj_t *dd_portal = lv_dropdown_create(card2_row1);
@@ -339,7 +354,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * El servidor HTTP se apaga solo tras 15 min sin nuevas asociaciones
      * (auto-off por seguridad). Este boton lo arranca de nuevo sin tener
      * que reasociar el movil ni reiniciar el display. */
-    lv_obj_t *card2_row2 = lv_obj_create(card2);
+    lv_obj_t *card2_row2 = lv_obj_create(card2_body);
     lv_obj_remove_style_all(card2_row2);
     lv_obj_set_width(card2_row2, lv_pct(36));   /* derecha: portal web + Reactivar */
     lv_obj_set_height(card2_row2, LV_SIZE_CONTENT);
@@ -396,6 +411,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_font(c4_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(c4_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(c4_title, LV_SYMBOL_SETTINGS "  Acceso a Actualizar y Claves");
+    ui_card_wrap_title(card4, c4_title, lv_color_hex(0x00C851));
 
     lv_obj_t *c4_user = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_user, &lv_font_montserrat_20_es, 0);

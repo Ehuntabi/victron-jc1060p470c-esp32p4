@@ -158,28 +158,23 @@ void create_ausente_card(lv_obj_t *cont)
      * tarjetas de Autocaravana quepan en pantalla (24-ago-2026). El relleno
      * horizontal se queda en 16, que ese no estorba. */
     lv_obj_set_style_pad_hor(card_aus, 16, 0);
-    lv_obj_set_style_pad_ver(card_aus, 8, 0);
+    lv_obj_set_style_pad_ver(card_aus, 2, 0);
     lv_obj_set_style_pad_gap(card_aus, 4, 0);
     lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *aus_row = lv_obj_create(card_aus);
-    lv_obj_remove_style_all(aus_row);
-    lv_obj_set_size(aus_row, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(aus_row, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(aus_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(aus_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *aus_title = lv_label_create(aus_row);
-    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
-    lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
-
-    lv_obj_t *aus_sw = lv_switch_create(aus_row);
+    /* El interruptor va EN la cabecera (con su espaciador de equilibrio), asi
+     * que se crea antes que el titulo y la tarjeta no crece. */
+    lv_obj_t *aus_sw = lv_switch_create(card_aus);
     lv_obj_set_style_bg_color(aus_sw, lv_color_hex(0x4FC3F7), LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(aus_sw, ausente_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
     s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
+
+    lv_obj_t *aus_title = lv_label_create(card_aus);
+    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(aus_title, lv_color_hex(0x4FC3F7), 0);
+    lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
+    ui_card_wrap_title_with(card_aus, aus_title, lv_color_hex(0x4FC3F7), aus_sw);
 
     lv_obj_t *aus_hint = lv_label_create(card_aus);
     lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
@@ -214,8 +209,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_all(cont, 12, 0);
+    lv_obj_set_style_pad_gap(cont, 12, 0);
 
     /* === Card 1: Sonido === */
     lv_obj_t *card1 = lv_obj_create(cont);
@@ -226,7 +221,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_color(card1, lv_color_hex(0xFF7043), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
-    lv_obj_set_style_pad_all(card1, 16, 0);
+    lv_obj_set_style_pad_all(card1, 12, 0);
     lv_obj_set_style_pad_gap(card1, 12, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
@@ -241,11 +236,14 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *card1_title = lv_label_create(title_row);
-    /* Montserrat built-in para que el LV_SYMBOL_VOLUME_MAX se renderice. */
+    /* El LV_SYMBOL_VOLUME_MAX lo dibuja el fallback a Montserrat. */
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 
+    ui_card_wrap_title(card1, card1_title, lv_color_hex(0xFF7043));
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_END,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *lbl_vol = lv_label_create(title_row);
     lv_obj_set_style_text_font(lbl_vol, &lv_font_montserrat_20_es, 0);
     lv_label_set_text_fmt(lbl_vol, "Volumen: %d%%", audio_get_volume());
@@ -306,8 +304,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
     lv_obj_set_style_border_width(card2, 1, 0);
     lv_obj_set_style_radius(card2, 12, 0);
-    lv_obj_set_style_pad_all(card2, 16, 0);
-    lv_obj_set_style_pad_gap(card2, 16, 0);
+    lv_obj_set_style_pad_all(card2, 12, 0);
+    lv_obj_set_style_pad_gap(card2, 10, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -316,9 +314,20 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Bateria");
+    ui_card_wrap_title(card2, card2_title, lv_color_hex(0xFF9800));
+    /* v3.10: la tarjeta pasa a columna (cabecera centrada arriba) y el contenido
+     * de siempre se mete en una fila-cuerpo. */
+    lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *card2_body = lv_obj_create(card2);
+    lv_obj_remove_style_all(card2_body);
+    lv_obj_set_size(card2_body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card2_body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card2_body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card2_body, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    /* row_soc deja de ser child de card2; usa card2 como flex padre directamente */
-    lv_obj_t *row_soc = card2;
+    /* row_soc ya no es la tarjeta: es la fila-cuerpo bajo la cabecera. */
+    lv_obj_t *row_soc = card2_body;
 
     /* SoC Critico */
     lv_obj_t *col_crit = lv_obj_create(row_soc);
@@ -381,8 +390,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card3, 1, 0);
     lv_obj_set_style_radius(card3, 12, 0);
-    lv_obj_set_style_pad_all(card3, 16, 0);
-    lv_obj_set_style_pad_gap(card3, 16, 0);
+    lv_obj_set_style_pad_all(card3, 12, 0);
+    lv_obj_set_style_pad_gap(card3, 10, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -391,8 +400,19 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_CHARGE "  Congelador");
+    ui_card_wrap_title(card3, card3_title, lv_color_hex(0x00C851));
+    /* v3.10: la tarjeta pasa a columna (cabecera centrada arriba) y el contenido
+     * de siempre se mete en una fila-cuerpo. */
+    lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *card3_body = lv_obj_create(card3);
+    lv_obj_remove_style_all(card3_body);
+    lv_obj_set_size(card3_body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(card3_body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card3_body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card3_body, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *row_frigo = card3;
+    lv_obj_t *row_frigo = card3_body;
 
     /* Col minutos */
     lv_obj_t *col_min_a = lv_obj_create(row_frigo);

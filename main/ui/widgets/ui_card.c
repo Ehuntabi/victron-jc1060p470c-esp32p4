@@ -79,7 +79,7 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(header, 10, 0);
     /* Línea fina inferior con el color de acento como separador del body */
-    lv_obj_set_style_pad_bottom(header, 8, 0);
+    lv_obj_set_style_pad_bottom(header, 4, 0);
     lv_obj_set_style_border_color(header, accent, 0);
     lv_obj_set_style_border_width(header, 0, 0);
     lv_obj_set_style_border_side(header, LV_BORDER_SIDE_BOTTOM, 0);
@@ -112,6 +112,57 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
     return header;
 }
 
+/* ── Titulito unificado (v3.10) ─────────────────────────────────────
+ * Mismo aspecto que la cabecera de ui_card_set_title, pero para las tarjetas
+ * que ya tenian su etiqueta de titulo hecha a mano: se la pasa y se reparenta.
+ * La cabecera se coloca la PRIMERA en la tarjeta (lv_obj_move_to_index 0) para
+ * que el resto del contenido quede debajo sin tocarlo. */
+lv_obj_t *ui_card_wrap_title(lv_obj_t *card, lv_obj_t *title, lv_color_t accent)
+{
+    if (!card || !title) return NULL;
+
+    lv_obj_t *header = lv_obj_create(card);
+    lv_obj_remove_style_all(header);
+    lv_obj_set_size(header, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(header, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_bottom(header, 4, 0);
+    /* Linea fina inferior con el color de acento, igual que en las vistas. */
+    lv_obj_set_style_border_color(header, accent, 0);
+    lv_obj_set_style_border_side(header, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_width(header, 2, 0);
+    lv_obj_set_style_border_opa(header, LV_OPA_30, 0);
+    lv_obj_clear_flag(header, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_set_parent(title, header);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_move_to_index(header, 0);
+    return header;
+}
+
+lv_obj_t *ui_card_wrap_title_with(lv_obj_t *card, lv_obj_t *title,
+                                  lv_color_t accent, lv_obj_t *control)
+{
+    lv_obj_t *header = ui_card_wrap_title(card, title, accent);
+    if (!header || !control) return header;
+
+    /* Espaciador a la izquierda del titulo, del ancho del control: asi el titulo
+     * queda en el centro de la tarjeta aunque el control vaya a su derecha. */
+    lv_obj_t *hueco = lv_obj_create(header);
+    lv_obj_remove_style_all(hueco);
+    lv_obj_set_size(hueco, 1, 1);
+    lv_obj_move_to_index(hueco, 0);
+
+    lv_obj_set_parent(control, header);   /* queda detras del titulo */
+    lv_obj_update_layout(control);
+    lv_coord_t w = lv_obj_get_width(control);
+    if (w > 0) lv_obj_set_width(hueco, w);
+    return header;
+}
+
+
 lv_obj_t *ui_card_set_title_img(lv_obj_t *card, const lv_img_dsc_t *img_src,
                                 const char *title, lv_color_t accent)
 {
@@ -124,7 +175,7 @@ lv_obj_t *ui_card_set_title_img(lv_obj_t *card, const lv_img_dsc_t *img_src,
     lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(header, 12, 0);
-    lv_obj_set_style_pad_bottom(header, 8, 0);
+    lv_obj_set_style_pad_bottom(header, 4, 0);
     lv_obj_set_style_border_color(header, accent, 0);
     lv_obj_set_style_border_side(header, LV_BORDER_SIDE_BOTTOM, 0);
     lv_obj_set_style_border_width(header, 2, 0);

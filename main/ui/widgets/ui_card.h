@@ -54,6 +54,22 @@ void ui_card_pulse(lv_obj_t *card);
 lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
                             const char *title, lv_color_t accent);
 
+/* v3.10: pasa el titulito de una tarjeta al estilo unico (cabecera a lo ancho,
+ * titulo CENTRADO y linea fina del acento debajo, el de las vistas). Se le pasa
+ * la etiqueta que la pagina ya tiene: se reparenta a la cabecera y esta queda
+ * como primer hijo de la tarjeta, con el resto del contenido debajo.
+ * Devuelve la cabecera, por si la pagina quiere anadir algo al lado del titulo. */
+lv_obj_t *ui_card_wrap_title(lv_obj_t *card, lv_obj_t *title, lv_color_t accent);
+
+/* Igual, pero dejando un CONTROL en la misma fila de la cabecera (interruptor,
+ * boton pequeno). Para que el titulo siga centrado en la tarjeta se mete delante
+ * un espaciador del mismo ancho que el control: asi no hay que bajar el control a
+ * una fila aparte y la tarjeta NO crece. El control debe tener ancho estable
+ * (un interruptor o un boton); si cambia de ancho con el dato (un valor que pasa
+ * de "9 %" a "100 %"), mejor dejarlo en el cuerpo. */
+lv_obj_t *ui_card_wrap_title_with(lv_obj_t *card, lv_obj_t *title,
+                                  lv_color_t accent, lv_obj_t *control);
+
 /* Variante con icono raster (lv_img_dsc_t embebido) — mismas reglas que
  * ui_card_set_title pero usa una imagen 64x64 (o lo que indique el dsc) en
  * lugar de un glifo de fuente. */

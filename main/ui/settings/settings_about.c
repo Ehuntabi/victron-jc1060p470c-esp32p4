@@ -179,8 +179,8 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
-    lv_obj_set_style_pad_all(cont, 16, 0);
+    lv_obj_set_style_pad_gap(cont, 10, 0);
+    lv_obj_set_style_pad_all(cont, 10, 0);
 
 
     /* === Card 2: Info dinamica === */
@@ -192,8 +192,8 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_color(card2, lv_color_hex(0xFF9800), 0);
     lv_obj_set_style_border_width(card2, 1, 0);
     lv_obj_set_style_radius(card2, 12, 0);
-    lv_obj_set_style_pad_all(card2, 16, 0);
-    lv_obj_set_style_pad_gap(card2, 10, 0);
+    lv_obj_set_style_pad_all(card2, 12, 0);
+    lv_obj_set_style_pad_gap(card2, 6, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_COLUMN);
 
@@ -201,6 +201,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(card2_title, LV_SYMBOL_REFRESH "  Estado");
+    ui_card_wrap_title(card2, card2_title, lv_color_hex(0xFF9800));
 
     ui->lbl_about_uptime = lv_label_create(card2);
     lv_obj_set_style_text_font(ui->lbl_about_uptime, &lv_font_montserrat_20_es, 0);
@@ -244,26 +245,18 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_color(card3, lv_color_hex(0x666666), 0);
     lv_obj_set_style_border_width(card3, 1, 0);
     lv_obj_set_style_radius(card3, 12, 0);
-    lv_obj_set_style_pad_all(card3, 16, 0);
-    lv_obj_set_style_pad_gap(card3, 6, 0);
+    lv_obj_set_style_pad_all(card3, 12, 0);
+    lv_obj_set_style_pad_gap(card3, 4, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
-    /* Header row: titulo a la izquierda, boton reiniciar a la derecha */
-    lv_obj_t *card3_header = lv_obj_create(card3);
-    lv_obj_remove_style_all(card3_header);
-    lv_obj_set_size(card3_header, lv_pct(100), LV_SIZE_CONTENT);
-    lv_obj_set_layout(card3_header, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card3_header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card3_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *card3_title = lv_label_create(card3_header);
+    lv_obj_t *card3_title = lv_label_create(card3);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Version, Repo y Creditos");
 
     /* Boton Reiniciar pequeno en la esquina */
-    lv_obj_t *btn_reboot_hdr = lv_btn_create(card3_header);
+    lv_obj_t *btn_reboot_hdr = lv_btn_create(card3);
     lv_obj_set_size(btn_reboot_hdr, 130, 40);
     lv_obj_set_style_bg_color(btn_reboot_hdr, lv_color_hex(0xCC3333), 0);
     lv_obj_set_style_radius(btn_reboot_hdr, 8, 0);
@@ -271,6 +264,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_label_set_text(lbl_reboot_hdr, LV_SYMBOL_POWER "  Reiniciar");
     lv_obj_set_style_text_font(lbl_reboot_hdr, &lv_font_montserrat_20_es, 0);
     lv_obj_center(lbl_reboot_hdr);
+    ui_card_wrap_title_with(card3, card3_title, lv_color_hex(0x666666), btn_reboot_hdr);
     lv_obj_add_event_cb(btn_reboot_hdr, reboot_btn_cb, LV_EVENT_CLICKED, ui);
 
     /* Version + fecha/hora de compilacion, todo en una linea. */

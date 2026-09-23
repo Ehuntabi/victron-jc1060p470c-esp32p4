@@ -128,8 +128,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, 16, 0);
-    lv_obj_set_style_pad_gap(cont, 16, 0);
+    lv_obj_set_style_pad_all(cont, 8, 0);
+    lv_obj_set_style_pad_gap(cont, 8, 0);
 
     /* === Card 1: Brillo === */
     lv_obj_t *card1 = lv_obj_create(cont);
@@ -140,8 +140,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card1, lv_color_hex(0xBA68C8), 0);
     lv_obj_set_style_border_width(card1, 1, 0);
     lv_obj_set_style_radius(card1, 12, 0);
-    lv_obj_set_style_pad_all(card1, 16, 0);
-    lv_obj_set_style_pad_gap(card1, 12, 0);
+    lv_obj_set_style_pad_all(card1, 10, 0);
+    lv_obj_set_style_pad_gap(card1, 6, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
@@ -157,6 +157,11 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0xBA68C8), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
+    /* v3.10: titulito unico (centrado con subrayado). La fila se queda como
+     * cuerpo y el control se va al extremo derecho, que es donde estaba. */
+    ui_card_wrap_title(card1, card1_title, lv_color_hex(0xBA68C8));
+    lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_END,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Sub-row: valor + slider */
     lv_obj_t *card1_sub = lv_obj_create(card1_row);
@@ -213,35 +218,52 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);
     lv_obj_set_style_border_width(card_nm, 1, 0);
     lv_obj_set_style_radius(card_nm, 12, 0);
-    lv_obj_set_style_pad_all(card_nm, 12, 0);
-    lv_obj_set_style_pad_gap(card_nm, 14, 0);
+    lv_obj_set_style_pad_all(card_nm, 10, 0);
+    lv_obj_set_style_pad_gap(card_nm, 6, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_ROW);
+    /* v3.10: cabecera centrada arriba y una fila de controles debajo (antes era
+     * todo una fila con el titulo dentro). */
+    lv_obj_set_flex_flow(card_nm, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card_nm, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Todo en una linea con hijos DIRECTOS + spacer flexible: evita el bug de
      * LVGL de un contenedor SIZE_CONTENT anidado en un padre SPACE_BETWEEN
      * (colapsaba y recortaba el bloque -> se veia solo "Fin"). */
-    lv_obj_t *nm_title = lv_label_create(card_nm);
-    lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
-    lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
-
+    /* El interruptor se crea antes que el titulo porque va EN la cabecera: asi
+     * la tarjeta no crece (el espaciador de la izquierda lo equilibra). */
     lv_obj_t *nm_sw = lv_switch_create(card_nm);
     lv_obj_set_style_bg_color(nm_sw, lv_color_hex(0x9C27B0),
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
 
+    lv_obj_t *nm_title = lv_label_create(card_nm);
+    lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
+    lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
+    ui_card_wrap_title_with(card_nm, nm_title, lv_color_hex(0x9C27B0), nm_sw);
+
     /* Spacer flexible: empuja los selectores Inicio/Fin al borde derecho */
-    lv_obj_t *nm_spacer = lv_obj_create(card_nm);
+    /* Los selectores Inicio/Fin van en una fila-cuerpo: el espaciador flexible
+     * que los empuja a la derecha solo funciona dentro de una fila (suelto en la
+     * columna crecia en vertical y estiraba la tarjeta 200 px). El interruptor se
+     * queda arriba, en la cabecera. */
+    lv_obj_t *nm_body = lv_obj_create(card_nm);
+    lv_obj_remove_style_all(nm_body);
+    lv_obj_set_size(nm_body, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(nm_body, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(nm_body, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nm_body, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *nm_spacer = lv_obj_create(nm_body);
     lv_obj_remove_style_all(nm_spacer);
     lv_obj_set_height(nm_spacer, 1);
     lv_obj_set_flex_grow(nm_spacer, 1);
 
     for (int slot = 0; slot < 2; slot++) {
-        lv_obj_t *grp = lv_obj_create(card_nm);
+        lv_obj_t *grp = lv_obj_create(nm_body);
         lv_obj_remove_style_all(grp);
         lv_obj_set_size(grp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_set_layout(grp, LV_LAYOUT_FLEX);
@@ -316,8 +338,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card3, lv_color_hex(0x00C851), 0);
     lv_obj_set_style_border_width(card3, 1, 0);
     lv_obj_set_style_radius(card3, 12, 0);
-    lv_obj_set_style_pad_all(card3, 16, 0);
-    lv_obj_set_style_pad_gap(card3, 12, 0);
+    lv_obj_set_style_pad_all(card3, 10, 0);
+    lv_obj_set_style_pad_gap(card3, 6, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
@@ -325,6 +347,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, lv_color_hex(0x00C851), 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
+    ui_card_wrap_title(card3, card3_title, lv_color_hex(0x00C851));
 
     ui->view_selection.dropdown = lv_dropdown_create(card3);
     lv_obj_set_width(ui->view_selection.dropdown, lv_pct(100));
@@ -355,8 +378,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card_sp, lv_color_hex(0xFF9800), 0);
     lv_obj_set_style_border_width(card_sp, 1, 0);
     lv_obj_set_style_radius(card_sp, 12, 0);
-    lv_obj_set_style_pad_all(card_sp, 16, 0);
-    lv_obj_set_style_pad_gap(card_sp, 12, 0);
+    lv_obj_set_style_pad_all(card_sp, 10, 0);
+    lv_obj_set_style_pad_gap(card_sp, 6, 0);
     lv_obj_set_layout(card_sp, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_sp, LV_FLEX_FLOW_COLUMN);
 
@@ -364,6 +387,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(sp_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(sp_title, lv_color_hex(0xFF9800), 0);
     lv_label_set_text(sp_title, LV_SYMBOL_IMAGE "  Pantalla de bienvenida");
+    ui_card_wrap_title(card_sp, sp_title, lv_color_hex(0xFF9800));
 
     lv_obj_t *sp_dd = lv_dropdown_create(card_sp);
     lv_obj_set_width(sp_dd, lv_pct(100));

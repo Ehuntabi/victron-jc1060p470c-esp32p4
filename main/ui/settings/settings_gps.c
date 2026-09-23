@@ -66,12 +66,15 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto, u
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
 
     if (titulo) {
+        /* v3.10: el titulito pasa al estilo unico de la casa (centrado con la
+         * linea de acento debajo, como en las vistas). Antes iba en versalitas a
+         * la izquierda con letter_space 2: era el unico sitio de la app que lo
+         * hacia asi. */
         lv_obj_t *t = lv_label_create(c);
         lv_label_set_text(t, titulo);
         lv_obj_set_style_text_color(t, UI_COLOR_TEXT_SOFT, 0);
-        lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_letter_space(t, 2, 0);
-        lv_obj_align(t, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_set_style_text_font(t, &lv_font_montserrat_20_es, 0);
+        ui_card_wrap_title(c, t, lv_color_hex(acento));
     }
     return c;
 }
