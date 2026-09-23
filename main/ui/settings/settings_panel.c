@@ -620,18 +620,33 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_t *page_about = lv_menu_page_create(menu, "ACERCA DE Joint SPL 145 Control");
     
     /* Padding del main_page + layout 2 columnas */
-    /* Horizontal 12 (unificado con las vistas y las subpaginas, 22-sep-2026);
-     * el vertical sigue apretado: es lo que hace que el contenido entre. */
+    /* Horizontal 12 (unificado con las vistas y las subpaginas, 22-sep-2026) y
+     * vertical 12 tambien desde la v3.7: aqui el contenido son 4 filas de 88 px
+     * en 587, asi que sobra sitio. */
     lv_obj_set_style_pad_hor(main_page, 12, 0);
-    lv_obj_set_style_pad_top(main_page, 4, 0);      /* menos hueco arriba: sube el contenido */
-    lv_obj_set_style_pad_bottom(main_page, 8, 0);
+    /* 12 arriba, igual que el margen lateral y que las vistas (Overview 24,
+     * Bateria 32 de primer contenido medido): con el flex ya sin centrar el
+     * bloque, 4 px dejaban la primera tarjeta pegada al borde (y=17). Aqui
+     * sobra sitio: la pagina son 4 filas de 88 px en 587. */
+    lv_obj_set_style_pad_top(main_page, 12, 0);
+    lv_obj_set_style_pad_bottom(main_page, 12, 0);
     lv_obj_set_style_pad_row(main_page, 12, 0);
     lv_obj_set_style_pad_column(main_page, 12, 0);
     lv_obj_set_layout(main_page, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(main_page, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* El TERCER parametro (track_place) es el que coloca las FILAS de un flujo
+     * ROW_WRAP en el eje cruzado. Iba en CENTER: con la pagina mas alta que su
+     * contenido, el bloque de tarjetas quedaba centrado en vertical y dejaba la
+     * banda vacia de arriba (medido con la sonda: primer hijo en y=93 con
+     * pad_top=4, y el primer contenido en y=108 de la captura). En START el
+     * bloque empieza arriba, como en las vistas. Los dos parametros anteriores
+     * (eje principal y eje cruzado) se probaron el 22-sep SIN EFECTO: en un wrap
+     * el que manda es este. */
+    lv_obj_set_flex_align(main_page, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
 
-    /* Subpagina Autocaravana: mismo layout de 2 columnas que el menu principal. */
+    /* Subpagina Autocaravana: mismo layout de 2 columnas que el menu principal.
+     * Aqui el vertical se queda en 4: el contenido llega a y=528 de 538 y no
+     * cabe un margen mayor sin que aparezca la barra de scroll. */
     lv_obj_set_style_pad_hor(page_autocaravana, 12, 0);
     lv_obj_set_style_pad_top(page_autocaravana, 4, 0);
     lv_obj_set_style_pad_bottom(page_autocaravana, 8, 0);
@@ -639,7 +654,8 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
     lv_obj_set_layout(page_autocaravana, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(page_autocaravana, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(page_autocaravana, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Mismo caso que main_page: ver el comentario de arriba. */
+    lv_obj_set_flex_align(page_autocaravana, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
 
     /* Frigo: eager (es la pagina mas usada). populate=NULL para que el lazy
      * dispatch no haga nada; ui_frigo_panel_init mas abajo construye el

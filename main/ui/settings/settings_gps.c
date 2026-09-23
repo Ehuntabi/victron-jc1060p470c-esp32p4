@@ -17,20 +17,26 @@
  */
 #include "settings_panel.h"
 #include "settings_common.h"
+#include "ui/widgets/ui_card.h"     /* paleta compartida (UI_COLOR_CARD / _BORDER) */
 #include "gps/gps.h"
 #include "data/trip_computer.h"
 
 #include <stdio.h>
 #include <lvgl.h>
 
-#define COL_CARD     0x191D25
-#define COL_BORDE    0x262C37
+/* El fondo y el borde de las tarjetas salen de la paleta compartida (v3.7).
+ * Antes eran dos colores propios de antes del cambio de contraste de la v3.6
+ * (0x191D25 y 0x262C37): el borde quedo mas apagado que el fondo nuevo de la
+ * pagina y las tarjetas parecian no tener marco. Los de texto y estado se
+ * quedan como estaban. */
+#define COL_CARD     UI_COLOR_CARD
 #define COL_TEXTO    0xECEFF3
 #define COL_APAGADO  0x8B94A3
 #define COL_VERDE    0x4CD964
 #define COL_AMBAR    0xFF9800
 #define COL_ROJO     0xFF5A5A
 #define COL_AZUL     0x4FC3F7
+#define COL_MORADO   0xB388FF
 
 static lv_obj_t *s_punto;      /* circulo de color del estado */
 static lv_obj_t *s_estado;     /* "Posicion fijada" / ... */
@@ -40,16 +46,20 @@ static lv_obj_t *s_sats_lbl;   /* "satelites" / "a la vista" */
 static lv_obj_t *s_pos;
 static lv_obj_t *s_hora;
 static lv_obj_t *s_crudo;
+static lv_obj_t *s_tarjeta_estado;   /* la franja de arriba: su marco va del color del estado */
 
-/* Tarjeta con su titulito en versalitas. Devuelve el cuerpo, donde va todo. */
-static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto)
+/* Tarjeta con su titulito en versalitas. Devuelve el cuerpo, donde va todo.
+ * El marco es de 2 px y del color que se le pasa (v3.7): con el gris neutro de
+ * la paleta y 1 px no se leia como marco en el panel. Cada tarjeta lleva el
+ * suyo, como en el resto de paginas de Ajustes. */
+static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto, uint32_t acento)
 {
     lv_obj_t *c = lv_obj_create(padre);
     lv_obj_set_size(c, lv_pct(100), alto);
-    lv_obj_set_style_bg_color(c, lv_color_hex(COL_CARD), 0);
+    lv_obj_set_style_bg_color(c, COL_CARD, 0);
     lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(c, lv_color_hex(COL_BORDE), 0);
-    lv_obj_set_style_border_width(c, 1, 0);
+    lv_obj_set_style_border_color(c, lv_color_hex(acento), 0);
+    lv_obj_set_style_border_width(c, 2, 0);
     lv_obj_set_style_radius(c, 8, 0);
     lv_obj_set_style_pad_all(c, 8, 0);
     lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
@@ -110,6 +120,9 @@ static void refresco_cb(lv_timer_t *t)
         lv_label_set_text(s_sats_lbl, "SATELITES");
     }
     lv_obj_set_style_bg_color(s_punto, lv_color_hex(col), 0);
+    /* El marco de la franja de arriba es el mismo aviso que el punto y el
+     * titulo: de un vistazo, sin leer, ya se ve de que color esta el GPS. */
+    if (s_tarjeta_estado) lv_obj_set_style_border_color(s_tarjeta_estado, lv_color_hex(col), 0);
     lv_obj_set_style_text_color(s_estado, lv_color_hex(col), 0);
     lv_obj_set_style_text_color(s_sats, lv_color_hex(col), 0);
 
@@ -155,9 +168,10 @@ static void refresco_cb(lv_timer_t *t)
     buf[0] = 0;
     /* Solo las ULTIMAS tramas: la tarjeta mide 210 px y antes se le metian todas
      * las del anillo (~40 lineas), que se salian de la tarjeta y estiraban la
-     * pagina hasta y=1387 (medido con la sonda el 22-sep-2026). Ocho lineas
-     * entran de sobra y siguen valiendo para ver si el modulo habla. */
-    const int VISIBLES = 6;
+     * pagina hasta y=1387 (medido con la sonda el 22-sep-2026). Cinco bastan para
+     * ver si el modulo habla y son las que caben en el presupuesto de la pagina
+     * (23-sep-2026). */
+    const int VISIBLES = 5;
     for (int i = (GPS_CRUDO_N > VISIBLES ? GPS_CRUDO_N - VISIBLES : 0); i < GPS_CRUDO_N; i++) {
         char l[96];
         gps_crudo_get(i, l, sizeof(l));
@@ -173,8 +187,13 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
 {
     (void)ui;
     lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(page, 4, 0);    /* medido con sonda: sobraban 45 px */
-    lv_obj_set_style_pad_row(page, 4, 0);
+    /* Presupuesto de altura MEDIDO el 23-sep sobre la captura: la zona util de
+     * una pagina de Ajustes son 476 px (el panel llega a 538 y la barra de abajo
+     * empieza en 550). Antes el contenido pedia 534 y la tarjeta de TRAMAS
+     * EN CRUDO se metia debajo de la barra: se veia cortada. Con el reparto de
+     * abajo queda en 468 y entra entera. */
+    lv_obj_set_style_pad_all(page, 4, 0);
+    lv_obj_set_style_pad_row(page, 2, 0);
     /* 16 por la derecha: la barra de scroll (8 px de ancho + 6 de pad_right, ver
      * style_settings_scrollbar) vive en x=1010..1018, y las tarjetas, con solo 4
      * de margen, llegaban a 1020: le pasaban por debajo y la barra se comia su
@@ -185,7 +204,10 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     style_settings_scrollbar(page);
 
     /* ── Estado: la franja de arriba ─────────────────────────────── */
-    lv_obj_t *est = tarjeta(page, NULL, 118);
+    /* 96 y no 118: el contenido de la franja (titulo 34 + nota de dos lineas 36,
+     * o los satelites 46 + rotulo) cabe en 88. */
+    lv_obj_t *est = tarjeta(page, NULL, 96, COL_VERDE);
+    s_tarjeta_estado = est;
 
     s_punto = lv_obj_create(est);
     lv_obj_set_size(s_punto, 18, 18);
@@ -226,15 +248,15 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * con 8 de interlineado (140 px) mas el hueco del titulito. A 150 la ultima
      * linea quedaba cortada por abajo -- y la tarjeta no hace scroll, asi que no
      * se veia que faltaba nada. */
-    /* 230 y no 190: con la linea de potencia son CINCO renglones de font 24 con
-     * 8 de interlineado. La tarjeta no hace scroll, asi que si no cabe se corta
-     * por abajo sin avisar (ya paso al anadir el recorrido). */
-    lv_obj_set_size(fila, lv_pct(100), 230);
+    /* CINCO renglones de font 24 con 8 de interlineado: medido sobre la captura,
+     * el bloque de datos va de +30 a +216 y con el relleno pide 226. La tarjeta no
+     * hace scroll, asi que si no cabe se corta por abajo sin avisar. */
+    lv_obj_set_size(fila, lv_pct(100), 226);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 6, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *cpos = tarjeta(fila, "POSICION", lv_pct(100));
+    lv_obj_t *cpos = tarjeta(fila, "POSICION", lv_pct(100), COL_AZUL);
     lv_obj_set_flex_grow(cpos, 3);
     s_pos = lv_label_create(cpos);
     lv_obj_set_style_text_font(s_pos, &lv_font_montserrat_24, 0);
@@ -243,7 +265,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_label_set_text(s_pos, "--");
     lv_obj_align(s_pos, LV_ALIGN_TOP_LEFT, 0, 30);
 
-    lv_obj_t *chora = tarjeta(fila, "HORA DEL GPS", lv_pct(100));
+    lv_obj_t *chora = tarjeta(fila, "HORA DEL GPS", lv_pct(100), COL_MORADO);
     lv_obj_set_flex_grow(chora, 2);
     s_hora = lv_label_create(chora);
     lv_obj_set_style_text_font(s_hora, &lv_font_montserrat_24, 0);
@@ -253,7 +275,9 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_align(s_hora, LV_ALIGN_TOP_LEFT, 0, 30);
 
     /* ── Tramas en crudo ─────────────────────────────────────────── */
-    lv_obj_t *ctr = tarjeta(page, "TRAMAS EN CRUDO", 170);   /* medido: con 180 aun sobraban 3 px */
+    /* 134: titulo (19) + 5 tramas de font 14 (95) + rellenos. Con 6 no cabe en el
+     * presupuesto de la pagina. */
+    lv_obj_t *ctr = tarjeta(page, "TRAMAS EN CRUDO", 134, COL_APAGADO);
     s_crudo = lv_label_create(ctr);
     /* Letra 14 y no menos: es la mas pequena que hay compilada, y una trama
      * NMEA entera tiene que caber en una linea para poder leerla. No hay
