@@ -24,6 +24,8 @@ struct settings_page_ctx_s {
     uint32_t accent;
     ui_state_t *ui;
     lv_obj_t *page;   /* pagina de menu asociada (para navegacion programatica) */
+    const char *padre; /* como se llama la pagina de la que cuelga, para las migas
+                        * de pan del header ("Ajustes", "Autocaravana") */
     void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page);
     bool populated;
     /* Extras (solo Wi-Fi los usa) */

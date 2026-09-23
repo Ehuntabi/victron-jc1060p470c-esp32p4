@@ -173,7 +173,7 @@ lv_obj_t *ui_metric_create(lv_obj_t *parent, const char *label_text)
 
     lv_obj_t *title = lv_label_create(box);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(title, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(title, label_text ? label_text : "");
 
     lv_obj_t *row = lv_obj_create(box);
@@ -192,7 +192,7 @@ lv_obj_t *ui_metric_create(lv_obj_t *parent, const char *label_text)
 
     lv_obj_t *unit = lv_label_create(row);
     lv_obj_set_style_text_font(unit, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(unit, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(unit, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(unit, "");
 
     return box;
@@ -340,7 +340,7 @@ lv_obj_t *ui_arc_soc_create(lv_obj_t *parent, lv_coord_t size)
 
     lv_obj_t *volt_lbl = lv_label_create(box);
     lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(volt_lbl, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(volt_lbl, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(volt_lbl, "--");
     lv_obj_align(volt_lbl, LV_ALIGN_CENTER, 0, 26);
 

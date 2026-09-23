@@ -218,7 +218,7 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
      * dispara TASK_WDT al construir (memo feedback-lvgl-label-wrap-flex-grow-wdt). */
     lv_obj_t *lbl_header = lv_label_create(card_ctrl);
     lv_obj_set_style_text_font(lbl_header, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_header, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(lbl_header, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_long_mode(lbl_header, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(lbl_header, lv_pct(100));
     lv_label_set_text(lbl_header, "Configura hasta 8 dispositivos Victron\ncon su dirección MAC y clave AES.");
@@ -404,7 +404,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
 
     lv_obj_t *name_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(name_label, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(name_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(name_label, "Nombre:");
 
     lv_obj_t *name_ta = lv_textarea_create(col_left);
@@ -421,7 +421,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
 
     lv_obj_t *mac_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(mac_label, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(mac_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(mac_label, "Dirección MAC:");
 
     lv_obj_t *mac_ta = lv_textarea_create(col_left);
@@ -438,7 +438,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
 
     lv_obj_t *key_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(key_label, UI_COLOR_TEXT_DIM, 0);
+    lv_obj_set_style_text_color(key_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(key_label, "Clave AES (32 hex):");
 
     lv_obj_t *key_ta = lv_textarea_create(col_left);

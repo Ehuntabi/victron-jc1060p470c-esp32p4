@@ -610,7 +610,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * se salía por abajo en columnas estrechas. */
     lv_obj_set_style_pad_gap(ov->card_solar, 8, 0);
     /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
-    ui_metric_set_label(ov->m_solar_w, "Actual", UI_COLOR_TEXT_DIM);
+    ui_metric_set_label(ov->m_solar_w, "Actual", UI_COLOR_TEXT_SOFT);
     ui_metric_set(ov->m_solar_w, "--", "A", UI_COLOR_TEXT);
     ov->m_solar_kwh = ui_metric_create_compact(ov->card_solar, "Hoy");
     ui_metric_set(ov->m_solar_kwh, "--", "kWh", UI_COLOR_TEXT_DIM);
@@ -739,7 +739,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * métrica se salía por abajo en columnas estrechas. */
     lv_obj_set_style_pad_gap(ov->card_loads, 8, 0);
     /* Sin SPACE_AROUND: stack tight desde arriba, evita solape texto */
-    ui_metric_set_label(ov->m_loads_w, "Motor", UI_COLOR_TEXT_DIM);
+    ui_metric_set_label(ov->m_loads_w, "Motor", UI_COLOR_TEXT_SOFT);
     ui_metric_set(ov->m_loads_w, "--", "V", UI_COLOR_TEXT);
     ov->m_loads_kwh = ui_metric_create_compact(ov->card_loads, "Servicio");
     ui_metric_set(ov->m_loads_kwh, "--", "V", UI_COLOR_TEXT_DIM);

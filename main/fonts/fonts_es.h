@@ -19,6 +19,8 @@ extern const lv_font_t lv_font_inter_28_es;
 extern const lv_font_t lv_font_inter_46;
 extern const lv_font_t lv_font_inter_semibold_20;
 extern const lv_font_t lv_font_inter_semibold_24;
+extern const lv_font_t lv_font_inter_semibold_20;
+extern const lv_font_t lv_font_inter_semibold_24;
 
 /* Aliases para no tocar todos los `lv_font_montserrat_*_es` esparcidos */
 #define lv_font_montserrat_14_es lv_font_inter_14_es
@@ -41,6 +43,15 @@ extern const lv_font_t lv_font_inter_semibold_24;
 #define lv_font_montserrat_24 lv_font_inter_24_es
 #define lv_font_montserrat_28 lv_font_inter_28_es
 #define lv_font_montserrat_32 lv_font_inter_28_es
+
+/* v3.9: la SemiBold de Inter. Estaba compilada desde el principio y no la usaba
+ * nadie; entra en los TITULOS (entradas del menu de Ajustes y migas de pan): el
+ * mismo tamano con mas presencia, sin subir la letra ni cambiar de familia. */
+#define lv_font_semibold_20 lv_font_inter_semibold_20
+#define lv_font_semibold_24 lv_font_inter_semibold_24
+/* OJO con la SemiBold: se genero solo con los rangos de texto y SIN fallback, asi
+ * que NO dibuja los LV_SYMBOL_* (salen como una caja). Para un simbolo, usar la
+ * fuente normal, que si lleva Montserrat de fallback. */
 
 #ifdef __cplusplus
 }

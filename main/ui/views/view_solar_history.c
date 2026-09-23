@@ -318,7 +318,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     lv_obj_add_event_cb(bmode, sol_toggle_modo_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl_hint = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_lbl_hint, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(s_lbl_hint, UI_COLOR_TEXT_SOFT, 0);
     lv_obj_set_style_text_font(s_lbl_hint, &lv_font_montserrat_14_es, 0);
     lv_label_set_text(s_lbl_hint, "Potencia del panel  -  el boton cambia a dias");
     lv_obj_align(s_lbl_hint, LV_ALIGN_TOP_MID, 0, 94);

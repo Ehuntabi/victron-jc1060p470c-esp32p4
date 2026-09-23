@@ -427,7 +427,7 @@ void ui_init(void) {
     /* Indicador BLE — ancho fijo */
     ui->lbl_ble = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_ble, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(ui->lbl_ble, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
     lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
@@ -1348,7 +1348,7 @@ static void ble_indicator_timer_cb(lv_timer_t *t)
     /* Sin datos nunca recibidos o > 5s sin actualizacion -> gris */
     if (s_last_ble_data_us == 0 || age_ms > 5000) {
         lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
-        lv_obj_set_style_text_color(ui->lbl_ble, lv_color_hex(0x888888), 0);
+        lv_obj_set_style_text_color(ui->lbl_ble, UI_COLOR_TEXT_SOFT, 0);
     }
 }
 

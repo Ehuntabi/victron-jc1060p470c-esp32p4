@@ -391,12 +391,12 @@ static void update_display_elements(ui_default_battery_view_t *bv)
             ui_metric_set_label(bv->m_dc_in_v,
                                 alt_on ? LV_SYMBOL_CHARGE " Alternador"
                                        : LV_SYMBOL_BATTERY_FULL " Bat. motor",
-                                alt_on ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM);
+                                alt_on ? UI_COLOR_GREEN : UI_COLOR_TEXT_SOFT);
         } else {
             ui_metric_set(bv->m_dc_in_v, "--", "", UI_COLOR_TEXT);
             ui_metric_set_label(bv->m_dc_in_v,
                                 LV_SYMBOL_BATTERY_FULL " Bat. motor",
-                                UI_COLOR_TEXT_DIM);
+                                UI_COLOR_TEXT_SOFT);
         }
         if (bv->dcdc_state.output_voltage_centi > 0 &&
             bv->dcdc_state.device_state != VIC_STATE_OFF) {

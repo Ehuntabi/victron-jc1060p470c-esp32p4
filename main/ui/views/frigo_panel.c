@@ -606,7 +606,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * ventilador sean coherentes. */
     s_lbl_fan = lv_label_create(row_fan_hdr);
     lv_obj_set_style_text_font(s_lbl_fan, &lv_font_montserrat_24, 0);
-    lv_obj_set_style_text_color(s_lbl_fan, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(s_lbl_fan, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(s_lbl_fan, "-- %");
 
     /* === Segmented control: Modo Auto / OFF / 50% / 100% === */

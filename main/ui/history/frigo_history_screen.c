@@ -180,7 +180,7 @@ void ui_show_chart_screen(ui_state_t *ui)
      * ("para indicar swipe"): parecian controles y no hacian nada al tocarlas. */
     lv_obj_t *lbl_arr_l = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_arr_l, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(lbl_arr_l, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(lbl_arr_l, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(lbl_arr_l, LV_SYMBOL_LEFT);
     lv_obj_align(lbl_arr_l, LV_ALIGN_TOP_MID, -120, 14);
     lv_obj_add_flag(lbl_arr_l, LV_OBJ_FLAG_CLICKABLE);
@@ -188,7 +188,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_add_event_cb(lbl_arr_l, frigo_arrow_cb, LV_EVENT_CLICKED, (void *)1);
     lv_obj_t *lbl_arr_r = lv_label_create(scr);
     lv_obj_set_style_text_font(lbl_arr_r, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(lbl_arr_r, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(lbl_arr_r, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(lbl_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(lbl_arr_r, LV_ALIGN_TOP_MID, 120, 14);
     lv_obj_add_flag(lbl_arr_r, LV_OBJ_FLAG_CLICKABLE);
@@ -270,7 +270,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     /* Pista de uso tactil (zoom/pan sin botones) */
     {
         lv_obj_t *hint = lv_label_create(scr);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x8A93A6), 0);
+        lv_obj_set_style_text_color(hint, UI_COLOR_TEXT_SOFT, 0);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_14_es, 0);
         lv_label_set_text(hint,
             "Arrastra: mover  -  2 toques: zoom  -  manten: 1x");

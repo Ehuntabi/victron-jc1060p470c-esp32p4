@@ -259,7 +259,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card3_title = lv_label_create(card3_header);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card3_title, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_style_text_color(card3_title, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Version, Repo y Creditos");
 
     /* Boton Reiniciar pequeno en la esquina */

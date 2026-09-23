@@ -229,6 +229,9 @@ static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_add
 lv_obj_t *s_settings_menu = NULL;
 lv_obj_t *s_settings_main_page = NULL;
 static lv_obj_t *s_settings_back_btn = NULL;
+static lv_obj_t *s_settings_back_chev = NULL;    /* el chevron, del color de la seccion */
+static lv_obj_t *s_settings_back_label = NULL;   /* el nombre del padre */
+static lv_obj_t *s_settings_header_spacer = NULL;
 static lv_obj_t *s_settings_main_header = NULL;
 static lv_style_t s_settings_btn_style;
 static lv_style_t s_settings_btn_pressed_style;
@@ -402,7 +405,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *view_desc = lv_label_create(card_view);
     lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(view_desc, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(view_desc, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
 
@@ -571,34 +574,49 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_ver(main_header, 4, 0);
     s_settings_main_header = main_header;
 
+    /* MIGAS DE PAN en vez del boton "Volver" (v3.9). El boton lleno de color de
+     * seccion, con borde blanco y halo, pesaba mas que el propio titulo y no
+     * decia a donde volvia. Ahora es un chevron del color de la seccion y el
+     * nombre del padre en gris apagado ("‹ Ajustes"), sin caja: mismo gesto,
+     * mismo sitio, misma zona tactil (52 px de alto), y el titulo sigue centrado
+     * porque el espaciador de la derecha se ajusta al ancho de las migas. */
     lv_obj_t *back_btn = lv_menu_get_main_header_back_btn(menu);
     s_settings_back_btn = back_btn;
-    lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, 0);
-    /* Botón naranja cálido con sombra naranja exterior */
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_border_color(back_btn, lv_color_white(), 0);
-    lv_obj_set_style_border_opa(back_btn, LV_OPA_60, 0);
-    lv_obj_set_style_border_width(back_btn, 2, 0);
+    lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(back_btn, 0, 0);
+    lv_obj_set_style_shadow_width(back_btn, 0, 0);
     lv_obj_set_style_radius(back_btn, 10, 0);
-    lv_obj_set_style_pad_hor(back_btn, 18, 0);
-    lv_obj_set_style_pad_ver(back_btn, 10, 0);
-    lv_obj_set_style_shadow_width(back_btn, 12, 0);
-    lv_obj_set_style_shadow_color(back_btn, lv_color_hex(0xFF9800), 0);
-    lv_obj_set_style_shadow_opa(back_btn, LV_OPA_50, 0);
-    lv_obj_set_style_shadow_spread(back_btn, 0, 0);
-    /* Estado pulsado: naranja oscuro */
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0xE65100), LV_STATE_PRESSED);
-    lv_obj_set_style_text_font(back_btn, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(back_btn, lv_color_white(), 0);
+    lv_obj_set_style_pad_hor(back_btn, 8, 0);
+    lv_obj_set_style_pad_ver(back_btn, 12, 0);
+    lv_obj_set_style_pad_column(back_btn, 8, 0);
+    /* Al pulsar, un tinte suave del acento: se nota el toque sin volver a la
+     * pildora de color. */
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x4CD964), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(back_btn, LV_OPA_20, LV_STATE_PRESSED);
 
-    lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, LV_SYMBOL_LEFT "  Volver");
-    lv_obj_set_style_text_font(back_label, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(back_label, lv_color_white(), 0);
+    /* El chevron que crea lv_menu dentro del boton no lo usamos: lo dibujamos
+     * nosotros para poder ponerlo del color de la seccion. */
+    lv_obj_t *icono_menu = lv_obj_get_child(back_btn, 0);
+    if (icono_menu) lv_obj_add_flag(icono_menu, LV_OBJ_FLAG_HIDDEN);
+
+    s_settings_back_chev = lv_label_create(back_btn);
+    lv_label_set_text(s_settings_back_chev, LV_SYMBOL_LEFT);
+    /* El chevron va en la fuente NORMAL a proposito: la SemiBold se genero sin
+     * los rangos de FontAwesome y sin fallback, asi que LV_SYMBOL_LEFT salia como
+     * una caja. La normal lleva Montserrat de fallback y dibuja el simbolo. */
+    lv_obj_set_style_text_font(s_settings_back_chev, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_settings_back_chev, lv_color_hex(0x4CD964), 0);
+
+    s_settings_back_label = lv_label_create(back_btn);
+    lv_label_set_text(s_settings_back_label, "Ajustes");
+    lv_obj_set_style_text_font(s_settings_back_label, &lv_font_semibold_20, 0);
+    lv_obj_set_style_text_color(s_settings_back_label, UI_COLOR_TEXT_SOFT, 0);
+    lv_obj_set_style_text_color(s_settings_back_label, UI_COLOR_TEXT, LV_STATE_PRESSED);
     /* Spacer invisible para centrar el titulo via SPACE_BETWEEN */
     lv_obj_t *header_spacer = lv_obj_create(main_header);
     lv_obj_remove_style_all(header_spacer);
     lv_obj_set_size(header_spacer, 110, 1);
+    s_settings_header_spacer = header_spacer;
 
     lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
     s_settings_main_page = main_page;
@@ -1235,14 +1253,16 @@ static void settings_card_decor(lv_obj_t *cont, const char *title,
 
     lv_obj_t *t1 = lv_label_create(txt);
     lv_label_set_text(t1, title);
-    lv_obj_set_style_text_font(t1, &lv_font_montserrat_24_es, 0);
+    /* Titulo en SemiBold (v3.9): misma letra y mismo tamano que antes, con mas
+     * presencia frente al subtitulo, que sigue en 14 regular. */
+    lv_obj_set_style_text_font(t1, &lv_font_semibold_24, 0);
     lv_obj_set_style_text_color(t1, lv_color_white(), 0);
 
     if (subtitle && *subtitle) {
         lv_obj_t *t2 = lv_label_create(txt);
         lv_label_set_text(t2, subtitle);
         lv_obj_set_style_text_font(t2, &lv_font_montserrat_14_es, 0);
-        lv_obj_set_style_text_color(t2, lv_color_hex(0x8A93A6), 0);
+        lv_obj_set_style_text_color(t2, UI_COLOR_TEXT_SOFT, 0);
     }
 }
 
@@ -1299,6 +1319,9 @@ static settings_page_ctx_t *settings_menu_add_entry(
         ctx->ui = ui;
         ctx->page = target_page;
         ctx->populate = populate;
+        /* Los dos unicos contenedores con entradas son el menu principal y la
+         * subpagina Autocaravana; de ahi el nombre que enseña la miga de pan. */
+        ctx->padre = (main_page == s_settings_main_page) ? "Ajustes" : "Autocaravana";
         lv_obj_set_user_data(target_page, ctx);
     }
 
@@ -1362,8 +1385,9 @@ static void settings_menu_page_changed_cb(lv_event_t *e)
     if (!menu) return;
     lv_obj_t *cur = lv_menu_get_cur_main_page(menu);
     uint32_t accent = SETTINGS_DEFAULT_ACCENT;
+    settings_page_ctx_t *ctx = NULL;
     if (cur && cur != s_settings_main_page) {
-        settings_page_ctx_t *ctx = (settings_page_ctx_t *)lv_obj_get_user_data(cur);
+        ctx = (settings_page_ctx_t *)lv_obj_get_user_data(cur);
         if (ctx) {
             accent = ctx->accent;
             /* Lazy populate: la primera vez que se navega a la pagina,
@@ -1375,16 +1399,24 @@ static void settings_menu_page_changed_cb(lv_event_t *e)
         }
     }
     if (s_settings_back_btn) {
-        /* Variante mas oscura para el estado pulsado: ~60% de cada canal. */
-        uint8_t r = (accent >> 16) & 0xFF;
-        uint8_t g = (accent >>  8) & 0xFF;
-        uint8_t b =  accent        & 0xFF;
-        uint32_t darker = ((uint32_t)(r * 6 / 10) << 16) |
-                          ((uint32_t)(g * 6 / 10) << 8)  |
-                          ((uint32_t)(b * 6 / 10));
-        lv_obj_set_style_bg_color(s_settings_back_btn, lv_color_hex(accent), 0);
-        lv_obj_set_style_bg_color(s_settings_back_btn, lv_color_hex(darker), LV_STATE_PRESSED);
-        lv_obj_set_style_shadow_color(s_settings_back_btn, lv_color_hex(accent), 0);
+        /* Miga de pan: chevron del acento de la seccion, nombre del padre en
+         * gris y, al pulsar, el tinte suave de ese mismo acento. */
+        lv_obj_set_style_bg_color(s_settings_back_btn, lv_color_hex(accent), LV_STATE_PRESSED);
+        if (s_settings_back_chev) {
+            lv_obj_set_style_text_color(s_settings_back_chev, lv_color_hex(accent), 0);
+        }
+        if (s_settings_back_label) {
+            lv_label_set_text(s_settings_back_label,
+                              (ctx && ctx->padre) ? ctx->padre : "Ajustes");
+            /* El titulo se centra con SPACE_BETWEEN entre las migas y el
+             * espaciador de la derecha: si el padre se llama "Autocaravana" el
+             * espaciador tiene que crecer con el, o el titulo baila. */
+            if (s_settings_header_spacer) {
+                lv_obj_update_layout(s_settings_back_label);
+                lv_coord_t ancho = lv_obj_get_width(s_settings_back_btn);
+                if (ancho > 0) lv_obj_set_width(s_settings_header_spacer, ancho);
+            }
+        }
     }
     if (s_settings_main_header) {
         /* text_color hereda hacia el label de titulo de la pagina. El back

@@ -68,7 +68,7 @@ static lv_obj_t *tarjeta(lv_obj_t *padre, const char *titulo, lv_coord_t alto, u
     if (titulo) {
         lv_obj_t *t = lv_label_create(c);
         lv_label_set_text(t, titulo);
-        lv_obj_set_style_text_color(t, lv_color_hex(COL_APAGADO), 0);
+        lv_obj_set_style_text_color(t, UI_COLOR_TEXT_SOFT, 0);
         lv_obj_set_style_text_font(t, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_letter_space(t, 2, 0);
         lv_obj_align(t, LV_ALIGN_TOP_LEFT, 0, 0);
@@ -224,7 +224,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     s_nota = lv_label_create(est);
     lv_obj_set_style_text_font(s_nota, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(s_nota, lv_color_hex(COL_APAGADO), 0);
+    lv_obj_set_style_text_color(s_nota, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(s_nota, "");
     lv_obj_align(s_nota, LV_ALIGN_TOP_LEFT, 30, 42);
 
@@ -237,7 +237,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     s_sats_lbl = lv_label_create(est);
     lv_obj_set_style_text_font(s_sats_lbl, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(s_sats_lbl, lv_color_hex(COL_APAGADO), 0);
+    lv_obj_set_style_text_color(s_sats_lbl, UI_COLOR_TEXT_SOFT, 0);
     lv_obj_set_style_text_letter_space(s_sats_lbl, 2, 0);
     lv_label_set_text(s_sats_lbl, "SATÉLITES");
     lv_obj_align(s_sats_lbl, LV_ALIGN_TOP_RIGHT, 0, 56);

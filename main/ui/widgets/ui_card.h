@@ -15,7 +15,14 @@ extern "C" {
                                                         * 0x141821: se veian casi iguales) */
 #define UI_COLOR_CARD_BORDER  lv_color_hex(0x39424F)
 #define UI_COLOR_TEXT         lv_color_hex(0xFFFFFF)
-#define UI_COLOR_TEXT_DIM     lv_color_hex(0x8A93A6)
+#define UI_COLOR_TEXT_DIM     lv_color_hex(0x8A93A6)  /* SOLO para "no hay dato":
+                                                        * el "--" de un metrico vacio y
+                                                        * los estados apagados */
+#define UI_COLOR_TEXT_SOFT    lv_color_hex(0xE4E9F0)  /* texto descriptivo (rotulos,
+                                                        * subtitulos, pistas): casi
+                                                        * blanco y legible en el panel
+                                                        * (23-sep-2026; antes iban en
+                                                        * TEXT_DIM y no se leian) */
 #define UI_COLOR_CYAN         lv_color_hex(0x4FC3F7)
 #define UI_COLOR_GREEN        lv_color_hex(0x00C851)
 #define UI_COLOR_ORANGE       lv_color_hex(0xFF9800)

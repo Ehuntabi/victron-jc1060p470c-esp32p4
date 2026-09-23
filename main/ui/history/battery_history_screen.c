@@ -285,7 +285,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
      * porque el glifo solo es diminuto para un dedo. */
     lv_obj_t *bh_arr_l = lv_label_create(scr);
     lv_obj_set_style_text_font(bh_arr_l, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(bh_arr_l, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(bh_arr_l, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(bh_arr_l, LV_SYMBOL_LEFT);
     lv_obj_align(bh_arr_l, LV_ALIGN_TOP_MID, -150, 18);
     lv_obj_add_flag(bh_arr_l, LV_OBJ_FLAG_CLICKABLE);
@@ -293,7 +293,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_add_event_cb(bh_arr_l, bh_arrow_cb, LV_EVENT_CLICKED, (void *)1);  /* atras */
     lv_obj_t *bh_arr_r = lv_label_create(scr);
     lv_obj_set_style_text_font(bh_arr_r, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(bh_arr_r, lv_color_hex(0x8A93A6), 0);
+    lv_obj_set_style_text_color(bh_arr_r, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(bh_arr_r, LV_SYMBOL_RIGHT);
     lv_obj_align(bh_arr_r, LV_ALIGN_TOP_MID, 150, 18);
     lv_obj_add_flag(bh_arr_r, LV_OBJ_FLAG_CLICKABLE);
@@ -354,7 +354,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     /* Pista de uso tactil (zoom/pan sin botones) */
     {
         lv_obj_t *hint = lv_label_create(scr);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x8A93A6), 0);
+        lv_obj_set_style_text_color(hint, UI_COLOR_TEXT_SOFT, 0);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_14_es, 0);
         lv_label_set_text(hint,
             "Arrastra: mover  -  2 toques: zoom  -  manten: 1x");
