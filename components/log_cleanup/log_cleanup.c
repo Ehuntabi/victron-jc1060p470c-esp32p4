@@ -167,7 +167,10 @@ static int borrar_sesiones_dir(const char *dir, int max_days)
         if (fecha == 0 || fecha >= cutoff) continue;
 
         char sesion[128];
-        snprintf(sesion, sizeof(sesion), "%s/%s", VIG_DIR, ent->d_name);
+        /* OJO: aqui ponia VIG_DIR en vez de 'dir', asi que al limpiar las
+         * MINIATURAS (VIG_THUMBS_DIR) borraba dentro del arbol de fotos buenas y
+         * las miniaturas no se borraban nunca (auditoria del 23-sep-2026). */
+        snprintf(sesion, sizeof(sesion), "%s/%s", dir, ent->d_name);
 
         /* Una carpeta no se borra con contenido: primero los .jpg. */
         DIR *sd = opendir(sesion);

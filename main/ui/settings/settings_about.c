@@ -18,6 +18,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
+#include "esp_netif.h"     /* la IP del AP y la de la red, para la tarjeta Estado */
 #include "esp_netif.h"
 #include "esp_app_desc.h"
 #include "esp_timer.h"
@@ -61,6 +62,31 @@ static void flush_all_before_restart(void)
     ne185_vlog_flush();
 }
 
+static lv_obj_t *s_lbl_ip;   /* "IP: ..." de la tarjeta Estado */
+
+/* La IP vuelve a Acerca de -> Estado (23-sep-2026, peticion del usuario): el
+ * menu promete "Sistema, uptime, IP y reinicio" y desde el 22-sep no habia
+ * ninguna. Se muestran las DOS, que es lo que se necesita para entrar desde el
+ * movil: la del punto de acceso (192.168.4.1) y, si la placa esta conectada a
+ * una red, la suya en esa red. La del AP sigue tambien en Ajustes -> Wi-Fi. */
+static void about_refresh_ip(void)
+{
+    if (!s_lbl_ip) return;
+    char ap_txt[24] = "--";
+    esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    esp_netif_ip_info_t ia = {0};
+    if (ap && esp_netif_get_ip_info(ap, &ia) == ESP_OK && ia.ip.addr != 0)
+        snprintf(ap_txt, sizeof(ap_txt), IPSTR, IP2STR(&ia.ip));
+
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t is = {0};
+    if (sta && esp_netif_get_ip_info(sta, &is) == ESP_OK && is.ip.addr != 0)
+        lv_label_set_text_fmt(s_lbl_ip, "IP: " IPSTR " (red)  |  %s (AP)",
+                              IP2STR(&is.ip), ap_txt);
+    else
+        lv_label_set_text_fmt(s_lbl_ip, "IP: %s (punto de acceso)", ap_txt);
+}
+
 static void about_refresh_dynamic(ui_state_t *ui)
 {
     if (!ui) return;
@@ -84,9 +110,8 @@ static void about_refresh_dynamic(ui_state_t *ui)
             "RAM libre: int %u KB  |  PSRAM %u KB",
             (unsigned)(free_int / 1024), (unsigned)(free_spi / 1024));
     }
-    /* La IP del punto de acceso se movio a Ajustes -> WiFi, a la tarjeta del
-     * propio AP, que es donde tiene sentido buscarla (idea del usuario,
-     * 22-sep-2026). Aqui solo se queda el estado de la placa. */
+    about_refresh_ip();
+    /* IP del AP y de la red (ver about_refresh_ip). */
 }
 
 static void about_timer_cb(lv_timer_t *t)
@@ -212,6 +237,13 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(ui->lbl_about_heap, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(ui->lbl_about_heap, "RAM libre: --");
 
+    /* IP (AP + red): vuelve aqui porque el menu de Ajustes la anuncia. */
+    s_lbl_ip = lv_label_create(card2);
+    lv_obj_set_style_text_font(s_lbl_ip, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(s_lbl_ip, UI_COLOR_TEXT_SOFT, 0);
+    lv_label_set_text(s_lbl_ip, "IP: --");
+    about_refresh_ip();
+
     /* Diagnostico de salud: causa del ultimo reset + total de resets WDT/panic */
     s_lbl_wd = lv_label_create(card2);
     lv_obj_set_style_text_font(s_lbl_wd, &lv_font_montserrat_20_es, 0);
@@ -253,7 +285,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card3_title = lv_label_create(card3);
     lv_obj_set_style_text_font(card3_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card3_title, UI_COLOR_TEXT_SOFT, 0);
-    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Version, Repo y Creditos");
+    lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Versión, Repo y Créditos");
 
     /* Boton Reiniciar pequeno en la esquina */
     lv_obj_t *btn_reboot_hdr = lv_btn_create(card3);
@@ -282,7 +314,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
-    lv_label_set_text_fmt(lbl_ver_top, "Version: %s    Compilado: %s  %s",
+    lv_label_set_text_fmt(lbl_ver_top, "Versión: %s    Compilado: %s  %s",
                           raw_ver,
                           app_desc ? app_desc->date : __DATE__,
                           app_desc ? app_desc->time : __TIME__);

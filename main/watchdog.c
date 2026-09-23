@@ -292,34 +292,35 @@ static void wd_monitor_task(void *arg)
 /* Ultima fecha apuntada (solo lectura: pintar Ajustes no debe tocar la flash). */
 static uint32_t wd_load_arranque_nvs(void)
 {
+    /* OJO: el handle se cerraba ANTES de leer el blob, asi que estas dos
+     * lecturas fallaban siempre y Ajustes -> Acerca de se quedaba sin la fecha
+     * del ultimo reinicio (auditoria del 23-sep-2026: los 'return v;' mal
+     * indentados delataban el refactor a medias). */
     nvs_handle_t h;
     uint32_t v = 0;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u32(h, KEY_BOOT, &v);
-        nvs_close(h);
-    }
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return 0;
     wd_arranque_nvs_t a = {0};
     size_t len = sizeof(a);
     if (nvs_get_blob(h, KEY_ARRANQUE, &a, &len) == ESP_OK) v = a.epoch;   /* formato nuevo */
     else nvs_get_u32(h, KEY_BOOT, &v);                                    /* formato viejo */
-        return v;
+    nvs_close(h);
+    return v;
 }
 
 /* Motivo del ultimo arranque apuntado. Igual que la fecha: se lee UNA vez al
  * arrancar y se guarda en RAM, porque pintar Ajustes no debe tocar la flash. */
 static uint8_t wd_load_arranque_reason_nvs(void)
 {
+    /* Mismo fallo que en la fecha: se leia con el handle ya cerrado. */
     nvs_handle_t h;
     uint8_t v = 0xFF;
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u8(h, KEY_REASON, &v);
-        nvs_close(h);
-    }
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return 0xFF;
     wd_arranque_nvs_t a = {0};
     size_t len = sizeof(a);
     if (nvs_get_blob(h, KEY_ARRANQUE, &a, &len) == ESP_OK) v = a.motivo;  /* formato nuevo */
     else nvs_get_u8(h, KEY_REASON, &v);                                   /* formato viejo */
-        return v;
+    nvs_close(h);
+    return v;
 }
 
 esp_err_t watchdog_init(void)

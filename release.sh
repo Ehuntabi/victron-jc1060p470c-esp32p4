@@ -144,14 +144,15 @@ rm -f build/joint-spl-145-control-v*-esp32p4-full.bin
 OUT="joint-spl-145-control-$TAG-esp32p4-full.bin"
 ( cd build && python -m esptool --chip esp32p4 merge_bin -o "$OUT" @flash_args )
 
-# Mover a RELDIR como LA UNICA version presente: borrar antes cualquier .bin
-# de firmware que hubiera de un release anterior (full o app-only).
-mkdir -p "$RELDIR"
-rm -f "$RELDIR"/joint-spl-145-control-v*-esp32p4-full.bin \
-      "$RELDIR"/joint-spl-145-control-v*-app.bin
-mv "build/$OUT" "$RELDIR/"
-cp "$APP_BIN" "$RELDIR/joint-spl-145-control-$TAG-app.bin"
-echo "[ok] copiado a $RELDIR (full + app), version anterior borrada de ahi y de build/"
+# La copia a RELDIR se hace AL FINAL (paso 6c), despues de que el push y la
+# Release hayan salido bien: esta carpeta es "lo que se lleva a la autocaravana" y
+# tiene que contener lo ultimo PUBLICADO. Antes se copiaba y se borraba la version
+# anterior aqui mismo, antes del push: si el push fallaba (el SSH a GitHub se
+# bloquea a ratos, visto el 23-sep-2026) quedaba un binario que nadie podia
+# descargar y el bueno ya estaba borrado. Auditoria del 23-sep-2026.
+APP_CON_TAG="build/joint-spl-145-control-$TAG-app.bin"
+cp "$APP_BIN" "$APP_CON_TAG"
+echo "[ok] binarios listos en build/: $OUT y $(basename "$APP_CON_TAG")"
 
 # ── 5) verificar que la versión embebida == tag ──────────────────────────────
 EMB="$(python3 - "$APP_BIN" <<'PY'
@@ -232,9 +233,20 @@ else
   gh release create "$TAG" -R "$REPO" \
      --title "Joint SPL 145 Control $TAG" \
      "${NOTAS[@]}" \
-     "$RELDIR/$OUT" "$RELDIR/joint-spl-145-control-$TAG-app.bin" \
+     "build/$OUT" "$APP_CON_TAG" \
     && echo "[ok] Release $TAG publicada con el firmware completo y el app-bin de OTA"
 fi
+
+# ── 6c) ahora si: dejar en ~/joint-releases SOLO lo publicado ───────────────
+# Se llega aqui con el push y la Release ya hechos (o con la Release ya
+# existente), asi que lo que se copia es descargable. Se borra la version
+# anterior de esa carpeta justo despues de copiar la nueva.
+mkdir -p "$RELDIR"
+rm -f "$RELDIR"/joint-spl-145-control-v*-esp32p4-full.bin \
+      "$RELDIR"/joint-spl-145-control-v*-app.bin
+mv "build/$OUT" "$RELDIR/"
+mv "$APP_CON_TAG" "$RELDIR/joint-spl-145-control-$TAG-app.bin"
+echo "[ok] $RELDIR actualizado (full + app de $TAG), version anterior borrada"
 
 # ── 7) lo que queda por hacer a mano ────────────────────────────────────────
 cat <<EOF

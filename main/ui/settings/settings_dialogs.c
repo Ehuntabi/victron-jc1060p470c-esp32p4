@@ -37,7 +37,10 @@ static void ui_confirm_btn_cb(lv_event_t *e)
     if (ok && action) action();
 }
 
-void ui_show_confirm_dialog(const char *title, const char *msg,
+/* Constructor comun. Si 'cancelar_txt' es NULL no se crea el boton de cancelar:
+ * un aviso de solo lectura no tiene nada que cancelar. */
+static void mostrar_dialogo(const char *title, const char *msg,
+                            const char *cancelar_txt,
                             const char *ok_txt, ui_confirm_action_t on_confirm)
 {
     if (s_confirm_modal) return;
@@ -87,15 +90,17 @@ void ui_show_confirm_dialog(const char *title, const char *msg,
     lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *btn_cancel = lv_btn_create(row_btns);
+    lv_obj_t *btn_cancel = cancelar_txt ? lv_btn_create(row_btns) : NULL;
+    if (btn_cancel) {
     lv_obj_set_size(btn_cancel, 220, 60);
     lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
-    lv_label_set_text(lc, "Cancelar");
+    lv_label_set_text(lc, cancelar_txt);
     lv_obj_set_style_text_font(lc, &lv_font_montserrat_24_es, 0);
     lv_obj_center(lc);
     lv_obj_add_event_cb(btn_cancel, ui_confirm_btn_cb, LV_EVENT_CLICKED, NULL);   /* NULL = cancelar */
+    }
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 220, 60);
@@ -108,11 +113,20 @@ void ui_show_confirm_dialog(const char *title, const char *msg,
     lv_obj_add_event_cb(btn_ok, ui_confirm_btn_cb, LV_EVENT_CLICKED, (void *)1);   /* no-NULL = confirmar */
 }
 
+/* Envoltorio publico: confirmacion con los dos botones. */
+void ui_show_confirm_dialog(const char *title, const char *msg,
+                            const char *ok_txt, ui_confirm_action_t on_confirm)
+{
+    mostrar_dialogo(title, msg, "Cancelar", ok_txt, on_confirm);
+}
+
 /* Aviso de solo lectura: el mismo modal pero con un unico boton y sin accion.
  * Se usa al finalizar viaje para decir que ya se puede sacar la tarjeta. */
 void ui_show_info_dialog(const char *title, const char *msg)
 {
-    ui_show_confirm_dialog(title, msg, "Entendido", NULL);
+    /* Un solo boton: antes llamaba a la version de confirmacion y el aviso
+     * salia con "Cancelar" al lado, que no cancela nada (auditoria 23-sep-2026). */
+    mostrar_dialogo(title, msg, NULL, "Entendido", NULL);
 }
 
 /* Cierre forzado, para llamarlo al navegar sin haber respondido: el modal se

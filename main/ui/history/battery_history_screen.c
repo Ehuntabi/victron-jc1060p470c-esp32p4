@@ -70,7 +70,7 @@ static uint32_t s_bh_col[BH_SRC_COUNT]    = {0};
 /* Nombres cortos para la fila de totales (cabe en una sola linea). El nombre
  * completo (battery_history_source_name) se sigue usando en el CSV. */
 static const char *s_bh_short_names[BH_SRC_COUNT] = {
-    "Bateria", "Solar", "OrionTR", "AC",
+    "Batería", "Solar", "OrionTR", "AC",
 };
 static int  s_bh_day_idx = -1;
 static int  s_bh_n_dates = 0;

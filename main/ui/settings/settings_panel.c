@@ -609,7 +609,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     s_settings_main_page = main_page;
     lv_obj_t *page_frigo = lv_menu_page_create(menu, "FRIGO");
     ui->frigo_page = page_frigo;
-    lv_obj_t *page_logs = lv_menu_page_create(menu, "HISTORIAL EN GRAFICOS");
+    lv_obj_t *page_logs = lv_menu_page_create(menu, "HISTORIAL EN GRÁFICOS");
     lv_obj_t *page_sound = lv_menu_page_create(menu, "SONIDO Y ALERTAS");
     lv_obj_t *page_wifi = lv_menu_page_create(menu, "WI-FI");
 
@@ -667,7 +667,7 @@ void ui_settings_panel_init(ui_state_t *ui,
         "Opciones Frigo", "Sensores, ventilador y umbrales",
         LV_SYMBOL_REFRESH,    0x00C851, NULL);
     settings_menu_add_entry(ui, main_page, menu, page_logs,
-        "Historial en graficos", "Histórico SD: batería, nevera y placa solar",
+        "Historial en gráficos", "Histórico SD: batería, nevera y placa solar",
         LV_SYMBOL_SAVE,       0x9C27B0, populate_logs);
     settings_page_ctx_t *ctx_wifi = settings_menu_add_entry(
         ui, main_page, menu, page_wifi,

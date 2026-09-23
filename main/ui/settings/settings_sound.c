@@ -313,7 +313,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card2_title = lv_label_create(card2);
     lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card2_title, lv_color_hex(0xFF9800), 0);
-    lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Bateria");
+    lv_label_set_text(card2_title, LV_SYMBOL_BATTERY_FULL "  Batería");
     ui_card_wrap_title(card2, card2_title, lv_color_hex(0xFF9800));
     /* v3.10: la tarjeta pasa a columna (cabecera centrada arriba) y el contenido
      * de siempre se mete en una fila-cuerpo. */

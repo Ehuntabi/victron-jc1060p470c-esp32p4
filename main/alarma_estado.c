@@ -218,9 +218,9 @@ static const char *alarm_hint_text(void)
     /* Se enseña SIEMPRE que la alarma este activa, silenciada o no: silenciar
      * corta el sonido, no la señal visual (decidido el 13-sep-2026). Si esta
      * silenciada, el texto lo dice, para que se sepa que sigue pasando. */
-    if (alarma_activa(ALARMA_AGUA))  return alarma_silenciada(ALARMA_AGUA)  ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el deposito";
-    if (alarma_activa(ALARMA_GRISES)) return alarma_silenciada(ALARMA_GRISES) ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el deposito";
-    if (alarma_activa(ALARMA_BATERIA)) return alarma_silenciada(ALARMA_BATERIA) ? "Bateria baja (silenciada)" : "Bateria baja: toca la bateria";
+    if (alarma_activa(ALARMA_AGUA))  return alarma_silenciada(ALARMA_AGUA)  ? "Agua limpia en reserva (silenciada)" : "Agua limpia en reserva: toca el depósito";
+    if (alarma_activa(ALARMA_GRISES)) return alarma_silenciada(ALARMA_GRISES) ? "Aguas grises llenas (silenciada)" : "Aguas grises llenas: toca el depósito";
+    if (alarma_activa(ALARMA_BATERIA)) return alarma_silenciada(ALARMA_BATERIA) ? "Batería baja (silenciada)" : "Batería baja: toca la batería";
     if (alarma_activa(ALARMA_CONGELADOR)) return alarma_silenciada(ALARMA_CONGELADOR) ? "Congelador fuera de temperatura (silenciada)" : "Congelador fuera de temperatura: toca su temperatura";
     return NULL;
 }
