@@ -55,12 +55,10 @@ The ESP32 family of chips (except the ESP32) support the SPI co-processor HD (Ha
 In this mode of operation, SPI supports 2 or 4 data lines to transfer data to the co-processor or from the co-processor (half duplex) during an SPI transaction. This is different from 'standard' SPI mode which transfers data bidirectionally (full duplex) over two data lines (one for host to co-processor data [MOSI], one for co-processor to host data [MISO]) during an SPI transaction.
 
 > [!NOTE]
-> 
 > SPI Half Duplex mode is not supported on the classic ESP32. Other all chipsets support half duplex.
 > Please use SPI full duplex for classic ESP32
 
 > [!IMPORTANT]
-> 
 > SPI Half Duplex is not an industry standard and has multiple
 > implementations. Make sure your host processor supports the SPI HD
 > protocol implemented by the Hosted co-processor before proceeding. See [SPI HD protocol used by Hosted](#4-spi-hd-protocol).
@@ -69,19 +67,34 @@ In this mode of operation, SPI supports 2 or 4 data lines to transfer data to th
 
 To enable SPI HD on the Host and co-processor using `idf.py menuconfig`:
 
-1. On Host: **Component config** ---> **ESP-Hosted config** --->
-   **Transport layer** and choose **SPI Half-duplex**.
-2. On Co-processor: **Example configuration** ---> **Transport layer** and
-   choose **SPI Half-duplex**.
+On Host:
+
+```
+Component config
+└── ESP-Hosted config
+    ├── Transport layer ──> SPI Half-duplex
+    └── (configure SPI Half-duplex parameters)
+```
+
+On Co-processor:
+
+```
+Example Configuration
+└── Bus Config in between Host and Co-processor
+    ├── Transport layer ──> SPI Half-duplex
+    └── (configure SPI Half-duplex parameters)
+```
 
 ### 3.1 Clock and Phase
 
-The standard SPI CPOL clock and CPHA phase must be configured
-correctly on both the host and co-processor for the protocol to work.
+The standard SPI CPOL clock and CPHA phase must be configured correctly on both the host and co-processor for the protocol to work.
 
 ### 3.2 Data Lines
 
-Both the host and co-processor can support two or four data lines. Four data lines will be used to transfer data if configured on both the host and co-processor. If the host is configured to use two data lines, only two lines will be used to transfer data even if the co-processor is configured to use four data lines.
+Both the host and co-processor can support one, two or four data lines. Four data lines will be used to transfer data if configured on both the host and co-processor. If the host is configured to use two data lines, only two lines will be used to transfer data even if the co-processor is configured to use four data lines.
+
+> [!WARNING]
+> One data line support must be configured on both the host and co-processor for the transport to work.
 
 ### 3.3 Extra GPIO Signals
 
@@ -95,9 +108,15 @@ assigned to any free GPIO pins:
 > The `Reset` signal can be configured to connect to the `EN` or `RST`
 > pin on the co-processor, or assigned to a GPIO pin on the co-processor.
 >
-> To configure this, use `idf.py menuconfig` on the co-processor: **Example
-> configuration** ---> **SPI Half-duplex Configuration** --->
-> **GPIOs** and set **Slave GPIO pin to reset itself**.
+> To configure this, use `idf.py menuconfig` on the co-processor:
+>
+> ```
+> Example Configuration
+> └── Bus Config in between Host and Co-processor
+>     └── SPI Half-duplex Configuration
+>         └── GPIOs
+>             └── Slave GPIO pin to reset itself
+> ```
 
 ### 3.4 Pin Assignments
 
@@ -136,7 +155,7 @@ When communicating with the co-processor, the master uses the Command, Address, 
 - **Data**: variable length, 2 or 4 data lines
 
 > [!NOTE]
-> 
+>
 > The number of data lines used in the Address and Data phase depends
 > on the Command Mask in the Command sent by the host. See [Supported Commands](#44-supported-commands).
 
@@ -168,7 +187,7 @@ For example, if the host sends command `0x51` (2-bit mask + WRBUF), the host and
 The Command Mask determines the number of data lines used for the transaction. Even if there are four data lines between the host and co-processor, the host can tell the co-processor to use only two data lines by applying the 0x50 command mask.
 
 > [!WARNING]
-> 
+>
 > It is an error to apply the 4-bit data mask (0xA0) when there are
 > only two data lines connecting the host and co-processor.
 
@@ -332,16 +351,16 @@ sequenceDiagram
 
 ### 5.4 Code Reference
 
-- [`slave/main/spi_hd_slave_api.c`](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/slave/main/spi_hd_slave_api.c) implements the code to run the SPI HD driver on the co-processor
-- [`host/drivers/transport/spi_hd/spi_hd_drv.c`](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/host/drivers/transport/spi_hd/spi_hd_drv.c) implements the generic code to run the SPI HD driver on the host
-- [`host/port/spi_hd_wrapper.c`](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/host/port/spi_hd_wrapper.c) implements the ESP-IDF specific code used by the generic SPI HD driver on the host
+- [`slave/main/spi_hd_slave_api.c`](https://github.com/espressif/esp-hosted-mcu/blob/main/slave/main/spi_hd_slave_api.c) implements the code to run the SPI HD driver on the co-processor
+- [`host/drivers/transport/spi_hd/spi_hd_drv.c`](https://github.com/espressif/esp-hosted-mcu/blob/main/host/drivers/transport/spi_hd/spi_hd_drv.c) implements the generic code to run the SPI HD driver on the host
+- [`host/port/spi_hd_wrapper.c`](https://github.com/espressif/esp-hosted-mcu/blob/main/host/port/spi_hd_wrapper.c) implements the ESP-IDF specific code used by the generic SPI HD driver on the host
 
 ## 6 Hardware Considerations
 
 ### 6.1 General Considerations
 
 - Ensure equal trace lengths for all SPI connections, whether using jumper wires or PCB traces.
-- Use the lower clock frequency like 5 MHz for evaluation. Once solution verified, optimise the clock frequency in increasing steps to max possible value. To find out practical maximum SPI co-processor frequency for your co-processor, check `IDF_PERFORMANCE_MAX_SPI_CLK_FREQ` in [ESP-IDF co-processor SPI clock benchmark](https://github.com/espressif/esp-idf/blob/master/components/esp_driver_spi/test_apps/components/spi_bench_mark/include/spi_performance.h) 
+- Use the lower clock frequency like 5 MHz for evaluation. Once solution verified, optimise the clock frequency in increasing steps to max possible value. To find out practical maximum SPI co-processor frequency for your co-processor, check `IDF_PERFORMANCE_MAX_SPI_CLK_FREQ` in [ESP-IDF co-processor SPI clock benchmark](https://github.com/espressif/esp-idf/blob/master/components/esp_driver_spi/test_apps/components/spi_bench_mark/include/spi_performance.h)
 - Verify voltage compatibility between host and co-processor devices.
 - Provide proper power supply decoupling for both host and co-processor devices.
 
@@ -356,7 +375,7 @@ sequenceDiagram
 - Connect as many grounds as possible to improve common ground reference and reduce ground noise.
 
 > [!IMPORTANT]
-> 
+>
 > Quad SPI (QSPI) should not be used with jumper cables due to signal integrity issues. Use Dual SPI for evaluation with jumper cables.
 
 ### 6.3 PCB Design
@@ -387,7 +406,7 @@ For optimal performance and reliability in production designs:
 ## 7 Hardware Setup
 
 > [!IMPORTANT]
-> 
+>
 > Remember that Quad SPI (using D2 and D3) should only be used with a properly designed PCB, not with jumper wires.
 
 Before flashing the co-processor and host, ensure that you have made the correct hardware connections. The following tables show the recommended connections for SPI Half Duplex mode:
@@ -415,7 +434,7 @@ Before flashing the co-processor and host, ensure that you have made the correct
 - ESP32-S2/C2/C3/C5/C6/C61
   - Pins for SPI Half Duplex Host need to be figured out yet.
 - ESP32-P4
-  - For ESP32-P4-Function-EV-Board, the SDIO onboard pins are re-used for SPI Half Duplex Host.
+  - For ESP32-P4-Function-EV-Board, the SDIO onboard pins are reused for SPI Half Duplex Host.
   - For Non ESP32-P4-Function-EV-Board, pins for SPI Half Duplex Host need to be figured out yet.
 
 ### Co-processor connections
@@ -439,7 +458,7 @@ Before flashing the co-processor and host, ensure that you have made the correct
   - Pins for SPI Half Duplex co-processor need to be figured out yet for other boards
 
 > [!NOTE]
-> 
+>
 > A. QSPI Testing
 > - Tested on ESP32-P4-Function-EV-Board
 > - ESP32-P4 as host, ESP32-C6/C3 as QSPI co-processor
@@ -507,11 +526,15 @@ idf.py menuconfig
 ```
 
 #### 9.2.1 Transport config
-  - Navigate to "Example configuration" -> "Transport layer"
-  - Select "SPI Half-duplex"
-
+Navigate and change as following:
+  ```
+  Example Configuration
+  └── Bus Config in between Host and Co-processor
+      └── Transport layer
+          └── Select "SPI Half-duplex"
+  ```
 #### 9.2.2 Any other config
-  - Optionally, Configure any additional SPI-specific settings like co-processor GPIOs, SPI mode, etc.
+  - Optionally, Configure any additional SPI-specific settings in the "SPI Half-duplex Configuration" menu, like co-processor GPIOs, SPI mode, etc.
 
 ###### Generated files
 - Generated config files are (1) `sdkconfig` file and (2) internal `sdkconfig.h` file.
@@ -530,7 +553,15 @@ idf.py build
 
 ### 9.4 Co-processor Flashing
 
-There are two methods to flash the ESP-Hosted co-processor firmware:
+## Firmware Upgrade Guidelines
+
+It is **recommended** to periodically upgrade the slave firmware to leverage new features, bug fixes, and performance improvements.
+
+| Method                     | Description                                        | Recommended Use                                       |
+| -------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| **Direct Serial Flashing** | Uses UART pins for direct firmware installation    | First-time setup to install ESP-Hosted slave firmware |
+| **Slave OTA Update**       | Performs slave firmware updates directly from Host | All subsequent updates after initial installation     |
+
 
 ##### 9.4.1 Serial Flashing (Initial Setup)
 
@@ -544,62 +575,20 @@ idf.py -p <co-processor_serial_port> flash
 > [!NOTE]
 >
 > If you are not able to flash the co-processor, there might be a chance that host is not allowing to to do so.
-> 
+>
 > Put host in bootloader mode using following command and then retry flashing the co-processor
-> 
-> ```bash
-> esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run
-> ```
-
-Monitor the output (optional):
-```
-idf.py -p <coprocessor_serial_port> monitor
-```
+>
+> `esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run`
+>
+> Flash the co-processor and log the output:
+>
+> `idf.py -p <co-processor_serial_port> flash monitor`
 
 ##### 9.4.2 Co-processor OTA Flashing (Subsequent Updates)
 
-For subsequent updates, you can re-use ESP-Hosted-MCU transport, as it should be already working. While doing OTA, Complete co-processor firmware image is not needed and only co-processor application partition, 'network_adapter.bin' need to be re-flashed remotely from host.
+The ESP-Hosted link comes pre-configured and ready to use on first boot. You can update the slave firmware remotely from the host MCU using OTA (Over-The-Air) updates: **No** ESP-Prog, serial cable, or extra GPIO connections are required.
 
-1. Ensure your co-processor device is connected and communicating with the host with existing ESP-Hosted-MCU.
-
-2. Create a web server
-You can re-use your existing web server or create a new locally for testing. Below is example to do it.
-  - Make a new directory so that web server can be run into it and navigate into it
-  - Create simple local web server using python3
-
-     ```bash
-     python3 -m http.server 8080
-     ```
-3. Copy the co-processor app partition `network_adapter.bin` in the directory where you created the web server.
-  - The `network_adapter.bin` can be found in your co-processor project build at `<co-processor_project>/build/network_adapter.bin`
-
-4. Verify if web server is set-up correctly
-  - Open link `http://127.0.0.1:8080` in the browser and check if network_adapter.bin is available.
-  - Right click and copy the complete URL of this network_adapter.bin and note somewhere.
- 
-5. On the **host side**, use the `esp_hosted_ota` function to initiate the OTA update:
-
-   ```c
-   #include "esp_hosted_api.h"
-
-   const char* image_url = "http://example.com/path/to/network_adapter.bin"; //web server full url
-   esp_err_t ret = esp_hosted_ota(image_url);
-   if (ret == ESP_OK) {
-       printf("co-processor OTA update failed[%d]\n", ret);
-   }
-   ```
-
-   This function will download the firmware in chunk by chunk as http client from the specified URL and flash it to the co-processor device through the established transport.
-   In above web server example, You can paste the copied url earlier.
-   
-
-6. Monitor the OTA progress through the console output on both the host and co-processor devices.
-
-> [!NOTE]
->
-> - The `esp_hosted_ota` function is part of the ESP-Hosted-MCU API and handles the OTA process through the transport layer.
-> - Ensure that your host application has web server connectivity to download the firmware file.
-> - The co-processor device doesn't need to be connected to the web server for this OTA method.
+For step-by-step instructions, see the [Host Performs Slave OTA Example](../examples/host_performs_slave_ota/README.md).
 
 ## 10 Flashing the Host
 
@@ -608,8 +597,8 @@ Host are required to support 2 data line SPI (dual SPI) or 4 line SPI (quad SPI 
 | Supported Host Targets  | Any ESP chipset | Any Non-ESP chipset |
 | ----------------------- | --------------- | ------------------- |
 
-Non ESP chipset may need to port the porting layer. It is strongly recommanded to evaluate the solution using ESP chipset as host before porting to any non-esp chipset.
-For Quad SPI, PCB is only supported. Dual SPI could be evaluted using jumper cables.
+Non ESP chipset may need to port the porting layer. It is strongly recommended to evaluate the solution using ESP chipset as host before porting to any non-esp chipset.
+For Quad SPI, PCB is only supported. Dual SPI could be evaluated using jumper cables.
 
 Non-ESP Hosts, while porting, need to ensure that the Half duplex protocol and framing is exactly same as that of co-processor.
 
@@ -647,37 +636,43 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
 
 ###### 4. Disable native Wi-Fi if available
    If your host ESP chip already has native Wi-Fi support, disable it by editing the `components/soc/<soc>/include/soc/Kconfig.soc_caps.in` file and changing all `WIFI` related configs to `n`.
-     
+
     If you happen to have both, host and co-processor as same ESP chipset type (for example two ESP32-C2), note an [additional step](docs/troubleshooting/#1-esp-host-to-evaluate-already-has-native-wi-fi)
-    
+
 
 ### 10.3 Menuconfig, Build and Flash Host
 
 ###### 1. High performance configurations
-   This is optional step, suggested for high performance applications.
+This is optional step, suggested for high performance applications.
 
-   If using ESP32-P4 as host:
-     - Remove the default `sdkconfig.defaults.esp32p4` file.
-     - Create a new `sdkconfig.defaults.esp32p4` file with the following content:
-     ```
-     CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
-     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
-     CONFIG_ESP_WIFI_TX_BA_WIN=32
-     CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
-     CONFIG_ESP_WIFI_RX_BA_WIN=32
+If using ESP32-P4 as host and the ESP32-C6 as the co-processor:
 
-     CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
-     CONFIG_LWIP_TCP_WND_DEFAULT=65534
-     CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+- Remove all `CONFIG_ESP_WIFI_` settings. They do not apply to ESP-Hosted.
+- Add the following settings to your `sdkconfig.defaults.esp32p4` file:
+  ```
+  ### sdkconfig for ESP32-P4 + C6 Dev board
+  CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM=16
+  CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_DYNAMIC_TX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_AMPDU_TX_ENABLED=y
+  CONFIG_WIFI_RMT_TX_BA_WIN=32
+  CONFIG_WIFI_RMT_AMPDU_RX_ENABLED=y
+  CONFIG_WIFI_RMT_RX_BA_WIN=32
 
-     CONFIG_LWIP_TCP_SACK_OUT=y
-     ```
+  CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
+  CONFIG_LWIP_TCP_WND_DEFAULT=65534
+  CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
 
-    For other hosts also, you can merge above configs in corresponding `sdkconfig.defaults.esp32XX` file.
+  CONFIG_LWIP_TCP_SACK_OUT=y
+  ```
+
+For other ESP32 hosts, you can merge above configs into the corresponding `sdkconfig.defaults.esp32XX` file.
+
+To adjust other Wi-Fi parameters, run `idf.py menuconfig` and go to `Component config` ---> `Wi-Fi Remote` ---> `Wi-Fi configuration`.
+
+Optimised parameters for other co-processors can be found in the [Performance Optimization Guide](performance_optimization.md).
 
 ###### 2. Set environment for your host ESP chip:
 
@@ -693,9 +688,9 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
    ```
    ESP-Hosted-MCU host configurations are available under "Component config" -> "ESP-Hosted config"
    1. Select "SPI Half-duplex" as the transport layer
-   2. Change co-processor chipset to connect to under "Slave chipset to be used" 
+   2. Change co-processor chipset to connect to under "Slave chipset to be used"
    3. Change Number of data lines to 2 or 4 based on the co-processor using "SPI Half-duplex Configuration" -> "Num Data Lines to use"
-   4. Optionally, Configure SPI-specific settings like
+   4. Optionally, Configure SPI-specific settings in the "SPI Half-duplex Configuration" menu, like:
      - SPI Clock Freq (MHz)
      - SPI Mode
      - SPI Host GPIO Pins
@@ -784,7 +779,7 @@ After flashing both the co-processor and host devices, follow these steps to con
    - Set Wi-Fi mode: `wifi_mode <mode>` (where mode can be 'sta', 'ap', or 'apsta')
 
 7. Advanced iperf testing:
-   Once connected, you can run iperf tests:
+   Once connected, you can run iperf tests to verify performance:
 
    | Test Case | Host Command | External STA Command |
    | :-------: | :----------: | :------------------: |
@@ -794,6 +789,10 @@ After flashing both the co-processor and host devices, follow these steps to con
    | TCP Host RX | `iperf -s -i 3` | `iperf -c <HOST_IP> -t 60 -i 3` |
 
    Note: Replace `<STA_IP>` with the IP address of the external STA, and `<HOST_IP>` with the IP address of the ESP-Hosted device.
+
+> [!TIP]
+>
+> To measure the optimal performance, check out the [Shield Box Test Setup](shield-box-test-setup.md).
 
 8. Troubleshooting:
    - If you encounter issues, refer to section 6.3 for testing the SPI connection.

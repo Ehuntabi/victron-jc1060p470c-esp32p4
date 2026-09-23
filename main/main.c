@@ -11,6 +11,7 @@
 #include "esp_flash.h"
 #include "esp_chip_info.h"
 #include "esp_system.h"
+#include "esp_hosted.h"   /* version del firmware de la radio (C6) */
 #include "esp_heap_caps.h"
 #include "ui.h"
 #include "data/dashboard_state.h"
@@ -615,6 +616,35 @@ static void init_sd_rtc_frigo(void)
 }
 
 /* Wi-Fi AP + portal HTTP + publisher UDP hacia el mini. */
+/* Deja en el log el firmware que lleva la radio (el C6). Con la 0.0.27 no
+ * habia forma de preguntarselo; desde la 2.12.13 si, y ademas importa: el host
+ * y el esclavo van EMPAREJADOS, y con un C6 viejo el AP funciona pero el BLE no
+ * arranca (medido el 23-sep-2026). Se pregunta en segundo plano porque el
+ * transporte tarda ~11 s en levantarse, y no se bloquea el arranque por esto.
+ * Ver documentacion/C6_FIRMWARE_ACTUALIZACION.md. */
+static void radio_version_task(void *arg)
+{
+    (void)arg;
+    for (int intento = 0; intento < 15; intento++) {
+        esp_hosted_coprocessor_fwver_t v = {0};
+        if (esp_hosted_get_coprocessor_fwversion(&v) == ESP_OK) {
+            if (v.major1 == 0 && v.minor1 == 0) {
+                ESP_LOGW(TAG, "Radio C6: no dice su version (firmware anterior a la "
+                              "2.12.13). El BLE no funcionara hasta actualizarla: ver "
+                              "tools/c6_updater/LEEME.md");
+            } else {
+                ESP_LOGI(TAG, "Radio C6: firmware %u.%u.%u",
+                         (unsigned)v.major1, (unsigned)v.minor1, (unsigned)v.patch1);
+            }
+            vTaskDelete(NULL);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+    ESP_LOGW(TAG, "Radio C6: no he podido preguntar su version de firmware");
+    vTaskDelete(NULL);
+}
+
 static void init_network(void)
 {
     /* --- WiFi + config server --- */
@@ -625,6 +655,9 @@ static void init_network(void)
 
     /* --- Publisher UDP hacia el mini (1 Hz broadcast 192.168.4.255:4242) --- */
     udp_tx_start();
+
+    /* Que quede en el log que firmware lleva la radio (util para soporte). */
+    xTaskCreate(radio_version_task, "radio_ver", 3072, NULL, 3, NULL);
 }
 
 /* Historicos (bateria/energia/viaje/solar) + alertas + NE185. */

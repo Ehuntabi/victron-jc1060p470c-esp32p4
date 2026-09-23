@@ -16,10 +16,19 @@ dependencies:
     version: ^1
   espressif/esp_lcd_touch:
     version: ^1.1.2
+  # Salto de esp_hosted 0.0.27 -> 2.12.13 el 23-sep-2026 (tanda de la radio).
+  # Motivo y trampas en documentacion/C6_FIRMWARE_ACTUALIZACION.md: el AP salia
+  # abierto y con otro nombre. A partir de la 2.11.0 el host EXIGE
+  # esp_wifi_remote >= 1.3.1 (aqui resuelve 1.6.5), y desde la 2.5.2 el
+  # controlador BT del C6 arranca APAGADO: lo enciende victron_ble.c.
+  # OJO: host y esclavo van EMPAREJADOS. Con un C6 viejo, el host nuevo levanta
+  # el AP pero el BLE no arranca (medido el 23-sep-2026). Por eso, para
+  # actualizar una placa que aun tenga el C6 viejo hay que grabar el C6 ANTES:
+  # ver tools/c6_updater/LEEME.md.
   espressif/esp_wifi_remote:
-    version: '>=0.2.0,<0.3.0'
+    version: '>=1.3.1,<2.0.0'
   espressif/esp_hosted:
-    version: '>=0.0.27,<0.1.0'
+    version: '==2.12.13'
   espressif/onewire_bus: '>=0.1.0'
   espressif/ds18b20: '>=0.1.0'
   espressif/esp_codec_dev: ^1.3.0

@@ -1,17 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2021 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /*prevent recursive inclusion */
 #ifndef __SERIAL_LL_IF_H
@@ -23,13 +14,13 @@ extern "C" {
 
 /** includes **/
 #include "transport_drv.h"
-#include "os_wrapper.h"
+#include "port_esp_hosted_host_os.h"
 
 struct serial_ll_operations;
 
 /* serial interface handle */
 typedef struct serial_handle_s {
-	QueueHandle_t queue;
+	queue_handle_t queue;
 	uint8_t if_type;
 	uint8_t if_num;
 	struct serial_ll_operations *fops;
@@ -56,18 +47,18 @@ struct serial_ll_operations {
 	 *
 	 *         serial_rx_callback is notification mechanism to implementer of
 	 *         serial interface. Higher layer would understand there is data
-	 *         is ready through this notification. Then higer layer should do
+	 *         is ready through this notification. Then higher layer should do
 	 *         serial_read API to receive actual data.
 	 *
 	 *         As an another design option, serial_rx_callback can also be
 	 *         thought of incoming data indication, i.e. asynchronous rx
-	 *         indication, which can be used by higher layer in seperate
+	 *         indication, which can be used by higher layer in separate
 	 *         dedicated rx task to receive and process rx data.
 	 *
 	 * @param  serial_ll_hdl - handle
 	 *         rlen - output param, number of bytes read
 	 *
-	 * @retval rbuffer - ready buffer read on serial inerface
+	 * @retval rbuffer - ready buffer read on serial interface
 	 */
 	uint8_t *  (*read)  (const serial_ll_handle_t * serial_ll_hdl,
 		uint16_t * rlen);
@@ -78,7 +69,7 @@ struct serial_ll_operations {
 	 * @param  serial_ll_hdl - handle
 	 *         wlen - number of bytes to write
 	 *         wbuffer - buffer to send
-	 * @retval STM_FAIL/STM_OK
+	 * @retval 0 on success, -1 on failure
 	 */
 	int        (*write) (const serial_ll_handle_t * serial_ll_hdl,
 		uint8_t * wbuffer, const uint16_t wlen);
@@ -87,7 +78,7 @@ struct serial_ll_operations {
 	/**
 	 * @brief close - Close serial interface
 	 * @param  serial_ll_hdl - handle
-	 * @retval rbuffer - ready buffer read on serial inerface
+	 * @retval rbuffer - ready buffer read on serial interface
 	 */
 	int        (*close) (serial_ll_handle_t * serial_ll_hdl);
 };
@@ -99,7 +90,7 @@ struct serial_ll_operations {
   */
 serial_ll_handle_t * serial_ll_init(void(*rx_data_ind)(void));
 
-stm_ret_t serial_ll_rx_handler(interface_buffer_handle_t * buf_handle);
+int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle);
 #ifdef __cplusplus
 }
 #endif

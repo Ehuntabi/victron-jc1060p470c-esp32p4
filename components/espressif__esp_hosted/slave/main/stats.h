@@ -1,37 +1,37 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2021 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 //
 
 #ifndef __STATS__H__
 #define __STATS__H__
 
 #include <stdint.h>
-#include "adapter.h"
+#include "esp_hosted_interface.h"
 #include "endian.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
+#include "esp_hosted_header.h"
 
 #define SEC_TO_MSEC(x)                 (x*1000)
 #define MSEC_TO_USEC(x)                (x*1000)
 #define SEC_TO_USEC(x)                 (x*1000*1000)
 
+/* Change the feature flag definition */
+#ifdef CONFIG_ESP_HOSTED_FUNCTION_PROFILING
+#define ESP_FUNCTION_PROFILING 1
+#endif
+
 
 /* Stats CONFIG:
  *
- * 1. CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+ * 1. defined(CONFIG_ESP_HOSTED_LOG_RUNTIME_FREERTOS_STATS)
+ *    Needs to enable, CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
  *    These are debug stats to show the CPU utilization by all tasks
  *    This is set through sdkconfig
  *
@@ -48,10 +48,15 @@
 #define TEST_RAW_TP                    CONFIG_ESP_RAW_THROUGHPUT_TRANSPORT
 
 #ifdef CONFIG_ESP_PKT_STATS
-#define ESP_PKT_STATS 1
+  #define ESP_PKT_STATS 1
 #endif
 
-#ifdef CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+#ifdef CONFIG_ESP_HOSTED_LOG_RUNTIME_FREERTOS_STATS
+
+#ifndef CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+#error "CONFIG_ESP_HOSTED_LOG_RUNTIME_FREERTOS_STATS needs CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS to be enabled"
+#endif
+
   /* Stats to show task wise CPU utilization */
   #define STATS_TICKS                  pdMS_TO_TICKS(1000*2)
   #define ARRAY_SIZE_OFFSET            5
@@ -94,7 +99,7 @@ typedef struct {
  * to change TEST_RAW_TP__BUF_SIZE as:
  *
  * UDP : Max unfragmented packet size: 1472.
- * H_ESP_PAYLOAD_HEADER_OFFSET is not included into the calulations.
+ * H_ESP_PAYLOAD_HEADER_OFFSET is not included into the calculations.
  *
  * TCP: Assess MSS and decide similar to above
  */
@@ -104,24 +109,143 @@ typedef struct {
 void debug_update_raw_tp_rx_count(uint16_t len);
 #endif
 
-#if ESP_PKT_STATS || TEST_RAW_TP
+#ifdef ESP_PKT_NUM_DEBUG
+struct dbg_stats_t {
+	uint16_t tx_pkt_num;
+	uint16_t exp_rx_pkt_num;
+};
+
+extern struct dbg_stats_t dbg_stats;
+#define UPDATE_HEADER_TX_PKT_NO(h) h->pkt_num = htole16(dbg_stats.tx_pkt_num++)
+#define UPDATE_HEADER_RX_PKT_NO(h)                                              \
+	do {                                                                        \
+		uint16_t rcvd_pkt_num = le16toh(header->pkt_num);                       \
+		if (dbg_stats.exp_rx_pkt_num != rcvd_pkt_num) {                         \
+			ESP_LOGW(TAG, "exp_pkt_num[%u], rx_pkt_num[%u]",                    \
+					dbg_stats.exp_rx_pkt_num, rcvd_pkt_num);                    \
+			dbg_stats.exp_rx_pkt_num = rcvd_pkt_num;                            \
+		}                                                                       \
+		dbg_stats.exp_rx_pkt_num++;                                             \
+	} while(0);
+
+#else /*ESP_PKT_NUM_DEBUG*/
+
+#define UPDATE_HEADER_TX_PKT_NO(h)
+#define UPDATE_HEADER_RX_PKT_NO(h)
+
+#endif /*ESP_PKT_NUM_DEBUG*/
+
+#if ESP_PKT_STATS
 struct pkt_stats_t {
 	uint32_t sta_sh_in;
 	uint32_t sta_sh_out;
+	uint32_t ap_sh_in;
+	uint32_t ap_sh_out;
 	uint32_t hs_bus_sta_in;
 	uint32_t hs_bus_sta_out;
 	uint32_t hs_bus_sta_fail;
+	uint32_t hs_bus_ap_in;
+	uint32_t hs_bus_ap_out;
+	uint32_t hs_bus_ap_fail;
 	uint32_t serial_rx;
 	uint32_t serial_tx_total;
 	uint32_t serial_tx_evt;
-	uint32_t slave_wifi_rx_msg_loaded;
+	uint32_t sta_flowctrl_on;
+	uint32_t sta_flowctrl_off;
+	uint32_t sta_lwip_in;
+	uint32_t sta_slave_lwip_out;
+	uint32_t sta_host_lwip_out;
+	uint32_t sta_both_lwip_out;
 };
 
 extern struct pkt_stats_t pkt_stats;
+
 #endif
 
 
 void process_test_capabilities(uint8_t capabilities);
 void create_debugging_tasks(void);
 uint8_t debug_get_raw_tp_conf(void);
+
+/* Add these declarations before the macros */
+
+#ifdef ESP_FUNCTION_PROFILING
+
+/* Timing measurement stats */
+struct timing_measure {
+	uint32_t start_time;
+	uint32_t end_time;
+	uint32_t total_time;
+	uint32_t count;
+};
+
+struct timing_stats {
+	uint32_t min_time;
+	uint32_t max_time;
+	uint32_t avg_time;
+};
+
+/* Move struct definition to header file */
+struct timing_stats_entry {
+	const char *name;
+	struct timing_measure measure;
+	struct timing_stats stats;
+	bool active;
+};
+
+
+#define ESP_HOSTED_FUNC_PROF_START(func_name) do { \
+    struct timing_stats *s = register_prof_stats(func_name); \
+    if (!s) { \
+        ESP_LOGE(TAG, "Failed to register timing stats for %s", func_name); \
+        break; \
+    } \
+    struct timing_measure *t = get_prof_data(s); \
+    if (!t) { \
+        ESP_LOGE(TAG, "Failed to get timing measure for %s", func_name); \
+        break; \
+    } \
+    t->start_time = esp_timer_get_time(); \
+} while(0)
+
+#define ESP_HOSTED_FUNC_PROF_END(func_name) do { \
+    struct timing_stats *s = NULL; \
+    struct timing_measure *t = NULL; \
+    for (int i = 0; i < num_timing_entries; i++) { \
+        if (strcmp(timing_entries[i].name, func_name) == 0) { \
+            s = &timing_entries[i].stats; \
+            t = &timing_entries[i].measure; \
+            break; \
+        } \
+    } \
+    if (!s || !t) { \
+        ESP_LOGE(TAG, "Failed to find timing stats for %s", func_name); \
+        break; \
+    } \
+    t->end_time = esp_timer_get_time(); \
+    t->count++; \
+    int64_t elapsed = t->end_time - t->start_time; \
+    t->total_time += elapsed; \
+    if (s->min_time == 0 || elapsed < s->min_time) { \
+        s->min_time = elapsed; \
+    } \
+    if (elapsed > s->max_time) { \
+        s->max_time = elapsed; \
+    } \
+    if (t->count > 0) { \
+        s->avg_time = t->total_time / t->count; \
+    } \
+} while(0)
+
+extern struct timing_stats_entry timing_entries[CONFIG_ESP_HOSTED_FUNCTION_PROFILING_MAX_ENTRIES];
+extern int num_timing_entries;
+
+/* Function declarations */
+struct timing_stats* register_prof_stats(const char *func_name);
+struct timing_measure* get_prof_data(struct timing_stats *s);
+#else
+#define ESP_HOSTED_FUNC_PROF_START(func_name)
+#define ESP_HOSTED_FUNC_PROF_END(func_name)
+#endif
+
 #endif  /*__STATS__H__*/

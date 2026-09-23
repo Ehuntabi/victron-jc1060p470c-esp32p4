@@ -1,19 +1,23 @@
-// Copyright 2015-2022 Espressif Systems (Shanghai) PTE LTD
-/* SPDX-License-Identifier: GPL-2.0 OR Apache-2.0 */
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include "rpc_core.h"
-#include "rpc_common.h"
+#include "esp_hosted_rpc.h"
 #include "serial_if.h"
 #include "serial_drv.h"
 #include <unistd.h>
-#include "esp_log.h"
 #include "esp_task.h"
+#include "port_esp_hosted_host_config.h"
+#include "port_esp_hosted_host_log.h"
+#include "esp_hosted_rpc.pb-c.h"
 
-
-DEFINE_LOG_TAG(rpc_core);
+static const char *TAG = "rpc_core";
 
 
 #define RPC_LIB_STATE_INACTIVE      0
@@ -34,19 +38,7 @@ static queue_handle_t rpc_tx_q = NULL;
 static void * rpc_rx_thread_hdl;
 static void * rpc_tx_thread_hdl;
 static void * rpc_tx_sem;
-static void * async_timer_hdl;
 static struct rpc_lib_context rpc_lib_ctxt;
-
-static int call_event_callback(ctrl_cmd_t *app_event);
-static int is_async_resp_callback_available(ctrl_cmd_t *app_resp);
-static int is_sync_resp_sem_available(uint32_t uid);
-static int clear_async_resp_callback(ctrl_cmd_t *app_resp);
-static int call_async_resp_callback(ctrl_cmd_t *app_resp);
-static int set_async_resp_callback(ctrl_cmd_t *app_req, rpc_rsp_cb_t resp_cb);
-static int set_sync_resp_sem(ctrl_cmd_t *app_req);
-static int wait_for_sync_response(ctrl_cmd_t *app_req);
-static void rpc_async_timeout_handler(void *arg);
-static int post_sync_resp_sem(ctrl_cmd_t *app_resp);
 
 /* uid to link between requests and responses */
 /* uids are incrementing values from 1 onwards.
@@ -63,6 +55,8 @@ typedef struct {
 typedef struct {
 	uint32_t uid;
 	rpc_rsp_cb_t cb;
+	void * timer_hdl;
+	ctrl_cmd_t *app_req;  /* Store request so we can free it on response or timeout */
 } async_rsp_t;
 
 /* rpc response callbacks
@@ -70,17 +64,21 @@ typedef struct {
  * 1. If application wants to use synchrounous, i.e. Wait till the response received
  *    after current rpc request is sent or timeout occurs,
  *    application will pass this callback in request as NULL.
- * 2. If application wants to use `asynchrounous`, i.e. Just send the request and
+ * 2. If application wants to use `asynchronous`, i.e. Just send the request and
  *    unblock for next processing, application will assign function pointer in
  *    rpc request, which will be registered here.
  *    When the response comes, the this registered callback function will be called
  *    with input as response
  */
-#define MAX_SYNC_RPC_TRANSACTIONS  CONFIG_ESP_MAX_SIMULTANEOUS_SYNC_RPC_REQUESTS
-#define MAX_ASYNC_RPC_TRANSACTIONS CONFIG_ESP_MAX_SIMULTANEOUS_ASYNC_RPC_REQUESTS
+#define MAX_SYNC_RPC_TRANSACTIONS  H_MAX_SYNC_RPC_REQUESTS
+#define MAX_ASYNC_RPC_TRANSACTIONS H_MAX_ASYNC_RPC_REQUESTS
 
 static sync_rsp_t sync_rsp_table[MAX_SYNC_RPC_TRANSACTIONS] = { 0 };
 static async_rsp_t async_rsp_table[MAX_ASYNC_RPC_TRANSACTIONS] = { 0 };
+
+static void * sync_rsp_table_mutex = NULL;
+static void * async_rsp_table_mutex = NULL;
+static void * uid_mutex = NULL;
 
 /* rpc event callbacks
  * These will be updated when user registers event callback
@@ -92,6 +90,18 @@ static async_rsp_t async_rsp_table[MAX_ASYNC_RPC_TRANSACTIONS] = { 0 };
  *    event callback will be called asynchronously
  */
 static rpc_evt_cb_t rpc_evt_cb_table[RPC_ID__Event_Max - RPC_ID__Event_Base] = { NULL };
+
+
+static int call_event_callback(ctrl_cmd_t *app_event);
+static int is_async_resp_callback_available(ctrl_cmd_t *app_resp);
+static int is_sync_resp_sem_available(uint32_t uid);
+static int call_async_resp_callback(ctrl_cmd_t *app_resp);
+static int set_async_resp_callback(ctrl_cmd_t *app_req, rpc_rsp_cb_t resp_cb, void *timer_hdl);
+static int set_sync_resp_sem(ctrl_cmd_t *app_req);
+static int wait_for_sync_response(ctrl_cmd_t *app_req);
+static void rpc_async_timeout_handler(void *arg);
+static int post_sync_resp_sem(ctrl_cmd_t *app_resp);
+
 
 /* Open serial interface
  * This function may fail if the ESP32 kernel module is not loaded
@@ -118,17 +128,24 @@ static inline void set_rpc_lib_state(int state)
 	rpc_lib_ctxt.state = state;
 }
 
-static inline int is_rpc_lib_state(int state)
+static inline int is_rpc_lib_ready(void)
 {
-	if (rpc_lib_ctxt.state == state)
+	if (rpc_lib_ctxt.state >= RPC_LIB_STATE_READY)
 		return 1;
 	return 0;
 }
 
+static inline int is_rpc_lib_inactive(void)
+{
+	if (rpc_lib_ctxt.state == RPC_LIB_STATE_INACTIVE)
+		return 1;
+	return 0;
+}
 
 /* RPC TX indication */
 static void rpc_tx_ind(void)
 {
+	ESP_LOGV(TAG, "posting rpc tx semaphore");
 	g_h.funcs->_h_post_semaphore(rpc_tx_sem);
 }
 
@@ -193,7 +210,21 @@ static int process_rpc_tx_msg(ctrl_cmd_t *app_req)
 
 	/* 5. Assign response callback, if valid */
 	if (app_req->rpc_rsp_cb) {
-		ret = set_async_resp_callback(app_req, app_req->rpc_rsp_cb);
+
+		/* 5.1 Start timeout for response for async only
+		* For sync procedures, g_h.funcs->_h_get_semaphore takes care to
+		* handle timeout situations */
+		ESP_LOGI(TAG, "starting async resp timer for req[%u]",req.msg_id);
+		void *timer_hdl = g_h.funcs->_h_timer_start("rpc_async_timeout_timer", SEC_TO_MILLISEC(app_req->rsp_timeout_sec), H_TIMER_TYPE_ONESHOT,
+				rpc_async_timeout_handler, app_req);
+		if (!timer_hdl) {
+			ESP_LOGE(TAG, "Failed to start async resp timer");
+			goto fail_req;
+		}
+
+		/* 5.2 set async resp callback */
+		ESP_LOGD(TAG, "setting async resp callback for req[%u]",req.msg_id);
+		ret = set_async_resp_callback(app_req, app_req->rpc_rsp_cb, timer_hdl);
 		if (ret < 0) {
 			ESP_LOGE(TAG, "could not set callback for req[%u]",req.msg_id);
 			failure_status = RPC_ERR_SET_ASYNC_CB;
@@ -201,21 +232,9 @@ static int process_rpc_tx_msg(ctrl_cmd_t *app_req)
 		}
 	}
 
-	/* 6. Start timeout for response for async only
-	 * For sync procedures, g_h.funcs->_h_get_semaphore takes care to
-	 * handle timeout situations */
-	if (app_req->rpc_rsp_cb) {
-		async_timer_hdl = g_h.funcs->_h_timer_start(app_req->rsp_timeout_sec, RPC__TIMER_ONESHOT,
-				rpc_async_timeout_handler, app_req);
-		if (!async_timer_hdl) {
-			ESP_LOGE(TAG, "Failed to start async resp timer");
-			goto fail_req;
-		}
-	}
-
-
 	/* 7. Pack in protobuf and send the request */
 	rpc__pack(&req, tx_data);
+	ESP_LOGD(TAG, "sending rpc req[%u]",req.msg_id);
 	if (transport_pserial_send(tx_data, tx_len)) {
 		ESP_LOGE(TAG, "Send RPC req[0x%x] failed",req.msg_id);
 		failure_status = RPC_ERR_TRANSPORT_SEND;
@@ -261,7 +280,7 @@ fail_req:
 		 * Prevents timeout waiting for a response that will never come
 		 * as request was never sent
 		 */
-		ESP_LOGV(TAG, "put failed response into rx queue");
+		ESP_LOGW(TAG, "RPC Sync proc failed");
 
 		ctrl_cmd_t *app_resp = NULL;
 
@@ -293,6 +312,35 @@ fail_req2:
 
 	HOSTED_FREE(tx_data);
 	RPC_FREE_BUFFS();
+
+	/* app_req lifecycle on failure:
+	 * - Async requests: Check if registered in callback table
+	 *   - If registered: Will be freed on timeout or cleanup
+	 *   - If not registered (early failure): Free here
+	 * - Sync requests: NEVER free here! The calling application is waiting
+	 *   and will free it in rpc_wait_and_parse_sync_resp() after getting
+	 *   the error response we just queued. */
+	if (app_req->rpc_rsp_cb) {
+		/* Async request - check if it was registered */
+		int found = 0;
+
+		g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
+		for (int i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
+			if (async_rsp_table[i].uid == app_req->uid) {
+				found = 1;
+				break;
+			}
+		}
+		g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
+
+		if (!found) {
+			/* Not registered, free it here */
+			HOSTED_FREE(app_req);
+		}
+		/* If found, it will be freed by timeout or cleanup */
+	}
+	/* Sync requests: Don't free - caller owns it */
+
 	return FAILURE;
 }
 
@@ -348,17 +396,6 @@ static int process_rpc_rx_msg(Rpc * proto_msg, rpc_rx_ind_t rpc_rx_func)
 		/* Allocate app struct for response */
 		HOSTED_CALLOC(ctrl_cmd_t, app_resp, sizeof(ctrl_cmd_t), free_buffers);
 
-
-		/* If this was async procedure, timer would have
-		 * been running for response.
-		 * As response received, stop timer */
-		if (async_timer_hdl) {
-			ESP_LOGD(TAG, "Stopping the asyn timer for resp");
-			/* async_timer_hdl will be cleaned in g_h.funcs->_h_timer_stop */
-			g_h.funcs->_h_timer_stop(async_timer_hdl);
-			async_timer_hdl = NULL;
-		}
-
 		/* Decode protobuf buffer of response and
 		 * copy into app structures */
 		if (rpc_parse_rsp(proto_msg, app_resp)) {
@@ -377,7 +414,6 @@ static int process_rpc_rx_msg(Rpc * proto_msg, rpc_rx_ind_t rpc_rx_func)
 			 * return to select
 			 */
 			call_async_resp_callback(app_resp);
-			clear_async_resp_callback(app_resp);
 		} else {
 
 			/* as RPC async response callback function is
@@ -450,7 +486,7 @@ static void rpc_rx_thread(void const *arg)
 		Rpc *resp = NULL;
 
 		/* Block on read of protobuf encoded msg */
-		if (is_rpc_lib_state(RPC_LIB_STATE_INACTIVE)) {
+		if (!is_rpc_lib_ready()) {
 			g_h.funcs->_h_sleep(1);
 			continue;
 		}
@@ -470,7 +506,9 @@ static void rpc_rx_thread(void const *arg)
 		HOSTED_FREE(buf);
 
 		/* Send for further processing as event or response */
+		ESP_LOGV(TAG, "Before process_rpc_rx_msg");
 		process_rpc_rx_msg(resp, rpc_rx_func);
+		ESP_LOGV(TAG, "after process_rpc_rx_msg");
 		continue;
 
 		/* Failed - cleanup */
@@ -506,23 +544,33 @@ static void rpc_tx_thread(void const *arg)
 
 	/* Infinite loop to process incoming msg on serial interface */
 	while (1) {
+		ESP_LOGV(TAG, "Loop: Wait for next RPC request");
 
 		/* 4.1 Block on read of protobuf encoded msg */
-		if (is_rpc_lib_state(RPC_LIB_STATE_INACTIVE)) {
+		if (!is_rpc_lib_ready()) {
 			g_h.funcs->_h_sleep(1);
-			ESP_LOGV(TAG, "%s:%u rpc lib inactive",__func__,__LINE__);
+			ESP_LOGD(TAG, "%s:%u rpc lib not ready",__func__,__LINE__);
 			continue;
 		}
 
+		ESP_LOGV(TAG, "Waiting for RPC TX semaphore");
 		g_h.funcs->_h_get_semaphore(rpc_tx_sem, HOSTED_BLOCKING);
+		ESP_LOGV(TAG, "RPC TX semaphore acquired");
 
+		ESP_LOGV(TAG, "Dequeueing RPC TX Q");
 		if (g_h.funcs->_h_dequeue_item(rpc_tx_q, &app_req, HOSTED_BLOCK_MAX)) {
 			ESP_LOGE(TAG, "RPC TX Q Failed to dequeue");
 			continue;
 		}
 
 		if (app_req) {
+			ESP_LOGV(TAG, "Processing RPC TX msg");
 			process_rpc_tx_msg(app_req);
+			/* app_req lifecycle:
+			 * - Async requests: Stored in async_rsp_table, freed when response arrives or timeout
+			 * - Sync requests: Freed by caller in rpc_wait_and_parse_sync_resp() after response
+			 * - Failed requests: Freed in process_rpc_tx_msg() failure path
+			 * So we don't free anything here. */
 		} else {
 			ESP_LOGE(TAG, "RPC Tx Q empty or uninitialised");
 			continue;
@@ -565,6 +613,14 @@ static int cancel_rpc_threads(void)
 }
 
 
+static const char *rpc_id_name(int id)
+{
+	const ProtobufCEnumValue *v =
+		protobuf_c_enum_descriptor_get_value(&rpc_id__descriptor, id);
+
+	return v ? v->name : "UNKNOWN";
+}
+
 
 /* This function will be only invoked in synchrounous rpc response path,
  * i.e. if rpc response callbcak is not available i.e. NULL
@@ -587,10 +643,10 @@ static ctrl_cmd_t * get_response(int *read_len, ctrl_cmd_t *app_req)
 	/* Wait for response */
 	ret = wait_for_sync_response(app_req);
 	if (ret) {
-		if (ret == RET_FAIL_TIMEOUT)
-			ESP_LOGW(TAG, "Timeout waiting for Resp for Req[0x%x]", app_req->msg_id);
+		if ((ret == RET_FAIL_TIMEOUT) || (errno == ETIMEDOUT))
+			ESP_LOGW(TAG, "Timeout waiting for Resp for [0x%x](%s)", app_req->msg_id, rpc_id_name(app_req->msg_id));
 		else
-			ESP_LOGE(TAG, "ERR [%u] ret[%d] for Req[0x%x]", errno, ret, app_req->msg_id);
+			ESP_LOGE(TAG, "ERR [%u] ret[%d] for [0x%x](%s)", errno, ret, app_req->msg_id, rpc_id_name(app_req->msg_id));
 		return NULL;
 	}
 
@@ -614,21 +670,6 @@ static ctrl_cmd_t * get_response(int *read_len, ctrl_cmd_t *app_req)
 	return NULL;
 }
 
-static int clear_async_resp_callback(ctrl_cmd_t *app_resp)
-{
-	int i;
-
-	for (i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
-		if (async_rsp_table[i].uid == app_resp->uid) {
-			async_rsp_table[i].uid = 0;
-			async_rsp_table[i].cb = NULL;
-			return ESP_OK;
-		}
-	}
-
-	return CALLBACK_NOT_REGISTERED;
-}
-
 /* Check and call rpc response asynchronous callback if available
  * else flag error
  *     MSG_ID_OUT_OF_ORDER - if response id is not understandable
@@ -637,19 +678,41 @@ static int clear_async_resp_callback(ctrl_cmd_t *app_resp)
 static int call_async_resp_callback(ctrl_cmd_t *app_resp)
 {
 	int i;
-
-	if ((app_resp->msg_id <= RPC_ID__Resp_Base) ||
-	    (app_resp->msg_id >= RPC_ID__Resp_Max)) {
+	// msg_id of RPC_ID__Resp_Base now means Invalid RPC Request
+	if ((app_resp->msg_id < RPC_ID__Resp_Base) ||
+		(app_resp->msg_id >= RPC_ID__Resp_Max)) {
 		return MSG_ID_OUT_OF_ORDER;
 	}
 
+	/* Copy what we need and clear the entry in critical section. */
+	rpc_rsp_cb_t  local_cb  = NULL;
+	void         *timer_hdl = NULL;
+	ctrl_cmd_t   *local_req = NULL;
+
+	g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
 		if (async_rsp_table[i].uid == app_resp->uid) {
-			return async_rsp_table[i].cb(app_resp);
+			local_cb = async_rsp_table[i].cb;
+			timer_hdl = async_rsp_table[i].timer_hdl;
+			local_req = async_rsp_table[i].app_req;
+			async_rsp_table[i].uid       = 0;
+			async_rsp_table[i].cb        = NULL;
+			async_rsp_table[i].timer_hdl = NULL;
+			async_rsp_table[i].app_req   = NULL;
+			break;
 		}
 	}
+	g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
 
-	return CALLBACK_NOT_REGISTERED;
+	if (timer_hdl)
+		g_h.funcs->_h_timer_stop(timer_hdl);
+
+	HOSTED_FREE(local_req);
+
+	if (!local_cb)
+		return CALLBACK_NOT_REGISTERED;
+
+	return local_cb(app_resp);
 }
 
 
@@ -657,16 +720,21 @@ static int post_sync_resp_sem(ctrl_cmd_t *app_resp)
 {
 	int i;
 
-	if ((app_resp->msg_id <= RPC_ID__Resp_Base) ||
-	    (app_resp->msg_id >= RPC_ID__Resp_Max)) {
+	// msg_id of RPC_ID__Resp_Base now means Invalid RPC Request
+	if ((app_resp->msg_id < RPC_ID__Resp_Base) ||
+		(app_resp->msg_id >= RPC_ID__Resp_Max)) {
 		return MSG_ID_OUT_OF_ORDER;
 	}
 
+	g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
-		if (sync_rsp_table[i].uid == app_resp->uid) {
-			return g_h.funcs->_h_post_semaphore(sync_rsp_table[i].sem);
+		if (sync_rsp_table[i].uid == app_resp->uid && sync_rsp_table[i].sem) {
+			int ret = g_h.funcs->_h_post_semaphore(sync_rsp_table[i].sem);
+			g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+			return ret;
 		}
 	}
+	g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
 
 	return CALLBACK_NOT_REGISTERED;
 }
@@ -680,7 +748,7 @@ static int post_sync_resp_sem(ctrl_cmd_t *app_resp)
 static int call_event_callback(ctrl_cmd_t *app_event)
 {
 	if ((app_event->msg_id <= RPC_ID__Event_Base) ||
-	    (app_event->msg_id >= RPC_ID__Event_Max)) {
+		(app_event->msg_id >= RPC_ID__Event_Max)) {
 		return MSG_ID_OUT_OF_ORDER;
 	}
 
@@ -693,7 +761,7 @@ static int call_event_callback(ctrl_cmd_t *app_event)
 
 /* Set asynchronous rpc response callback from rpc **request**
  */
-static int set_async_resp_callback(ctrl_cmd_t *app_req, rpc_rsp_cb_t resp_cb)
+static int set_async_resp_callback(ctrl_cmd_t *app_req, rpc_rsp_cb_t resp_cb, void *timer_hdl)
 {
 	int i;
 
@@ -703,13 +771,18 @@ static int set_async_resp_callback(ctrl_cmd_t *app_req, rpc_rsp_cb_t resp_cb)
 		return MSG_ID_OUT_OF_ORDER;
 	}
 
+	g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
 		if (!async_rsp_table[i].uid) {
 			async_rsp_table[i].uid = app_req->uid;
 			async_rsp_table[i].cb = resp_cb;
+			async_rsp_table[i].timer_hdl = timer_hdl;
+			async_rsp_table[i].app_req = app_req;  /* Store request for later cleanup */
+			g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
 			return CALLBACK_SET_SUCCESS;
 		}
 	}
+	g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
 
 	ESP_LOGE(TAG, "Async cb not registered: out of buffer space");
 	return CALLBACK_NOT_REGISTERED;
@@ -735,23 +808,50 @@ static int set_sync_resp_sem(ctrl_cmd_t *app_req)
 	} else if (!app_req->rpc_rsp_cb) {
 		/* For sync, set sem */
 		app_req->rx_sem = g_h.funcs->_h_create_semaphore(1);
-		g_h.funcs->_h_get_semaphore(app_req->rx_sem, HOSTED_BLOCKING);
+		if (!app_req->rx_sem) {
+			ESP_LOGE(TAG, "Failed to create sync sem");
+			return CALLBACK_NOT_REGISTERED;
+		}
+		g_h.funcs->_h_get_semaphore(app_req->rx_sem, 0);
 
+		g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
 		for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
 			if (!sync_rsp_table[i].uid) {
-				ESP_LOGD(TAG, "Register sync sem %p for uid %ld", app_req->rx_sem, app_req->uid);
 				sync_rsp_table[i].uid = app_req->uid;
 				sync_rsp_table[i].sem = app_req->rx_sem;
+				g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+				ESP_LOGD(TAG, "Register sync sem %p for uid %ld", app_req->rx_sem, app_req->uid);
 				return CALLBACK_SET_SUCCESS;
 			}
 		}
-		ESP_LOGE(TAG, "Symc sem not registered: out of buffer space");
+		g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+
+		// failed to add to sync_rsp_table: destroy the sem
+		g_h.funcs->_h_destroy_semaphore(app_req->rx_sem);
+		app_req->rx_sem = NULL;
+		ESP_LOGE(TAG, "Sync sem not registered: out of buffer space");
 		return CALLBACK_NOT_REGISTERED;
 	} else {
 		/* For async, nothing to be done */
 		ESP_LOGD(TAG, "NOT Register sync sem for resp[0x%x]", exp_resp_msg_id);
 		return CALLBACK_NOT_REGISTERED;
 	}
+}
+
+// cleanup the sync table entry based on uid
+static void cleanup_sync_table_entry(uint32_t cleanup_uid)
+{
+	int i;
+
+	g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
+	for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
+		if (sync_rsp_table[i].uid == cleanup_uid) {
+			sync_rsp_table[i].uid = 0;
+			sync_rsp_table[i].sem = NULL;
+			break;
+		}
+	}
+	g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
 }
 
 static int wait_for_sync_response(ctrl_cmd_t *app_req)
@@ -776,17 +876,37 @@ static int wait_for_sync_response(ctrl_cmd_t *app_req)
 
 	ESP_LOGV(TAG, "Wait for sync resp for Req[0x%x] with timer of %u sec",
 			app_req->msg_id, timeout_sec);
+
+	void *local_sem = NULL;
+	g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
 		if (sync_rsp_table[i].uid == app_req->uid) {
-			ret = g_h.funcs->_h_get_semaphore(sync_rsp_table[i].sem, timeout_sec);
-			if (g_h.funcs->_h_destroy_semaphore(sync_rsp_table[i].sem)) {
-				ESP_LOGE(TAG, "read sem rx for resp[0x%x] destroy failed", exp_resp_msg_id);
-			}
-			// clear table entry
-			sync_rsp_table[i].uid = 0;
-			sync_rsp_table[i].sem = NULL;
-			return ret;
+			local_sem = sync_rsp_table[i].sem;
+			break;
 		}
+	}
+	g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+
+	if (local_sem) {
+		bool entry_cleared = false;
+
+		ret = g_h.funcs->_h_get_semaphore(local_sem, SEC_TO_MILLISEC(timeout_sec));
+		g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
+		// search the table again to make sure we clear the correct entry
+		for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
+			if (sync_rsp_table[i].uid == app_req->uid) {
+				// clear table entry
+				sync_rsp_table[i].uid = 0;
+				sync_rsp_table[i].sem = NULL;
+				entry_cleared = true;
+				break;
+			}
+		}
+		g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+		if (entry_cleared && g_h.funcs->_h_destroy_semaphore(local_sem)) {
+			ESP_LOGE(TAG, "read sem rx for resp[0x%x] destroy failed", exp_resp_msg_id);
+		}
+		return ret;
 	}
 	ESP_LOGW(TAG, "Not able to map new request to resp id");
 	return MSG_ID_OUT_OF_ORDER;
@@ -797,16 +917,20 @@ static int is_async_resp_callback_available(ctrl_cmd_t *app_resp)
 {
 	int i;
 
-	if ((app_resp->msg_id <= RPC_ID__Resp_Base) || (app_resp->msg_id >= RPC_ID__Resp_Max)) {
+	// msg_id of RPC_ID__Resp_Base now means Invalid RPC Request
+	if ((app_resp->msg_id < RPC_ID__Resp_Base) || (app_resp->msg_id >= RPC_ID__Resp_Max)) {
 		ESP_LOGE(TAG, "resp id[0x%x] out of range", app_resp->msg_id);
 		return MSG_ID_OUT_OF_ORDER;
 	}
 
+	g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
 		if (async_rsp_table[i].uid == app_resp->uid) {
+			g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
 			return CALLBACK_AVAILABLE;
 		}
 	}
+	g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
 
 	return CALLBACK_NOT_REGISTERED;
 }
@@ -815,11 +939,14 @@ static int is_sync_resp_sem_available(uint32_t uid)
 {
 	int i;
 
+	g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
 	for (i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
 		if (sync_rsp_table[i].uid == uid) {
+			g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
 			return CALLBACK_AVAILABLE;
 		}
 	}
+	g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
 	return CALLBACK_NOT_REGISTERED;
 }
 
@@ -859,7 +986,7 @@ ctrl_cmd_t * rpc_wait_and_parse_sync_resp(ctrl_cmd_t *app_req)
 
 	rx_buf = get_response(&rx_buf_len, app_req);
 	if (!rx_buf || !rx_buf_len) {
-		ESP_LOGE(TAG, "Response not received for [0x%x]", app_req->msg_id);
+		ESP_LOGE(TAG, "Response not received for [0x%x](%s)", app_req->msg_id, rpc_id_name(app_req->msg_id));
 		if (rx_buf) {
 			HOSTED_FREE(rx_buf);
 		}
@@ -877,7 +1004,7 @@ ctrl_cmd_t * rpc_wait_and_parse_sync_resp(ctrl_cmd_t *app_req)
 //static void rpc_async_timeout_handler(void const *arg)
 static void rpc_async_timeout_handler(void *arg)
 {
-	/* Please Nore: Be careful while porting this to MCU.
+	/* Please Note: Be careful while porting this to MCU.
 	 * rpc_async_timeout_handler should only be invoked after the timer has expired.
 	 * timer should not expire incorrect duration (Check os_wrapper layer for
 	 * correct seconds to milliseconds or ticks etc depending upon the platform
@@ -893,13 +1020,39 @@ static void rpc_async_timeout_handler(void *arg)
 	  return;
 	}
 
-	ESP_LOGW(TAG, "ASYNC Timeout for req [0x%x]",app_req->msg_id);
+	ESP_LOGW(TAG, "ASYNC Timeout for req [0x%x](%s)", app_req->msg_id, rpc_id_name(app_req->msg_id));
 	rpc_rsp_cb_t func = app_req->rpc_rsp_cb;
+	uint32_t req_uid = app_req->uid;
 	ctrl_cmd_t *app_resp = NULL;
 	HOSTED_CALLOC(ctrl_cmd_t, app_resp, sizeof(ctrl_cmd_t), free_buffers);
 	app_resp->msg_id = app_req->msg_id - RPC_ID__Req_Base + RPC_ID__Resp_Base;
 	app_resp->msg_type = RPC_TYPE__Resp;
 	app_resp->resp_event_status = RPC_ERR_REQUEST_TIMEOUT;
+
+	/* Clear the async callback table entry
+	 * actual content cleared after the critical section */
+	void *local_timer_hdl = NULL;
+	ctrl_cmd_t * local_app_req = NULL;
+	g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
+	for (int i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
+		if (async_rsp_table[i].uid == req_uid) {
+			local_timer_hdl = async_rsp_table[i].timer_hdl;
+			local_app_req = async_rsp_table[i].app_req;
+
+			async_rsp_table[i].uid = 0;
+			async_rsp_table[i].cb = NULL;
+			async_rsp_table[i].timer_hdl = NULL;
+			async_rsp_table[i].app_req = NULL;
+
+			break;
+		}
+	}
+	g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
+	// now clear timer and app req
+	if (local_timer_hdl)
+		g_h.funcs->_h_timer_stop(local_timer_hdl);
+	if (local_app_req)
+		HOSTED_FREE(local_app_req);
 
 	/* call func pointer to notify failure */
 	func(app_resp);
@@ -918,14 +1071,22 @@ int rpc_send_req(ctrl_cmd_t *app_req)
 		ESP_LOGE(TAG, "Invalid param in rpc_send_req");
 		return FAILURE;
 	}
-	ESP_LOGV(TAG, "app_req msgid[0x%x]", app_req->msg_id);
 
+	if (!rpc_tx_q) {
+		ESP_LOGW(TAG, "RPC not initialized or transport down, failing fast");
+		return FAILURE;
+	}
+
+
+	g_h.funcs->_h_lock_mutex(uid_mutex, HOSTED_BLOCK_MAX);
 	uid++;
 	// handle rollover in uid value
 	if (!uid)
 		uid++;
 	app_req->uid = uid;
+	g_h.funcs->_h_unlock_mutex(uid_mutex);
 
+	ESP_LOGD(TAG, "app_req msgid[0x%x] with uid %" PRIu32, app_req->msg_id, app_req->uid);
 	if (!app_req->rpc_rsp_cb) {
 		/* sync proc only */
 		if (set_sync_resp_sem(app_req)) {
@@ -936,6 +1097,7 @@ int rpc_send_req(ctrl_cmd_t *app_req)
 
 	app_req->msg_type = RPC_TYPE__Req;
 
+	ESP_LOGV(TAG, "queueing rpc tx q with uid %" PRIu32, app_req->uid);
 	if (g_h.funcs->_h_queue_item(rpc_tx_q, &app_req, HOSTED_BLOCK_MAX)) {
 	  ESP_LOGE(TAG, "Failed to new app rpc req[0x%x] in tx queue", app_req->msg_id);
 	  goto fail_req;
@@ -943,11 +1105,15 @@ int rpc_send_req(ctrl_cmd_t *app_req)
 
 	rpc_tx_ind();
 
-	H_FREE_PTR_WITH_FUNC(app_req->app_free_buff_func, app_req->app_free_buff_hdl);
+	/* TODO : commenting, Review again to avoid duable free */
+	//H_FREE_PTR_WITH_FUNC(app_req->app_free_buff_func, app_req->app_free_buff_hdl);
 
 	return SUCCESS;
 
 fail_req:
+	if (!app_req->rpc_rsp_cb) {
+		cleanup_sync_table_entry(app_req->uid);
+	}
 	if (app_req->rx_sem)
 		g_h.funcs->_h_destroy_semaphore(app_req->rx_sem);
 
@@ -957,44 +1123,118 @@ fail_req:
 	return FAILURE;
 }
 
+static int cleanup_sync_async_timer_table(void)
+{
+	int timer_index = 0;
+	int app_req_index = 0;
+	void *timer_hdls[MAX_ASYNC_RPC_TRANSACTIONS] = { 0 };
+	ctrl_cmd_t *app_reqs[MAX_ASYNC_RPC_TRANSACTIONS] = { 0 };
+	int i;
+
+	// collect timer handles and app reqs first, cleanup after releasing mutex lock
+	g_h.funcs->_h_lock_mutex(async_rsp_table_mutex, HOSTED_BLOCK_MAX);
+	for (i = 0; i < MAX_ASYNC_RPC_TRANSACTIONS; i++) {
+		if (async_rsp_table[i].timer_hdl) {
+			timer_hdls[timer_index++] = async_rsp_table[i].timer_hdl;
+		}
+		if (async_rsp_table[i].app_req) {
+			app_reqs[app_req_index++] = async_rsp_table[i].app_req;
+		}
+		async_rsp_table[i].timer_hdl = NULL;
+		async_rsp_table[i].uid = 0;
+		async_rsp_table[i].cb = NULL;
+		async_rsp_table[i].app_req = NULL;
+	}
+	g_h.funcs->_h_unlock_mutex(async_rsp_table_mutex);
+
+	for (i = 0; i < timer_index; i++) {
+		if (timer_hdls[i])
+			g_h.funcs->_h_timer_stop(timer_hdls[i]);
+	}
+	for (i = 0; i < app_req_index; i++) {
+		if (app_reqs[i])
+			HOSTED_FREE(app_reqs[i]);
+	}
+
+	g_h.funcs->_h_lock_mutex(sync_rsp_table_mutex, HOSTED_BLOCK_MAX);
+	for (int i = 0; i < MAX_SYNC_RPC_TRANSACTIONS; i++) {
+		if (sync_rsp_table[i].sem) {
+			g_h.funcs->_h_get_semaphore(sync_rsp_table[i].sem, 0);
+			g_h.funcs->_h_destroy_semaphore(sync_rsp_table[i].sem);
+		}
+		sync_rsp_table[i].uid = 0;
+		sync_rsp_table[i].sem = NULL;
+	}
+	g_h.funcs->_h_unlock_mutex(sync_rsp_table_mutex);
+
+	return SUCCESS;
+}
+
 /* De-init hosted rpc lib */
 int rpc_core_deinit(void)
 {
 	int ret = SUCCESS;
 
-	if (is_rpc_lib_state(RPC_LIB_STATE_INACTIVE))
+	if (is_rpc_lib_inactive())
 		return ret;
 
 	set_rpc_lib_state(RPC_LIB_STATE_INACTIVE);
 
+	/* Drain rpc_rx_q before destroying to prevent buffer leaks */
 	if (rpc_rx_q) {
+		esp_queue_elem_t elem;
+		/* Flush all remaining items and free their buffers */
+		while (g_h.funcs->_h_dequeue_item(rpc_rx_q, &elem, 0) == 0) {
+			if (elem.buf) {
+				g_h.funcs->_h_free(elem.buf);
+			}
+		}
 		g_h.funcs->_h_destroy_queue(rpc_rx_q);
+		rpc_rx_q = NULL;
 	}
 
+	/* Drain rpc_tx_q before destroying to prevent buffer leaks */
 	if (rpc_tx_q) {
+		void *buf_ptr;
+		/* Flush all remaining items and free their buffers */
+		while (g_h.funcs->_h_dequeue_item(rpc_tx_q, &buf_ptr, 0) == 0) {
+			if (buf_ptr) {
+				g_h.funcs->_h_free(buf_ptr);
+			}
+		}
 		g_h.funcs->_h_destroy_queue(rpc_tx_q);
+		rpc_tx_q = NULL;
 	}
 
-	if (rpc_tx_sem && g_h.funcs->_h_destroy_semaphore(rpc_tx_sem)) {
-		ret = FAILURE;
-		ESP_LOGE(TAG, "read sem tx deinit failed");
-	}
-
-	if (async_timer_hdl) {
-		/* async_timer_hdl will be cleaned in g_h.funcs->_h_timer_stop */
-		g_h.funcs->_h_timer_stop(async_timer_hdl);
-		async_timer_hdl = NULL;
-	}
-
-	if (serial_deinit()) {
-		ret = FAILURE;
-		ESP_LOGE(TAG, "Serial de-init failed");
+	if (rpc_tx_sem) {
+		if (g_h.funcs->_h_destroy_semaphore(rpc_tx_sem)) {
+			ret = FAILURE;
+			ESP_LOGE(TAG, "read sem tx deinit failed");
+		}
+		rpc_tx_sem = NULL;
 	}
 
 	if (cancel_rpc_threads()) {
 		ret = FAILURE;
 		ESP_LOGE(TAG, "cancel rpc rx thread failed");
 	}
+
+	cleanup_sync_async_timer_table();
+
+	if (serial_deinit()) {
+		ret = FAILURE;
+		ESP_LOGE(TAG, "Serial de-init failed");
+	}
+
+	if (sync_rsp_table_mutex)
+		g_h.funcs->_h_destroy_mutex(sync_rsp_table_mutex);
+	if (async_rsp_table_mutex)
+		g_h.funcs->_h_destroy_mutex(async_rsp_table_mutex);
+	if (uid_mutex)
+		g_h.funcs->_h_destroy_mutex(uid_mutex);
+	sync_rsp_table_mutex  = NULL;
+	async_rsp_table_mutex = NULL;
+	uid_mutex             = NULL;
 
 	return ret;
 }
@@ -1004,9 +1244,18 @@ int rpc_core_init(void)
 {
 	int ret = SUCCESS;
 
+	/* mutex init */
+	sync_rsp_table_mutex = g_h.funcs->_h_create_mutex();
+	async_rsp_table_mutex = g_h.funcs->_h_create_mutex();
+	uid_mutex = g_h.funcs->_h_create_mutex();
+	if (!sync_rsp_table_mutex || !async_rsp_table_mutex || !uid_mutex) {
+		ESP_LOGE(TAG, "mutex init failed, exiting");
+		goto free_bufs;
+	}
+
 	/* semaphore init */
-	rpc_tx_sem = g_h.funcs->_h_create_semaphore(CONFIG_ESP_MAX_SIMULTANEOUS_SYNC_RPC_REQUESTS +
-			CONFIG_ESP_MAX_SIMULTANEOUS_ASYNC_RPC_REQUESTS);
+	rpc_tx_sem = g_h.funcs->_h_create_semaphore(MAX_SYNC_RPC_TRANSACTIONS +
+			MAX_ASYNC_RPC_TRANSACTIONS);
 	if (!rpc_tx_sem) {
 		ESP_LOGE(TAG, "sem init failed, exiting");
 		goto free_bufs;
@@ -1036,14 +1285,40 @@ int rpc_core_init(void)
 		goto free_bufs;
 
 	/* state init */
-	set_rpc_lib_state(RPC_LIB_STATE_READY);
-
+	set_rpc_lib_state(RPC_LIB_STATE_INIT);
 	return ret;
 
 free_bufs:
+	if (sync_rsp_table_mutex)
+		g_h.funcs->_h_destroy_mutex(sync_rsp_table_mutex);
+	if (async_rsp_table_mutex)
+		g_h.funcs->_h_destroy_mutex(async_rsp_table_mutex);
+	if (uid_mutex)
+		g_h.funcs->_h_destroy_mutex(uid_mutex);
+	if (rpc_tx_sem)
+		g_h.funcs->_h_destroy_semaphore(rpc_tx_sem);
+	if (rpc_rx_q)
+		g_h.funcs->_h_destroy_queue(rpc_rx_q);
+	if (rpc_tx_q)
+		g_h.funcs->_h_destroy_queue(rpc_tx_q);
+	sync_rsp_table_mutex  = NULL;
+	async_rsp_table_mutex = NULL;
+	uid_mutex             = NULL;
+	rpc_tx_sem            = NULL;
+	rpc_rx_q              = NULL;
+	rpc_tx_q              = NULL;
 	rpc_core_deinit();
 	return FAILURE;
 }
 
+int rpc_core_start(void)
+{
+	set_rpc_lib_state(RPC_LIB_STATE_READY);
+	return SUCCESS;
+}
 
-
+int rpc_core_stop(void)
+{
+	set_rpc_lib_state(RPC_LIB_STATE_INIT);
+	return SUCCESS;
+}

@@ -17,6 +17,9 @@ idf_component_register(
         esp_event
         esp_wifi
         esp_http_server
+        # esp_hosted: preguntar la version de firmware de la radio (C6) al
+        # arrancar y dejarla en el log. Ver main/main.c (radio_version_task).
+        espressif__esp_hosted
         # ── Nuevas: ESP32-P4 / MIPI-DSI / JD9165BA / GT911 ──────────────────
         driver               # i2c_master + ledc + gpio (unificado en IDF 5.x)
         esp_hw_support       # contiene esp_ldo_regulator.h (IDF 5.3)

@@ -1,8 +1,7 @@
 /*
- * Espressif Systems Wireless LAN device driver
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
- * Copyright (C) 2015-2022 Espressif Systems (Shanghai) PTE LTD
- * SPDX-License-Identifier: GPL-2.0 OR Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef __RPC_CORE_H
@@ -11,8 +10,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
+#include "transport_drv.h"
 #include "rpc_slave_if.h"
-#include "os_wrapper.h"
+#include "port_esp_hosted_host_log.h"
+#include "port_esp_hosted_host_config.h"
 
 #ifndef BIT
 #define BIT(n) (1UL << (n))
@@ -88,11 +90,13 @@ typedef struct q_element {
 
 #define RPC_REQ_COPY_STR(DsT,SrC,MaxSizE) {                                   \
   if (SrC) {                                                                  \
-    RPC_REQ_COPY_BYTES(DsT, SrC, min(strlen((char*)SrC)+1,MaxSizE));          \
+    RPC_REQ_COPY_BYTES(DsT, SrC, H_MIN(strlen((char*)SrC)+1,MaxSizE));        \
   }                                                                           \
 }
 
 int rpc_core_init(void);
+int rpc_core_start(void);
+int rpc_core_stop(void);
 int rpc_core_deinit(void);
 /*
  * Allows user app to create low level protobuf request
@@ -120,7 +124,7 @@ ctrl_cmd_t * rpc_wait_and_parse_sync_resp(ctrl_cmd_t *req);
  * > req - control request from user
  *
  * Returns:
- * > CALLBACK_AVAILABLE - if a non NULL asynchrounous control response
+ * > CALLBACK_AVAILABLE - if a non NULL asynchronous control response
  *                      callback is available
  * In case of failures -
  * > MSG_ID_OUT_OF_ORDER - if request msg id is unsupported
@@ -133,4 +137,11 @@ int is_event_callback_registered(int event);
 int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy);
 
 int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp);
+
+#if H_PEER_DATA_TRANSFER
+int rpc_evt_register_custom_callback(uint32_t msg_id_exp,
+		void (*callback)(uint32_t msg_id_recvd, const uint8_t *data_recvd, size_t data_len_recvd, void *local_context),
+		void *local_context);
+#endif
+
 #endif /* __RPC_CORE_H */

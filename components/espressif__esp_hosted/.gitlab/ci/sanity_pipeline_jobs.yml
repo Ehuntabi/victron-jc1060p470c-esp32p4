@@ -1,0 +1,373 @@
+# Holds jobs that run from a merge request
+
+###
+### Check project pre-requisites have been fulfilled
+###
+
+premerge_check:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .premerge_check_template
+  image: espressif/idf:latest
+
+###
+### Build host using ESP-IDF examples
+###
+
+### protocols/mqtt example
+### IDF master and v6.x don't build mqtt example with wifi-remote and ESP-Hosted
+### so we only verify mqtt example against earlier IDF
+sanity_build_idf_release_mqtt:
+  variables:
+    EXAMPLE_CI_FILE: "sdkconfig.ci.p4_wifi"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example_mqtt
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_VER: ["release-v5.5"]
+        IDF_TARGET: ["esp32p4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+
+### wifi/iperf example
+sanity_build_idf_v5.5_iperf:
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_VER: ["release-v5.5"]
+        IDF_TARGET: ["esp32p4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        IDF_EXAMPLE_PATH: ["examples/wifi/iperf"]
+
+sanity_build_idf_v5.5_iperf_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_VER: ["v5.5.5", "v5.5.4"]
+        IDF_TARGET: ["esp32p4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        IDF_EXAMPLE_PATH: ["examples/wifi/iperf"]
+
+sanity_build_idf_master_iperf:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template
+  image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5", "esp32c61"]
+        IDF_EXAMPLE_PATH: ["examples/wifi/iperf"]
+
+###
+### Build coprocessor
+###
+
+sanity_build_coprocessor_idf_v5.5:
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32c6", "esp32c5"]
+        IDF_VER: ["release-v5.5"]
+        SLAVE_CI_FILE: ["sdio", "spi", "spi_hd", "uart", "dpp"]
+
+sanity_build_coprocessor_idf_v5.5_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32c6", "esp32c5"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        SLAVE_CI_FILE: ["sdio", "spi", "spi_hd", "uart", "dpp"]
+
+# verify co-processor targets with Wi-Fi + BT
+sanity_build_coprocessor_idf_master:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32c6", "esp32c5", "esp32c61"]
+        SLAVE_CI_FILE: ["sdio", "spi", "spi_hd", "uart", "dpp"]
+      - IDF_TARGET: ["esp32"]
+        SLAVE_CI_FILE: ["sdio", "uart"]
+      # esp32 + spi overflows iram0_0_seg on IDF master; this gate is link coverage
+      - IDF_TARGET: ["esp32"]
+        SLAVE_CI_FILE: ["spi"]
+        CONFIG_OVERRIDE: "CONFIG_ESP_WIFI_IRAM_OPT=n"
+      - IDF_TARGET: ["esp32c2", "esp32c3", "esp32s3"]
+        SLAVE_CI_FILE: ["spi", "spi_hd", "uart"]
+
+# verify co-processor targets with BT only
+sanity_build_coprocessor_idf_master_2:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32h2"]
+        SLAVE_CI_FILE: ["spi", "spi_hd", "uart"]
+
+# verify co-processor targets with OpenThread RCP
+# v5.5.4 is for Zigbee SDK release
+sanity_build_coprocessor_rcp:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32c6", "esp32c5", "esp32h2"]
+        IDF_VER: ["latest"]
+        SLAVE_CI_FILE: ["openthread_rcp"]
+
+sanity_build_coprocessor_rcp_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_coprocessor
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32c6", "esp32c5", "esp32h2"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        SLAVE_CI_FILE: ["openthread_rcp"]
+
+###
+### build ESP-Hosted examples
+###
+
+sanity_build_nimble_examples:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["latest", "release-v5.5"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32h2"]
+        EXAMPLE_TO_BUILD: ["host_nimble_bleprph_host_only_vhci",
+        "host_nimble_bleprph_host_only_uart_hci"]
+
+sanity_build_nimble_examples_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32h2"]
+        EXAMPLE_TO_BUILD: ["host_nimble_bleprph_host_only_vhci",
+        "host_nimble_bleprph_host_only_uart_hci"]
+
+sanity_build_bluedroid_examples:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["latest", "release-v5.5"]
+        IDF_SLAVE_TARGET: ["esp32"]
+        EXAMPLE_TO_BUILD: ["host_bluedroid_ble_compatibility_test",
+        "host_bluedroid_bt_hid_mouse_device",
+        "host_bluedroid_host_only",
+        "host_bt_controller_mac_addr"]
+
+sanity_build_bluedroid_examples_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        IDF_SLAVE_TARGET: ["esp32"]
+        EXAMPLE_TO_BUILD: ["host_bluedroid_ble_compatibility_test",
+        "host_bluedroid_bt_hid_mouse_device",
+        "host_bluedroid_host_only",
+        "host_bt_controller_mac_addr"]
+
+sanity_build_wifi_examples:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["latest", "release-v5.5"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        EXAMPLE_TO_BUILD: ["host_wifi_easy_connect_dpp_enrollee",
+        "host_wifi_itwt",
+        "host_transport_config",
+        "host_network_split__power_save",
+        "host_performs_slave_ota"]
+
+sanity_build_wifi_examples_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        EXAMPLE_TO_BUILD: ["host_wifi_easy_connect_dpp_enrollee",
+        "host_wifi_itwt",
+        "host_transport_config",
+        "host_network_split__power_save",
+        "host_performs_slave_ota"]
+
+# build an example using the various transports
+# this is to verify transport builds as expected on the host
+sanity_build_transport_examples:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["latest", "release-v5.5"]
+        IDF_SLAVE_TARGET: ["esp32c6"]
+        EXAMPLE_TO_BUILD: ["host_network_split__power_save"]
+        EXAMPLE_CI_FILE: ["sdio", "spi", "spi_hd", "uart"]
+
+sanity_build_transport_examples_2:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["v5.5.5", "v5.5.4"]
+        IDF_SLAVE_TARGET: ["esp32c6"]
+        EXAMPLE_TO_BUILD: ["host_network_split__power_save"]
+        EXAMPLE_CI_FILE: ["sdio", "spi", "spi_hd", "uart"]
+
+# build OpenThread Host examples
+sanity_build_openthread_examples:
+  rules:
+    - !reference [.default_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["latest"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        EXAMPLE_TO_BUILD: ["host_openthread_border_router",
+        "host_openthread_cli"]
+
+# build Zigbee Host examples
+sanity_build_zigbee_examples:
+  variables:
+    OVERRIDE_IDF_CI_CONSTRAINTS: "v5.5"
+  rules:
+    - !reference [.release_branch_rules, rules]
+  extends: .build_template_example
+  image: espressif/idf:${IDF_VER}
+  parallel:
+    matrix:
+      - IDF_TARGET: ["esp32p4"]
+        IDF_VER: ["v5.5.4"]
+        IDF_SLAVE_TARGET: ["esp32c6", "esp32c5"]
+        EXAMPLE_TO_BUILD: ["host_zigbee_thermostat"]
+
+create_release_tag:
+  stage: release
+  image: python:3.8
+  tags:
+    - build
+  before_script: []
+  dependencies: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/v2.x" && $CI_PIPELINE_SOURCE == "push"
+  script:
+    - |
+      set -e
+      VER=$(python3 -c "import re,sys;print(re.search(r'^version:\s*\"?([^\"\s]+)\"?', open('idf_component.yml').read(), re.M).group(1))")
+      test -n "${VER}"
+      git remote set-url origin "https://oauth2:${GITLAB_TOKEN_STAGING_TO_MAIN}@gitlab.espressif.cn:6688/app-frameworks/esp_hosted_mcu.git"
+      # tags are not fetched at the default git depth, so ask the remote
+      if git ls-remote --tags --exit-code origin "refs/tags/v${VER}" >/dev/null 2>&1; then
+        echo "v${VER} already released"
+        exit 0
+      fi
+      git config user.name "$GITLAB_USER_NAME"
+      git config user.email "$GITLAB_USER_EMAIL"
+      git tag -a "v${VER}" "$CI_COMMIT_SHA" -m "ESP-Hosted-MCU ${VER}"
+      git push origin "v${VER}"
+
+# Proves the GITLAB_TO_GITHUB_DEPLOY_KEY variable can push to GitHub from a
+# runner. Pushes a probe tag that is created only in this job and never on
+# GitLab, so the push mirror cannot be the thing that delivered it: absent at
+# the source, present at the destination means the key did it. The name does
+# not match v2.*, so the registry workflow ignores it.
+github_deploy_key_probe:
+  stage: release
+  image: alpine:3.20
+  tags:
+    - build
+  before_script: []
+  dependencies: []
+  variables:
+    GIT_STRATEGY: none
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/v2.x" && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+  script:
+    - apk add --no-cache git openssh-client
+    - chmod 600 "$GITLAB_TO_GITHUB_DEPLOY_KEY"
+    - export GIT_SSH_COMMAND="ssh -i $GITLAB_TO_GITHUB_DEPLOY_KEY -o StrictHostKeyChecking=accept-new"
+    - GH=git@github.com:espressif/esp-hosted-mcu.git
+    - PROBE="ci-deploy-probe-${CI_PIPELINE_ID}"
+    - echo "=== BEFORE — expect no output ==="
+    - git ls-remote "$GH" "refs/tags/${PROBE}"
+    - git init -q /tmp/probe
+    - cd /tmp/probe
+    - git remote add gh "$GH"
+    # Tag a commit GitHub already has, so the push carries the ref alone and
+    # transfers no objects.
+    - git fetch -q --depth 1 gh refs/heads/release/v2.x
+    - git tag "$PROBE" FETCH_HEAD
+    - echo "=== PUSH — expect '* [new tag]' ==="
+    - git push gh "refs/tags/${PROBE}"
+    - echo "=== AFTER — expect the tag ==="
+    - git ls-remote "$GH" "refs/tags/${PROBE}"

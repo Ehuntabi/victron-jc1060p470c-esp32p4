@@ -90,7 +90,7 @@ The SPI used is full duplex. Handshake, Data Ready and Reset are additional GPIO
   - Host can send/receive up to 1600 bytes per transaction
 
 - TX buffer scenarios:
-  1. No data to transfer: 
+  1. No data to transfer:
      - Allocate 1600-byte dummy TX buffer
      - Set packet length field in payload header to 0
   2. Valid data to send:
@@ -121,18 +121,18 @@ The SPI used is full duplex. Handshake, Data Ready and Reset are additional GPIO
 For a detailed implementation of SPI full duplex communication using the ESP-Hosted framework, refer to the following code files in the ESP-Hosted repository:
 
 - **Master SPI Communication Code**:
-  - [spi_drv.c](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/host/drivers/transport/spi/spi_drv.c): Contains the implementation for configuring and handling SPI transactions on the master side.
-  - [spi_wrapper.c](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/host/port/esp_idf/spi_wrapper.c): Provides an OS abstraction layer for SPI operations, making it easier to handle SPI communication in a platform-independent manner.
+  - [spi_drv.c](https://github.com/espressif/esp-hosted-mcu/blob/main/host/drivers/transport/spi/spi_drv.c): Contains the implementation for configuring and handling SPI transactions on the master side.
+  - [spi_wrapper.c](https://github.com/espressif/esp-hosted-mcu/blob/main/host/port/spi_wrapper.c): Provides an OS abstraction layer for SPI operations, making it easier to handle SPI communication in a platform-independent manner.
 
 - **Co-processor SPI Communication Code**:
-  - [spi_slave_apis.c](https://github.com/espressif/esp-hosted/blob/feature/esp_as_mcu_host/firmware/components/esp_slave/spi_slave_apis.c): Includes the setup and transaction handling for the SPI co-processor, detailing how the co-processor should configure its SPI interface and handle incoming and outgoing data.
+  - [spi_slave_api.c](https://github.com/espressif/esp-hosted-mcu/blob/main/slave/main/spi_slave_api.c): Includes the setup and transaction handling for the SPI co-processor, detailing how the co-processor should configure its SPI interface and handle incoming and outgoing data.
 
 ## 4 Hardware Considerations
 
 ### 4.1 General Considerations
 
 - Ensure equal trace lengths for all SPI connections, whether using jumper wires or PCB traces.
-- Use the lower clock frequency like 5 MHz for evaluation. Once solution verified, optimise the clock frequency in increasing steps to max possible value. To find out practical maximum SPI slave frequency for your co-processor, check `IDF_PERFORMANCE_MAX_SPI_CLK_FREQ` in [ESP-IDF SPI slave benchmark](https://github.com/espressif/esp-idf/blob/master/components/esp_driver_spi/test_apps/components/spi_bench_mark/include/spi_performance.h) 
+- Use the lower clock frequency like 5 MHz for evaluation. Once solution verified, optimise the clock frequency in increasing steps to max possible value. To find out practical maximum SPI slave frequency for your co-processor, check `IDF_PERFORMANCE_MAX_SPI_CLK_FREQ` in [ESP-IDF SPI slave benchmark](https://github.com/espressif/esp-idf/blob/master/components/esp_driver_spi/test_apps/components/spi_bench_mark/include/spi_performance.h)
 - Verify voltage compatibility between host and co-processor devices.
 - Provide proper power supply decoupling for both host and co-processor devices.
 
@@ -177,32 +177,34 @@ For optimal performance and reliability in production designs:
 
 Setting up the hardware involves connecting the master and co-processor devices via the SPI pins and ensuring all extra GPIO signals are properly connected. Below is the table of connections for the SPI full duplex setup between an host ESP chipset and another ESP chipset as co-processor:
 
-
 ### Host connections
 
-| Signal      | ESP32 | ESP32-S2/S3 | ESP32-C2/C3/C5/C6 | ESP32-P4 (ESP32-P4-Function-EV-Board) |
-|-------------|-------|-------------|-------------------|---------------------------------------|
-| CLK         | 14    | 12          | 6                 | 18                                    |
-| MOSI        | 13    | 11          | 7                 | 14                                    |
-| MISO        | 12    | 13          | 2                 | 15                                    |
-| CS          | 15    | 10          | 10                | 19                                    |
-| Handshake   | 26    | 17          | 3                 | 16                                    |
-| Data Ready  | 4     | 4           | 4                 | 17                                    |
-| Reset Out   | 5     | 5           | 5                 | 54                                    |
+| Signal      | ESP32 | ESP32-S2/S3 | ESP32-C2/C3/C5/C6 | ESP32-P4 |
+|-------------|-------|-------------|-------------------|----------|
+| CLK         | 14    | 12          | 6                 | 9        |
+| MOSI        | 13    | 11          | 7                 | 8        |
+| MISO        | 12    | 13          | 2                 | 10       |
+| CS          | 15    | 10          | 10                | 7        |
+| Handshake   | 26    | 17          | 3                 | 6        |
+| Data Ready  | 4     | 4           | 4                 | 11       |
+| Reset Out   | 5     | 5           | 5                 | 12       |
 
+> [!NOTE]
+> The GPIOs pins on the ESP32-P4 are SPI IO_MUX pins and powered by the `VDD_LP` pin. If you use a different set of GPIOs, check that they are powered to 3.3V by the pin(s) providing power for the GPIOs based on your ESP32-P4 schematic. See the ESP32-P4 Datasheet, [Table 2-1. Pin Overview](https://www.espressif.com/sites/default/files/documentation/esp32-p4_datasheet_en.pdf#table.2.1), for a list of GPIO pins and the pins providing the power for the GPIOs.
+>
+> If the pins providing power are connected to an internal Low Dropout Voltage Regulator (LDO), set the LDO to output 3.3V. See [Low Dropout Voltage Regulator (LDO)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32p4/api-reference/peripherals/ldo_regulator.html) for more information on programming the internal LDOs.
 
 ### Co-processor connections
 
 | Signal      | ESP32 | ESP32-C2/C3/C5/C6 | ESP32-S2/S3 | ESP32-C6 on ESP32-P4-Function-EV-Board |
-|-------------|-------|-------------------|-------------|---------------------------------------|
-| CLK         | 14    | 6                 | 12          | 19                                    |
-| MOSI        | 13    | 7                 | 11          | 20                                    |
-| MISO        | 12    | 2                 | 13          | 21                                    |
-| CS          | 15    | 10                | 10          | 18                                    |
-| Handshake   | 26    | 3                 | 17          | 22                                    |
-| Data Ready  | 4     | 4                 | 5           | 23                                    |
-| Reset In    | EN    | EN/RST            | EN/RST      | EN/RST                                |
-
+|-------------|-------|-------------------|-------------|----------------------------------------|
+| CLK         | 14    | 6                 | 12          | 19                                     |
+| MOSI        | 13    | 7                 | 11          | 20                                     |
+| MISO        | 12    | 2                 | 13          | 21                                     |
+| CS          | 15    | 10                | 10          | 18                                     |
+| Handshake   | 26    | 3                 | 17          | 22                                     |
+| Data Ready  | 4     | 4                 | 5           | 23                                     |
+| Reset In    | EN    | EN/RST            | EN/RST      | EN/RST                                 |
 
 > [!NOTE]
 > - Always try to use IO_MUX pins from the datasheet for optimal performance on both sides.
@@ -269,13 +271,17 @@ idf.py menuconfig
 ```
 
 #### 7.2.1 Transport config
-  - Navigate to "Example configuration" -> "Transport layer"
-  - Select "SPI Full-duplex"
-
+Navigate & change to following
+```
+-- "Example configuration"
+    └── "Bus Config in between Host and Co-processor"
+        └── "Transport layer"
+            └── Select "SPI Full-duplex"
+```
 #### 7.2.2 Any other config
    Optionally, configure any additional SPI-specific settings under "SPI Full-duplex"
   - Set the GPIO pins for SPI signals (MOSI, MISO, CLK, CS), Handshake, Data Ready, Reset
-  - Configure SPI mode (0, 1, 2, or 3)
+  - Configure SPI mode (1, 2, or 3)
   - Set the SPI clock frequency
   - Checksum enable/disable (Checksum is recommended to be enabled as spi hardware doesn't have any error detection)
 
@@ -296,6 +302,13 @@ idf.py build
 
 ### 7.4 Co-processor Flashing
 
+It is **recommended** to periodically upgrade the slave firmware to leverage new features, bug fixes, and performance improvements.
+
+| Method                     | Description                                        | Recommended Use                                       |
+| -------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| **Direct Serial Flashing** | Uses UART pins for direct firmware installation    | First-time setup to install ESP-Hosted slave firmware |
+| **Slave OTA Update**       | Performs slave firmware updates directly from Host | All subsequent updates after initial installation     |
+
 ##### 7.4.1 Serial Flashing (Initial Setup)
 
 For the initial setup or when OTA is not available, use serial flashing.
@@ -306,64 +319,21 @@ idf.py -p <co-processor_serial_port> flash
 ```
 
 > [!NOTE]
->
 > If you are not able to flash the co-processor, there might be a chance that host is not allowing to to do so.
-> 
+>
 > Put host in bootloader mode using following command and then retry flashing the co-processor
-> 
-> ```bash
-> esptool.py -p <host_serial_port> --before default_reset --after no_reset run
-> ```
-
-Monitor the output (optional):
-```
-idf.py -p <co-processor_serial_port> monitor
-```
+>
+> `esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run`
+>
+> Flash the co-processor and log the output:
+>
+> `idf.py -p <co-processor_serial_port> flash monitor`
 
 ##### 7.4.2 Co-processor OTA Flashing (Subsequent Updates)
 
-For subsequent updates, you can re-use ESP-Hosted-MCU transport, as it should be already working. While doing OTA, Complete co-processor firmware image is not needed and only co-processor application partition, 'network_adapter.bin' need to be re-flashed remotely from host.
+The ESP-Hosted link comes pre-configured and ready to use on first boot. You can update the slave firmware remotely from the host MCU using OTA (Over-The-Air) updates: **No** ESP-Prog, serial cable, or extra GPIO connections are required.
 
-1. Ensure your co-processor device is connected and communicating with the host with existing ESP-Hosted-MCU.
-
-2. Create a web server
-You can re-use your existing web server or create a new locally for testing. Below is example to do it.
-    - Make a new directory so that web server can be run into it and navigate into it
-    - Create simple local web server using python3
-
-     ```bash
-     python3 -m http.server 8080
-     ```
-3. Copy the co-processor app partition `network_adapter.bin` in the directory where you created the web server.
-    - The `network_adapter.bin` can be found in your co-processor project build at `<co-processor_project>/build/network_adapter.bin`
-
-4. Verify if web server is set-up correctly
-    - Open link `http://127.0.0.1:8080` in the browser and check if network_adapter.bin is available.
-    - Right click and copy the complete URL of this network_adapter.bin and note somewhere.
-
-5. On the **host side**, use the `esp_hosted_ota` function to initiate the OTA update:
-
-   ```c
-   #include "esp_hosted_api.h"
-
-   const char* image_url = "http://example.com/path/to/network_adapter.bin"; //web server full url
-   esp_err_t ret = esp_hosted_ota(image_url);
-   if (ret == ESP_OK) {
-       printf("co-processor OTA update failed[%d]\n", ret);
-   }
-   ```
-
-   This function will download the firmware in chunk by chunk as http client from the specified URL and flash it to the co-processor device through the established transport.
-   In above web server example, You can paste the copied url earlier.
-
-
-6. Monitor the OTA progress through the console output on both the host and co-processor devices.
-
-> [!NOTE]
->
->   A. The `esp_hosted_ota` function is part of the ESP-Hosted-MCU API and handles the OTA process through the transport layer. \
->   B. Ensure that your host application has web server connectivity to download the firmware file. \
->   C. The co-processor device doesn't need to be connected to the web server for this OTA method.
+For step-by-step instructions, see the [Host Performs Slave OTA Example](../examples/host_performs_slave_ota/README.md).
 
 ## 8 Flashing the Host
 
@@ -403,38 +373,43 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
    This step is necessary because esp-extconn and esp-hosted cannot work together.
 
 ###### 4. Disable native Wi-Fi if available
-   If your host ESP chip already has native Wi-Fi support, disable it by editing the `components/soc/<soc>/include/soc/Kconfig.soc_caps.in` file and changing all `WIFI` related configs to `n`.
-     
-    If you happen to have both, host and co-processor as same ESP chipset type (for example two ESP32-C2), note an [additional step](docs/troubleshooting/#1-esp-host-to-evaluate-already-has-native-wi-fi)
-    
+If your host ESP chip already has native Wi-Fi support, disable it by editing the `components/soc/<soc>/include/soc/Kconfig.soc_caps.in` file and changing all `WIFI` related configs to `n`.
+
+If you happen to have both, host and co-processor as same ESP chipset type (for example two ESP32-C2), note an [additional step](docs/troubleshooting/#1-esp-host-to-evaluate-already-has-native-wi-fi)
 
 ### 8.3 Menuconfig, Build and Flash Host
 
 ##### 1. High performance configurations
-   This is optional step, suggested for high performance applications.
+This is optional step, suggested for high performance applications.
 
-   If using ESP32-P4 as host:
-   - Remove the default `sdkconfig.defaults.esp32p4` file.
-   - Create a new `sdkconfig.defaults.esp32p4` file with the following content:
-     ```
-     CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
-     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
-     CONFIG_ESP_WIFI_TX_BA_WIN=32
-     CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
-     CONFIG_ESP_WIFI_RX_BA_WIN=32
+If using ESP32-P4 as host and the ESP32-C6 as the co-processor:
 
-     CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
-     CONFIG_LWIP_TCP_WND_DEFAULT=65534
-     CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+- Remove all `CONFIG_ESP_WIFI_` settings. They do not apply to ESP-Hosted.
+- Add the following settings to your `sdkconfig.defaults.esp32p4` file:
+  ```
+  ### sdkconfig for ESP32-P4 + C6 Dev board
+  CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM=16
+  CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_DYNAMIC_TX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_AMPDU_TX_ENABLED=y
+  CONFIG_WIFI_RMT_TX_BA_WIN=32
+  CONFIG_WIFI_RMT_AMPDU_RX_ENABLED=y
+  CONFIG_WIFI_RMT_RX_BA_WIN=32
 
-     CONFIG_LWIP_TCP_SACK_OUT=y
-     ```
+  CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
+  CONFIG_LWIP_TCP_WND_DEFAULT=65534
+  CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
 
-    For other hosts also, you can merge above configs in corresponding `sdkconfig.defaults.esp32XX` file.
+  CONFIG_LWIP_TCP_SACK_OUT=y
+  ```
+
+For other ESP32 hosts, you can merge above configs into the corresponding `sdkconfig.defaults.esp32XX` file.
+
+To adjust other Wi-Fi parameters, run `idf.py menuconfig` and go to `Component config` ---> `Wi-Fi Remote` ---> `Wi-Fi configuration`.
+
+Optimised parameters for other co-processors can be found in the [Performance Optimization Guide](performance_optimization.md).
 
 ###### 2. Set environment for your host ESP chip:
 
@@ -450,14 +425,13 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
    ESP-Hosted-MCU host configurations are available under "Component config" -> "ESP-Hosted config"
    1. Select "SPI Full-duplex" as the transport layer
    2. Change co chipset to connect to under "slave chipset to be used"
-   3. Optionally, configure SPI-specific settings like
+   3. Optionally, configure SPI-specific settings in the "SPI Configuration" menu, like:
    - SPI Clock Freq (MHz)
    - SPI Mode
    - SPI Pins
    - SPI Checksum Enable/Disable (Checksum is recommended to be enabled as spi hardware doesn't have any error detection)
 
 > [!NOTE]
-> 
 > The actual clock frequency used is determined by the hardware. Use an oscilloscope or logic analyzer to check the clock frequency.
 
 ###### 4. Build the project:
@@ -491,7 +465,7 @@ After flashing both the co-processor and host devices, follow these steps to con
 3. Verify the connection:
    - Check the serial output of both devices for successful initialization messages.
    - Look for messages indicating that the SPI Full Duplex transport layer has been established
-   
+
 4. Logs at both sides:
    - Host:
 
@@ -541,7 +515,7 @@ After flashing both the co-processor and host devices, follow these steps to con
    - Set Wi-Fi mode: `wifi_mode <mode>` (where mode can be 'sta', 'ap', or 'apsta')
 
 7. Advanced iperf testing:
-   Once connected, you can run iperf tests:
+   Once connected, you can run iperf tests to verify performance:
 
    | Test Case | Host Command | External STA Command |
    |-----------|--------------|----------------------|
@@ -552,6 +526,10 @@ After flashing both the co-processor and host devices, follow these steps to con
 
    Note: Replace `<STA_IP>` with the IP address of the external STA, and `<HOST_IP>` with the IP address of the ESP-Hosted device.
 
+> [!TIP]
+>
+> To measure the optimal performance, check out the [Shield Box Test Setup](shield-box-test-setup.md).
+
 8. Troubleshooting:
    - If you encounter issues, refer to section 6.3 for testing the SPI connection.
    - Consider using a lower clock speed or checking your [hardware connections](#5-hardware-setup) if you experience communication problems.
@@ -560,7 +538,7 @@ After flashing both the co-processor and host devices, follow these steps to con
 9. Monitoring and debugging:
    - Use the serial monitor on both devices to observe the communication between the host and co-processor.
    - For more detailed debugging, consider using a logic analyzer to examine the SPI signals.
-   
+
 ## 10 References
 - [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/)
 - [ESP32 Hardware Design Guidelines](https://www.espressif.com/en/products/hardware/esp32/resources)

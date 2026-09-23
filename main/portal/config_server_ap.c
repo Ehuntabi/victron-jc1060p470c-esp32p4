@@ -651,19 +651,20 @@ esp_err_t wifi_ap_init(void)
     if (esp_wifi_get_config(WIFI_IF_AP, &leida) == ESP_OK) {
         ESP_LOGI(TAG, "AP en la radio: ssid='%s' authmode=%d ch=%d",
                  (const char *)leida.ap.ssid, leida.ap.authmode, leida.ap.channel);
-        /* Que no coincida es lo ESPERADO hoy, no una sorpresa: esp_hosted le
-         * pone al AP el nombre del chip ("ESP_<MAC>") y lo levanta abierto, se
-         * configure lo que se configure. Por eso se avisa como W y no como E, y
-         * se dice el nombre de verdad -- que es el que hay que poner en los
-         * satelites, y el que llevaba toda la noche despistando porque la
-         * pantalla de Ajustes muestra otro. */
-        /* Con el C6 en condiciones esto no salta nunca. Si salta, es que ese
-         * chip lleva el firmware de FABRICA, que ignora la configuracion y
-         * levanta su AP por defecto ("ESP_<MAC>", abierto). Paso el 21-ago-2026
-         * en una de las dos pantallas y se arreglo grabandole al C6 el firmware
-         * de ~/esp_hosted_slave; la otra ya venia bien. El procedimiento esta en
-         * el historial (commit del boton "Actualizar radio C6", retirado despues
-         * de usarlo). */
+        /* ESTADO A 23-SEP-2026: con esp_hosted 2.12.13 en el host Y en el C6,
+         * esto ya coincide siempre -- medido en el banco: ssid='VictronConfig',
+         * authmode=3 (WPA2), y comprobado por el aire desde otro equipo. El
+         * fallo que describian los comentarios de abajo era del firmware VIEJO
+         * de la radio (0.0.27), que es el que ponia "ESP_<MAC>" y levantaba el
+         * AP sin cifrar. Ya no se espera que salte; se deja porque es barato y
+         * porque un dia puede volver a pasar (por ejemplo si alguien graba un
+         * firmware de radio que no empareja con el host). */
+        /* Si esto salta, la radio no esta aplicando la configuracion. Causas
+         * vistas: (1) el C6 llevaba el firmware de fabrica -- paso el 21-ago-2026
+         * y se arreglo grabandomelo; (2) el host y el C6 NO van emparejados: con
+         * el host nuevo (2.12.13) y un C6 viejo el AP sale bien pero el BLE no
+         * arranca, asi que ese caso se detecta antes por el BLE. El
+         * procedimiento de grabado esta en victron/tools/c6_updater/LEEME.md. */
         if (strcmp((const char *)leida.ap.ssid, ssid) != 0) {
             ESP_LOGW(TAG, "El AP NO se llama '%s' sino '%s': el C6 esta ignorando "
                           "la configuracion (firmware de fabrica). Es el nombre que "
@@ -678,7 +679,7 @@ esp_err_t wifi_ap_init(void)
              * continuar; wifi_ap_init() devuelve error y quien lo llama
              * (linea ~229) ya sabe no arrancar el HTTP encima. */
             ESP_LOGE(TAG, "El AP esta ABIERTO (sin cifrar) pese a configurar WPA2: "
-                          "esp_hosted no aplica la clave. Parando el AP.");
+                          "la radio no aplica la clave. Parando el AP.");
             esp_wifi_stop();
             return ESP_FAIL;
         }

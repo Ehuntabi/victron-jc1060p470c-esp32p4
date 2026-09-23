@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader
+/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader.rule
+/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader-complete.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

@@ -1,34 +1,43 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2021 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "sdkconfig.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "esp_idf_version.h"
 #include "soc/gpio_reg.h"
 #include "esp_log.h"
 #include "interface.h"
-#include "adapter.h"
 #include "driver/spi_slave.h"
 #include "driver/gpio.h"
 #include "endian.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "mempool.h"
 #include "stats.h"
 #include "esp_timer.h"
+#include "esp_hosted_interface.h"
+#include "esp_hosted_transport.h"
+#include "esp_hosted_transport_init.h"
+#include "esp_hosted_header.h"
+#include "host_power_save.h"
+#include "esp_hosted_interface.h"
+#include "slave_wifi_config.h"
+#include "esp_hosted_coprocessor_fw_ver.h"
+
+#include "slave_util.h"
+#include "slave_config.h"
+#include "mempool.h"
+
+#if H_USE_MEMPOOL
+// memory should be 4 byte aligned for DMA access
+#define MEM_ALIGNMENT_BYTES          4
+#endif
 
 static const char TAG[] = "SPI_DRIVER";
 /* SPI settings */
@@ -46,6 +55,13 @@ static const char TAG[] = "SPI_DRIVER";
 
 #define SPI_RX_QUEUE_SIZE          CONFIG_ESP_SPI_RX_Q_SIZE
 #define SPI_TX_QUEUE_SIZE          CONFIG_ESP_SPI_TX_Q_SIZE
+
+// de-assert HS signal on CS, instead of at end of transaction
+#if defined(CONFIG_ESP_SPI_DEASSERT_HS_ON_CS)
+#define HS_DEASSERT_ON_CS (1)
+#else
+#define HS_DEASSERT_ON_CS (0)
+#endif
 
 /* By default both Handshake and Data Ready used Active High,
  * unless configured otherwise.
@@ -65,6 +81,7 @@ static const char TAG[] = "SPI_DRIVER";
 #else
     #define DMA_CHAN               SPI_DMA_CH_AUTO
 #endif
+static uint8_t hosted_constructs_init_done = 0;
 
 
 #if ESP_SPI_MODE==0
@@ -77,7 +94,11 @@ static const char TAG[] = "SPI_DRIVER";
 #define GPIO_MASK_DATA_READY (1ULL << GPIO_DATA_READY)
 #define GPIO_MASK_HANDSHAKE (1ULL << GPIO_HANDSHAKE)
 
+#if HS_DEASSERT_ON_CS
+#define H_CS_INTR_TO_CLEAR_HS                        GPIO_INTR_ANYEDGE
+#else
 #define H_CS_INTR_TO_CLEAR_HS                        GPIO_INTR_NEGEDGE
+#endif
 
 #if H_HANDSHAKE_ACTIVE_HIGH
   #define H_HS_VAL_ACTIVE                            GPIO_OUT_W1TS_REG
@@ -99,15 +120,31 @@ static const char TAG[] = "SPI_DRIVER";
   #define H_DR_PULL_REGISTER                         GPIO_PULLUP_ONLY
 #endif
 
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0))
+/**
+ * For ESP-IDF v5.5, Building ESP32 with UART Transport can fail due to
+ * lack of IRAM space.
+ * To reduce IRAM usage
+ * - `CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y`
+ * should be enabled
+ */
+#if CONFIG_IDF_TARGET_ESP32 && !CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH
+#error Building for SPI-FD transport can fail due to lack of IRAM space
+#error To free up IRAM, enable Component config --> ESP Ringbuf ---> Place non-ISR ringbuf functions into flash
+#error or uncomment
+#error CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y in sdkconfig.defaults.esp32 and regenerate sdkconfig
+#endif
+#endif
+
 static interface_context_t context;
 static interface_handle_t if_handle_g;
 static SemaphoreHandle_t spi_tx_sem;
 static SemaphoreHandle_t spi_rx_sem;
+#if HS_DEASSERT_ON_CS
+static SemaphoreHandle_t wait_cs_deassert_sem;
+#endif
 static QueueHandle_t spi_rx_queue[MAX_PRIORITY_QUEUES];
 static QueueHandle_t spi_tx_queue[MAX_PRIORITY_QUEUES];
-#if DUMMY_TRANS_DESIGN
-static SemaphoreHandle_t spi_sema;
-#endif
 
 static interface_handle_t * esp_spi_init(void);
 static int32_t esp_spi_write(interface_handle_t *handle,
@@ -116,9 +153,7 @@ static int esp_spi_read(interface_handle_t *if_handle, interface_buffer_handle_t
 static esp_err_t esp_spi_reset(interface_handle_t *handle);
 static void esp_spi_deinit(interface_handle_t *handle);
 static void esp_spi_read_done(void *handle);
-#if !DUMMY_TRANS_DESIGN
 static void queue_next_transaction(void);
-#endif
 
 if_ops_t if_ops = {
 	.init = esp_spi_init,
@@ -129,68 +164,100 @@ if_ops_t if_ops = {
 };
 
 #define SPI_MEMPOOL_NUM_BLOCKS     ((SPI_TX_QUEUE_SIZE+SPI_RX_QUEUE_SIZE)+SPI_QUEUE_SIZE*2)
-static struct hosted_mempool * buf_mp_tx_g;
-static struct hosted_mempool * buf_mp_rx_g;
-static struct hosted_mempool * trans_mp_g;
-#if DUMMY_TRANS_DESIGN
-static uint8_t dummy_queued = pdFALSE;
+
+#if H_USE_MEMPOOL
+static hosted_mempool_t * buf_mp_tx_g;
+static hosted_mempool_t * buf_mp_rx_g;
+static hosted_mempool_t * trans_mp_g;
 #endif
 
-static inline void spi_mempool_create()
+#define USE_SEPARATE_MEMPOOLS 0
+
+static inline void spi_mempool_create(void)
 {
-	buf_mp_tx_g = hosted_mempool_create(NULL, 0,
-			SPI_MEMPOOL_NUM_BLOCKS, SPI_BUFFER_SIZE);
-	/* re-use the mempool, as same size, can be seperate, if needed */
+#if H_USE_MEMPOOL
+	hosted_mempool_config_t config = {
+		.pre_allocated_mem = NULL,
+		.pre_allocated_mem_size = 0,
+		.num_blocks = SPI_MEMPOOL_NUM_BLOCKS,
+		.block_size = SPI_BUFFER_SIZE,
+		.alignment_in_bytes = MEM_ALIGNMENT_BYTES,
+		.malloc = slave_util_malloc,
+		.calloc = slave_util_calloc,
+		.memset = memset,
+		.free   = free,
+	};
+
+	buf_mp_tx_g = hosted_mempool_create(&config);
+
+#if USE_SEPARATE_MEMPOOLS
+	buf_mp_rx_g = hosted_mempool_create(&config);
+#else
+	/* reuse the mempool, as same size, can be separate, if needed */
 	buf_mp_rx_g = buf_mp_tx_g;
-	trans_mp_g = hosted_mempool_create(NULL, 0,
-			SPI_MEMPOOL_NUM_BLOCKS, sizeof(spi_slave_transaction_t));
-#if CONFIG_ESP_CACHE_MALLOC
+#endif
+
+	config.block_size = sizeof(spi_slave_transaction_t);
+	trans_mp_g = hosted_mempool_create(&config);
+
 	assert(buf_mp_tx_g);
 	assert(buf_mp_rx_g);
 	assert(trans_mp_g);
-#endif
+#endif // H_USE_MEMPOOL
 }
 
-static inline void spi_mempool_destroy()
+static int rx_buf_allocated = 0;
+static int tx_buf_allocated = 0;
+
+static inline void spi_mempool_destroy(void)
 {
+#if H_USE_MEMPOOL
 	hosted_mempool_destroy(buf_mp_tx_g);
+#if USE_SEPARATE_MEMPOOLS
+	hosted_mempool_destroy(buf_mp_rx_g);
+#endif
 	hosted_mempool_destroy(trans_mp_g);
+#endif // #if H_USE_MEMPOOL
 }
 
 static inline void *spi_buffer_tx_alloc(uint need_memset)
 {
-	return hosted_mempool_alloc(buf_mp_tx_g, SPI_BUFFER_SIZE, need_memset);
+	tx_buf_allocated++;
+	MEMPOOL_ALLOC(buf_mp_tx_g, SPI_BUFFER_SIZE, need_memset);
 }
 
 static inline void *spi_buffer_rx_alloc(uint need_memset)
 {
-	return hosted_mempool_alloc(buf_mp_rx_g, SPI_BUFFER_SIZE, need_memset);
+	rx_buf_allocated++;
+	MEMPOOL_ALLOC(buf_mp_rx_g, SPI_BUFFER_SIZE, need_memset);
 }
 
 static inline spi_slave_transaction_t *spi_trans_alloc(uint need_memset)
 {
-	return hosted_mempool_alloc(trans_mp_g, sizeof(spi_slave_transaction_t), need_memset);
+	MEMPOOL_ALLOC(trans_mp_g, sizeof(spi_slave_transaction_t), need_memset);
 }
 
 static inline void spi_buffer_tx_free(void *buf)
 {
-	hosted_mempool_free(buf_mp_tx_g, buf);
+	tx_buf_allocated--;
+	MEMPOOL_FREE(buf_mp_tx_g, buf);
 }
 
 static inline void spi_buffer_rx_free(void *buf)
 {
-	hosted_mempool_free(buf_mp_rx_g, buf);
+	rx_buf_allocated--;
+	MEMPOOL_FREE(buf_mp_rx_g, buf);
 }
 
 static inline void spi_trans_free(spi_slave_transaction_t *trans)
 {
-	hosted_mempool_free(trans_mp_g, trans);
+	MEMPOOL_FREE(trans_mp_g, trans);
 }
-
-#define set_handshake_gpio()     gpio_set_level(GPIO_HANDSHAKE, 1);
-#define reset_handshake_gpio()   gpio_set_level(GPIO_HANDSHAKE, 0);
-#define set_dataready_gpio()     gpio_set_level(GPIO_DATA_READY, 1);
-#define reset_dataready_gpio()   gpio_set_level(GPIO_DATA_READY, 0);
+volatile uint8_t data_ready_flag = 0;
+#define set_handshake_gpio()     ESP_EARLY_LOGD(TAG, "+ set handshake gpio");gpio_set_level(GPIO_HANDSHAKE, 1);
+#define reset_handshake_gpio()   ESP_EARLY_LOGD(TAG, "- reset handshake gpio");gpio_set_level(GPIO_HANDSHAKE, 0);
+#define set_dataready_gpio()     if (!data_ready_flag) {ESP_EARLY_LOGD(TAG, "+ set dataready gpio");gpio_set_level(GPIO_DATA_READY, 1);data_ready_flag = 1;}
+#define reset_dataready_gpio()   if (data_ready_flag) {ESP_EARLY_LOGD(TAG, "- reset dataready gpio");gpio_set_level(GPIO_DATA_READY, 0);data_ready_flag = 0;}
 
 interface_context_t *interface_insert_driver(int (*event_handler)(uint8_t val))
 {
@@ -222,20 +289,23 @@ static inline int find_wifi_tx_throttling_to_be_set(void)
 	}
 
 	queue_load = uxQueueMessagesWaiting(spi_rx_queue[PRIO_Q_OTHERS]);
-#if ESP_PKT_STATS
-	pkt_stats.slave_wifi_rx_msg_loaded = queue_load;
-#endif
 
 	load_percent = (queue_load*100/SPI_RX_QUEUE_SIZE);
 
 	if (load_percent > slv_cfg_g.throttle_high_threshold) {
 		slv_state_g.current_throttling = 1;
 		ESP_LOGV(TAG, "throttling started");
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_on++;
+#endif
 	}
 
 	if (load_percent < slv_cfg_g.throttle_low_threshold) {
 		slv_state_g.current_throttling = 0;
 		ESP_LOGV(TAG, "throttling stopped");
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_off++;
+#endif
 	}
 
 	return slv_state_g.current_throttling;
@@ -263,7 +333,7 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	header->if_num = 0;
 	header->offset = htole16(sizeof(struct esp_payload_header));
 	header->priv_pkt_type = ESP_PACKET_TYPE_EVENT;
-	header->throttle_cmd = find_wifi_tx_throttling_to_be_set();
+	header->throttle_cmd = 0;
 
 	/* Populate event data */
 	event = (struct esp_priv_event *) (buf_handle.payload + sizeof(struct esp_payload_header));
@@ -286,6 +356,14 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	*pos = LENGTH_1_BYTE;               pos++;len++;
 	*pos = cap;                         pos++;len++;
 
+	/* TLV - Extended Capability */
+	*pos = ESP_PRIV_CAP_EXT;            pos++;len++;
+	*pos = LENGTH_4_BYTE;               pos++;len++;
+	*pos = (ext_cap) & 0xFF;            pos++;len++;
+	*pos = (ext_cap >> 8) & 0xFF;       pos++;len++;
+	*pos = (ext_cap >> 16) & 0xFF;      pos++;len++;
+	*pos = (ext_cap >> 24) & 0xFF;      pos++;len++;
+
 	*pos = ESP_PRIV_TEST_RAW_TP;        pos++;len++;
 	*pos = LENGTH_1_BYTE;               pos++;len++;
 	*pos = raw_tp_cap;                  pos++;len++;
@@ -297,6 +375,20 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	*pos = ESP_PRIV_TX_Q_SIZE;          pos++;len++;
 	*pos = LENGTH_1_BYTE;               pos++;len++;
 	*pos = SPI_TX_QUEUE_SIZE;           pos++;len++;
+
+	// convert fw version into a uint32_t
+	uint32_t fw_version = ESP_HOSTED_VERSION_VAL(PROJECT_VERSION_MAJOR_1,
+			PROJECT_VERSION_MINOR_1,
+			PROJECT_VERSION_PATCH_1);
+
+	// send fw version as a little-endian uint32_t
+	*pos = ESP_PRIV_FIRMWARE_VERSION;   pos++;len++;
+	*pos = LENGTH_4_BYTE;               pos++;len++;
+	// send fw_version as a little endian 32bit value
+	*pos = (fw_version & 0xff);         pos++;len++;
+	*pos = (fw_version >> 8) & 0xff;    pos++;len++;
+	*pos = (fw_version >> 16) & 0xff;   pos++;len++;
+	*pos = (fw_version >> 24) & 0xff;   pos++;len++;
 
 	/* TLVs end */
 
@@ -321,11 +413,9 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	xQueueSend(spi_tx_queue[PRIO_Q_OTHERS], &buf_handle, portMAX_DELAY);
 	xSemaphoreGive(spi_tx_sem);
 
-#if !DUMMY_TRANS_DESIGN
 	set_dataready_gpio();
 	/* process first data packet here to start transactions */
 	queue_next_transaction();
-#endif
 }
 
 
@@ -336,50 +426,14 @@ static void IRAM_ATTR spi_post_setup_cb(spi_slave_transaction_t *trans)
 	set_handshake_gpio();
 }
 
-#if DUMMY_TRANS_DESIGN
-static inline int is_valid_trans_buffer(uint8_t *trans_buf)
-{
-	struct esp_payload_header *header;
-	uint16_t len, offset;
-
-	if (!trans_buf) {
-		return pdFALSE;
-	}
-
-	header = (struct esp_payload_header *) trans_buf;
-
-	len = le16toh(header->len);
-	offset = le16toh(header->offset);
-
-	if (!len || (len > SPI_BUFFER_SIZE) ||
-	    (offset != sizeof(struct esp_payload_header))) {
-		return pdFALSE;
-	}
-
-	if ((header->if_type >= ESP_MAX_IF) || (header->if_num)) {
-		return pdFALSE;
-	}
-
-	return pdTRUE;
-}
-#endif
 /* Invoked after transaction is sent/received.
  * Use this to set the handshake line low */
 static void IRAM_ATTR spi_post_trans_cb(spi_slave_transaction_t *trans)
 {
-#if DUMMY_TRANS_DESIGN
-	if (trans && is_valid_trans_buffer((uint8_t *)trans->tx_buffer)) {
-		/* Host has consumed a valid TX buffer
-		 * Clear Data ready line and release semaphore */
-		reset_dataready_gpio();
-
-		if (spi_sema)
-			xSemaphoreGive(spi_sema);
-	}
-#endif
+#if !HS_DEASSERT_ON_CS
 	/* Clear handshake line */
 	reset_handshake_gpio();
-
+#endif
 }
 
 static uint8_t * get_next_tx_buffer(uint32_t *len)
@@ -413,17 +467,8 @@ static uint8_t * get_next_tx_buffer(uint32_t *len)
 		return buf_handle.payload;
 	}
 
-#if DUMMY_TRANS_DESIGN
-	/* Dummy transaction is already queued. Return. */
-	if (dummy_queued) {
-		if (len)
-			*len = 0;
-		return NULL;
-	}
-#else
 	/* No real data pending, clear ready line and indicate host an idle state */
 	reset_dataready_gpio();
-#endif
 
 	/* Create empty dummy buffer */
 	sendbuf = spi_buffer_tx_alloc(MEMSET_REQUIRED);
@@ -453,6 +498,7 @@ static int process_spi_rx(interface_buffer_handle_t *buf_handle)
 {
 	struct esp_payload_header *header = NULL;
 	uint16_t len = 0, offset = 0;
+	uint8_t flags = 0;
 #if CONFIG_ESP_SPI_CHECKSUM
 	uint16_t rx_checksum = 0, checksum = 0;
 #endif
@@ -467,12 +513,28 @@ static int process_spi_rx(interface_buffer_handle_t *buf_handle)
 	header = (struct esp_payload_header *) buf_handle->payload;
 	len = le16toh(header->len);
 	offset = le16toh(header->offset);
+	flags = header->flags;
+	ESP_LOGV(TAG, "process_spi_rx: flags[%u]", flags);
 
-	if (!len)
+	if (flags & FLAG_POWER_SAVE_STARTED) {
+		ESP_LOGI(TAG, "Host informed starting to power sleep");
+		if (context.event_handler) {
+			context.event_handler(ESP_POWER_SAVE_ON);
+		}
+	} else if (flags & FLAG_POWER_SAVE_STOPPED) {
+		ESP_LOGI(TAG, "Host informed that it waken up");
+		if (context.event_handler) {
+			context.event_handler(ESP_POWER_SAVE_OFF);
+		}
+	}
+
+	if (!len) {
+		ESP_LOGV(TAG, "rx_pkt len[%u] is 0, dropping it", len);
 		return -1;
+	}
 
 	if ((len+offset) > SPI_BUFFER_SIZE) {
-		ESP_LOGE(TAG, "rx_pkt len[%u]>max[%u], dropping it", len+offset, SPI_BUFFER_SIZE);
+		ESP_LOGE(TAG, "rx_pkt len+offset[%u]>max[%u], dropping it", len+offset, SPI_BUFFER_SIZE);
 
 		return -1;
 	}
@@ -489,6 +551,7 @@ static int process_spi_rx(interface_buffer_handle_t *buf_handle)
 		return -1;
 	}
 #endif
+	ESP_HEXLOGD("spi_rx", header, len, 32);
 
 	/* Buffer is valid */
 	buf_handle->if_type = header->if_type;
@@ -501,6 +564,8 @@ static int process_spi_rx(interface_buffer_handle_t *buf_handle)
 #if ESP_PKT_STATS
 	if (buf_handle->if_type == ESP_STA_IF)
 		pkt_stats.hs_bus_sta_in++;
+	else if (buf_handle->if_type == ESP_AP_IF)
+		pkt_stats.hs_bus_ap_in++;
 #endif
 	if (header->if_type == ESP_SERIAL_IF) {
 		xQueueSend(spi_rx_queue[PRIO_Q_SERIAL], buf_handle, portMAX_DELAY);
@@ -514,112 +579,30 @@ static int process_spi_rx(interface_buffer_handle_t *buf_handle)
 	return 0;
 }
 
-#if DUMMY_TRANS_DESIGN
-static void spi_transaction_tx_task(void* pvParameters)
-{
-	spi_slave_transaction_t *spi_trans;
-	esp_err_t ret = 0;
-	interface_buffer_handle_t buf_handle;
-
-	for(;;) {
-		xSemaphoreTake(spi_tx_sem, portMAX_DELAY);
-
-		if (pdFALSE == xQueueReceive(spi_tx_queue[PRIO_Q_SERIAL], &buf_handle, 0))
-			if (pdFALSE == xQueueReceive(spi_tx_queue[PRIO_Q_BT], &buf_handle, 0))
-				if (pdFALSE == xQueueReceive(spi_tx_queue[PRIO_Q_OTHERS], &buf_handle, 0))
-					ret = pdFALSE;
-
-		if (ret == pdTRUE && buf_handle.payload) {
-			spi_trans = spi_trans_alloc(MEMSET_REQUIRED);
-			assert(spi_trans);
-
-			/* Attach Rx Buffer */
-			spi_trans->rx_buffer = spi_buffer_rx_alloc(MEMSET_REQUIRED);
-			assert(spi_trans->rx_buffer);
-
-			/* Attach Tx Buffer */
-			spi_trans->tx_buffer = buf_handle.payload;
-
-			/* Transaction len */
-			spi_trans->length = SPI_BUFFER_SIZE * SPI_BITS_PER_WORD;
-
-			/* Execute transaction */
-			xSemaphoreTake(spi_sema, portMAX_DELAY);
-
-			spi_slave_queue_trans(ESP_SPI_CONTROLLER, spi_trans,
-					portMAX_DELAY);
-
-			/* Set Data ready high */
-			set_dataready_gpio();
-		}
-	}
-}
-
-static void queue_dummy_transaction()
-{
-	spi_slave_transaction_t *spi_trans = NULL;
-	esp_err_t ret = ESP_OK;
-	uint32_t len = 0;
-	uint8_t *tx_buffer = NULL;
-
-	tx_buffer = get_next_tx_buffer(&len);
-	if (!tx_buffer) {
-		/* No need to queue dummy transaction */
-		xSemaphoreGive(spi_sema);
-		return;
-	}
-
-	spi_trans = spi_trans_alloc(MEMSET_REQUIRED);
-	assert(spi_trans);
-
-	/* Attach Rx Buffer */
-	spi_trans->rx_buffer = spi_buffer_rx_alloc(MEMSET_REQUIRED);
-	assert(spi_trans->rx_buffer);
-
-	/* Attach Tx Buffer */
-	spi_trans->tx_buffer = tx_buffer;
-
-	/* Transaction len */
-	spi_trans->length = SPI_BUFFER_SIZE * SPI_BITS_PER_WORD;
-
-	ret = spi_slave_queue_trans(ESP_SPI_CONTROLLER, spi_trans, 0);
-	if (ret != ESP_OK) {
-		free(spi_trans->rx_buffer);
-		free((void *)spi_trans->tx_buffer);
-		free(spi_trans);
-		xSemaphoreGive(spi_sema);
-		return;
-	}
-
-	if (!len) {
-		/* queued dummy transaction, release semaphore */
-		dummy_queued = pdTRUE;
-		xSemaphoreGive(spi_sema);
-	} else {
-		/* Queued transaction with valid TX Buffer. Set Data ready high. */
-		set_dataready_gpio();
-	}
-}
-
-#else
 static void queue_next_transaction(void)
 {
 	spi_slave_transaction_t *spi_trans = NULL;
 	uint32_t len = 0;
 	uint8_t *tx_buffer = get_next_tx_buffer(&len);
-	if (!tx_buffer) {
+	if (unlikely(!tx_buffer)) {
 		/* Queue next transaction failed */
 		ESP_LOGE(TAG , "Failed to queue new transaction\r\n");
 		return;
 	}
-	ESP_HEXLOGD("spi_tx", tx_buffer, len);
+	ESP_HEXLOGD("spi_tx", tx_buffer, len, 32);
 
 	spi_trans = spi_trans_alloc(MEMSET_REQUIRED);
-	assert(spi_trans);
+	if (unlikely(!spi_trans)) {
+		assert(spi_trans);
+	}
 
 	/* Attach Rx Buffer */
 	spi_trans->rx_buffer = spi_buffer_rx_alloc(MEMSET_REQUIRED);
-	assert(spi_trans->rx_buffer);
+	if (unlikely(!spi_trans->rx_buffer)) {
+		ESP_LOGE(TAG, "rx_buf_allocated %d", rx_buf_allocated);
+		ESP_LOGE(TAG, "tx_buf_allocated %d", tx_buf_allocated);
+		assert(spi_trans->rx_buffer);
+	}
 
 	/* Attach Tx Buffer */
 	spi_trans->tx_buffer = tx_buffer;
@@ -629,51 +612,42 @@ static void queue_next_transaction(void)
 
 	spi_slave_queue_trans(ESP_SPI_CONTROLLER, spi_trans, portMAX_DELAY);
 }
-#endif
 
 static void spi_transaction_post_process_task(void* pvParameters)
 {
 	spi_slave_transaction_t *spi_trans = NULL;
-#if DUMMY_TRANS_DESIGN
-	struct esp_payload_header *header;
-#endif
 	esp_err_t ret = ESP_OK;
 	interface_buffer_handle_t rx_buf_handle;
 
+	ESP_LOGI(TAG, "SPI post process task started");
 	for (;;) {
+		/* Check if interface is being deinitialized */
+#if H_PS_UNLOAD_BUS_WHILE_PS
+		if (if_handle_g.state == DEINIT) {
+			vTaskDelay(pdMS_TO_TICKS(10));
+			ESP_LOGI(TAG, "spi deinit");
+			continue;
+		}
+#endif
+
 		memset(&rx_buf_handle, 0, sizeof(rx_buf_handle));
 
 		/* Await transmission result, after any kind of transmission a new packet
 		 * (dummy or real) must be placed in SPI slave
 		 */
-		spi_slave_get_trans_result(ESP_SPI_CONTROLLER, &spi_trans,
-				portMAX_DELAY);
-#if DUMMY_TRANS_DESIGN
-		if (spi_trans->tx_buffer) {
-			header = (struct esp_payload_header *) spi_trans->tx_buffer;
+		ESP_ERROR_CHECK(spi_slave_get_trans_result(ESP_SPI_CONTROLLER, &spi_trans,
+				portMAX_DELAY));
 
-			if (header->if_type == 0xF && header->if_num == 0xF && header->offset == 0) {
-				/* Dummy Tx buffer consumed by host */
-				dummy_queued = pdFALSE;
-			}
-
-			spi_buffer_tx_free((void *)spi_trans->tx_buffer);
-			spi_trans->tx_buffer = NULL;
-		}
-
-		/* Check if dummy transaction is needed
+#if HS_DEASSERT_ON_CS
+		/* Wait until CS has been deasserted before we queue a new transaction.
 		 *
-		 * If failed to obtain spi_sema:
-		 *    - Transaction is already queued.
-		 *    - No need to queue dummy transaction
-		 *
-		 * If spi_sema is obtained: queue dummy transaction
-		 **/
-
-		ret = xSemaphoreTake(spi_sema, 0);
-		if (ret == pdTRUE)
-			queue_dummy_transaction();
-#else
+		 * Some MCUs delay deasserting CS at the end of a transaction.
+		 * If we queue a new transaction without waiting for CS to deassert,
+		 * the slave SPI can start (since CS is still asserted), and data is lost
+		 * as host is not expecting any data.
+		 */
+		xSemaphoreTake(wait_cs_deassert_sem, portMAX_DELAY);
+#endif
 		/* Queue new transaction to get ready as soon as possible */
 		queue_next_transaction();
 		assert(spi_trans);
@@ -682,21 +656,21 @@ static void spi_transaction_post_process_task(void* pvParameters)
 			(struct esp_payload_header *)spi_trans->tx_buffer;
 		if (header->if_type == ESP_STA_IF)
 			pkt_stats.sta_sh_out++;
+		else if (header->if_type == ESP_AP_IF)
+			pkt_stats.ap_sh_out++;
 #endif
 
 		/* Free any tx buffer, data is not relevant anymore */
 		spi_buffer_tx_free((void *)spi_trans->tx_buffer);
-#endif
-
 		/* Process received data */
-		if (spi_trans->rx_buffer) {
+		if (likely(spi_trans->rx_buffer)) {
 			rx_buf_handle.payload = spi_trans->rx_buffer;
 
 			ret = process_spi_rx(&rx_buf_handle);
 
 			/* free rx_buffer if process_spi_rx returns an error
 			 * In success case it will be freed later */
-			if (ret != ESP_OK) {
+			if (unlikely(ret)) {
 				spi_buffer_rx_free((void *)spi_trans->rx_buffer);
 			}
 		} else {
@@ -710,7 +684,19 @@ static void spi_transaction_post_process_task(void* pvParameters)
 
 static void IRAM_ATTR gpio_disable_hs_isr_handler(void* arg)
 {
+#if HS_DEASSERT_ON_CS
+	int level = gpio_get_level(GPIO_CS);
+	if (level == 0) {
+		/* CS is asserted, disable HS */
+		reset_handshake_gpio();
+	} else {
+		/* Last transaction complete, populate next one */
+		if (wait_cs_deassert_sem)
+			xSemaphoreGive(wait_cs_deassert_sem);
+	}
+#else
 	reset_handshake_gpio();
+#endif
 }
 
 static void register_hs_disable_pin(uint32_t gpio_num)
@@ -733,6 +719,21 @@ static void register_hs_disable_pin(uint32_t gpio_num)
 
 static interface_handle_t * esp_spi_init(void)
 {
+	if (unlikely(if_handle_g.state >= DEACTIVE)) {
+		return &if_handle_g;
+	}
+
+#if H_PS_UNLOAD_BUS_WHILE_PS
+	if (hosted_constructs_init_done) {
+
+  #if H_IF_AVAILABLE_SPI_SLAVE_ENABLE_DISABLE
+		spi_slave_enable(ESP_SPI_CONTROLLER);
+  #endif
+		if_handle_g.state = ACTIVE;
+		return &if_handle_g;
+	}
+#endif
+
 	esp_err_t ret = ESP_OK;
 	uint16_t prio_q_idx = 0;
 
@@ -763,95 +764,97 @@ static interface_handle_t * esp_spi_init(void)
 		.post_trans_cb=spi_post_trans_cb
 	};
 
-	/* Configuration for the handshake line */
-	gpio_config_t io_conf={
-		.intr_type=GPIO_INTR_DISABLE,
-		.mode=GPIO_MODE_OUTPUT,
-		.pin_bit_mask=GPIO_MASK_HANDSHAKE
-	};
+	if (!hosted_constructs_init_done) {
+		/* Configuration for the handshake line */
+		gpio_config_t io_conf={
+			.intr_type=GPIO_INTR_DISABLE,
+			.mode=GPIO_MODE_OUTPUT,
+			.pin_bit_mask=GPIO_MASK_HANDSHAKE
+		};
 
-	/* Configuration for data_ready line */
-	gpio_config_t io_data_ready_conf={
-		.intr_type=GPIO_INTR_DISABLE,
-		.mode=GPIO_MODE_OUTPUT,
-		.pin_bit_mask=GPIO_MASK_DATA_READY
-	};
+		/* Configuration for data_ready line */
+		gpio_config_t io_data_ready_conf={
+			.intr_type=GPIO_INTR_DISABLE,
+			.mode=GPIO_MODE_OUTPUT,
+			.pin_bit_mask=GPIO_MASK_DATA_READY
+		};
 
-	spi_mempool_create();
+		spi_mempool_create();
 
-	/* Configure handshake and data_ready lines as output */
-	gpio_config(&io_conf);
-	gpio_config(&io_data_ready_conf);
-	reset_handshake_gpio();
-	reset_dataready_gpio();
+		/* Configure handshake and data_ready lines as output */
+		gpio_config(&io_conf);
+		gpio_config(&io_data_ready_conf);
+		reset_handshake_gpio();
+		reset_dataready_gpio();
 
-	/* Enable pull-ups on SPI lines
-	 * so that no rogue pulses when no master is connected
-	 */
-	gpio_set_pull_mode(CONFIG_ESP_SPI_GPIO_HANDSHAKE, H_HS_PULL_REGISTER);
-	gpio_set_pull_mode(CONFIG_ESP_SPI_GPIO_DATA_READY, H_DR_PULL_REGISTER);
-	gpio_set_pull_mode(GPIO_MOSI, GPIO_PULLUP_ONLY);
-	gpio_set_pull_mode(GPIO_SCLK, GPIO_PULLUP_ONLY);
-	gpio_set_pull_mode(GPIO_CS, GPIO_PULLUP_ONLY);
+		/* Enable pull-ups on SPI lines
+		 * so that no rogue pulses when no master is connected
+		 */
+		gpio_set_pull_mode(CONFIG_ESP_SPI_GPIO_HANDSHAKE, H_HS_PULL_REGISTER);
+		gpio_set_pull_mode(CONFIG_ESP_SPI_GPIO_DATA_READY, H_DR_PULL_REGISTER);
+		gpio_set_pull_mode(GPIO_MOSI, GPIO_PULLUP_ONLY);
+		gpio_set_pull_mode(GPIO_SCLK, GPIO_PULLUP_ONLY);
+		gpio_set_pull_mode(GPIO_CS, GPIO_PULLUP_ONLY);
 
-	ESP_LOGI(TAG, "SPI Ctrl:%u mode: %u, Freq:ConfigAtHost\nGPIOs: MOSI: %u, MISO: %u, CS: %u, CLK: %u HS: %u DR: %u\n",
-			ESP_SPI_CONTROLLER, slvcfg.mode,
-			GPIO_MOSI, GPIO_MISO, GPIO_CS, GPIO_SCLK,
-			GPIO_HANDSHAKE, GPIO_DATA_READY);
+		ESP_LOGI(TAG, "SPI Ctrl:%u mode: %u, Freq:ConfigAtHost\nGPIOs: CLK:%u MOSI:%u MISO:%u CS:%u HS:%u DR:%u\n",
+				ESP_SPI_CONTROLLER, slvcfg.mode,
+				GPIO_SCLK, GPIO_MOSI, GPIO_MISO, GPIO_CS,
+				GPIO_HANDSHAKE, GPIO_DATA_READY);
 
-	ESP_LOGI(TAG, "Hosted SPI queue size: Tx:%u Rx:%u", SPI_TX_QUEUE_SIZE, SPI_RX_QUEUE_SIZE);
-	register_hs_disable_pin(GPIO_CS);
+		ESP_LOGI(TAG, "Hosted SPI queue size: Tx:%u Rx:%u", SPI_TX_QUEUE_SIZE, SPI_RX_QUEUE_SIZE);
+		register_hs_disable_pin(GPIO_CS);
 
 #if !H_HANDSHAKE_ACTIVE_HIGH
-	ESP_LOGI(TAG, "Handshake: Active Low");
+		ESP_LOGI(TAG, "Handshake: Active Low");
 #endif
 
 #if !H_DATAREADY_ACTIVE_HIGH
-	ESP_LOGI(TAG, "DataReady: Active Low");
+		ESP_LOGI(TAG, "DataReady: Active Low");
 #endif
+	}
 
 
 	/* Initialize SPI slave interface */
 	ret=spi_slave_initialize(ESP_SPI_CONTROLLER, &buscfg, &slvcfg, DMA_CHAN);
 	assert(ret==ESP_OK);
 
-	//gpio_set_drive_capability(CONFIG_ESP_SPI_GPIO_HANDSHAKE, GPIO_DRIVE_CAP_3);
-	//gpio_set_drive_capability(CONFIG_ESP_SPI_GPIO_DATA_READY, GPIO_DRIVE_CAP_3);
-	gpio_set_drive_capability(GPIO_SCLK, GPIO_DRIVE_CAP_3);
-	gpio_set_drive_capability(GPIO_MISO, GPIO_DRIVE_CAP_3);
-	gpio_set_pull_mode(GPIO_MISO, GPIO_PULLDOWN_ONLY);
+	if (!hosted_constructs_init_done) {
+		//gpio_set_drive_capability(CONFIG_ESP_SPI_GPIO_HANDSHAKE, GPIO_DRIVE_CAP_3);
+		//gpio_set_drive_capability(CONFIG_ESP_SPI_GPIO_DATA_READY, GPIO_DRIVE_CAP_3);
+		gpio_set_drive_capability(GPIO_SCLK, GPIO_DRIVE_CAP_3);
+		gpio_set_drive_capability(GPIO_MISO, GPIO_DRIVE_CAP_3);
+		gpio_set_pull_mode(GPIO_MISO, GPIO_PULLDOWN_ONLY);
 
-
-	memset(&if_handle_g, 0, sizeof(if_handle_g));
-	if_handle_g.state = INIT;
-
-	spi_tx_sem = xSemaphoreCreateCounting(SPI_TX_QUEUE_SIZE*3, 0);
-	assert(spi_tx_sem != NULL);
-	spi_rx_sem = xSemaphoreCreateCounting(SPI_RX_QUEUE_SIZE*3, 0);
-	assert(spi_rx_sem != NULL);
-
-	for (prio_q_idx=0; prio_q_idx<MAX_PRIORITY_QUEUES;prio_q_idx++) {
-		spi_rx_queue[prio_q_idx] = xQueueCreate(SPI_RX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
-		assert(spi_rx_queue[prio_q_idx] != NULL);
-
-		spi_tx_queue[prio_q_idx] = xQueueCreate(SPI_TX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
-		assert(spi_tx_queue[prio_q_idx] != NULL);
+#if HS_DEASSERT_ON_CS
+		wait_cs_deassert_sem = xSemaphoreCreateBinary();
+		assert(wait_cs_deassert_sem!= NULL);
+		ret = xSemaphoreTake(wait_cs_deassert_sem, 0);
+#endif
 	}
 
-#if DUMMY_TRANS_DESIGN
-	spi_sema = xSemaphoreCreateBinary();
-	assert(spi_sema != NULL);
-	xSemaphoreGive(spi_sema);
+	memset(&if_handle_g, 0, sizeof(if_handle_g));
+	if_handle_g.state = ACTIVE;
 
-	assert(xTaskCreate(spi_transaction_tx_task , "spi_tx_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL,
-			CONFIG_ESP_DEFAULT_TASK_PRIO+1, NULL) == pdTRUE);
-#endif
-	assert(xTaskCreate(spi_transaction_post_process_task , "spi_post_process_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL,
-			CONFIG_ESP_DEFAULT_TASK_PRIO, NULL) == pdTRUE);
+	if (!hosted_constructs_init_done) {
+		spi_tx_sem = xSemaphoreCreateCounting(SPI_TX_QUEUE_SIZE*3, 0);
+		assert(spi_tx_sem != NULL);
+		spi_rx_sem = xSemaphoreCreateCounting(SPI_RX_QUEUE_SIZE*3, 0);
+		assert(spi_rx_sem != NULL);
 
-	usleep(500);
+		for (prio_q_idx=0; prio_q_idx<MAX_PRIORITY_QUEUES;prio_q_idx++) {
+			spi_rx_queue[prio_q_idx] = xQueueCreate(SPI_RX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
+			assert(spi_rx_queue[prio_q_idx] != NULL);
+
+			spi_tx_queue[prio_q_idx] = xQueueCreate(SPI_TX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
+			assert(spi_tx_queue[prio_q_idx] != NULL);
+		}
+
+		assert(xTaskCreate(spi_transaction_post_process_task , "spi_post_process_task" ,
+					CONFIG_ESP_HOSTED_DEFAULT_TASK_STACK_SIZE, NULL,
+					CONFIG_ESP_HOSTED_DEFAULT_TASK_PRIORITY, NULL) == pdTRUE);
+		hosted_constructs_init_done = 1;
+	}
+
 
 	return &if_handle_g;
 }
@@ -863,24 +866,29 @@ static int32_t esp_spi_write(interface_handle_t *handle, interface_buffer_handle
 	struct esp_payload_header *header = NULL;
 	interface_buffer_handle_t tx_buf_handle = {0};
 
-	if (!handle || !buf_handle) {
+	if (unlikely(handle->state < ACTIVE)) {
+		ESP_LOGE(TAG, "SPI is not active\n");
+		return ESP_FAIL;
+	}
+
+	if (unlikely(!handle || !buf_handle)) {
 		ESP_LOGE(TAG , "Invalid arguments\n");
 		return ESP_FAIL;
 	}
 
-	if (!buf_handle->payload_len || !buf_handle->payload) {
+	if (unlikely(!buf_handle->payload_len || !buf_handle->payload)) {
 		ESP_LOGE(TAG , "Invalid arguments, len:%d\n", buf_handle->payload_len);
 		return ESP_FAIL;
 	}
 
 	total_len = buf_handle->payload_len + sizeof (struct esp_payload_header);
 
-	/* make the adresses dma aligned */
+	/* make the addresses dma aligned */
 	if (!IS_SPI_DMA_ALIGNED(total_len)) {
 		MAKE_SPI_DMA_ALIGNED(total_len);
 	}
 
-	if (total_len > SPI_BUFFER_SIZE) {
+	if (unlikely(total_len > SPI_BUFFER_SIZE)) {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 		ESP_LOGE(TAG, "Max frame length exceeded %ld.. drop it\n", total_len);
 #else
@@ -909,7 +917,7 @@ static int32_t esp_spi_write(interface_handle_t *handle, interface_buffer_handle
 	header->seq_num = htole16(buf_handle->seq_num);
 	header->flags = buf_handle->flag;
 
-	header->throttle_cmd = find_wifi_tx_throttling_to_be_set();
+	tx_buf_handle.wifi_flow_ctrl_en = find_wifi_tx_throttling_to_be_set();
 
 	/* copy the data from caller */
 	memcpy(tx_buf_handle.payload + offset, buf_handle->payload, buf_handle->payload_len);
@@ -927,10 +935,10 @@ static int32_t esp_spi_write(interface_handle_t *handle, interface_buffer_handle
 	else
 		xQueueSend(spi_tx_queue[PRIO_Q_OTHERS], &tx_buf_handle, portMAX_DELAY);
 
-	xSemaphoreGive(spi_tx_sem);
-
 	/* indicate waiting data on ready pin */
 	set_dataready_gpio();
+
+	xSemaphoreGive(spi_tx_sem);
 
 	return buf_handle->payload_len;
 }
@@ -942,12 +950,18 @@ static void IRAM_ATTR esp_spi_read_done(void *handle)
 
 static int esp_spi_read(interface_handle_t *if_handle, interface_buffer_handle_t *buf_handle)
 {
-	if (!if_handle) {
+	if (unlikely(!if_handle)) {
 		ESP_LOGE(TAG, "Invalid arguments to esp_spi_read\n");
 		return ESP_FAIL;
 	}
 
-	xSemaphoreTake(spi_rx_sem, portMAX_DELAY);
+	if (likely(spi_rx_sem)) {
+		xSemaphoreTake(spi_rx_sem, portMAX_DELAY);
+	}
+	if (unlikely(if_handle->state < DEACTIVE)) {
+		ESP_LOGE(TAG, "spi slave bus inactive\n");
+		return ESP_FAIL;
+	}
 
 	if (pdFALSE == xQueueReceive(spi_rx_queue[PRIO_Q_SERIAL], buf_handle, 0))
 		if (pdFALSE == xQueueReceive(spi_rx_queue[PRIO_Q_BT], buf_handle, 0))
@@ -971,23 +985,18 @@ static esp_err_t esp_spi_reset(interface_handle_t *handle)
 
 static void esp_spi_deinit(interface_handle_t *handle)
 {
-	esp_err_t ret = ESP_OK;
-
-	spi_mempool_destroy();
-#if DUMMY_TRANS_DESIGN
-	if (spi_sema)
-		vSemaphoreDelete(spi_sema);
+	if (!handle) {
+		return;
+	}
+#if H_PS_UNLOAD_BUS_WHILE_PS
+	if (if_handle_g.state == DEINIT) {
+		ESP_LOGW(TAG, "SPI already deinitialized");
+		return;
+	}
+  #if H_IF_AVAILABLE_SPI_SLAVE_ENABLE_DISABLE
+	spi_slave_disable(ESP_SPI_CONTROLLER);
+  #endif
+	handle->state = DEINIT;
+	ESP_LOGI(TAG, "SPI deinit requested. Signaling spi task to exit.");
 #endif
-
-	ret = spi_slave_free(ESP_SPI_CONTROLLER);
-	if (ESP_OK != ret) {
-		ESP_LOGE(TAG, "spi slave bus free failed\n");
-		return;
-	}
-
-	ret = spi_bus_free(ESP_SPI_CONTROLLER);
-	if (ESP_OK != ret) {
-		ESP_LOGE(TAG, "spi all bus free failed\n");
-		return;
-	}
 }

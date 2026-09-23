@@ -1,0 +1,18 @@
+stages:
+  - pre
+  - build
+  - build_coprocessor
+  - build_example
+  - release
+
+before_script:
+  - git submodule update --init --recursive
+
+include:
+  - project: 'ci/actions/common'
+    file: 'templates/stable/default-workflow.yml'
+  - '.gitlab/ci/templates.yml'
+  - '.gitlab/ci/rules.yml'
+  - '.gitlab/ci/regression_pipeline_jobs.yml'
+  - '.gitlab/ci/sanity_pipeline_jobs.yml'
+  - '.gitlab/ci/pre_commit.yml'

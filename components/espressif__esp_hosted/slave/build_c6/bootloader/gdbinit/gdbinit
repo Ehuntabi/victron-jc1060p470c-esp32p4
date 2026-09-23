@@ -1,0 +1,2 @@
+source /home/jc/esp_hosted_21213/slave/build_c6/bootloader/gdbinit/symbols
+source /home/jc/esp_hosted_21213/slave/build_c6/bootloader/gdbinit/connect

@@ -1,21 +1,13 @@
-// Copyright 2015-2023 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "serial_if.h"
 #include "serial_ll_if.h"
-#include "esp_log.h"
 #include "esp_hosted_log.h"
+#include "port_esp_hosted_host_log.h"
 
 DEFINE_LOG_TAG(serial);
 
@@ -29,28 +21,33 @@ static void * readSemaphore;
 
 static void rpc_rx_indication(void);
 
+/* Global serial handle - shared by RPC RX and TX threads */
+static struct serial_drv_handle_t* g_serial_drv_handle = NULL;
+
 /* -------- Serial Drv ---------- */
 struct serial_drv_handle_t* serial_drv_open(const char *transport)
 {
-	struct serial_drv_handle_t* serial_drv_handle = NULL;
 	if (!transport) {
 		ESP_LOGE(TAG, "Invalid parameter in open");
 		return NULL;
 	}
 
-	if(serial_drv_handle) {
-		ESP_LOGE(TAG, "return orig hndl\n");
-		return serial_drv_handle;
+	/* Return existing handle if already opened */
+	if(g_serial_drv_handle) {
+		ESP_LOGD(TAG, "Serial already open, returning existing handle");
+		return g_serial_drv_handle;
 	}
 
-	serial_drv_handle = (struct serial_drv_handle_t*) g_h.funcs->_h_calloc
+	/* Allocate new handle */
+	g_serial_drv_handle = (struct serial_drv_handle_t*) g_h.funcs->_h_calloc
 		(1,sizeof(struct serial_drv_handle_t));
-	if (!serial_drv_handle) {
+	if (!g_serial_drv_handle) {
 		ESP_LOGE(TAG, "Failed to allocate memory \n");
 		return NULL;
 	}
 
-	return serial_drv_handle;
+	ESP_LOGD(TAG, "Serial handle allocated");
+	return g_serial_drv_handle;
 }
 
 int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
@@ -69,7 +66,7 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 		return RET_INVALID;
 	}
 
-	ESP_HEXLOGV("serial_write", buf, in_count);
+	ESP_HEXLOGV("serial_write", buf, in_count, 32);
 	ret = serial_ll_if_g->fops->write(serial_ll_if_g, buf, in_count);
 	if (ret != RET_OK) {
 		*out_count = 0;
@@ -90,7 +87,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 	uint8_t* read_buf = NULL;
 	int ret = 0;
 	/* Any of `RPC_EP_NAME_EVT` and `RPC_EP_NAME_RSP` could be used,
-	 * as both have same strlen in adapter.h */
+	 * as both have same strlen in esp_hosted_transport.h */
 	const char* ep_name = RPC_EP_NAME_RSP;
 	uint8_t *buf = NULL;
 	uint32_t buf_len = 0;
@@ -108,6 +105,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 		return NULL;
 	}
 
+	ESP_LOGV(TAG, "Wait for serial_ll_semaphore");
 	g_h.funcs->_h_get_semaphore(readSemaphore, HOSTED_BLOCK_MAX);
 
 	if( (!serial_ll_if_g) ||
@@ -116,6 +114,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 		ESP_LOGE(TAG,"serial interface refusing to read\n\r");
 		return NULL;
 	}
+	ESP_LOGV(TAG, "Starting serial_ll read");
 
 	/* Get buffer from serial interface */
 	read_buf = serial_ll_if_g->fops->read(serial_ll_if_g, &rx_buf_len);
@@ -123,7 +122,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 		ESP_LOGE(TAG,"serial read failed\n\r");
 		return NULL;
 	}
-	ESP_HEXLOGV("serial_read", read_buf, rx_buf_len);
+	ESP_HEXLOGV("serial_read", read_buf, rx_buf_len, 32);
 
 /*
  * Read Operation happens in two steps because total read length is unknown
@@ -167,6 +166,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 		ESP_LOGE(TAG,"Failed to parse RX data \n\r");
 		goto free_bufs;
 	}
+	ESP_LOGV(TAG, "TLV parsed");
 
 	if (rx_buf_len < (init_read_len + buf_len)) {
 		ESP_LOGE(TAG,"Buf read on serial iface is smaller than expected len\n");
@@ -189,6 +189,7 @@ uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
 	HOSTED_FREE(read_buf);
 
 	*out_nbyte = buf_len;
+	ESP_LOGV(TAG, "Serial payload size(after removing TLV): %" PRIu32, *out_nbyte);
 	return buf;
 
 free_bufs:
@@ -201,19 +202,22 @@ int serial_drv_close(struct serial_drv_handle_t** serial_drv_handle)
 {
 	if (!serial_drv_handle || !(*serial_drv_handle)) {
 		ESP_LOGE(TAG,"Invalid parameter in close \n\r");
-		if (serial_drv_handle)
-			HOSTED_FREE(serial_drv_handle);
 		return RET_INVALID;
 	}
+
+	ESP_LOGD(TAG, "Freeing serial handle");
 	HOSTED_FREE(*serial_drv_handle);
+	*serial_drv_handle = NULL;
+	g_serial_drv_handle = NULL;  /* Clear global so next open allocates fresh */
+
 	return RET_OK;
 }
 
 int rpc_platform_init(void)
 {
 	/* rpc semaphore */
-	readSemaphore = g_h.funcs->_h_create_semaphore(CONFIG_ESP_MAX_SIMULTANEOUS_SYNC_RPC_REQUESTS +
-			CONFIG_ESP_MAX_SIMULTANEOUS_ASYNC_RPC_REQUESTS);
+	readSemaphore = g_h.funcs->_h_create_semaphore(H_MAX_SYNC_RPC_REQUESTS +
+			H_MAX_ASYNC_RPC_REQUESTS);
 	assert(readSemaphore);
 
 	/* grab the semaphore, so that task will be mandated to wait on semaphore */
@@ -235,10 +239,20 @@ int rpc_platform_init(void)
 /* TODO: Why this is not called in transport_pserial_close() */
 int rpc_platform_deinit(void)
 {
-	if (RET_OK != serial_ll_if_g->fops->close(serial_ll_if_g)) {
-		ESP_LOGE(TAG,"Serial interface close failed\n\r");
-		return RET_FAIL;
+	if (serial_ll_if_g) {
+		if (RET_OK != serial_ll_if_g->fops->close(serial_ll_if_g)) {
+			ESP_LOGE(TAG,"Serial interface close failed\n\r");
+			return RET_FAIL;
+		}
+		/* serial_ll_close frees the handle, NULL our pointer */
+		serial_ll_if_g = NULL;
 	}
+
+	if (readSemaphore) {
+		g_h.funcs->_h_destroy_semaphore(readSemaphore);
+		readSemaphore = NULL;
+	}
+
 	return RET_OK;
 }
 
@@ -249,5 +263,3 @@ static void rpc_rx_indication(void)
 		g_h.funcs->_h_post_semaphore(readSemaphore);
 	}
 }
-
-

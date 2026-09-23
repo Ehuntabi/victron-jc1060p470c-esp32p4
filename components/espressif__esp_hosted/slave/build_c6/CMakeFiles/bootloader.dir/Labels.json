@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/CMakeFiles/bootloader-complete.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule"
+		},
+		{
+			"file" : "/home/jc/esp_hosted_21213/slave/build_c6/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"bootloader"
+		],
+		"name" : "bootloader"
+	}
+}

@@ -1,17 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2024 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "sdkconfig.h"
 
@@ -24,11 +15,26 @@
 #include "esp_hosted_log.h"
 #include "driver/uart.h"
 
-#include "adapter.h"
 #include "endian.h"
 #include "interface.h"
 #include "mempool.h"
+#include "memdump.h"
 #include "stats.h"
+#include "esp_idf_version.h"
+#include "esp_hosted_interface.h"
+#include "esp_hosted_transport.h"
+#include "esp_hosted_transport_init.h"
+#include "esp_hosted_header.h"
+#include "esp_hosted_coprocessor_fw_ver.h"
+
+#include "slave_util.h"
+#include "slave_config.h"
+#include "mempool.h"
+
+#if H_USE_MEMPOOL
+// memory should be 4 byte aligned for DMA access
+#define MEM_ALIGNMENT_BYTES          4
+#endif
 
 #define HOSTED_UART                CONFIG_ESP_UART_PORT
 #define HOSTED_UART_GPIO_TX        CONFIG_ESP_UART_PIN_TX
@@ -42,11 +48,24 @@
 #define HOSTED_UART_CHECKSUM       CONFIG_ESP_UART_CHECKSUM
 
 #define BUFFER_SIZE                MAX_TRANSPORT_BUF_SIZE
-#define EVENT_QUEUE_SIZE           100
 
-#define UART_PROCESS_RX_DATA_ERROR (-1)
-#define UART_PROCESS_WAITING_MORE_RX_DATA (0)
-#define UART_PROCESS_RX_DATA_DONE (1)
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0))
+/**
+ * For ESP-IDF v5.5, Building ESP32 with UART Transport can fail due to
+ * lack of IRAM space.
+ * To reduce IRAM usage
+ * - `CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y`
+ * - `CONFIG_RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH=y`
+ * should be enabled
+ */
+#if CONFIG_IDF_TARGET_ESP32 && (!CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH || !CONFIG_RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH)
+#error Building for UART transport can fail due to lack of IRAM space
+#error To free up IRAM, enable Component config --> ESP Ringbuf ---> Place non-ISR ringbuf functions into flash and
+#error Component config --> ESP Ringbuf ---> Place ISR ringbuf functions into flash
+#error or uncomment
+#error CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y and CONFIG_RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH=y in sdkconfig.defaults.esp32 and regenerate sdkconfig
+#endif
+#endif
 
 static const char TAG[] = "UART_DRIVER";
 
@@ -59,20 +78,6 @@ static const char TAG[] = "UART_DRIVER";
 #error "ESP Console UART and Hosted UART are the same. Select another UART port."
 #endif
 #endif
-
-// these values should match ESP_UART_PARITY values in Kconfig.projbuild
-enum {
-	HOSTED_UART_PARITY_NONE = 0,
-	HOSTED_UART_PARITY_EVEN = 1,
-	HOSTED_UART_PARITY_ODD = 2,
-};
-
-// these values should match ESP_UART_STOP_BITS values in Kconfig.projbuild
-enum {
-	HOSTED_STOP_BITS_1 = 0,
-	HOSTED_STOP_BITS_1_5 = 1,
-	HOSTED_STOP_BITS_2 = 2,
-};
 
 // for flow control
 static volatile uint8_t wifi_flow_ctrl = 0;
@@ -94,62 +99,69 @@ if_ops_t if_ops = {
 	.deinit = h_uart_deinit,
 };
 
-static QueueHandle_t uart_queue;
 static interface_handle_t if_handle_g;
 static interface_context_t context;
 
-static struct hosted_mempool * buf_mp_tx_g;
-static struct hosted_mempool * buf_mp_rx_g;
+#if H_USE_MEMPOOL
+static hosted_mempool_t * buf_mp_tx_g;
+static hosted_mempool_t * buf_mp_rx_g;
+#endif
 
 static SemaphoreHandle_t uart_rx_sem;
 static QueueHandle_t uart_rx_queue[MAX_PRIORITY_QUEUES];
 
 static void uart_rx_task(void* pvParameters);
 
-static inline void h_uart_mempool_create()
+static inline void h_uart_mempool_create(void)
 {
-	buf_mp_tx_g = hosted_mempool_create(NULL, 0,
-			HOSTED_UART_TX_QUEUE_SIZE, BUFFER_SIZE);
-	buf_mp_rx_g = hosted_mempool_create(NULL, 0,
-			HOSTED_UART_RX_QUEUE_SIZE, BUFFER_SIZE);
-#if CONFIG_ESP_CACHE_MALLOC
+#if H_USE_MEMPOOL
+	hosted_mempool_config_t config = {
+		.pre_allocated_mem = NULL,
+		.pre_allocated_mem_size = 0,
+		.num_blocks = HOSTED_UART_TX_QUEUE_SIZE,
+		.block_size = BUFFER_SIZE,
+		.alignment_in_bytes = MEM_ALIGNMENT_BYTES,
+		.malloc = slave_util_malloc,
+		.calloc = slave_util_calloc,
+		.memset = memset,
+		.free   = free,
+	};
+	buf_mp_tx_g = hosted_mempool_create(&config);
+
+	config.num_blocks = HOSTED_UART_RX_QUEUE_SIZE;
+	buf_mp_rx_g = hosted_mempool_create(&config);
+
 	assert(buf_mp_tx_g);
 	assert(buf_mp_rx_g);
 #endif
 }
 
-static unsigned int h_uart_for_loop_delay(unsigned int number)
+static inline void h_uart_mempool_destroy(void)
 {
-	volatile int idx = 0;
-	for (idx=0; idx<100*number; idx++) {
-	}
-	return 0;
-}
-
-static inline void h_uart_mempool_destroy()
-{
+#if H_USE_MEMPOOL
 	hosted_mempool_destroy(buf_mp_tx_g);
 	hosted_mempool_destroy(buf_mp_rx_g);
+#endif
 }
 
 static inline void *h_uart_buffer_tx_alloc(size_t nbytes, uint need_memset)
 {
-	return hosted_mempool_alloc(buf_mp_tx_g, nbytes, need_memset);
+	MEMPOOL_ALLOC(buf_mp_tx_g, nbytes, need_memset);
 }
 
 static inline void h_uart_buffer_tx_free(void *buf)
 {
-	hosted_mempool_free(buf_mp_tx_g, buf);
+	MEMPOOL_FREE(buf_mp_tx_g, buf);
 }
 
 static inline void *h_uart_buffer_rx_alloc(uint need_memset)
 {
-	return hosted_mempool_alloc(buf_mp_rx_g, BUFFER_SIZE, need_memset);
+	MEMPOOL_ALLOC(buf_mp_rx_g, BUFFER_SIZE, need_memset);
 }
 
 static inline void h_uart_buffer_rx_free(void *buf)
 {
-	hosted_mempool_free(buf_mp_rx_g, buf);
+	MEMPOOL_FREE(buf_mp_rx_g, buf);
 }
 
 static void flow_ctrl_task(void* pvParameters)
@@ -185,14 +197,15 @@ static void start_rx_data_throttling_if_needed(void)
 			return;
 
 		queue_load = uxQueueMessagesWaiting(uart_rx_queue[PRIO_Q_OTHERS]);
-#if ESP_PKT_STATS
-		pkt_stats.slave_wifi_rx_msg_loaded = queue_load;
-#endif
+
 
 		load_percent = (queue_load*100/HOSTED_UART_RX_QUEUE_SIZE);
 		if (load_percent > slv_cfg_g.throttle_high_threshold) {
 			slv_state_g.current_throttling = 1;
 			wifi_flow_ctrl = 1;
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_on++;
+#endif
 			TRIGGER_FLOW_CTRL();
 		}
 	}
@@ -206,14 +219,15 @@ static void stop_rx_data_throttling_if_needed(void)
 	if (slv_state_g.current_throttling) {
 
 		queue_load = uxQueueMessagesWaiting(uart_rx_queue[PRIO_Q_OTHERS]);
-#if ESP_PKT_STATS
-		pkt_stats.slave_wifi_rx_msg_loaded = queue_load;
-#endif
+
 
 		load_percent = (queue_load*100/HOSTED_UART_RX_QUEUE_SIZE);
 		if (load_percent < slv_cfg_g.throttle_low_threshold) {
 			slv_state_g.current_throttling = 0;
 			wifi_flow_ctrl = 0;
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_off++;
+#endif
 			TRIGGER_FLOW_CTRL();
 		}
 	}
@@ -227,12 +241,9 @@ static void uart_rx_read_done(void *handle)
 	h_uart_buffer_rx_free(buf);
 }
 
-// large incoming data may be broken up into several serial packets
-static int current_rx_len = 0;
-static int expected_pkt_len = 0;
 static uint8_t * uart_scratch_buf = NULL;
 
-static int process_uart_rx_data(size_t size)
+static void uart_rx_task(void* pvParameters)
 {
 	struct esp_payload_header *header = NULL;
 	interface_buffer_handle_t buf_handle = {0};
@@ -242,71 +253,97 @@ static int process_uart_rx_data(size_t size)
 	uint16_t rx_checksum = 0, checksum = 0;
 #endif
 	int bytes_read;
-	int remaining_len;
+	int total_len;
+	uint8_t flags = 0;
+
+	// delay for a while to let app main threads start and become ready
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+
+	// now ready: open data path
+	if (context.event_handler) {
+		context.event_handler(ESP_OPEN_DATA_PATH);
+	}
 
 	if (!uart_scratch_buf) {
 		uart_scratch_buf = malloc(BUFFER_SIZE);
 		assert(uart_scratch_buf);
 	}
 
-	bytes_read = uart_read_bytes(HOSTED_UART, &uart_scratch_buf[current_rx_len],
-			size, portMAX_DELAY);
-	current_rx_len += bytes_read;
-	ESP_LOGD(TAG, "current_rx_len %d", current_rx_len);
+	header = (struct esp_payload_header *)uart_scratch_buf;
 
 	// process all data in buffer until there isn't enough to form a packet header
 	while (1) {
-		if (!expected_pkt_len) {
-			if (current_rx_len < sizeof(struct esp_payload_header)) {
-				// not yet enough info in data to decode header
-				ESP_LOGD(TAG, "not enough data to decode header");
-				return 0;
-			}
-			struct esp_payload_header * h = (struct esp_payload_header *)uart_scratch_buf;
-			expected_pkt_len = le16toh(h->len) + sizeof(struct esp_payload_header);
-			ESP_LOGD(TAG, "expected_pkt_len %d", expected_pkt_len);
-		}
-		if (expected_pkt_len > BUFFER_SIZE) {
-			ESP_LOGE(TAG, "packet size error");
-			current_rx_len = 0;
-			expected_pkt_len = 0;
-			return UART_PROCESS_RX_DATA_ERROR;
-		}
-		if (current_rx_len < expected_pkt_len) {
-			// still got more data to read
-			return UART_PROCESS_WAITING_MORE_RX_DATA;
+		// get the header
+		bytes_read = uart_read_bytes(HOSTED_UART, uart_scratch_buf,
+				sizeof(struct esp_payload_header), portMAX_DELAY);
+		ESP_LOGD(TAG, "Read %d bytes (header)", bytes_read);
+		if (bytes_read < sizeof(struct esp_payload_header)) {
+			ESP_LOGE(TAG, "Failed to read header");
+			continue;
 		}
 
-		// we have enough data to form a complete packet
-		buf = h_uart_buffer_rx_alloc(MEMSET_REQUIRED);
-		assert(buf);
-
-		// copy data to the buffer
-		memcpy(buf, uart_scratch_buf, expected_pkt_len);
-
-		/* Process received data */
-		buf_handle.payload = buf;
-		buf_handle.payload_len = expected_pkt_len;
-
-		header = (struct esp_payload_header *)buf_handle.payload;
 		len = le16toh(header->len);
 		offset = le16toh(header->offset);
+		if (offset != sizeof(struct esp_payload_header)) {
+			ESP_LOGE(TAG, "invalid offset in header");
+			continue;
+		}
+		total_len = len + sizeof(struct esp_payload_header);
+		if (total_len > BUFFER_SIZE) {
+			ESP_LOGE(TAG, "incoming data too big: %d", total_len);
+			continue;
+		}
+
+		// get the data, if any
+		if (len) {
+			bytes_read = uart_read_bytes(HOSTED_UART, &uart_scratch_buf[offset],
+					len, portMAX_DELAY);
+			ESP_LOGD(TAG, "Read %d bytes (payload)", bytes_read);
+			if (bytes_read < len) {
+				ESP_LOGE(TAG, "Failed to read payload");
+				continue;
+			}
+		}
+
+		// process flags
+		flags = header->flags;
+		if (flags & FLAG_POWER_SAVE_STARTED) {
+			ESP_LOGI(TAG, "Host informed starting to power sleep");
+			if (context.event_handler) {
+				context.event_handler(ESP_POWER_SAVE_ON);
+			}
+		} else if (flags & FLAG_POWER_SAVE_STOPPED) {
+			ESP_LOGI(TAG, "Host informed that it waken up");
+			if (context.event_handler) {
+				context.event_handler(ESP_POWER_SAVE_OFF);
+			}
+		}
 
 #if HOSTED_UART_CHECKSUM
+		// calculate checksum over data in scratch buffer
 		rx_checksum = le16toh(header->checksum);
 		header->checksum = 0;
 
-		checksum = compute_checksum(buf_handle.payload, len+offset);
+		checksum = compute_checksum(uart_scratch_buf, total_len);
 
 		if (checksum != rx_checksum) {
 			ESP_LOGE(TAG, "%s: cal_chksum[%u] != exp_chksum[%u], drop len[%u] offset[%u]",
 					 __func__, checksum, rx_checksum, len, offset);
-			h_uart_buffer_rx_free(buf);
-			return UART_PROCESS_RX_DATA_ERROR;
+			continue;
 		}
 #endif
 
-		/* Buffer is valid */
+		// allocate a rx buffer
+		buf = h_uart_buffer_rx_alloc(MEMSET_REQUIRED);
+		assert(buf);
+
+		// copy data to the buffer
+		memcpy(buf, uart_scratch_buf, total_len);
+
+		/* Process received data */
+		buf_handle.payload = buf;
+		buf_handle.payload_len = total_len;
+
 		buf_handle.if_type = header->if_type;
 		buf_handle.if_num = header->if_num;
 		buf_handle.free_buf_handle = uart_rx_read_done;
@@ -319,6 +356,8 @@ static int process_uart_rx_data(size_t size)
 #if ESP_PKT_STATS
 		if (header->if_type == ESP_STA_IF)
 			pkt_stats.hs_bus_sta_in++;
+		else if (header->if_type == ESP_AP_IF)
+			pkt_stats.hs_bus_ap_in++;
 #endif
 		if (header->if_type == ESP_SERIAL_IF) {
 			xQueueSend(uart_rx_queue[PRIO_Q_SERIAL], &buf_handle, portMAX_DELAY);
@@ -328,69 +367,6 @@ static int process_uart_rx_data(size_t size)
 			xQueueSend(uart_rx_queue[PRIO_Q_OTHERS], &buf_handle, portMAX_DELAY);
 		}
 		xSemaphoreGive(uart_rx_sem);
-
-		// clean up the scratch buffer
-		if (current_rx_len > expected_pkt_len) {
-			// got part of another packet at the end. Move to the front
-			ESP_LOGD(TAG, "moving remaining data");
-			remaining_len = current_rx_len - expected_pkt_len;
-			memmove(uart_scratch_buf, &uart_scratch_buf[expected_pkt_len], remaining_len);
-
-			current_rx_len = remaining_len;
-			expected_pkt_len = 0;
-		} else {
-			current_rx_len = 0;
-			expected_pkt_len = 0;
-			break;
-		}
-	}
-
-	return UART_PROCESS_RX_DATA_DONE;
-}
-
-static void uart_rx_task(void* pvParameters)
-{
-	uart_event_t event;
-
-	// delay for a while to let app main threads start and become ready
-	vTaskDelay(100 / portTICK_PERIOD_MS);
-
-	// now ready: open data path
-	if (context.event_handler) {
-		context.event_handler(ESP_OPEN_DATA_PATH);
-	}
-
-	while (1) {
-		// wait for uart event
-		if (xQueueReceive(uart_queue, (void *)&event, (TickType_t)portMAX_DELAY)) {
-			switch (event.type) {
-			case UART_DATA:
-				process_uart_rx_data(event.size);
-				break;
-			case UART_FIFO_OVF:
-				ESP_LOGE(TAG, "uart hw fifo overflow");
-				uart_flush_input(HOSTED_UART);
-				xQueueReset(uart_queue);
-				break;
-			case UART_BUFFER_FULL:
-				ESP_LOGE(TAG, "uart ring buffer full");
-				uart_flush_input(HOSTED_UART);
-				xQueueReset(uart_queue);
-				break;
-			case UART_BREAK:
-				ESP_LOGW(TAG, "uart rx break");
-				break;
-			case UART_PARITY_ERR:
-				ESP_LOGE(TAG, "uart parity error");
-				break;
-			case UART_FRAME_ERR:
-				ESP_LOGW(TAG, "uart frame error");
-				break;
-			default:
-				ESP_LOGW(TAG, "uart event type: %d", event.type);
-				break;
-			}
-		}
 	}
 }
 
@@ -419,7 +395,7 @@ static int h_uart_read(interface_handle_t *if_handle, interface_buffer_handle_t 
 
 static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_t *buf_handle)
 {
-	int32_t total_len = 0;
+	uint32_t total_len = 0;
 	uint8_t* sendbuf = NULL;
 	uint16_t offset = sizeof(struct esp_payload_header);
 	struct esp_payload_header *header = NULL;
@@ -470,14 +446,12 @@ static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_
 #endif
 
 	ESP_LOGD(TAG, "sending %"PRIu32 " bytes", total_len);
-	ESP_HEXLOGD("spi_hd_tx", sendbuf, total_len);
+	ESP_HEXLOGD("uart_tx", sendbuf, total_len, 32);
 
 	tx_len = uart_write_bytes(HOSTED_UART, (const char*)sendbuf, total_len);
 
 	// wait until all data is transmitted
 	uart_wait_tx_done(HOSTED_UART, portMAX_DELAY);
-
-	h_uart_for_loop_delay(250);
 
 	if ((tx_len < 0) || (tx_len != total_len)) {
 		ESP_LOGE(TAG , "uart transmit error");
@@ -488,6 +462,8 @@ static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_
 #if ESP_PKT_STATS
 	if (header->if_type == ESP_STA_IF)
 		pkt_stats.sta_sh_out++;
+	else if (header->if_type == ESP_AP_IF)
+		pkt_stats.ap_sh_out++;
 	else if (header->if_type == ESP_SERIAL_IF)
 		pkt_stats.serial_tx_total++;
 #endif
@@ -499,82 +475,27 @@ static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_
 
 static interface_handle_t * h_uart_init(void)
 {
+	if (if_handle_g.state >= DEACTIVE) {
+		return &if_handle_g;
+	}
+
 	uint16_t prio_q_idx = 0;
-	uart_word_length_t uart_word_length;
-	uart_parity_t parity;
-	uart_stop_bits_t stop_bits;
-
-	switch (HOSTED_UART_NUM_DATA_BITS) {
-	case 5:
-		uart_word_length = UART_DATA_5_BITS;
-		break;
-	case 6:
-		uart_word_length = UART_DATA_6_BITS;
-		break;
-	case 7:
-		uart_word_length = UART_DATA_7_BITS;
-		break;
-	case 8:
-		// drop through to default
-	default:
-		uart_word_length = UART_DATA_8_BITS;
-		break;
-	}
-
-	switch (HOSTED_UART_PARITY) {
-	case HOSTED_UART_PARITY_EVEN: // even parity
-		parity = UART_PARITY_EVEN;
-		break;
-	case HOSTED_UART_PARITY_ODD: // odd parity
-		parity = UART_PARITY_ODD;
-		break;
-	case HOSTED_UART_PARITY_NONE: // none
-		// drop through to default
-	default:
-		parity = UART_PARITY_DISABLE;
-		break;
-	}
-
-	switch (HOSTED_UART_STOP_BITS) {
-	case HOSTED_STOP_BITS_1_5: // 1.5 stop bits
-		stop_bits = UART_STOP_BITS_1_5;
-		break;
-	case HOSTED_STOP_BITS_2: // 2 stop bits
-		stop_bits = UART_STOP_BITS_2;
-		break;
-	case HOSTED_STOP_BITS_1: // 1 stop bits
-		// drop through to default
-	default:
-		stop_bits = UART_STOP_BITS_1;
-		break;
-	}
 
 	// initialise UART
 	const uart_config_t uart_config = {
 		.baud_rate = HOSTED_UART_BAUD_RATE,
-		.data_bits = uart_word_length,
-		.parity = parity,
-		.stop_bits = stop_bits,
+		.data_bits = HOSTED_UART_NUM_DATA_BITS,
+		.parity = HOSTED_UART_PARITY,
+		.stop_bits = HOSTED_UART_STOP_BITS,
 		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
 		.source_clk = UART_SCLK_DEFAULT,
 	};
 
 	ESP_ERROR_CHECK(uart_driver_install(HOSTED_UART, BUFFER_SIZE, BUFFER_SIZE,
-			EVENT_QUEUE_SIZE, &uart_queue, 0));
+			0, NULL, 0));
 	ESP_ERROR_CHECK(uart_param_config(HOSTED_UART, &uart_config));
 	ESP_ERROR_CHECK(uart_set_pin(HOSTED_UART, HOSTED_UART_GPIO_TX, HOSTED_UART_GPIO_RX,
 			UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-	// lower rx receive threshold to prevent uart ring buffer overflow at high baud rates
-	if (HOSTED_UART_BAUD_RATE > 230400) {
-		ESP_ERROR_CHECK(uart_set_rx_full_threshold(HOSTED_UART, 64));
-	} else
-	if (HOSTED_UART_BAUD_RATE > 1000000) {
-		ESP_ERROR_CHECK(uart_set_rx_full_threshold(HOSTED_UART, 32));
-	} else
-	if (HOSTED_UART_BAUD_RATE > 2500000) {
-		ESP_ERROR_CHECK(uart_set_rx_full_threshold(HOSTED_UART, 16));
-	}
-
 	ESP_LOGI(TAG, "UART GPIOs: Tx: %"PRIu16 ", Rx: %"PRIu16 ", Baud Rate %i",
 			HOSTED_UART_GPIO_TX, HOSTED_UART_GPIO_RX, HOSTED_UART_BAUD_RATE);
 	ESP_LOGI(TAG, "Hosted UART Queue Sizes: Tx: %"PRIu16 ", Rx: %"PRIu16,
@@ -592,23 +513,29 @@ static interface_handle_t * h_uart_init(void)
 
 	// start up tasks
 	assert(xTaskCreate(uart_rx_task, "uart_rx_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL,
-			CONFIG_ESP_DEFAULT_TASK_PRIO, NULL) == pdTRUE);
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_STACK_SIZE, NULL,
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_PRIORITY, NULL) == pdTRUE);
 
 	assert(xTaskCreate(flow_ctrl_task, "flow_ctrl_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL ,
-			CONFIG_ESP_DEFAULT_TASK_PRIO, NULL) == pdTRUE);
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_STACK_SIZE, NULL ,
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_PRIORITY, NULL) == pdTRUE);
 
 	// data path opened
 	memset(&if_handle_g, 0, sizeof(if_handle_g));
-	if_handle_g.state = INIT;
+	if_handle_g.state = ACTIVE;
 
 	return &if_handle_g;
 }
 
 static void h_uart_deinit(interface_handle_t * handle)
 {
+#if H_HOST_PS_ALLOWED && H_PS_UNLOAD_BUS_WHILE_PS
 	esp_err_t ret;
+	if (if_handle_g.state == DEINIT) {
+		ESP_LOGW(TAG, "UART already deinitialized");
+		return;
+	}
+	if_handle_g.state = DEINIT;
 
 	h_uart_mempool_destroy();
 
@@ -624,6 +551,7 @@ static void h_uart_deinit(interface_handle_t * handle)
 	if (ret != ESP_OK)
 		ESP_LOGE(TAG, "%s: Failed to flush uart Tx", __func__);
 	uart_driver_delete(HOSTED_UART);
+#endif
 }
 
 static esp_err_t h_uart_reset(interface_handle_t *handle)
@@ -721,6 +649,20 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	*pos = ESP_PRIV_TX_Q_SIZE;          pos++;len++;
 	*pos = LENGTH_1_BYTE;               pos++;len++;
 	*pos = HOSTED_UART_TX_QUEUE_SIZE;   pos++;len++;
+
+	// convert fw version into a uint32_t
+	uint32_t fw_version = ESP_HOSTED_VERSION_VAL(PROJECT_VERSION_MAJOR_1,
+			PROJECT_VERSION_MINOR_1,
+			PROJECT_VERSION_PATCH_1);
+
+	// send fw version as a little-endian uint32_t
+	*pos = ESP_PRIV_FIRMWARE_VERSION;   pos++;len++;
+	*pos = LENGTH_4_BYTE;               pos++;len++;
+	// send fw_version as a little endian 32bit value
+	*pos = (fw_version & 0xff);         pos++;len++;
+	*pos = (fw_version >> 8) & 0xff;    pos++;len++;
+	*pos = (fw_version >> 16) & 0xff;   pos++;len++;
+	*pos = (fw_version >> 24) & 0xff;   pos++;len++;
 
 	/* TLVs end */
 

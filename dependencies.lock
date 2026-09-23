@@ -41,7 +41,7 @@ dependencies:
       type: service
     version: 1.1.6
   espressif/esp_cam_sensor:
-    component_hash: 0a2775d95fae99449bb4c044feab6d887e9db309602fad8df6c3fc58bc6e1b6d
+    component_hash: 0dd6634a71cc8756f0e46c961476304a23a82db4f4c4deb8aecfa30161d2185c
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -65,7 +65,7 @@ dependencies:
     - esp32c6
     - esp32c61
     - esp32s31
-    version: 2.2.0
+    version: 2.6.0
   espressif/esp_codec_dev:
     component_hash: 4779f31a3ba3f9b38aee1afe6ccb9ba8f6108dc3a6e77d39d7d714e9a215371b
     dependencies:
@@ -77,7 +77,7 @@ dependencies:
       type: service
     version: 1.6.2
   espressif/esp_h264:
-    component_hash: 40cb64e697a8cfd787453165f6ce54e1fb8601844448eb073d677b9f9fde071e
+    component_hash: 3d60078419ceac61cd87579664ae6a5a9b9a42d6f2edf4e23d753af8d2a67da9
     dependencies:
     - name: idf
       require: private
@@ -87,16 +87,17 @@ dependencies:
       type: service
     targets:
     - esp32s3
+    - esp32s31
     - esp32p4
-    version: 1.3.0
+    version: 1.4.1
   espressif/esp_hosted:
     dependencies: []
     source:
       path: components/espressif__esp_hosted
       type: local
-    version: 0.0.27
+    version: 2.12.13
   espressif/esp_ipa:
-    component_hash: 668dfaa406c089104294c908546e5c641879585e088ad6b2186f6322c6227dac
+    component_hash: 80871ce076e8fce944e4f7d86a8b16e12d93c57e5e37064ec38eb9b123b6d769
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -110,7 +111,7 @@ dependencies:
       type: service
     targets:
     - esp32p4
-    version: 2.1.0
+    version: 2.4.0
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
@@ -170,7 +171,7 @@ dependencies:
       type: service
     version: 1.1.2
   espressif/esp_video:
-    component_hash: d3c27c05433c0ff4d57e544fcdce891fa2497debf2f006d5ff452c4eb4e7fced
+    component_hash: 5694b16c12b8bb26b56ad3f999ad10119f1314d64b2d1c518bc7dfed902df9e1
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
@@ -179,19 +180,21 @@ dependencies:
     - name: espressif/esp_cam_sensor
       registry_url: https://components.espressif.com
       require: private
-      version: 2.2.*
-    - name: espressif/esp_h264
+      version: 2.6.*
+    - matches:
+      - if: $CONFIG{ESP_VIDEO_USE_CUSTOMIZED_ESP_H264_VERSION} == False
+      name: espressif/esp_h264
       registry_url: https://components.espressif.com
       require: private
       rules:
       - if: target in [esp32p4]
-      version: 1.3.0
+      version: 1.4.*
     - name: espressif/esp_ipa
       registry_url: https://components.espressif.com
       require: private
       rules:
       - if: target in [esp32p4]
-      version: 2.1.*
+      version: 2.4.*
     - name: idf
       require: private
       version: '>=5.4'
@@ -212,23 +215,29 @@ dependencies:
     - esp32c6
     - esp32c61
     - esp32s31
-    version: 2.2.0
+    version: 2.5.0
   espressif/esp_wifi_remote:
-    component_hash: 263261f498f7378b23351dfecbfc11e9b44895b66ce57991c4fd61bc0d6a2f34
+    component_hash: faa185898a843b9d7d0456e4094a3b5f1491a48ddd57ce0e5179e13ac6243f2c
     dependencies:
-    - name: idf
+    - name: espressif/esp_hosted
+      registry_url: https://components.espressif.com
       require: private
-      version: '>=5.3'
-    - name: espressif/eppp_link
+      rules:
+      - if: target in [esp32h2, esp32p4]
+      version: '>=2.11'
+    - name: espressif/wifi_remote_over_eppp
       registry_url: https://components.espressif.com
       require: private
       version: '>=0.1'
+    - name: idf
+      require: private
+      version: '>=5.3'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 0.2.3
+    version: 1.6.5
   espressif/onewire_bus:
-    component_hash: a85dc1ceb71fb87af77c57d5fd4e6f48a504de1fc2b83fc302ec0cea331d05ce
+    component_hash: dcce4fb1c2fc43c3d02de1cc9abdf062127468a785578723696de3817c526f99
     dependencies:
     - name: idf
       require: private
@@ -236,9 +245,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.1.1
+    version: 1.1.2
   espressif/usb_host_uvc:
-    component_hash: 3dde9c89980212de1e394a29d3fe782a2988a08fd2a16af34eee6f642aab6ebe
+    component_hash: ecb2604b71cb5a65d64e5f441be54793b1838096043ad8cf1fa0d3012de18a9a
     dependencies:
     - name: idf
       require: private
@@ -260,11 +269,25 @@ dependencies:
     - esp32h4
     - esp32s31
     - linux
-    version: 2.5.1
+    version: 2.5.2
+  espressif/wifi_remote_over_eppp:
+    component_hash: 1fd6968af20f0b19e421f6b519b0a8caf81d689afc3783b564c28559e45f66ef
+    dependencies:
+    - name: espressif/eppp_link
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.1'
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.3.3
   idf:
     source:
       type: idf
-    version: 5.4.4
+    version: 5.5.5
   lvgl/lvgl:
     component_hash: d7c1ac037ae6e85d94897f807d6e7ba0946a83e720074fc95a4f6241da9f9f53
     dependencies: []
@@ -284,6 +307,6 @@ direct_dependencies:
 - espressif/onewire_bus
 - idf
 - lvgl/lvgl
-manifest_hash: 8c61ca02a0719a85d1e385923d612b0aad2b7c78517fe10194a31b2db9b73e1d
+manifest_hash: d3639a64b93405547b7a637f0a5934f19ac58206be65447ee2726e9ad7861dfe
 target: esp32p4
 version: 2.0.0

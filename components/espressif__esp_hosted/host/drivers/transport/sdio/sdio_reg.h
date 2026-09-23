@@ -1,28 +1,14 @@
-// SPDX-License-Identifier: Apache-2.0
 /*
- * Espressif Systems Wireless LAN device driver
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
- * Copyright (C) 2015-2023 Espressif Systems (Shanghai) PTE LTD
- *
- * This software file (the "File") is distributed by Espressif Systems (Shanghai)
- * PTE LTD under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef __SDIO_REG_H
 #define __SDIO_REG_H
 
 /** Includes **/
-#include "common.h"
+#include "port_esp_hosted_host_config.h"
 
 /** constants/macros **/
 #define SD_IO_CCCR_FN_ENABLE           0x02
@@ -69,7 +55,7 @@
 #define ESP_HOST_INT_ENA_REG           (ESP_SLAVE_SLCHOST_BASE + 0xDC)
 
 /* Host side interrupts for ESP_HOST_INT_ENA_REG */
-#if CONFIG_SLAVE_CHIPSET_ESP32 || CONFIG_SLAVE_CHIPSET_ESP32C6
+#if H_SLAVE_TARGET_ESP32 || H_SLAVE_TARGET_ESP32C6 || H_SLAVE_TARGET_ESP32C5 || H_SLAVE_TARGET_ESP32C61
   #define SDIO_INT_NEW_PACKET          (23)
   #define SDIO_INT_START_THROTTLE      (7)
   #define SDIO_INT_STOP_THROTTLE       (6)

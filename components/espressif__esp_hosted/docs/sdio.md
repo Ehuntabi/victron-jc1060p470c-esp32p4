@@ -8,6 +8,7 @@ If you wish to skip the theory, you can refer the [Quick Start Guide](#1-quick-s
 
 <details>
 <summary>Table of Contents</summary>
+
 1. [Quick Start Guide](#1-quick-start-guide)
 
 2. [Introduction](#2-introduction)
@@ -24,7 +25,9 @@ If you wish to skip the theory, you can refer the [Quick Start Guide](#1-quick-s
 
 8. [Testing and Troubleshooting](#8-testing-and-troubleshooting)
 
-9. [References](#9-references)
+9. [Performance and Memory Usage](#9-performance-and-memory-usage) || [9.1 Stream and Packet Mode](#91-stream-and-packet-mode) || [9.2 Double Buffering on the Host](#92-double-buffering-on-the-host) || [9.3 Reducing Memory Usage](#93-reducing-memory-usage) || [9.4 Switching to Packet Mode](#94-switching-to-packet-mode)
+
+10. [References](#10-references)
 
 </details>
 
@@ -37,6 +40,7 @@ This section provides a brief overview of how to get started with ESP-Hosted usi
 - [6. Flashing the Co-processor](#6-flashing-the-co-processor)
 - [7. Flashing the Host](#7-flashing-the-host)
 - [8. Testing and Troubleshooting](#8-testing-and-troubleshooting)
+- [9. Performance and Memory Usage](#9-performance-and-memory-usage)
 
 These sections will guide you through the process of flashing both the co-processor and host devices, setting up the hardware connections, and verifying successful communication.
 
@@ -127,41 +131,61 @@ For optimal performance and reliability in production designs:
 
 Setting up the hardware involves connecting the master and co-processor devices via the SDIO pins and ensuring all extra GPIO signals are properly connected. Below is the table of connections for the SDIO setup between a host ESP chipset and another ESP chipset as co-processor:
 
+### Host Connections
+
+SDIO-capable host microcontrollers (MCUs) can connect their GPIO lines to the co-processor as detailed in the table below.
+
+#### GPIO Flexibility
+
+- The ESP32 supports SDIO host on fixed GPIOs.
+- The ESP32-S3 supports SDIO host on flexible GPIOs.
+- For the ESP32-P4, Slot 0 supports fixed GPIOs, while Slot 1 supports flexible GPIOs.
+
+By default, Slot 1 is used on the ESP32-P4 to take advantage of its flexible pin mapping; however, Slot 0 is also supported. Parallel access to both Slot 0 and Slot 1 is supported for all hosts.
 
 
-### Host connections
-| Signal      | ESP32 | ESP32-S3 | ESP32-P4-Function-EV-Board |
-|-------------|-------|----------|----------|
-| CLK         | 14    | 19       | 18       |
-| Reset Out   | 5     | 42       | 54       |
-| CMD         | 15+[ext-pull-up](#34-pull-up-resistors)    | 47+[ext-pull-up](#34-pull-up-resistors)       | 19+[ext-pull-up](#34-pull-up-resistors)       |
-| DAT0        | 2+[ext-pull-up](#34-pull-up-resistors)     | 13+[ext-pull-up](#34-pull-up-resistors)       | 14+[ext-pull-up](#34-pull-up-resistors)       |
-| DAT1        | 4+[ext-pull-up](#34-pull-up-resistors)     | 35+[ext-pull-up](#34-pull-up-resistors)       | 15+[ext-pull-up](#34-pull-up-resistors)       |
-| DAT2        | 12+[ext-pull-up](#34-pull-up-resistors)    | 20+[ext-pull-up](#34-pull-up-resistors)       | 16+[ext-pull-up](#34-pull-up-resistors)         |
-| DAT3        | 13+[ext-pull-up](#34-pull-up-resistors)    | 9+[ext-pull-up](#34-pull-up-resistors)        | 17+[ext-pull-up](#34-pull-up-resistors)       |
+| Signal    | ESP32 | ESP32-S3 |
+|-----------|-------|----------|
+| CLK       | 14    | 19       |
+| CMD       | 15+[ext-pull-up](#34-pull-up-resistors) | 47+[ext-pull-up](#34-pull-up-resistors) |
+| D0        | 2+[ext-pull-up](#34-pull-up-resistors)  | 13+[ext-pull-up](#34-pull-up-resistors) |
+| D1        | 4+[ext-pull-up](#34-pull-up-resistors)  | 35+[ext-pull-up](#34-pull-up-resistors) |
+| D2        | 12+[ext-pull-up](#34-pull-up-resistors) | 20+[ext-pull-up](#34-pull-up-resistors) |
+| D3        | 13+[ext-pull-up](#34-pull-up-resistors) | 9+[ext-pull-up](#34-pull-up-resistors)  |
+| Reset Out | 5     | 42       |
 
+### ESP32-P4-Function-EV-Board Host Pin Mapping
 
+| Signal    | ESP32-P4 with ESP32-C6 Co-processor | ESP32-P4 with ESP32-C5 Co-processor |
+|-----------|-------------------------------------|-------------------------------------|
+| CLK       | 18                                  | 33                                  |
+| CMD       | 19+[ext-pull-up](#34-pull-up-resistors) | 4+[ext-pull-up](#34-pull-up-resistors)  |
+| D0        | 14+[ext-pull-up](#34-pull-up-resistors) | 20+[ext-pull-up](#34-pull-up-resistors) |
+| D1        | 15+[ext-pull-up](#34-pull-up-resistors) | 23+[ext-pull-up](#34-pull-up-resistors) |
+| D2        | 16+[ext-pull-up](#34-pull-up-resistors) | 21+[ext-pull-up](#34-pull-up-resistors) |
+| D3        | 17+[ext-pull-up](#34-pull-up-resistors) | 22+[ext-pull-up](#34-pull-up-resistors) |
+| Reset Out | 54                                  | 53                                  |
+
+>
 
 ### Co-processor connections
 
-| Signal      | ESP32 | ESP32-C6 |
-|-------------|-------|----------|
-| CLK         | 14    | 19       |
-| CMD         | 15    | 18       |
-| DAT0        | 2     | 20       |
-| DAT1        | 4     | 21       |
-| DAT2        | 12    | 22       |
-| DAT3        | 13    | 23       |
-| Reset In    | EN    | EN/RST   |
+SDIO slave provider ESP chips are : ESP32, ESP32-C5, ESP32-C6.\
+All these chips have fixed GPIOs SDIO support.
 
+| Signal   | ESP32 | ESP32-C6 | ESP32-C5 |
+|----------|-------|----------|----------|
+| CLK      | 14    | 19       | 9        |
+| CMD      | 15    | 18       | 10       |
+| D0       | 2     | 20       | 8        |
+| D1       | 4     | 21       | 7        |
+| D2       | 12    | 22       | 14       |
+| D3       | 13    | 23       | 13       |
+| Reset In | EN    | EN/RST   | RST      |
 
 > [!NOTE]
-> 
-> A. Try to use IO_MUX pins from the datasheet for optimal performance on both sides. \
-> B. These GPIO assignments are based on default Kconfig configurations. You can modify these in the menuconfig for both host and co-processor if needed. \
-> C. Once ported, any other host with standard SDIO can be used. \
-> D. ESP32, ESP32-S3, and ESP32-P4 can be used as hosts; ESP32 and ESP32-C6 can be used as co-processors in SDIO mode. \
-> E. External pull-ups are mandatory
+>
+> - External pull-ups are mandatory
 
 ## 5 Set-Up ESP-IDF
 
@@ -189,8 +213,8 @@ Please follow the [ESP-IDF Get Started Guide](https://docs.espressif.com/project
 
 ## 6. Flashing the Co-processor
 
-| Supported Co-processor Targets | ESP32 | ESP32-C6 |
-| ------------------------------ | ----- | -------- |
+| Supported Co-processor Targets | ESP32 | ESP32-C6 | ESP32-C5 |
+| ------------------------------ | ----- | -------- | -------- |
 
 There are four steps to flash the ESP-Hosted co-processor firmware:
 
@@ -215,11 +239,11 @@ There are four steps to flash the ESP-Hosted co-processor firmware:
    ```
 
 #### 6.2.1 Transport config
-  - Navigate to "Example configuration" -> "Transport layer"
-  - Select "SDIO"
+  - Navigate to "Example configuration" -> "Bus Config in between Host and Co-processor"
+  - In "Transport layer", select "SDIO"
 
 #### 6.2.2 Any other config
-  - Optionally, Configure any additional SDIO-specific settings like co-processor GPIOs, SDIO Mode, SDIO timing,etc.
+  - Optionally, Configure any additional SDIO-specific settings in the "SDIO Configuration" menu, like co-processor GPIOs, SDIO Mode, SDIO timing,etc.
 
 ###### Generated files
 - Generated config files are (1) `sdkconfig` file and (2) internal `sdkconfig.h` file.
@@ -238,7 +262,13 @@ There are four steps to flash the ESP-Hosted co-processor firmware:
 
 ### 6.4 Co-processor Flashing
 
-There are two methods to flash the ESP-Hosted co-processor firmware:
+It is **recommended** to periodically upgrade the slave firmware to leverage new features, bug fixes, and performance improvements.
+
+| Method                     | Description                                        | Recommended Use                                       |
+| -------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| **Direct Serial Flashing** | Uses UART pins for direct firmware installation    | First-time setup to install ESP-Hosted slave firmware |
+| **Slave OTA Update**       | Performs slave firmware updates directly from Host | All subsequent updates after initial installation     |
+
 
 #### 6.4.1 Serial Flashing (Initial Setup)
 
@@ -252,74 +282,34 @@ idf.py -p <co-processor_serial_port> flash
 > [!NOTE]
 >
 > If you are not able to flash the co-processor, there might be a chance that host is not allowing to to do so.
-> 
+>
 > Put host in bootloader mode using following command and then retry flashing the co-processor
-> 
-> ```bash
-> esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run
-> ```
-
-Monitor the output (optional):
-```
-idf.py -p <PORT> monitor
-```
+>
+> `esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run`
+>
+> Flash the co-processor and log the output:
+>
+> `idf.py -p <co-processor_serial_port> flash monitor`
 
 ##### 6.4.2 Co-processor OTA Flashing (Subsequent Updates)
 
-For subsequent updates, you can re-use ESP-Hosted-MCU transport, as it should be already working. While doing OTA, Complete co-processor firmware image is not needed and only co-processor application partition, 'network_adapter.bin' need to be re-flashed remotely from host.
+The ESP-Hosted link comes pre-configured and ready to use on first boot. You can update the slave firmware remotely from the host MCU using OTA (Over-The-Air) updates: **No** ESP-Prog, serial cable, or extra GPIO connections are required.
 
-1. Ensure your co-processor device is connected and communicating with the host with existing ESP-Hosted-MCU.
+For step-by-step instructions, see the [Host Performs Slave OTA Example](../examples/host_performs_slave_ota/README.md).
 
-2. Create a web server
-You can re-use your existing web server or create a new locally for testing. Below is example to do it.
-  - Make a new directory so that web server can be run into it and navigate into it
-  - Create simple local web server using python3
 
-     ```bash
-     python3 -m http.server 8080
-     ```
-3. Copy the co-processor app partition `network_adapter.bin` in the directory where you created the web server.
-  - The `network_adapter.bin` can be found in your co-processor project build at `<co-processor_project>/build/network_adapter.bin`
-
-4. Verify if web server is set-up correctly
-  - Open link `http://127.0.0.1:8080` in the browser and check if network_adapter.bin is available.
-  - Right click and copy the complete URL of this network_adapter.bin and note somewhere.
- 
-5. On the **host side**, use the `esp_hosted_ota` function to initiate the OTA update:
-
-   ```c
-   #include "esp_hosted_api.h"
-
-   const char* image_url = "http://example.com/path/to/network_adapter.bin"; //web server full url
-   esp_err_t ret = esp_hosted_ota(image_url);
-   if (ret == ESP_OK) {
-       printf("co-processor OTA update failed[%d]\n", ret);
-   }
-   ```
-
-   This function will download the firmware in chunk by chunk as http client from the specified URL and flash it to the co-processor device through the established transport.
-   In above web server example, You can paste the copied url earlier.
-   
-
-6. Monitor the OTA progress through the console output on both the host and co-processor devices.
-
-> [!NOTE]
->
-> A. The `esp_hosted_ota` function is part of the ESP-Hosted-MCU API and handles the OTA process through the transport layer. \
-> B. Ensure that your host application has web server connectivity to download the firmware file. \
-> C. The co-processor device doesn't need to be connected to the web server for this OTA method.
 
 ## 7 Flashing the Host
 
 | Supported Host Targets  | Any ESP chipset | Any Non-ESP chipset |
 | ----------------------- | --------------- | ------------------- |
 
-Any host having SDIO master can be used as host. Please make sure the hardware configurations, like external pull-ups are installed correctly. Tthe voltage at SDIO pins is expected to be 3v3 volts. 
+Any host having SDIO master can be used as host. Please make sure the hardware configurations, like external pull-ups are installed correctly. The voltage at SDIO pins is expected to be 3v3 volts.
 - ESP chipsets as SDIO master
   - ESP as host could be one of ESP32, ESP32-S3, ESP32-P4.
   - For ESP32 as host, may need additional **eFuse burning** for voltage correction on one of data pin. ESP32-S3 and ESP32-P4 does **not** need this.
 - Non ESP SDIO Master
-  - Any other host having SDIO master can be used as host. Please make sure the hardware configurations, like ([external Pull-up Resistors](#42-pull-up-resistors)) are installed correctly. Tthe voltage at SDIO pins is expected to be 3v3 volts.
+  - Any other host having SDIO master can be used as host. Please make sure the hardware configurations, like ([external Pull-up Resistors](#42-pull-up-resistors)) are installed correctly. The voltage at SDIO pins is expected to be 3v3 volts.
 - Pull-ups required for CMD, DAT0, DAT1, DAT2, DAT3 lines (for both 1-Bit and 4-Bit SDIO)
 - eFuse burning may be required for classic ESP32.
 - Pull-Up and eFuse burning is detailed in [(3) Hardware Considerations](#3-hardware-considerations)
@@ -358,37 +348,43 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
 
 ###### 4. Disable native Wi-Fi if available
    If your host ESP chip already has native Wi-Fi support, disable it by editing the `components/soc/<soc>/include/soc/Kconfig.soc_caps.in` file and changing all `WIFI` related configs to `n`.
-     
+
     If you happen to have both, host and co-processor as same ESP chipset type (for example two ESP32-C2), note an [additional step](docs/troubleshooting/#1-esp-host-to-evaluate-already-has-native-wi-fi)
-    
+
 
 ### 7.3 Menuconfig, Build and Flash Host
 
 ##### 1. High performance configurations
-   This is optional step, suggested for high performance applications.
+This is optional step, suggested for high performance applications.
 
-   If using ESP32-P4 as host:
-   - Remove the default `sdkconfig.defaults.esp32p4` file.
-   - Create a new `sdkconfig.defaults.esp32p4` file with the following content:
-     ```
-     CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
-     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
-     CONFIG_ESP_WIFI_TX_BA_WIN=32
-     CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
-     CONFIG_ESP_WIFI_RX_BA_WIN=32
+If using ESP32-P4 as host and the ESP32-C6 as the co-processor:
 
-     CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
-     CONFIG_LWIP_TCP_WND_DEFAULT=65534
-     CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+- Remove all `CONFIG_ESP_WIFI_` settings. They do not apply to ESP-Hosted.
+- Add the following settings to your `sdkconfig.defaults.esp32p4` file:
+  ```
+  ### sdkconfig for ESP32-P4 + C6 Dev board
+  CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM=16
+  CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_DYNAMIC_TX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_AMPDU_TX_ENABLED=y
+  CONFIG_WIFI_RMT_TX_BA_WIN=32
+  CONFIG_WIFI_RMT_AMPDU_RX_ENABLED=y
+  CONFIG_WIFI_RMT_RX_BA_WIN=32
 
-     CONFIG_LWIP_TCP_SACK_OUT=y
-     ```
+  CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
+  CONFIG_LWIP_TCP_WND_DEFAULT=65534
+  CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
 
-    For other hosts also, you can merge above configs in corresponding `sdkconfig.defaults.esp32XX` file.
+  CONFIG_LWIP_TCP_SACK_OUT=y
+  ```
+
+For other ESP32 hosts, you can merge above configs into the corresponding `sdkconfig.defaults.esp32XX` file.
+
+To adjust other Wi-Fi parameters, run `idf.py menuconfig` and go to `Component config` ---> `Wi-Fi Remote` ---> `Wi-Fi configuration`.
+
+Optimised parameters for other co-processors can be found in the [Performance Optimization Guide](performance_optimization.md).
 
 ###### 2. Set environment for your host ESP chip:
 
@@ -396,7 +392,7 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
    idf.py set-target <host_target>
    ```
    Replace `<host_target>` with your specific ESP chip (e.g., esp32, esp32s3, esp32p4).
-   
+
 ###### 3. Flexible Menuconfig configurations
 
    ```
@@ -414,13 +410,13 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
       You can use a lower clock speed to verify the connections. Start with a clock speed between 400 kHz to 20 MHz.
       To configure this, use `Menuconfig` on the Host: **Component config** ---> **ESP-Hosted config** ---> **Hosted SDIO Configuration** and set **SDIO Clock Freq (in kHz)**.
     > [!NOTE]
-    > 
+    >
     > The actual clock frequency used is determined by the hardware. Use an oscilloscope or logic analyzer to check the clock frequency.
 
    - Using 1-bit SDIO Mode
      By default, SDIO operates in 4-Bit mode.
      You can set the SDIO Bus Width to 1-Bit. In 1-Bit mode, only `DAT0` and `DAT1` signals are used for data and are less affected by noise on the signal lines. This can help you verify that the SDIO protocol is working at the logical level, if you have issues getting 4-Bit SDIO to work on your prototype board.
-     
+
      To configure this, use `Menuconfig` on the Host: **Component config** ---> **ESP-Hosted config** ---> **Hosted SDIO Configuration** ---> **SDIO Bus Width** to **1 Bit**.
 
    - SDIO Mode
@@ -524,6 +520,10 @@ After flashing both the co-processor and host devices, follow these steps to con
 
    Note: Replace `<STA_IP>` with the IP address of the external STA, and `<HOST_IP>` with the IP address of the ESP-Hosted device.
 
+> [!TIP]
+>
+> To measure the optimal performance, check out the [Shield Box Test Setup](shield-box-test-setup.md).
+
 8. Troubleshooting:
    - Consider using a lower clock speed or checking your [hardware setup](docs/sdio.md#7-hardware-setup) if you experience communication problems.
    - ESP-Hosted-MCU troubleshooting guide: [docs/troubleshooting.md](docs/troubleshooting.md)
@@ -534,10 +534,105 @@ After flashing both the co-processor and host devices, follow these steps to con
    - Use a logic analyzer or oscilloscope to verify the SDIO signals.
    - Ensure that the power supply to both devices is stable and within the required voltage levels.
 
-## 9 References
+## 9 Performance and Memory Usage
+
+Quick summary:
+
+- for maximum network performance, at the cost of more memory usage on host and co-processor, use SDIO Streaming Mode (default mode of operation)
+- for lower memory usage, at the cost of lower network performance, use [SDIO Packet Mode](#94-switching-to-packet-mode)
+
+### 9.1 Stream and Packet Mode
+
+The co-processor SDIO can operate in two modes: Streaming Mode and Packet Mode.
+
+| **Streaming Mode** | **Packet Mode** |
+| --- | --- |
+| Co-processor combines multiple queued Tx packets together into one large packet | Co-processor queues individual Tx packets |
+| Host fetches the large packet as one SDIO transfer | Host fetches each packet one at a time |
+| Host breaks the large packet back into individual packets to send to the Rx queue | Host sends each packet to the Rx queue |
+| More efficient (less SDIO overhead), but requires more memory at Host to hold the large packet | Less efficient (higher SDIO overhead for each packet), but minimises memory required at Host |
+
+### 9.2 Double Buffering on the Host
+
+The Host implements a double-buffering scheme to receive data. One thread fetches data (using hardware DMA) from the co-processor and stores it in one Rx buffer, while another thread breaks up previously received data into packets for processing.
+
+### 9.3 Reducing Memory Usage in Streaming Mode
+
+#### 9.3.1 Host Receive
+
+> [!NOTE]
+> **Host Receive**: Router --Network Data--> Co-processor --SDIO--> Host
+
+In SDIO streaming mode, the host receives SDIO data from the co-processor in one large SDIO transfer. For this reason, **Streaming mode consumes more heap memory** compared to Packet mode, and has a higher throughput (less SDIO overhead).
+
+For Host systems with high heap memory usage, you can reduce the amount of heap memory used by ESP-Hosted for buffers, at the cost of reduced throughput, by adjusting the number of Tx buffers used by the co-processor.
+
+**On the co-processor**: run `idf.py menuconfig` -> `Example Configuration` -> `Bus Config in between Host and Co-processor` -> `SDIO Configuration` and adjust `SDIO Tx queue size`. The default queue size is `20`.
+
+The table below shows the effect of changing `SDIO Tx queue size` on throughput and memory usage on the Host. The throughput numbers are obtained by using the RawTP option in ESP-Hosted to send / receive raw SDIO data.
+
+| SDIO Tx queue size | Host Rx Raw Throughput (Mbits/s) | Memory Used by Buffers (Tested) | Memory Used by Buffers (Theoretical) |
+| ---: | ---: | ---: | ---: |
+| 5  | 54 | 12,288 | 15,360 |
+| 10 | 70 | 26,624 | 30,720 |
+| 15 | 76 | 41,984 | 46,080 |
+| 20 | 80 | 56,320 | 61,440 |
+| 25 | 82 | 65,536 | 76,800 |
+| 30 | 84 | 65,536 | 92,160 |
+
+> [!NOTE]
+> The SDIO packet size is 1536 bytes. The co-processor can send at most `(Tx queue size) * 1536` bytes. Since the Host does double buffering, the theoretical Buffer Size needed is `2 * (Tx queue size) * 1536`.
+
+From the table above, throughput is more or less stagnant on and above Rx queue size of `25`. For a good trade off between memory consumption vs performance, the Rx queue sizes are currently defaulted to `20`.
+
+#### 9.3.2 Host Transmit
+
+> [!NOTE]
+> **Host Transmit**: Host --SDIO--> Co-Processor --Network Data--> Router
+
+To reduce memory usage on the co-processor, you can reduce the number of buffers the co-processor uses to receive data from the Host.
+
+**On the co-processor**: run `idf.py menuconfig`
+
+```
+Example Configuration
+└── Bus Config in between Host and Co-processor
+    └── SDIO Configuration
+        └── SDIO Rx queue size (default: 20)
+```
+
+Reducing the number of Rx buffers on the co-processor can affect the Tx throughput from the Host if the number of Rx buffers is set to a small value.
+
+### 9.4 Switching to Packet Mode
+
+For minimal memory usage with a lower throughput, you can switch to Packet Mode. To do this:
+
+- on the co-processor: run `idf.py menuconfig`
+
+  ```
+  Example Configuration
+  └── Bus Config in between Host and Co-processor
+      └── SDIO Configuration
+          └── Enable SDIO Streaming Mode [Deselect this option]
+  ```
+
+- on the host: run `idf.py menuconfig`
+  ```
+   ── Component config
+      └── ESP-Hosted config
+          └── Hosted SDIO Configuration
+              └── SDIO Receive Optimization
+                  ├── No optimization
+                  ├── Always Rx Max Packet size [Change to this, preferably]
+                  └── Use Streaming Mode        [Default was selected, change to one of above]
+  ```
+In Packet Mode, the host uses `2 * 1536` or `3,072` bytes of memory for Rx buffers.
+- with `No optimization`, Rx Raw Throughput is 33.0 Mbits/s
+- with `Always Rx Max Packet size`, Rx Raw Throughput is 33.2 Mbits/s
+
+## 10 References
 
 - [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/)
 - [ESP32 Hardware Design Guidelines](https://www.espressif.com/en/products/hardware/esp32/resources)
-- [SDIO Protocol Basics](https://en.wikipedia.org/wiki/Serial_Peripheral_Interface)
-- [ESP SDIO Slave Communication](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/protocols/esp_sdio_slave_protocol.html)
-
+- [ESP SDIO Slave Communication](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/esp_sdio_slave_protocol.html)
+- [ESP SDIO Card Slave Driver](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/sdio_slave.html)

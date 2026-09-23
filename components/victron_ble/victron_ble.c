@@ -16,6 +16,11 @@
 #include "host/ble_hs.h"
 #include "aes/esp_aes.h"
 
+/* esp_hosted >= 2.5.2: el controlador Bluetooth del C6 arranca APAGADO y hay
+ * que encenderlo desde el P4 (host) antes de nimble_port_init(). Con la 0.0.27
+ * que llevabamos no hacia falta. Ver docs/migration_guide.md de esp_hosted. */
+#include "esp_hosted.h"
+
 static const char *TAG = "victron_ble";
 
 static bool victron_debug_enabled = false;
@@ -148,6 +153,23 @@ void victron_ble_init(void)
             0x2C,0xDD,0x51,0x61, 0xE3,0x40,0x4B,0x7A
         };
         memcpy(legacy_aes_key, default_key, sizeof(legacy_aes_key));
+    }
+
+    /* El controlador BT vive en el C6: hay que encenderlo desde aqui antes de
+     * arrancar NimBLE (en esp_hosted >= 2.5.2 no viene encendido). Si falla, se
+     * sigue igualmente: el propio nimble_port_init dira si no hay transporte, y
+     * asi un fallo de la radio no impide que la pantalla arranque. OJO: con el
+     * C6 sin actualizar estas dos devuelven ESP_FAIL y el BLE no arranca (el
+     * host y el esclavo van emparejados; ver C6_FIRMWARE_ACTUALIZACION.md). */
+    esp_err_t bt_err = esp_hosted_bt_controller_init();
+    if (bt_err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_hosted_bt_controller_init fallo: %s (0x%x) -- "
+                      "mira si el C6 necesita actualizarse", esp_err_to_name(bt_err), bt_err);
+    }
+    bt_err = esp_hosted_bt_controller_enable();
+    if (bt_err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_hosted_bt_controller_enable fallo: %s (0x%x)",
+                 esp_err_to_name(bt_err), bt_err);
     }
 
     ESP_LOGI(TAG, "Initializing NimBLE stack");

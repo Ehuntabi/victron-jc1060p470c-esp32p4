@@ -29,18 +29,18 @@ For this, third party software for protobuf C compiler is needed to be installed
 - Debian/Ubuntu
   - sudo apt install protobuf-c-compiler
 - Mac OS
-  - brew install protobuf
+  - brew install protobuf protobuf-c
 - Windows
   - check https://github.com/protobuf-c/protobuf-c
 
-`protoc-c` command should be available once installed.
+`protoc --c_out` always needs the `protoc-gen-c` plugin from protobuf-c, so both protoc and protobuf-c must be present (on macOS these are separate Homebrew formulas, hence both are listed above).
 
-This software might only be needed on development environment, Once esp_hosted_rpc.pb-c.c & esp_hosted_rpc.pb-c.h files are generated, could also be uninstalled.
+This software might only be needed on development environment, Once esp_hosted_rpc.pb-c.c & esp_hosted_rpc.pb-c.h files are generated, could also be uninstalled (no more needed).
 
 ##### Steps to generate
 ```sh
 $ cd <path/to/esp_hosted_fg>/common/proto
-$ protoc-c esp_hosted_rpc.proto --c_out=.
+$ protoc esp_hosted_rpc.proto --c_out=.
 ```
 
 ## Add new RPC message

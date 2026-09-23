@@ -1,0 +1,18 @@
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=/home/jc/.espressif/python_env/idf5.5_py3.12_env/bin/python -DESP_PLATFORM=1 -DCCACHE_ENABLE=0 /home/jc/esp_hosted_21213/slave
+warning: the int symbol ESP_HOSTED_BT_UART_PORT_ESP32 (defined at /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:973) has a non-int range [BTDM_CTRL_HCI_UART_NO (undefined), BTDM_CTRL_HCI_UART_NO (undefined)]
+warning: the int symbol ESP_HOSTED_BT_UART_BAUDRATE_ESP32 (defined at /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:979) has a non-int range [BTDM_CTRL_HCI_UART_BAUDRATE (undefined), BTDM_CTRL_HCI_UART_BAUDRATE (undefined)]
+info: INFO: Symbol ESP_WIFI_DPP_SUPPORT defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:1084
+    /home/jc/.espressif/esp-idf-5.5/components/esp_wifi/Kconfig:718
+info: INFO: Symbol WIFI_CMD_DEFAULT_COUNTRY_NONE defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/jc/esp_hosted_21213/slave/managed_components/esp-qa__wifi-cmd/Kconfig:9
+    /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:1600
+info: INFO: Symbol WIFI_CMD_DEFAULT_COUNTRY_CN defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/jc/esp_hosted_21213/slave/managed_components/esp-qa__wifi-cmd/Kconfig:13
+    /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:1604
+info: INFO: Choice WIFI_CMD_DEFAULT_COUNTRY defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/jc/esp_hosted_21213/slave/main/Kconfig.projbuild:1594
+    /home/jc/esp_hosted_21213/slave/managed_components/esp-qa__wifi-cmd/Kconfig:3
+*************************************************************************************
+                    Building ESP-Hosted-MCU FW :: 2.12.13 
+*************************************************************************************

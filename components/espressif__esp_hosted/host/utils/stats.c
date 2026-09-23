@@ -1,28 +1,19 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2021 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /** Includes **/
 
 #include "stats.h"
-#include "esp_hosted_config.h"
 #if TEST_RAW_TP
-#include "os_wrapper.h"
 #include "transport_drv.h"
 #endif
 #include "esp_log.h"
+#include "esp_hosted_transport_init.h"
+#include "esp_hosted_os_abstraction.h"
+#include "port_esp_hosted_host_os.h"
 
 // use mempool and zero copy for Tx
 #include "mempool.h"
@@ -30,11 +21,14 @@
 #if ESP_PKT_STATS
 struct pkt_stats_t pkt_stats;
 void *pkt_stats_thread = NULL;
-extern volatile uint8_t wifi_tx_throttling;
+#endif
+
+#ifdef ESP_PKT_NUM_DEBUG
+struct dbg_stats_t dbg_stats;
 #endif
 
 #if ESP_PKT_STATS || TEST_RAW_TP
-DEFINE_LOG_TAG(stats);
+static const char *TAG = "stats";
 #endif
 
 /** Constants/Macros **/
@@ -46,6 +40,9 @@ DEFINE_LOG_TAG(stats);
 
 /** Exported Functions **/
 
+// disable usage of mempool for now
+#define DISABLE_MEMPOOL 1
+
 #if TEST_RAW_TP
 static int test_raw_tp = 0;
 static uint8_t log_raw_tp_stats_timer_running = 0;
@@ -55,11 +52,17 @@ static void * raw_tp_tx_task_id = 0;
 static uint64_t test_raw_tx_len = 0;
 static uint64_t test_raw_rx_len = 0;
 
+#if !DISABLE_MEMPOOL
 static struct mempool * buf_mp_g = NULL;
+#endif
 
 void stats_mempool_free(void* ptr)
 {
+#if DISABLE_MEMPOOL
+	g_h.funcs->_h_free(ptr);
+#else
 	mempool_free(buf_mp_g, ptr);
+#endif
 }
 
 void test_raw_tp_cleanup(void)
@@ -91,7 +94,6 @@ void raw_tp_timer_func(void * arg)
 #endif
 	int32_t div = 1024;
 
-
 	actual_bandwidth_tx = (test_raw_tx_len*8)/TEST_RAW_TP__TIMEOUT;
 	actual_bandwidth_rx = (test_raw_rx_len*8)/TEST_RAW_TP__TIMEOUT;
 #if USE_FLOATING_POINT
@@ -112,10 +114,12 @@ static void raw_tp_tx_task(void const* pvParameters)
 	uint32_t i = 0;
 	g_h.funcs->_h_sleep(5);
 
+#if !DISABLE_MEMPOOL
 	buf_mp_g = mempool_create(MAX_TRANSPORT_BUFFER_SIZE);
-#ifdef CONFIG_ESP_CACHE_MALLOC
-	assert(channel->memp);
+#ifdef H_USE_MEMPOOL
+	assert(buf_mp_g);
 #endif
+#endif // !DISABLE_MEMPOOL
 
 	while (1) {
 
@@ -126,18 +130,22 @@ static void raw_tp_tx_task(void const* pvParameters)
 		for (i=0; i<(TEST_RAW_TP__BUF_SIZE/4-1); i++, ptr++)
 			*ptr = 0xBAADF00D;
 
-		ret = esp_hosted_tx(ESP_TEST_IF, 0, raw_tp_tx_buf, TEST_RAW_TP__BUF_SIZE, H_BUFF_ZEROCOPY, H_DEFLT_FREE_FUNC);
+		ret = esp_hosted_tx(ESP_TEST_IF, 0, raw_tp_tx_buf, TEST_RAW_TP__BUF_SIZE, H_BUFF_ZEROCOPY, raw_tp_tx_buf, H_DEFLT_FREE_FUNC, 0);
 
 #else
+#if DISABLE_MEMPOOL
+		raw_tp_tx_buf = g_h.funcs->_h_malloc_align(MAX_TRANSPORT_BUFFER_SIZE, HOSTED_MEM_ALIGNMENT_64);
+		g_h.funcs->_h_memset(raw_tp_tx_buf, 0, MAX_TRANSPORT_BUFFER_SIZE);
+#else
 		raw_tp_tx_buf = mempool_alloc(buf_mp_g, MAX_TRANSPORT_BUFFER_SIZE, true);
-
+#endif
 		ptr = (uint32_t*) (raw_tp_tx_buf + H_ESP_PAYLOAD_HEADER_OFFSET);
 		for (i=0; i<(TEST_RAW_TP__BUF_SIZE/4-1); i++, ptr++)
 			*ptr = 0xBAADF00D;
 
-		ret = esp_hosted_tx(ESP_TEST_IF, 0, raw_tp_tx_buf, TEST_RAW_TP__BUF_SIZE, H_BUFF_ZEROCOPY, stats_mempool_free);
+		ret = esp_hosted_tx(ESP_TEST_IF, 0, raw_tp_tx_buf, TEST_RAW_TP__BUF_SIZE, H_BUFF_ZEROCOPY, raw_tp_tx_buf, stats_mempool_free, 0);
 #endif
-		if (ret != STM_OK) {
+		if (ret) {
 			ESP_LOGE(TAG, "Failed to send to queue\n");
 			continue;
 		}
@@ -154,8 +162,8 @@ static void process_raw_tp_flags(uint8_t cap)
 	test_raw_tp_cleanup();
 
 	if (test_raw_tp) {
-		hosted_timer_handler = g_h.funcs->_h_timer_start(TEST_RAW_TP__TIMEOUT,
-				RPC__TIMER_PERIODIC, raw_tp_timer_func, NULL);
+		hosted_timer_handler = g_h.funcs->_h_timer_start("raw_tp_timer", SEC_TO_MILLISEC(TEST_RAW_TP__TIMEOUT),
+				H_TIMER_TYPE_PERIODIC, raw_tp_timer_func, NULL);
 		if (!hosted_timer_handler) {
 			ESP_LOGE(TAG, "Failed to create timer\n\r");
 			return;
@@ -208,21 +216,26 @@ struct mem_stats h_stats_g;
 #if ESP_PKT_STATS
 void stats_timer_func(void * arg)
 {
-	ESP_LOGI(TAG, "slave: sta_rx_in: %lu sta_rx_out: %lu sta_tx_in [pass: %lu drop: %lu] sta_tx_out: %lu ",
+	ESP_LOGI(TAG, "STA: s2h{in[%lu] out[%lu]} h2s{in(flowctrl_drop[%lu] in[%lu or %lu]) out(ok[%lu] drop[%lu])} flwctl{on[%lu] off[%lu]}",
 			pkt_stats.sta_rx_in,pkt_stats.sta_rx_out,
-			pkt_stats.sta_tx_in_pass, pkt_stats.sta_tx_in_drop, pkt_stats.sta_tx_out);
-	ESP_LOGI(TAG, "wifi_tx_throttling %u", wifi_tx_throttling);
+			pkt_stats.sta_tx_flowctrl_drop, pkt_stats.sta_tx_in_pass, pkt_stats.sta_tx_trans_in,  pkt_stats.sta_tx_out, pkt_stats.sta_tx_out_drop,
+			pkt_stats.sta_flow_ctrl_on, pkt_stats.sta_flow_ctrl_off);
+	ESP_LOGI(TAG, "internal: free %d l-free %d min-free %d, psram: free %d l-free %d min-free %d",
+			heap_caps_get_free_size(MALLOC_CAP_8BIT) - heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+			heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL),
+			heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL),
+			heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+			heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
+			heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM));
 }
 #endif
 
 void create_debugging_tasks(void)
 {
 #if ESP_PKT_STATS
-	if (ESP_PKT_STATS_REPORT_INTERVAL) {
 		ESP_LOGI(TAG, "Start Pkt_stats reporting thread [timer: %u sec]", ESP_PKT_STATS_REPORT_INTERVAL);
-		pkt_stats_thread = g_h.funcs->_h_timer_start(ESP_PKT_STATS_REPORT_INTERVAL,
-				RPC__TIMER_PERIODIC, stats_timer_func, NULL);
+		pkt_stats_thread = g_h.funcs->_h_timer_start("pkt_stats_timer", SEC_TO_MILLISEC(ESP_PKT_STATS_REPORT_INTERVAL),
+				H_TIMER_TYPE_PERIODIC, stats_timer_func, NULL);
 		assert(pkt_stats_thread);
-	}
 #endif
 }

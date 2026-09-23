@@ -1,12 +1,14 @@
-// Copyright 2015-2022 Espressif Systems (Shanghai) PTE LTD
-/* SPDX-License-Identifier: GPL-2.0-only OR Apache-2.0 */
+/*
+ * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /** Includes **/
 #include <string.h>
-#include "os_wrapper.h"
 #include "serial_if.h"
 #include "serial_drv.h"
-#include "esp_log.h"
+#include "port_esp_hosted_host_log.h"
 
 DEFINE_LOG_TAG(serial_if);
 
@@ -18,30 +20,12 @@ DEFINE_LOG_TAG(serial_if);
 #define PROTO_PSER_TLV_T_EPNAME           0x01
 #define PROTO_PSER_TLV_T_DATA             0x02
 
-#if 0
-#ifdef MCU_SYS
-#define command_log(format, ...)          printf(format "\r", ##__VA_ARGS__);
-#else
-#define command_log(...)                  printf("%s:%u ",__func__,__LINE__); \
-                                          printf(__VA_ARGS__);
-#endif
-#endif
-
-#if 0
-#define HOSTED_CALLOC(buff,nbytes) do {                           \
-    buff = (uint8_t *)g_h.funcs->_h_calloc(1, nbytes);       \
-    if (!buff) {                                                  \
-        printf("%s, Failed to allocate memory \n", __func__);     \
-        goto free_bufs;                                           \
-    }                                                             \
-} while(0);
-#endif
 
 /** Exported variables **/
 struct serial_drv_handle_t* serial_handle = NULL;
 
 /*
- * The data written on serial driver file, `SERIAL_IF_FILE` from adapter.h
+ * The data written on serial driver file, `SERIAL_IF_FILE` from esp_hosted_transport.h
  * In TLV i.e. Type Length Value format, to transfer data between host and ESP32
  *  | type | length | value |
  * Types are 0x01 : for endpoint name
@@ -52,7 +36,7 @@ struct serial_drv_handle_t* serial_handle = NULL;
 
 uint16_t compose_tlv(uint8_t* buf, uint8_t* data, uint16_t data_length)
 {
-	char* ep_name = RPC_EP_NAME_RSP;
+	const char* ep_name = RPC_EP_NAME_RSP;
 	uint16_t ep_length = strlen(ep_name);
 	uint16_t count = 0;
 	uint8_t idx;
@@ -82,8 +66,8 @@ uint16_t compose_tlv(uint8_t* buf, uint8_t* data, uint16_t data_length)
 
 uint8_t parse_tlv(uint8_t* data, uint32_t* pro_len)
 {
-	char* ep_name = RPC_EP_NAME_RSP;
-	char* ep_name2 = RPC_EP_NAME_EVT;
+	const char* ep_name = RPC_EP_NAME_RSP;
+	const char* ep_name2 = RPC_EP_NAME_EVT;
 	uint64_t len = 0;
 	uint16_t val_len = 0;
 	if (data[len] == PROTO_PSER_TLV_T_EPNAME) {
@@ -129,7 +113,15 @@ uint8_t parse_tlv(uint8_t* data, uint32_t* pro_len)
 
 int transport_pserial_close(void)
 {
-	int ret = serial_drv_close(&serial_handle);
+	int ret = SUCCESS;
+
+	ret = rpc_platform_deinit();
+	if (ret != SUCCESS) {
+		ESP_LOGE(TAG, "Platform deinit failed\n");
+	}
+
+	ret = serial_drv_close(&serial_handle);
+
 	if (ret) {
 		ESP_LOGE(TAG, "Failed to close driver interface\n");
 		return FAILURE;
@@ -166,10 +158,15 @@ int transport_pserial_open(void)
 
 int transport_pserial_send(uint8_t* data, uint16_t data_length)
 {
-	char* ep_name = RPC_EP_NAME_RSP;
+	const char* ep_name = RPC_EP_NAME_RSP;
 	int count = 0, ret = 0;
 	uint16_t buf_len = 0;
 	uint8_t *write_buf = NULL;
+
+	if (!data || !data_length) {
+		ESP_LOGW(TAG, "Empty RPC data, ignored");
+		return FAILURE;
+	}
 
 /*
  * TLV (Type - Length - Value) structure is as follows:
@@ -185,30 +182,31 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 	buf_len = SIZE_OF_TYPE + SIZE_OF_LENGTH + strlen(ep_name) +
 		SIZE_OF_TYPE + SIZE_OF_LENGTH + data_length;
 
-	HOSTED_CALLOC(uint8_t,write_buf,buf_len,free_bufs);
+	HOSTED_CALLOC(uint8_t,write_buf,buf_len,free_bufs2);
 
 	if (!serial_handle) {
 		ESP_LOGE(TAG, "Serial connection closed?\n");
-		goto free_bufs;
+		goto free_bufs1;
 	}
 
 	count = compose_tlv(write_buf, data, data_length);
 	if (!count) {
 		ESP_LOGE(TAG, "Failed to compose TX data\n");
-		goto free_bufs;
+		goto free_bufs1;
 	}
 
 	ret = serial_drv_write(serial_handle, write_buf, count, &count);
 	if (ret != SUCCESS) {
 		ESP_LOGE(TAG, "Failed to write TX data\n");
-		goto free_bufs;
-	}
-	return SUCCESS;
-free_bufs:
-	if (write_buf) {
-		g_h.funcs->_h_free(write_buf);
+		goto free_bufs2;
 	}
 
+	return ret;
+
+free_bufs1:
+	HOSTED_FREE(write_buf);
+free_bufs2:
+	/* write_buf is supposed to be freed by serial_drv_write() */
 	return FAILURE;
 }
 

@@ -1,0 +1,24 @@
+# Holds rules for running jobs
+
+# default rule
+# used for running jobs on a merge request to release/v2.x
+.default_rules:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/v2.x" && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "release/v2.x"
+
+# release branch rule
+# used for the post-merge breadth matrix on release/v2.x
+.release_branch_rules:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/v2.x" && $CI_PIPELINE_SOURCE == "push"
+
+# no build rule to disable jobs temporarily
+# while testing new build rules
+.no_build_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "release/v2.x" && $CI_PIPELINE_SOURCE == "push"
+      when: never

@@ -42,7 +42,7 @@ UART is supported on all ESP devices, and many other MCUs and operating systems.
 However, UART is a low-speed bus, and not recommended for environments where high network throughput (more than 1 Mbits/s) is required.
 
 > [!NOTE]
-> UART here is used to transport both Wi-Fi and Bluetooth data (VHCI). Do not confuse this with the standard Bluetooth over UART implementation (HCI), which does not support Wi-Fi.
+> UART is used to transport both Wi-Fi and Bluetooth data (as Hosted HCI). Do not confuse this with standard HCI sent over UART, which does not support Wi-Fi.
 
 ## 3 Hardware Considerations
 
@@ -146,12 +146,21 @@ Configure the co-processor project using
 idf.py menuconfig
 ```
 
+> [!NOTE]
+> When building with ESP-IDF v5.5, you may see this build error:
+>
+> `Building for UART transport can fail due to lack of IRAM space`
+>
+> To reduce IRAM usage, you can either:
+> - run `idf.py menuconfig` and enable `Component config` --> `ESP Ringbuf` ---> `Place non-ISR ringbuf functions into flash`, or
+> - uncomment `CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y` in `slave/sdkconfig.defaults.esp32` and regenerate the `sdkconfig`
+
 #### 6.2.1 Transport config
-  - Navigate to "Example configuration" -> "Transport layer"
-  - Select "UART"
+  - Navigate to "Example configuration" -> "Bus Config in between Host and Co-processor"
+  - In "Transport layer", select "UART"
 
 #### 6.2.2 Any other config
-  - Optionally, Configure any additional UART-specific settings like TX and Rx GPIOs, baud rate, etc.
+  - Optionally, Configure any additional UART-specific settings in the "UART Configuration" menu, like TX and Rx GPIOs, baud rate, etc.
 
 ###### Generated files
 - Generated config files are (1) `sdkconfig` file and (2) internal `sdkconfig.h` file.
@@ -170,7 +179,13 @@ idf.py build
 
 ### 6.4 Co-processor Flashing
 
-There are two methods to flash the ESP-Hosted co-processor firmware:
+It is **recommended** to periodically upgrade the slave firmware to leverage new features, bug fixes, and performance improvements.
+
+| Method                     | Description                                        | Recommended Use                                       |
+| -------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| **Direct Serial Flashing** | Uses UART pins for direct firmware installation    | First-time setup to install ESP-Hosted slave firmware |
+| **Slave OTA Update**       | Performs slave firmware updates directly from Host | All subsequent updates after initial installation     |
+
 
 ##### 6.4.1 Serial Flashing (Initial Setup)
 
@@ -187,58 +202,17 @@ idf.py -p <co-processor_serial_port> flash
 >
 > Put host in bootloader mode using following command and then retry flashing the co-processor
 >
-> ```bash
-> esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run
-> ```
-
-Monitor the output (optional):
-```
-idf.py -p <coprocessor_serial_port> monitor
-```
+> `esptool.py -p **<host_serial_port>** --before default_reset --after no_reset run`
+>
+> Flash the co-processor and log the output:
+>
+> `idf.py -p <co-processor_serial_port> flash monitor`
 
 ##### 6.4.2 Co-processor OTA Flashing (Subsequent Updates)
 
-For subsequent updates, you can re-use ESP-Hosted-MCU transport, as it should be already working. While doing OTA, Complete co-processor firmware image is not needed and only co-processor application partition, 'network_adapter.bin' need to be re-flashed remotely from host.
+The ESP-Hosted link comes pre-configured and ready to use on first boot. You can update the slave firmware remotely from the host MCU using OTA (Over-The-Air) updates: **No** ESP-Prog, serial cable, or extra GPIO connections are required.
 
-1. Ensure your co-processor device is connected and communicating with the host with existing ESP-Hosted-MCU.
-
-2. Create a web server
-You can re-use your existing web server or create a new locally for testing. Below is example to do it.
-  - Make a new directory so that web server can be run into it and navigate into it
-  - Create simple local web server using python3
-
-     ```bash
-     python3 -m http.server 8080
-     ```
-3. Copy the co-processor app partition `network_adapter.bin` in the directory where you created the web server.
-  - The `network_adapter.bin` can be found in your co-processor project build at `<co-processor_project>/build/network_adapter.bin`
-
-4. Verify if web server is set-up correctly
-  - Open link `http://127.0.0.1:8080` in the browser and check if network_adapter.bin is available.
-  - Right click and copy the complete URL of this network_adapter.bin and note somewhere.
-
-5. On the **host side**, use the `esp_hosted_ota` function to initiate the OTA update:
-
-   ```c
-   #include "esp_hosted_api.h"
-
-   const char* image_url = "http://example.com/path/to/network_adapter.bin"; //web server full url
-   esp_err_t ret = esp_hosted_ota(image_url);
-   if (ret == ESP_OK) {
-       printf("co-processor OTA update failed[%d]\n", ret);
-   }
-   ```
-
-   This function will download the firmware in chunk by chunk as http client from the specified URL and flash it to the co-processor device through the established transport.
-   In above web server example, You can paste the copied url earlier.
-
-6. Monitor the OTA progress through the console output on both the host and co-processor devices.
-
-> [!NOTE]
->
-> - The `esp_hosted_ota` function is part of the ESP-Hosted-MCU API and handles the OTA process through the transport layer.
-> - Ensure that your host application has web server connectivity to download the firmware file.
-> - The co-processor device doesn't need to be connected to the web server for this OTA method.
+For step-by-step instructions, see the [Host Performs Slave OTA Example](../examples/host_performs_slave_ota/README.md).
 
 ## 7 Flashing the Host
 
@@ -247,7 +221,7 @@ Host are required to support two-line UART and the required baud rate in their h
 | Supported Host Targets  | Any ESP chipset | Any Non-ESP chipset |
 | ----------------------- | --------------- | ------------------- |
 
-Non ESP chipset may need to port the porting layer. It is strongly recommanded to evaluate the solution using ESP chipset as host before porting to any non-esp chipset.
+Non ESP chipset may need to port the porting layer. It is strongly recommended to evaluate the solution using ESP chipset as host before porting to any non-esp chipset.
 
 ### 7.1 Select Example to Run in Hosted Mode
 
@@ -290,30 +264,36 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
 ### 7.3 Menuconfig, Build and Flash Host
 
 ###### 1. High performance configurations
-   This is optional step, suggested for high performance applications.
+This is optional step, suggested for high performance applications.
 
-   If using ESP32-P4 as host:
-     - Remove the default `sdkconfig.defaults.esp32p4` file.
-     - Create a new `sdkconfig.defaults.esp32p4` file with the following content:
-     ```
-     CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
-     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=64
-     CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
-     CONFIG_ESP_WIFI_TX_BA_WIN=32
-     CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
-     CONFIG_ESP_WIFI_RX_BA_WIN=32
+If using ESP32-P4 as host and the ESP32-C6 as the co-processor:
 
-     CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
-     CONFIG_LWIP_TCP_WND_DEFAULT=65534
-     CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
-     CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+- Remove all `CONFIG_ESP_WIFI_` settings. They do not apply to ESP-Hosted.
+- Add the following settings to your `sdkconfig.defaults.esp32p4` file:
+  ```
+  ### sdkconfig for ESP32-P4 + C6 Dev board
+  CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM=16
+  CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_DYNAMIC_TX_BUFFER_NUM=64
+  CONFIG_WIFI_RMT_AMPDU_TX_ENABLED=y
+  CONFIG_WIFI_RMT_TX_BA_WIN=32
+  CONFIG_WIFI_RMT_AMPDU_RX_ENABLED=y
+  CONFIG_WIFI_RMT_RX_BA_WIN=32
 
-     CONFIG_LWIP_TCP_SACK_OUT=y
-     ```
+  CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
+  CONFIG_LWIP_TCP_WND_DEFAULT=65534
+  CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+  CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
 
-    For other hosts also, you can merge above configs in corresponding `sdkconfig.defaults.esp32XX` file.
+  CONFIG_LWIP_TCP_SACK_OUT=y
+  ```
+
+For other ESP32 hosts, you can merge above configs into the corresponding `sdkconfig.defaults.esp32XX` file.
+
+To adjust other Wi-Fi parameters, run `idf.py menuconfig` and go to `Component config` ---> `Wi-Fi Remote` ---> `Wi-Fi configuration`.
+
+Optimised parameters for other co-processors can be found in the [Performance Optimization Guide](performance_optimization.md).
 
 ###### 2. Set environment for your host ESP chip:
 
@@ -330,7 +310,7 @@ Now that ESP-IDF is set up, follow these steps to prepare the host:
    ESP-Hosted-MCU host configurations are available under "Component config" -> "ESP-Hosted config"
    1. Select "UART" as the transport layer
    2. Change co-processor chipset to connect to under "Slave chipset to be used"
-   3. Optionally, Configure UART-specific settings like
+   3. Optionally, Configure UART-specific settings in the "UART Configuration" menu, like:
      - UART Tx and Rx GPIOs
      - UART baud rate
      - UART Checksum Enable/Disable (Checksum is recommended to be enabled)
@@ -424,7 +404,7 @@ After flashing both the co-processor and host devices, follow these steps to con
    - Set Wi-Fi mode: `wifi_mode <mode>` (where mode can be 'sta', 'ap', or 'apsta')
 
 7. Advanced iperf testing:
-   Once connected, you can run iperf tests:
+   Once connected, you can run iperf tests to verify performance:
 
    | Test Case | Host Command | External STA Command |
    |-----------|--------------|----------------------|
@@ -434,6 +414,10 @@ After flashing both the co-processor and host devices, follow these steps to con
    | TCP Host RX | `iperf -s -i 3` | `iperf -c <HOST_IP> -t 60 -i 3` |
 
    Note: Replace `<STA_IP>` with the IP address of the external STA, and `<HOST_IP>` with the IP address of the ESP-Hosted device.
+
+> [!TIP]
+>
+> To measure the optimal performance, check out the [Shield Box Test Setup](shield-box-test-setup.md).
 
 8. Troubleshooting:
    - If you encounter issues, refer to section 3.3 for checking the UART connection.

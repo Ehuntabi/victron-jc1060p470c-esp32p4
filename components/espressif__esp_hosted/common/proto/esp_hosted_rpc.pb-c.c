@@ -187,6 +187,51 @@ void   wifi_scan_time__free_unpacked
   assert(message->base.descriptor == &wifi_scan_time__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   wifi_scan_channel_bitmap__init
+                     (WifiScanChannelBitmap         *message)
+{
+  static const WifiScanChannelBitmap init_value = WIFI_SCAN_CHANNEL_BITMAP__INIT;
+  *message = init_value;
+}
+size_t wifi_scan_channel_bitmap__get_packed_size
+                     (const WifiScanChannelBitmap *message)
+{
+  assert(message->base.descriptor == &wifi_scan_channel_bitmap__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t wifi_scan_channel_bitmap__pack
+                     (const WifiScanChannelBitmap *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &wifi_scan_channel_bitmap__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t wifi_scan_channel_bitmap__pack_to_buffer
+                     (const WifiScanChannelBitmap *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &wifi_scan_channel_bitmap__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+WifiScanChannelBitmap *
+       wifi_scan_channel_bitmap__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (WifiScanChannelBitmap *)
+     protobuf_c_message_unpack (&wifi_scan_channel_bitmap__descriptor,
+                                allocator, len, data);
+}
+void   wifi_scan_channel_bitmap__free_unpacked
+                     (WifiScanChannelBitmap *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &wifi_scan_channel_bitmap__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   wifi_scan_config__init
                      (WifiScanConfig         *message)
 {
@@ -230,6 +275,51 @@ void   wifi_scan_config__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &wifi_scan_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   wifi_scan_default_params__init
+                     (WifiScanDefaultParams         *message)
+{
+  static const WifiScanDefaultParams init_value = WIFI_SCAN_DEFAULT_PARAMS__INIT;
+  *message = init_value;
+}
+size_t wifi_scan_default_params__get_packed_size
+                     (const WifiScanDefaultParams *message)
+{
+  assert(message->base.descriptor == &wifi_scan_default_params__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t wifi_scan_default_params__pack
+                     (const WifiScanDefaultParams *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &wifi_scan_default_params__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t wifi_scan_default_params__pack_to_buffer
+                     (const WifiScanDefaultParams *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &wifi_scan_default_params__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+WifiScanDefaultParams *
+       wifi_scan_default_params__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (WifiScanDefaultParams *)
+     protobuf_c_message_unpack (&wifi_scan_default_params__descriptor,
+                                allocator, len, data);
+}
+void   wifi_scan_default_params__free_unpacked
+                     (WifiScanDefaultParams *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &wifi_scan_default_params__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   wifi_he_ap_info__init
@@ -410,6 +500,51 @@ void   wifi_pmf_config__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &wifi_pmf_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   wifi_bss_max_idle_config__init
+                     (WifiBssMaxIdleConfig         *message)
+{
+  static const WifiBssMaxIdleConfig init_value = WIFI_BSS_MAX_IDLE_CONFIG__INIT;
+  *message = init_value;
+}
+size_t wifi_bss_max_idle_config__get_packed_size
+                     (const WifiBssMaxIdleConfig *message)
+{
+  assert(message->base.descriptor == &wifi_bss_max_idle_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t wifi_bss_max_idle_config__pack
+                     (const WifiBssMaxIdleConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &wifi_bss_max_idle_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t wifi_bss_max_idle_config__pack_to_buffer
+                     (const WifiBssMaxIdleConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &wifi_bss_max_idle_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+WifiBssMaxIdleConfig *
+       wifi_bss_max_idle_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (WifiBssMaxIdleConfig *)
+     protobuf_c_message_unpack (&wifi_bss_max_idle_config__descriptor,
+                                allocator, len, data);
+}
+void   wifi_bss_max_idle_config__free_unpacked
+                     (WifiBssMaxIdleConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &wifi_bss_max_idle_config__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   wifi_ap_config__init
@@ -1897,6 +2032,276 @@ void   wifi_bandwidths__free_unpacked
   assert(message->base.descriptor == &wifi_bandwidths__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   wifi_itwt_setup_config__init
+                     (WifiItwtSetupConfig         *message)
+{
+  static const WifiItwtSetupConfig init_value = WIFI_ITWT_SETUP_CONFIG__INIT;
+  *message = init_value;
+}
+size_t wifi_itwt_setup_config__get_packed_size
+                     (const WifiItwtSetupConfig *message)
+{
+  assert(message->base.descriptor == &wifi_itwt_setup_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t wifi_itwt_setup_config__pack
+                     (const WifiItwtSetupConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &wifi_itwt_setup_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t wifi_itwt_setup_config__pack_to_buffer
+                     (const WifiItwtSetupConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &wifi_itwt_setup_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+WifiItwtSetupConfig *
+       wifi_itwt_setup_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (WifiItwtSetupConfig *)
+     protobuf_c_message_unpack (&wifi_itwt_setup_config__descriptor,
+                                allocator, len, data);
+}
+void   wifi_itwt_setup_config__free_unpacked
+                     (WifiItwtSetupConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &wifi_itwt_setup_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   wifi_twt_config__init
+                     (WifiTwtConfig         *message)
+{
+  static const WifiTwtConfig init_value = WIFI_TWT_CONFIG__INIT;
+  *message = init_value;
+}
+size_t wifi_twt_config__get_packed_size
+                     (const WifiTwtConfig *message)
+{
+  assert(message->base.descriptor == &wifi_twt_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t wifi_twt_config__pack
+                     (const WifiTwtConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &wifi_twt_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t wifi_twt_config__pack_to_buffer
+                     (const WifiTwtConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &wifi_twt_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+WifiTwtConfig *
+       wifi_twt_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (WifiTwtConfig *)
+     protobuf_c_message_unpack (&wifi_twt_config__descriptor,
+                                allocator, len, data);
+}
+void   wifi_twt_config__free_unpacked
+                     (WifiTwtConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &wifi_twt_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   esp_app_desc__init
+                     (EspAppDesc         *message)
+{
+  static const EspAppDesc init_value = ESP_APP_DESC__INIT;
+  *message = init_value;
+}
+size_t esp_app_desc__get_packed_size
+                     (const EspAppDesc *message)
+{
+  assert(message->base.descriptor == &esp_app_desc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t esp_app_desc__pack
+                     (const EspAppDesc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &esp_app_desc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t esp_app_desc__pack_to_buffer
+                     (const EspAppDesc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &esp_app_desc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+EspAppDesc *
+       esp_app_desc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (EspAppDesc *)
+     protobuf_c_message_unpack (&esp_app_desc__descriptor,
+                                allocator, len, data);
+}
+void   esp_app_desc__free_unpacked
+                     (EspAppDesc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &esp_app_desc__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   heap_size_threshold__init
+                     (HeapSizeThreshold         *message)
+{
+  static const HeapSizeThreshold init_value = HEAP_SIZE_THRESHOLD__INIT;
+  *message = init_value;
+}
+size_t heap_size_threshold__get_packed_size
+                     (const HeapSizeThreshold *message)
+{
+  assert(message->base.descriptor == &heap_size_threshold__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t heap_size_threshold__pack
+                     (const HeapSizeThreshold *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &heap_size_threshold__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t heap_size_threshold__pack_to_buffer
+                     (const HeapSizeThreshold *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &heap_size_threshold__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+HeapSizeThreshold *
+       heap_size_threshold__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (HeapSizeThreshold *)
+     protobuf_c_message_unpack (&heap_size_threshold__descriptor,
+                                allocator, len, data);
+}
+void   heap_size_threshold__free_unpacked
+                     (HeapSizeThreshold *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &heap_size_threshold__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   mem_info__init
+                     (MemInfo         *message)
+{
+  static const MemInfo init_value = MEM_INFO__INIT;
+  *message = init_value;
+}
+size_t mem_info__get_packed_size
+                     (const MemInfo *message)
+{
+  assert(message->base.descriptor == &mem_info__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t mem_info__pack
+                     (const MemInfo *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &mem_info__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t mem_info__pack_to_buffer
+                     (const MemInfo *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &mem_info__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+MemInfo *
+       mem_info__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (MemInfo *)
+     protobuf_c_message_unpack (&mem_info__descriptor,
+                                allocator, len, data);
+}
+void   mem_info__free_unpacked
+                     (MemInfo *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &mem_info__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   heap_info__init
+                     (HeapInfo         *message)
+{
+  static const HeapInfo init_value = HEAP_INFO__INIT;
+  *message = init_value;
+}
+size_t heap_info__get_packed_size
+                     (const HeapInfo *message)
+{
+  assert(message->base.descriptor == &heap_info__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t heap_info__pack
+                     (const HeapInfo *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &heap_info__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t heap_info__pack_to_buffer
+                     (const HeapInfo *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &heap_info__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+HeapInfo *
+       heap_info__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (HeapInfo *)
+     protobuf_c_message_unpack (&heap_info__descriptor,
+                                allocator, len, data);
+}
+void   heap_info__free_unpacked
+                     (HeapInfo *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &heap_info__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   connected_stalist__init
                      (ConnectedSTAList         *message)
 {
@@ -1940,6 +2345,51 @@ void   connected_stalist__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &connected_stalist__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   eap_fast_config__init
+                     (EapFastConfig         *message)
+{
+  static const EapFastConfig init_value = EAP_FAST_CONFIG__INIT;
+  *message = init_value;
+}
+size_t eap_fast_config__get_packed_size
+                     (const EapFastConfig *message)
+{
+  assert(message->base.descriptor == &eap_fast_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t eap_fast_config__pack
+                     (const EapFastConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &eap_fast_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t eap_fast_config__pack_to_buffer
+                     (const EapFastConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &eap_fast_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+EapFastConfig *
+       eap_fast_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (EapFastConfig *)
+     protobuf_c_message_unpack (&eap_fast_config__descriptor,
+                                allocator, len, data);
+}
+void   eap_fast_config__free_unpacked
+                     (EapFastConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &eap_fast_config__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   rpc__req__get_mac_address__init
@@ -2750,6 +3200,186 @@ void   rpc__resp__otaend__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &rpc__resp__otaend__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__otaactivate__init
+                     (RpcReqOTAActivate         *message)
+{
+  static const RpcReqOTAActivate init_value = RPC__REQ__OTAACTIVATE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__otaactivate__get_packed_size
+                     (const RpcReqOTAActivate *message)
+{
+  assert(message->base.descriptor == &rpc__req__otaactivate__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__otaactivate__pack
+                     (const RpcReqOTAActivate *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__otaactivate__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__otaactivate__pack_to_buffer
+                     (const RpcReqOTAActivate *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__otaactivate__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqOTAActivate *
+       rpc__req__otaactivate__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqOTAActivate *)
+     protobuf_c_message_unpack (&rpc__req__otaactivate__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__otaactivate__free_unpacked
+                     (RpcReqOTAActivate *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__otaactivate__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__otaactivate__init
+                     (RpcRespOTAActivate         *message)
+{
+  static const RpcRespOTAActivate init_value = RPC__RESP__OTAACTIVATE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__otaactivate__get_packed_size
+                     (const RpcRespOTAActivate *message)
+{
+  assert(message->base.descriptor == &rpc__resp__otaactivate__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__otaactivate__pack
+                     (const RpcRespOTAActivate *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__otaactivate__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__otaactivate__pack_to_buffer
+                     (const RpcRespOTAActivate *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__otaactivate__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespOTAActivate *
+       rpc__resp__otaactivate__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespOTAActivate *)
+     protobuf_c_message_unpack (&rpc__resp__otaactivate__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__otaactivate__free_unpacked
+                     (RpcRespOTAActivate *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__otaactivate__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__app_get_desc__init
+                     (RpcReqAppGetDesc         *message)
+{
+  static const RpcReqAppGetDesc init_value = RPC__REQ__APP_GET_DESC__INIT;
+  *message = init_value;
+}
+size_t rpc__req__app_get_desc__get_packed_size
+                     (const RpcReqAppGetDesc *message)
+{
+  assert(message->base.descriptor == &rpc__req__app_get_desc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__app_get_desc__pack
+                     (const RpcReqAppGetDesc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__app_get_desc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__app_get_desc__pack_to_buffer
+                     (const RpcReqAppGetDesc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__app_get_desc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqAppGetDesc *
+       rpc__req__app_get_desc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqAppGetDesc *)
+     protobuf_c_message_unpack (&rpc__req__app_get_desc__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__app_get_desc__free_unpacked
+                     (RpcReqAppGetDesc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__app_get_desc__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__app_get_desc__init
+                     (RpcRespAppGetDesc         *message)
+{
+  static const RpcRespAppGetDesc init_value = RPC__RESP__APP_GET_DESC__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__app_get_desc__get_packed_size
+                     (const RpcRespAppGetDesc *message)
+{
+  assert(message->base.descriptor == &rpc__resp__app_get_desc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__app_get_desc__pack
+                     (const RpcRespAppGetDesc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__app_get_desc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__app_get_desc__pack_to_buffer
+                     (const RpcRespAppGetDesc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__app_get_desc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespAppGetDesc *
+       rpc__resp__app_get_desc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespAppGetDesc *)
+     protobuf_c_message_unpack (&rpc__resp__app_get_desc__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__app_get_desc__free_unpacked
+                     (RpcRespAppGetDesc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__app_get_desc__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   rpc__req__wifi_set_max_tx_power__init
@@ -4100,6 +4730,96 @@ void   rpc__resp__wifi_scan_get_ap_records__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &rpc__resp__wifi_scan_get_ap_records__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_scan_get_ap_record__init
+                     (RpcReqWifiScanGetApRecord         *message)
+{
+  static const RpcReqWifiScanGetApRecord init_value = RPC__REQ__WIFI_SCAN_GET_AP_RECORD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_scan_get_ap_record__get_packed_size
+                     (const RpcReqWifiScanGetApRecord *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_scan_get_ap_record__pack
+                     (const RpcReqWifiScanGetApRecord *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_scan_get_ap_record__pack_to_buffer
+                     (const RpcReqWifiScanGetApRecord *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiScanGetApRecord *
+       rpc__req__wifi_scan_get_ap_record__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiScanGetApRecord *)
+     protobuf_c_message_unpack (&rpc__req__wifi_scan_get_ap_record__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_scan_get_ap_record__free_unpacked
+                     (RpcReqWifiScanGetApRecord *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_scan_get_ap_record__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_scan_get_ap_record__init
+                     (RpcRespWifiScanGetApRecord         *message)
+{
+  static const RpcRespWifiScanGetApRecord init_value = RPC__RESP__WIFI_SCAN_GET_AP_RECORD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_scan_get_ap_record__get_packed_size
+                     (const RpcRespWifiScanGetApRecord *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_scan_get_ap_record__pack
+                     (const RpcRespWifiScanGetApRecord *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_scan_get_ap_record__pack_to_buffer
+                     (const RpcRespWifiScanGetApRecord *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_get_ap_record__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiScanGetApRecord *
+       rpc__resp__wifi_scan_get_ap_record__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiScanGetApRecord *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_scan_get_ap_record__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_scan_get_ap_record__free_unpacked
+                     (RpcRespWifiScanGetApRecord *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_get_ap_record__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   rpc__req__wifi_clear_ap_list__init
@@ -5677,6 +6397,96 @@ void   rpc__req__wifi_ap_get_sta_aid__free_unpacked
   assert(message->base.descriptor == &rpc__req__wifi_ap_get_sta_aid__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   rpc__req__wifi_sta_get_negotiated_phymode__init
+                     (RpcReqWifiStaGetNegotiatedPhymode         *message)
+{
+  static const RpcReqWifiStaGetNegotiatedPhymode init_value = RPC__REQ__WIFI_STA_GET_NEGOTIATED_PHYMODE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_get_negotiated_phymode__get_packed_size
+                     (const RpcReqWifiStaGetNegotiatedPhymode *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_get_negotiated_phymode__pack
+                     (const RpcReqWifiStaGetNegotiatedPhymode *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_get_negotiated_phymode__pack_to_buffer
+                     (const RpcReqWifiStaGetNegotiatedPhymode *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaGetNegotiatedPhymode *
+       rpc__req__wifi_sta_get_negotiated_phymode__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaGetNegotiatedPhymode *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_get_negotiated_phymode__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_get_negotiated_phymode__free_unpacked
+                     (RpcReqWifiStaGetNegotiatedPhymode *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_get_negotiated_phymode__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_get_negotiated_phymode__init
+                     (RpcRespWifiStaGetNegotiatedPhymode         *message)
+{
+  static const RpcRespWifiStaGetNegotiatedPhymode init_value = RPC__RESP__WIFI_STA_GET_NEGOTIATED_PHYMODE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_get_negotiated_phymode__get_packed_size
+                     (const RpcRespWifiStaGetNegotiatedPhymode *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_get_negotiated_phymode__pack
+                     (const RpcRespWifiStaGetNegotiatedPhymode *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_get_negotiated_phymode__pack_to_buffer
+                     (const RpcRespWifiStaGetNegotiatedPhymode *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_get_negotiated_phymode__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaGetNegotiatedPhymode *
+       rpc__resp__wifi_sta_get_negotiated_phymode__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaGetNegotiatedPhymode *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_get_negotiated_phymode__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_get_negotiated_phymode__free_unpacked
+                     (RpcRespWifiStaGetNegotiatedPhymode *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_get_negotiated_phymode__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   rpc__resp__wifi_ap_get_sta_aid__init
                      (RpcRespWifiApGetStaAid         *message)
 {
@@ -5810,6 +6620,96 @@ void   rpc__resp__wifi_sta_get_rssi__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &rpc__resp__wifi_sta_get_rssi__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_scan_params__init
+                     (RpcReqWifiScanParams         *message)
+{
+  static const RpcReqWifiScanParams init_value = RPC__REQ__WIFI_SCAN_PARAMS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_scan_params__get_packed_size
+                     (const RpcReqWifiScanParams *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_params__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_scan_params__pack
+                     (const RpcReqWifiScanParams *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_params__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_scan_params__pack_to_buffer
+                     (const RpcReqWifiScanParams *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_scan_params__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiScanParams *
+       rpc__req__wifi_scan_params__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiScanParams *)
+     protobuf_c_message_unpack (&rpc__req__wifi_scan_params__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_scan_params__free_unpacked
+                     (RpcReqWifiScanParams *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_scan_params__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_scan_params__init
+                     (RpcRespWifiScanParams         *message)
+{
+  static const RpcRespWifiScanParams init_value = RPC__RESP__WIFI_SCAN_PARAMS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_scan_params__get_packed_size
+                     (const RpcRespWifiScanParams *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_params__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_scan_params__pack
+                     (const RpcRespWifiScanParams *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_params__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_scan_params__pack_to_buffer
+                     (const RpcRespWifiScanParams *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_params__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiScanParams *
+       rpc__resp__wifi_scan_params__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiScanParams *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_scan_params__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_scan_params__free_unpacked
+                     (RpcRespWifiScanParams *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_scan_params__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   rpc__req__wifi_sta_get_aid__init
@@ -6622,6 +7522,1986 @@ void   rpc__resp__wifi_get_band_mode__free_unpacked
   assert(message->base.descriptor == &rpc__resp__wifi_get_band_mode__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   rpc__req__wifi_set_inactive_time__init
+                     (RpcReqWifiSetInactiveTime         *message)
+{
+  static const RpcReqWifiSetInactiveTime init_value = RPC__REQ__WIFI_SET_INACTIVE_TIME__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_set_inactive_time__get_packed_size
+                     (const RpcReqWifiSetInactiveTime *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_set_inactive_time__pack
+                     (const RpcReqWifiSetInactiveTime *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_set_inactive_time__pack_to_buffer
+                     (const RpcReqWifiSetInactiveTime *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiSetInactiveTime *
+       rpc__req__wifi_set_inactive_time__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiSetInactiveTime *)
+     protobuf_c_message_unpack (&rpc__req__wifi_set_inactive_time__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_set_inactive_time__free_unpacked
+                     (RpcReqWifiSetInactiveTime *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_set_inactive_time__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_set_inactive_time__init
+                     (RpcRespWifiSetInactiveTime         *message)
+{
+  static const RpcRespWifiSetInactiveTime init_value = RPC__RESP__WIFI_SET_INACTIVE_TIME__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_set_inactive_time__get_packed_size
+                     (const RpcRespWifiSetInactiveTime *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_set_inactive_time__pack
+                     (const RpcRespWifiSetInactiveTime *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_set_inactive_time__pack_to_buffer
+                     (const RpcRespWifiSetInactiveTime *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_inactive_time__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiSetInactiveTime *
+       rpc__resp__wifi_set_inactive_time__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiSetInactiveTime *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_set_inactive_time__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_set_inactive_time__free_unpacked
+                     (RpcRespWifiSetInactiveTime *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_set_inactive_time__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_get_inactive_time__init
+                     (RpcReqWifiGetInactiveTime         *message)
+{
+  static const RpcReqWifiGetInactiveTime init_value = RPC__REQ__WIFI_GET_INACTIVE_TIME__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_get_inactive_time__get_packed_size
+                     (const RpcReqWifiGetInactiveTime *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_get_inactive_time__pack
+                     (const RpcReqWifiGetInactiveTime *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_get_inactive_time__pack_to_buffer
+                     (const RpcReqWifiGetInactiveTime *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiGetInactiveTime *
+       rpc__req__wifi_get_inactive_time__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiGetInactiveTime *)
+     protobuf_c_message_unpack (&rpc__req__wifi_get_inactive_time__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_get_inactive_time__free_unpacked
+                     (RpcReqWifiGetInactiveTime *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_get_inactive_time__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_get_inactive_time__init
+                     (RpcRespWifiGetInactiveTime         *message)
+{
+  static const RpcRespWifiGetInactiveTime init_value = RPC__RESP__WIFI_GET_INACTIVE_TIME__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_get_inactive_time__get_packed_size
+                     (const RpcRespWifiGetInactiveTime *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_get_inactive_time__pack
+                     (const RpcRespWifiGetInactiveTime *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_get_inactive_time__pack_to_buffer
+                     (const RpcRespWifiGetInactiveTime *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_get_inactive_time__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiGetInactiveTime *
+       rpc__resp__wifi_get_inactive_time__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiGetInactiveTime *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_get_inactive_time__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_get_inactive_time__free_unpacked
+                     (RpcRespWifiGetInactiveTime *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_get_inactive_time__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_disable_pmf_config__init
+                     (RpcReqWifiDisablePmfConfig         *message)
+{
+  static const RpcReqWifiDisablePmfConfig init_value = RPC__REQ__WIFI_DISABLE_PMF_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_disable_pmf_config__get_packed_size
+                     (const RpcReqWifiDisablePmfConfig *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_disable_pmf_config__pack
+                     (const RpcReqWifiDisablePmfConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_disable_pmf_config__pack_to_buffer
+                     (const RpcReqWifiDisablePmfConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiDisablePmfConfig *
+       rpc__req__wifi_disable_pmf_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiDisablePmfConfig *)
+     protobuf_c_message_unpack (&rpc__req__wifi_disable_pmf_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_disable_pmf_config__free_unpacked
+                     (RpcReqWifiDisablePmfConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_disable_pmf_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_disable_pmf_config__init
+                     (RpcRespWifiDisablePmfConfig         *message)
+{
+  static const RpcRespWifiDisablePmfConfig init_value = RPC__RESP__WIFI_DISABLE_PMF_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_disable_pmf_config__get_packed_size
+                     (const RpcRespWifiDisablePmfConfig *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_disable_pmf_config__pack
+                     (const RpcRespWifiDisablePmfConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_disable_pmf_config__pack_to_buffer
+                     (const RpcRespWifiDisablePmfConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_disable_pmf_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiDisablePmfConfig *
+       rpc__resp__wifi_disable_pmf_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiDisablePmfConfig *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_disable_pmf_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_disable_pmf_config__free_unpacked
+                     (RpcRespWifiDisablePmfConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_disable_pmf_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_setup__init
+                     (RpcReqWifiStaItwtSetup         *message)
+{
+  static const RpcReqWifiStaItwtSetup init_value = RPC__REQ__WIFI_STA_ITWT_SETUP__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_setup__get_packed_size
+                     (const RpcReqWifiStaItwtSetup *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_setup__pack
+                     (const RpcReqWifiStaItwtSetup *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_setup__pack_to_buffer
+                     (const RpcReqWifiStaItwtSetup *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtSetup *
+       rpc__req__wifi_sta_itwt_setup__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtSetup *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_setup__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_setup__free_unpacked
+                     (RpcReqWifiStaItwtSetup *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_setup__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_setup__init
+                     (RpcRespWifiStaItwtSetup         *message)
+{
+  static const RpcRespWifiStaItwtSetup init_value = RPC__RESP__WIFI_STA_ITWT_SETUP__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_setup__get_packed_size
+                     (const RpcRespWifiStaItwtSetup *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_setup__pack
+                     (const RpcRespWifiStaItwtSetup *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_setup__pack_to_buffer
+                     (const RpcRespWifiStaItwtSetup *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtSetup *
+       rpc__resp__wifi_sta_itwt_setup__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtSetup *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_setup__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_setup__free_unpacked
+                     (RpcRespWifiStaItwtSetup *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_setup__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_teardown__init
+                     (RpcReqWifiStaItwtTeardown         *message)
+{
+  static const RpcReqWifiStaItwtTeardown init_value = RPC__REQ__WIFI_STA_ITWT_TEARDOWN__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_teardown__get_packed_size
+                     (const RpcReqWifiStaItwtTeardown *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_teardown__pack
+                     (const RpcReqWifiStaItwtTeardown *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_teardown__pack_to_buffer
+                     (const RpcReqWifiStaItwtTeardown *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtTeardown *
+       rpc__req__wifi_sta_itwt_teardown__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtTeardown *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_teardown__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_teardown__free_unpacked
+                     (RpcReqWifiStaItwtTeardown *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_teardown__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_teardown__init
+                     (RpcRespWifiStaItwtTeardown         *message)
+{
+  static const RpcRespWifiStaItwtTeardown init_value = RPC__RESP__WIFI_STA_ITWT_TEARDOWN__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_teardown__get_packed_size
+                     (const RpcRespWifiStaItwtTeardown *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_teardown__pack
+                     (const RpcRespWifiStaItwtTeardown *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_teardown__pack_to_buffer
+                     (const RpcRespWifiStaItwtTeardown *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtTeardown *
+       rpc__resp__wifi_sta_itwt_teardown__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtTeardown *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_teardown__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_teardown__free_unpacked
+                     (RpcRespWifiStaItwtTeardown *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_teardown__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_suspend__init
+                     (RpcReqWifiStaItwtSuspend         *message)
+{
+  static const RpcReqWifiStaItwtSuspend init_value = RPC__REQ__WIFI_STA_ITWT_SUSPEND__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_suspend__get_packed_size
+                     (const RpcReqWifiStaItwtSuspend *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_suspend__pack
+                     (const RpcReqWifiStaItwtSuspend *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_suspend__pack_to_buffer
+                     (const RpcReqWifiStaItwtSuspend *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtSuspend *
+       rpc__req__wifi_sta_itwt_suspend__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtSuspend *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_suspend__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_suspend__free_unpacked
+                     (RpcReqWifiStaItwtSuspend *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_suspend__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_suspend__init
+                     (RpcRespWifiStaItwtSuspend         *message)
+{
+  static const RpcRespWifiStaItwtSuspend init_value = RPC__RESP__WIFI_STA_ITWT_SUSPEND__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_suspend__get_packed_size
+                     (const RpcRespWifiStaItwtSuspend *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_suspend__pack
+                     (const RpcRespWifiStaItwtSuspend *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_suspend__pack_to_buffer
+                     (const RpcRespWifiStaItwtSuspend *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtSuspend *
+       rpc__resp__wifi_sta_itwt_suspend__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtSuspend *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_suspend__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_suspend__free_unpacked
+                     (RpcRespWifiStaItwtSuspend *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_suspend__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_get_flow_id_status__init
+                     (RpcReqWifiStaItwtGetFlowIdStatus         *message)
+{
+  static const RpcReqWifiStaItwtGetFlowIdStatus init_value = RPC__REQ__WIFI_STA_ITWT_GET_FLOW_ID_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_get_flow_id_status__get_packed_size
+                     (const RpcReqWifiStaItwtGetFlowIdStatus *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_get_flow_id_status__pack
+                     (const RpcReqWifiStaItwtGetFlowIdStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_get_flow_id_status__pack_to_buffer
+                     (const RpcReqWifiStaItwtGetFlowIdStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtGetFlowIdStatus *
+       rpc__req__wifi_sta_itwt_get_flow_id_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtGetFlowIdStatus *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_get_flow_id_status__free_unpacked
+                     (RpcReqWifiStaItwtGetFlowIdStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_get_flow_id_status__init
+                     (RpcRespWifiStaItwtGetFlowIdStatus         *message)
+{
+  static const RpcRespWifiStaItwtGetFlowIdStatus init_value = RPC__RESP__WIFI_STA_ITWT_GET_FLOW_ID_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_get_flow_id_status__get_packed_size
+                     (const RpcRespWifiStaItwtGetFlowIdStatus *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_get_flow_id_status__pack
+                     (const RpcRespWifiStaItwtGetFlowIdStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_get_flow_id_status__pack_to_buffer
+                     (const RpcRespWifiStaItwtGetFlowIdStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtGetFlowIdStatus *
+       rpc__resp__wifi_sta_itwt_get_flow_id_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtGetFlowIdStatus *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_get_flow_id_status__free_unpacked
+                     (RpcRespWifiStaItwtGetFlowIdStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_send_probe_req__init
+                     (RpcReqWifiStaItwtSendProbeReq         *message)
+{
+  static const RpcReqWifiStaItwtSendProbeReq init_value = RPC__REQ__WIFI_STA_ITWT_SEND_PROBE_REQ__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_send_probe_req__get_packed_size
+                     (const RpcReqWifiStaItwtSendProbeReq *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_send_probe_req__pack
+                     (const RpcReqWifiStaItwtSendProbeReq *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_send_probe_req__pack_to_buffer
+                     (const RpcReqWifiStaItwtSendProbeReq *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtSendProbeReq *
+       rpc__req__wifi_sta_itwt_send_probe_req__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtSendProbeReq *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_send_probe_req__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_send_probe_req__free_unpacked
+                     (RpcReqWifiStaItwtSendProbeReq *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_send_probe_req__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_send_probe_req__init
+                     (RpcRespWifiStaItwtSendProbeReq         *message)
+{
+  static const RpcRespWifiStaItwtSendProbeReq init_value = RPC__RESP__WIFI_STA_ITWT_SEND_PROBE_REQ__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_send_probe_req__get_packed_size
+                     (const RpcRespWifiStaItwtSendProbeReq *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_send_probe_req__pack
+                     (const RpcRespWifiStaItwtSendProbeReq *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_send_probe_req__pack_to_buffer
+                     (const RpcRespWifiStaItwtSendProbeReq *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_send_probe_req__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtSendProbeReq *
+       rpc__resp__wifi_sta_itwt_send_probe_req__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtSendProbeReq *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_send_probe_req__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_send_probe_req__free_unpacked
+                     (RpcRespWifiStaItwtSendProbeReq *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_send_probe_req__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_itwt_set_target_wake_time_offset__init
+                     (RpcReqWifiStaItwtSetTargetWakeTimeOffset         *message)
+{
+  static const RpcReqWifiStaItwtSetTargetWakeTimeOffset init_value = RPC__REQ__WIFI_STA_ITWT_SET_TARGET_WAKE_TIME_OFFSET__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_itwt_set_target_wake_time_offset__get_packed_size
+                     (const RpcReqWifiStaItwtSetTargetWakeTimeOffset *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_itwt_set_target_wake_time_offset__pack
+                     (const RpcReqWifiStaItwtSetTargetWakeTimeOffset *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_itwt_set_target_wake_time_offset__pack_to_buffer
+                     (const RpcReqWifiStaItwtSetTargetWakeTimeOffset *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaItwtSetTargetWakeTimeOffset *
+       rpc__req__wifi_sta_itwt_set_target_wake_time_offset__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaItwtSetTargetWakeTimeOffset *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_itwt_set_target_wake_time_offset__free_unpacked
+                     (RpcReqWifiStaItwtSetTargetWakeTimeOffset *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__init
+                     (RpcRespWifiStaItwtSetTargetWakeTimeOffset         *message)
+{
+  static const RpcRespWifiStaItwtSetTargetWakeTimeOffset init_value = RPC__RESP__WIFI_STA_ITWT_SET_TARGET_WAKE_TIME_OFFSET__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__get_packed_size
+                     (const RpcRespWifiStaItwtSetTargetWakeTimeOffset *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__pack
+                     (const RpcRespWifiStaItwtSetTargetWakeTimeOffset *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__pack_to_buffer
+                     (const RpcRespWifiStaItwtSetTargetWakeTimeOffset *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaItwtSetTargetWakeTimeOffset *
+       rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaItwtSetTargetWakeTimeOffset *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__free_unpacked
+                     (RpcRespWifiStaItwtSetTargetWakeTimeOffset *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_twt_config__init
+                     (RpcReqWifiStaTwtConfig         *message)
+{
+  static const RpcReqWifiStaTwtConfig init_value = RPC__REQ__WIFI_STA_TWT_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_twt_config__get_packed_size
+                     (const RpcReqWifiStaTwtConfig *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_twt_config__pack
+                     (const RpcReqWifiStaTwtConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_twt_config__pack_to_buffer
+                     (const RpcReqWifiStaTwtConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaTwtConfig *
+       rpc__req__wifi_sta_twt_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaTwtConfig *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_twt_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_twt_config__free_unpacked
+                     (RpcReqWifiStaTwtConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_twt_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_twt_config__init
+                     (RpcRespWifiStaTwtConfig         *message)
+{
+  static const RpcRespWifiStaTwtConfig init_value = RPC__RESP__WIFI_STA_TWT_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_twt_config__get_packed_size
+                     (const RpcRespWifiStaTwtConfig *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_twt_config__pack
+                     (const RpcRespWifiStaTwtConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_twt_config__pack_to_buffer
+                     (const RpcRespWifiStaTwtConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_twt_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaTwtConfig *
+       rpc__resp__wifi_sta_twt_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaTwtConfig *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_twt_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_twt_config__free_unpacked
+                     (RpcRespWifiStaTwtConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_twt_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__get_coprocessor_fw_version__init
+                     (RpcReqGetCoprocessorFwVersion         *message)
+{
+  static const RpcReqGetCoprocessorFwVersion init_value = RPC__REQ__GET_COPROCESSOR_FW_VERSION__INIT;
+  *message = init_value;
+}
+size_t rpc__req__get_coprocessor_fw_version__get_packed_size
+                     (const RpcReqGetCoprocessorFwVersion *message)
+{
+  assert(message->base.descriptor == &rpc__req__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__get_coprocessor_fw_version__pack
+                     (const RpcReqGetCoprocessorFwVersion *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__get_coprocessor_fw_version__pack_to_buffer
+                     (const RpcReqGetCoprocessorFwVersion *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGetCoprocessorFwVersion *
+       rpc__req__get_coprocessor_fw_version__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGetCoprocessorFwVersion *)
+     protobuf_c_message_unpack (&rpc__req__get_coprocessor_fw_version__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__get_coprocessor_fw_version__free_unpacked
+                     (RpcReqGetCoprocessorFwVersion *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__get_coprocessor_fw_version__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__get_coprocessor_fw_version__init
+                     (RpcRespGetCoprocessorFwVersion         *message)
+{
+  static const RpcRespGetCoprocessorFwVersion init_value = RPC__RESP__GET_COPROCESSOR_FW_VERSION__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__get_coprocessor_fw_version__get_packed_size
+                     (const RpcRespGetCoprocessorFwVersion *message)
+{
+  assert(message->base.descriptor == &rpc__resp__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__get_coprocessor_fw_version__pack
+                     (const RpcRespGetCoprocessorFwVersion *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__get_coprocessor_fw_version__pack_to_buffer
+                     (const RpcRespGetCoprocessorFwVersion *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__get_coprocessor_fw_version__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGetCoprocessorFwVersion *
+       rpc__resp__get_coprocessor_fw_version__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGetCoprocessorFwVersion *)
+     protobuf_c_message_unpack (&rpc__resp__get_coprocessor_fw_version__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__get_coprocessor_fw_version__free_unpacked
+                     (RpcRespGetCoprocessorFwVersion *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__get_coprocessor_fw_version__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__set_dhcp_dns_status__init
+                     (RpcReqSetDhcpDnsStatus         *message)
+{
+  static const RpcReqSetDhcpDnsStatus init_value = RPC__REQ__SET_DHCP_DNS_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__set_dhcp_dns_status__get_packed_size
+                     (const RpcReqSetDhcpDnsStatus *message)
+{
+  assert(message->base.descriptor == &rpc__req__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__set_dhcp_dns_status__pack
+                     (const RpcReqSetDhcpDnsStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__set_dhcp_dns_status__pack_to_buffer
+                     (const RpcReqSetDhcpDnsStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSetDhcpDnsStatus *
+       rpc__req__set_dhcp_dns_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSetDhcpDnsStatus *)
+     protobuf_c_message_unpack (&rpc__req__set_dhcp_dns_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__set_dhcp_dns_status__free_unpacked
+                     (RpcReqSetDhcpDnsStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__set_dhcp_dns_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__set_dhcp_dns_status__init
+                     (RpcRespSetDhcpDnsStatus         *message)
+{
+  static const RpcRespSetDhcpDnsStatus init_value = RPC__RESP__SET_DHCP_DNS_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__set_dhcp_dns_status__get_packed_size
+                     (const RpcRespSetDhcpDnsStatus *message)
+{
+  assert(message->base.descriptor == &rpc__resp__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__set_dhcp_dns_status__pack
+                     (const RpcRespSetDhcpDnsStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__set_dhcp_dns_status__pack_to_buffer
+                     (const RpcRespSetDhcpDnsStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__set_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSetDhcpDnsStatus *
+       rpc__resp__set_dhcp_dns_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSetDhcpDnsStatus *)
+     protobuf_c_message_unpack (&rpc__resp__set_dhcp_dns_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__set_dhcp_dns_status__free_unpacked
+                     (RpcRespSetDhcpDnsStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__set_dhcp_dns_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__get_dhcp_dns_status__init
+                     (RpcReqGetDhcpDnsStatus         *message)
+{
+  static const RpcReqGetDhcpDnsStatus init_value = RPC__REQ__GET_DHCP_DNS_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__get_dhcp_dns_status__get_packed_size
+                     (const RpcReqGetDhcpDnsStatus *message)
+{
+  assert(message->base.descriptor == &rpc__req__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__get_dhcp_dns_status__pack
+                     (const RpcReqGetDhcpDnsStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__get_dhcp_dns_status__pack_to_buffer
+                     (const RpcReqGetDhcpDnsStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGetDhcpDnsStatus *
+       rpc__req__get_dhcp_dns_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGetDhcpDnsStatus *)
+     protobuf_c_message_unpack (&rpc__req__get_dhcp_dns_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__get_dhcp_dns_status__free_unpacked
+                     (RpcReqGetDhcpDnsStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__get_dhcp_dns_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__get_dhcp_dns_status__init
+                     (RpcRespGetDhcpDnsStatus         *message)
+{
+  static const RpcRespGetDhcpDnsStatus init_value = RPC__RESP__GET_DHCP_DNS_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__get_dhcp_dns_status__get_packed_size
+                     (const RpcRespGetDhcpDnsStatus *message)
+{
+  assert(message->base.descriptor == &rpc__resp__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__get_dhcp_dns_status__pack
+                     (const RpcRespGetDhcpDnsStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__get_dhcp_dns_status__pack_to_buffer
+                     (const RpcRespGetDhcpDnsStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__get_dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGetDhcpDnsStatus *
+       rpc__resp__get_dhcp_dns_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGetDhcpDnsStatus *)
+     protobuf_c_message_unpack (&rpc__resp__get_dhcp_dns_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__get_dhcp_dns_status__free_unpacked
+                     (RpcRespGetDhcpDnsStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__get_dhcp_dns_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__supp_dpp_init__init
+                     (RpcReqSuppDppInit         *message)
+{
+  static const RpcReqSuppDppInit init_value = RPC__REQ__SUPP_DPP_INIT__INIT;
+  *message = init_value;
+}
+size_t rpc__req__supp_dpp_init__get_packed_size
+                     (const RpcReqSuppDppInit *message)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_init__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__supp_dpp_init__pack
+                     (const RpcReqSuppDppInit *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_init__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__supp_dpp_init__pack_to_buffer
+                     (const RpcReqSuppDppInit *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_init__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSuppDppInit *
+       rpc__req__supp_dpp_init__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSuppDppInit *)
+     protobuf_c_message_unpack (&rpc__req__supp_dpp_init__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__supp_dpp_init__free_unpacked
+                     (RpcReqSuppDppInit *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__supp_dpp_init__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__supp_dpp_init__init
+                     (RpcRespSuppDppInit         *message)
+{
+  static const RpcRespSuppDppInit init_value = RPC__RESP__SUPP_DPP_INIT__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__supp_dpp_init__get_packed_size
+                     (const RpcRespSuppDppInit *message)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_init__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__supp_dpp_init__pack
+                     (const RpcRespSuppDppInit *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_init__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__supp_dpp_init__pack_to_buffer
+                     (const RpcRespSuppDppInit *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_init__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSuppDppInit *
+       rpc__resp__supp_dpp_init__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSuppDppInit *)
+     protobuf_c_message_unpack (&rpc__resp__supp_dpp_init__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__supp_dpp_init__free_unpacked
+                     (RpcRespSuppDppInit *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_init__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__supp_dpp_deinit__init
+                     (RpcReqSuppDppDeinit         *message)
+{
+  static const RpcReqSuppDppDeinit init_value = RPC__REQ__SUPP_DPP_DEINIT__INIT;
+  *message = init_value;
+}
+size_t rpc__req__supp_dpp_deinit__get_packed_size
+                     (const RpcReqSuppDppDeinit *message)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__supp_dpp_deinit__pack
+                     (const RpcReqSuppDppDeinit *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__supp_dpp_deinit__pack_to_buffer
+                     (const RpcReqSuppDppDeinit *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSuppDppDeinit *
+       rpc__req__supp_dpp_deinit__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSuppDppDeinit *)
+     protobuf_c_message_unpack (&rpc__req__supp_dpp_deinit__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__supp_dpp_deinit__free_unpacked
+                     (RpcReqSuppDppDeinit *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__supp_dpp_deinit__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__supp_dpp_deinit__init
+                     (RpcRespSuppDppDeinit         *message)
+{
+  static const RpcRespSuppDppDeinit init_value = RPC__RESP__SUPP_DPP_DEINIT__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__supp_dpp_deinit__get_packed_size
+                     (const RpcRespSuppDppDeinit *message)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__supp_dpp_deinit__pack
+                     (const RpcRespSuppDppDeinit *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__supp_dpp_deinit__pack_to_buffer
+                     (const RpcRespSuppDppDeinit *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_deinit__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSuppDppDeinit *
+       rpc__resp__supp_dpp_deinit__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSuppDppDeinit *)
+     protobuf_c_message_unpack (&rpc__resp__supp_dpp_deinit__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__supp_dpp_deinit__free_unpacked
+                     (RpcRespSuppDppDeinit *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_deinit__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__supp_dpp_bootstrap_gen__init
+                     (RpcReqSuppDppBootstrapGen         *message)
+{
+  static const RpcReqSuppDppBootstrapGen init_value = RPC__REQ__SUPP_DPP_BOOTSTRAP_GEN__INIT;
+  *message = init_value;
+}
+size_t rpc__req__supp_dpp_bootstrap_gen__get_packed_size
+                     (const RpcReqSuppDppBootstrapGen *message)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__supp_dpp_bootstrap_gen__pack
+                     (const RpcReqSuppDppBootstrapGen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__supp_dpp_bootstrap_gen__pack_to_buffer
+                     (const RpcReqSuppDppBootstrapGen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSuppDppBootstrapGen *
+       rpc__req__supp_dpp_bootstrap_gen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSuppDppBootstrapGen *)
+     protobuf_c_message_unpack (&rpc__req__supp_dpp_bootstrap_gen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__supp_dpp_bootstrap_gen__free_unpacked
+                     (RpcReqSuppDppBootstrapGen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__supp_dpp_bootstrap_gen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__supp_dpp_bootstrap_gen__init
+                     (RpcRespSuppDppBootstrapGen         *message)
+{
+  static const RpcRespSuppDppBootstrapGen init_value = RPC__RESP__SUPP_DPP_BOOTSTRAP_GEN__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__supp_dpp_bootstrap_gen__get_packed_size
+                     (const RpcRespSuppDppBootstrapGen *message)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__supp_dpp_bootstrap_gen__pack
+                     (const RpcRespSuppDppBootstrapGen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__supp_dpp_bootstrap_gen__pack_to_buffer
+                     (const RpcRespSuppDppBootstrapGen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_bootstrap_gen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSuppDppBootstrapGen *
+       rpc__resp__supp_dpp_bootstrap_gen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSuppDppBootstrapGen *)
+     protobuf_c_message_unpack (&rpc__resp__supp_dpp_bootstrap_gen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__supp_dpp_bootstrap_gen__free_unpacked
+                     (RpcRespSuppDppBootstrapGen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_bootstrap_gen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__supp_dpp_start_listen__init
+                     (RpcReqSuppDppStartListen         *message)
+{
+  static const RpcReqSuppDppStartListen init_value = RPC__REQ__SUPP_DPP_START_LISTEN__INIT;
+  *message = init_value;
+}
+size_t rpc__req__supp_dpp_start_listen__get_packed_size
+                     (const RpcReqSuppDppStartListen *message)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__supp_dpp_start_listen__pack
+                     (const RpcReqSuppDppStartListen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__supp_dpp_start_listen__pack_to_buffer
+                     (const RpcReqSuppDppStartListen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSuppDppStartListen *
+       rpc__req__supp_dpp_start_listen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSuppDppStartListen *)
+     protobuf_c_message_unpack (&rpc__req__supp_dpp_start_listen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__supp_dpp_start_listen__free_unpacked
+                     (RpcReqSuppDppStartListen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__supp_dpp_start_listen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__supp_dpp_start_listen__init
+                     (RpcRespSuppDppStartListen         *message)
+{
+  static const RpcRespSuppDppStartListen init_value = RPC__RESP__SUPP_DPP_START_LISTEN__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__supp_dpp_start_listen__get_packed_size
+                     (const RpcRespSuppDppStartListen *message)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__supp_dpp_start_listen__pack
+                     (const RpcRespSuppDppStartListen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__supp_dpp_start_listen__pack_to_buffer
+                     (const RpcRespSuppDppStartListen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_start_listen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSuppDppStartListen *
+       rpc__resp__supp_dpp_start_listen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSuppDppStartListen *)
+     protobuf_c_message_unpack (&rpc__resp__supp_dpp_start_listen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__supp_dpp_start_listen__free_unpacked
+                     (RpcRespSuppDppStartListen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_start_listen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__supp_dpp_stop_listen__init
+                     (RpcReqSuppDppStopListen         *message)
+{
+  static const RpcReqSuppDppStopListen init_value = RPC__REQ__SUPP_DPP_STOP_LISTEN__INIT;
+  *message = init_value;
+}
+size_t rpc__req__supp_dpp_stop_listen__get_packed_size
+                     (const RpcReqSuppDppStopListen *message)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__supp_dpp_stop_listen__pack
+                     (const RpcReqSuppDppStopListen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__supp_dpp_stop_listen__pack_to_buffer
+                     (const RpcReqSuppDppStopListen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqSuppDppStopListen *
+       rpc__req__supp_dpp_stop_listen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqSuppDppStopListen *)
+     protobuf_c_message_unpack (&rpc__req__supp_dpp_stop_listen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__supp_dpp_stop_listen__free_unpacked
+                     (RpcReqSuppDppStopListen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__supp_dpp_stop_listen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__supp_dpp_stop_listen__init
+                     (RpcRespSuppDppStopListen         *message)
+{
+  static const RpcRespSuppDppStopListen init_value = RPC__RESP__SUPP_DPP_STOP_LISTEN__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__supp_dpp_stop_listen__get_packed_size
+                     (const RpcRespSuppDppStopListen *message)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__supp_dpp_stop_listen__pack
+                     (const RpcRespSuppDppStopListen *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__supp_dpp_stop_listen__pack_to_buffer
+                     (const RpcRespSuppDppStopListen *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_stop_listen__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespSuppDppStopListen *
+       rpc__resp__supp_dpp_stop_listen__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespSuppDppStopListen *)
+     protobuf_c_message_unpack (&rpc__resp__supp_dpp_stop_listen__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__supp_dpp_stop_listen__free_unpacked
+                     (RpcRespSuppDppStopListen *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__supp_dpp_stop_listen__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__iface_mac_addr_set_get__init
+                     (RpcReqIfaceMacAddrSetGet         *message)
+{
+  static const RpcReqIfaceMacAddrSetGet init_value = RPC__REQ__IFACE_MAC_ADDR_SET_GET__INIT;
+  *message = init_value;
+}
+size_t rpc__req__iface_mac_addr_set_get__get_packed_size
+                     (const RpcReqIfaceMacAddrSetGet *message)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__iface_mac_addr_set_get__pack
+                     (const RpcReqIfaceMacAddrSetGet *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__iface_mac_addr_set_get__pack_to_buffer
+                     (const RpcReqIfaceMacAddrSetGet *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqIfaceMacAddrSetGet *
+       rpc__req__iface_mac_addr_set_get__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqIfaceMacAddrSetGet *)
+     protobuf_c_message_unpack (&rpc__req__iface_mac_addr_set_get__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__iface_mac_addr_set_get__free_unpacked
+                     (RpcReqIfaceMacAddrSetGet *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_set_get__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__iface_mac_addr_set_get__init
+                     (RpcRespIfaceMacAddrSetGet         *message)
+{
+  static const RpcRespIfaceMacAddrSetGet init_value = RPC__RESP__IFACE_MAC_ADDR_SET_GET__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__iface_mac_addr_set_get__get_packed_size
+                     (const RpcRespIfaceMacAddrSetGet *message)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__iface_mac_addr_set_get__pack
+                     (const RpcRespIfaceMacAddrSetGet *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__iface_mac_addr_set_get__pack_to_buffer
+                     (const RpcRespIfaceMacAddrSetGet *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_set_get__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespIfaceMacAddrSetGet *
+       rpc__resp__iface_mac_addr_set_get__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespIfaceMacAddrSetGet *)
+     protobuf_c_message_unpack (&rpc__resp__iface_mac_addr_set_get__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__iface_mac_addr_set_get__free_unpacked
+                     (RpcRespIfaceMacAddrSetGet *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_set_get__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__iface_mac_addr_len_get__init
+                     (RpcReqIfaceMacAddrLenGet         *message)
+{
+  static const RpcReqIfaceMacAddrLenGet init_value = RPC__REQ__IFACE_MAC_ADDR_LEN_GET__INIT;
+  *message = init_value;
+}
+size_t rpc__req__iface_mac_addr_len_get__get_packed_size
+                     (const RpcReqIfaceMacAddrLenGet *message)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__iface_mac_addr_len_get__pack
+                     (const RpcReqIfaceMacAddrLenGet *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__iface_mac_addr_len_get__pack_to_buffer
+                     (const RpcReqIfaceMacAddrLenGet *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqIfaceMacAddrLenGet *
+       rpc__req__iface_mac_addr_len_get__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqIfaceMacAddrLenGet *)
+     protobuf_c_message_unpack (&rpc__req__iface_mac_addr_len_get__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__iface_mac_addr_len_get__free_unpacked
+                     (RpcReqIfaceMacAddrLenGet *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__iface_mac_addr_len_get__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__iface_mac_addr_len_get__init
+                     (RpcRespIfaceMacAddrLenGet         *message)
+{
+  static const RpcRespIfaceMacAddrLenGet init_value = RPC__RESP__IFACE_MAC_ADDR_LEN_GET__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__iface_mac_addr_len_get__get_packed_size
+                     (const RpcRespIfaceMacAddrLenGet *message)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__iface_mac_addr_len_get__pack
+                     (const RpcRespIfaceMacAddrLenGet *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__iface_mac_addr_len_get__pack_to_buffer
+                     (const RpcRespIfaceMacAddrLenGet *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_len_get__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespIfaceMacAddrLenGet *
+       rpc__resp__iface_mac_addr_len_get__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespIfaceMacAddrLenGet *)
+     protobuf_c_message_unpack (&rpc__resp__iface_mac_addr_len_get__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__iface_mac_addr_len_get__free_unpacked
+                     (RpcRespIfaceMacAddrLenGet *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__iface_mac_addr_len_get__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__feature_control__init
+                     (RpcReqFeatureControl         *message)
+{
+  static const RpcReqFeatureControl init_value = RPC__REQ__FEATURE_CONTROL__INIT;
+  *message = init_value;
+}
+size_t rpc__req__feature_control__get_packed_size
+                     (const RpcReqFeatureControl *message)
+{
+  assert(message->base.descriptor == &rpc__req__feature_control__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__feature_control__pack
+                     (const RpcReqFeatureControl *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__feature_control__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__feature_control__pack_to_buffer
+                     (const RpcReqFeatureControl *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__feature_control__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqFeatureControl *
+       rpc__req__feature_control__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqFeatureControl *)
+     protobuf_c_message_unpack (&rpc__req__feature_control__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__feature_control__free_unpacked
+                     (RpcReqFeatureControl *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__feature_control__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__feature_control__init
+                     (RpcRespFeatureControl         *message)
+{
+  static const RpcRespFeatureControl init_value = RPC__RESP__FEATURE_CONTROL__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__feature_control__get_packed_size
+                     (const RpcRespFeatureControl *message)
+{
+  assert(message->base.descriptor == &rpc__resp__feature_control__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__feature_control__pack
+                     (const RpcRespFeatureControl *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__feature_control__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__feature_control__pack_to_buffer
+                     (const RpcRespFeatureControl *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__feature_control__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespFeatureControl *
+       rpc__resp__feature_control__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespFeatureControl *)
+     protobuf_c_message_unpack (&rpc__resp__feature_control__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__feature_control__free_unpacked
+                     (RpcRespFeatureControl *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__feature_control__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__mem_monitor__init
+                     (RpcReqMemMonitor         *message)
+{
+  static const RpcReqMemMonitor init_value = RPC__REQ__MEM_MONITOR__INIT;
+  *message = init_value;
+}
+size_t rpc__req__mem_monitor__get_packed_size
+                     (const RpcReqMemMonitor *message)
+{
+  assert(message->base.descriptor == &rpc__req__mem_monitor__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__mem_monitor__pack
+                     (const RpcReqMemMonitor *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__mem_monitor__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__mem_monitor__pack_to_buffer
+                     (const RpcReqMemMonitor *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__mem_monitor__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqMemMonitor *
+       rpc__req__mem_monitor__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqMemMonitor *)
+     protobuf_c_message_unpack (&rpc__req__mem_monitor__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__mem_monitor__free_unpacked
+                     (RpcReqMemMonitor *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__mem_monitor__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__mem_monitor__init
+                     (RpcRespMemMonitor         *message)
+{
+  static const RpcRespMemMonitor init_value = RPC__RESP__MEM_MONITOR__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__mem_monitor__get_packed_size
+                     (const RpcRespMemMonitor *message)
+{
+  assert(message->base.descriptor == &rpc__resp__mem_monitor__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__mem_monitor__pack
+                     (const RpcRespMemMonitor *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__mem_monitor__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__mem_monitor__pack_to_buffer
+                     (const RpcRespMemMonitor *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__mem_monitor__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespMemMonitor *
+       rpc__resp__mem_monitor__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespMemMonitor *)
+     protobuf_c_message_unpack (&rpc__resp__mem_monitor__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__mem_monitor__free_unpacked
+                     (RpcRespMemMonitor *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__mem_monitor__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   rpc__event__wifi_event_no_args__init
                      (RpcEventWifiEventNoArgs         *message)
 {
@@ -6982,6 +9862,3606 @@ void   rpc__event__sta_disconnected__free_unpacked
   assert(message->base.descriptor == &rpc__event__sta_disconnected__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   rpc__gpio_config__init
+                     (RpcGpioConfig         *message)
+{
+  static const RpcGpioConfig init_value = RPC__GPIO_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__gpio_config__get_packed_size
+                     (const RpcGpioConfig *message)
+{
+  assert(message->base.descriptor == &rpc__gpio_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__gpio_config__pack
+                     (const RpcGpioConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__gpio_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__gpio_config__pack_to_buffer
+                     (const RpcGpioConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__gpio_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcGpioConfig *
+       rpc__gpio_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcGpioConfig *)
+     protobuf_c_message_unpack (&rpc__gpio_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__gpio_config__free_unpacked
+                     (RpcGpioConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__gpio_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_config__init
+                     (RpcReqGpioConfig         *message)
+{
+  static const RpcReqGpioConfig init_value = RPC__REQ__GPIO_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_config__get_packed_size
+                     (const RpcReqGpioConfig *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_config__pack
+                     (const RpcReqGpioConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_config__pack_to_buffer
+                     (const RpcReqGpioConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioConfig *
+       rpc__req__gpio_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioConfig *)
+     protobuf_c_message_unpack (&rpc__req__gpio_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_config__free_unpacked
+                     (RpcReqGpioConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_config__init
+                     (RpcRespGpioConfig         *message)
+{
+  static const RpcRespGpioConfig init_value = RPC__RESP__GPIO_CONFIG__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_config__get_packed_size
+                     (const RpcRespGpioConfig *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_config__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_config__pack
+                     (const RpcRespGpioConfig *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_config__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_config__pack_to_buffer
+                     (const RpcRespGpioConfig *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_config__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioConfig *
+       rpc__resp__gpio_config__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioConfig *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_config__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_config__free_unpacked
+                     (RpcRespGpioConfig *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_config__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_reset_pin__init
+                     (RpcReqGpioResetPin         *message)
+{
+  static const RpcReqGpioResetPin init_value = RPC__REQ__GPIO_RESET_PIN__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_reset_pin__get_packed_size
+                     (const RpcReqGpioResetPin *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_reset_pin__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_reset_pin__pack
+                     (const RpcReqGpioResetPin *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_reset_pin__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_reset_pin__pack_to_buffer
+                     (const RpcReqGpioResetPin *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_reset_pin__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioResetPin *
+       rpc__req__gpio_reset_pin__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioResetPin *)
+     protobuf_c_message_unpack (&rpc__req__gpio_reset_pin__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_reset_pin__free_unpacked
+                     (RpcReqGpioResetPin *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_reset_pin__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_reset_pin__init
+                     (RpcRespGpioResetPin         *message)
+{
+  static const RpcRespGpioResetPin init_value = RPC__RESP__GPIO_RESET_PIN__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_reset_pin__get_packed_size
+                     (const RpcRespGpioResetPin *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_reset_pin__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_reset_pin__pack
+                     (const RpcRespGpioResetPin *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_reset_pin__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_reset_pin__pack_to_buffer
+                     (const RpcRespGpioResetPin *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_reset_pin__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioResetPin *
+       rpc__resp__gpio_reset_pin__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioResetPin *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_reset_pin__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_reset_pin__free_unpacked
+                     (RpcRespGpioResetPin *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_reset_pin__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_set_level__init
+                     (RpcReqGpioSetLevel         *message)
+{
+  static const RpcReqGpioSetLevel init_value = RPC__REQ__GPIO_SET_LEVEL__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_set_level__get_packed_size
+                     (const RpcReqGpioSetLevel *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_level__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_set_level__pack
+                     (const RpcReqGpioSetLevel *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_level__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_set_level__pack_to_buffer
+                     (const RpcReqGpioSetLevel *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_level__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioSetLevel *
+       rpc__req__gpio_set_level__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioSetLevel *)
+     protobuf_c_message_unpack (&rpc__req__gpio_set_level__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_set_level__free_unpacked
+                     (RpcReqGpioSetLevel *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_set_level__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_set_level__init
+                     (RpcRespGpioSetLevel         *message)
+{
+  static const RpcRespGpioSetLevel init_value = RPC__RESP__GPIO_SET_LEVEL__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_set_level__get_packed_size
+                     (const RpcRespGpioSetLevel *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_level__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_set_level__pack
+                     (const RpcRespGpioSetLevel *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_level__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_set_level__pack_to_buffer
+                     (const RpcRespGpioSetLevel *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_level__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioSetLevel *
+       rpc__resp__gpio_set_level__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioSetLevel *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_set_level__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_set_level__free_unpacked
+                     (RpcRespGpioSetLevel *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_set_level__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_get_level__init
+                     (RpcReqGpioGetLevel         *message)
+{
+  static const RpcReqGpioGetLevel init_value = RPC__REQ__GPIO_GET_LEVEL__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_get_level__get_packed_size
+                     (const RpcReqGpioGetLevel *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_get_level__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_get_level__pack
+                     (const RpcReqGpioGetLevel *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_get_level__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_get_level__pack_to_buffer
+                     (const RpcReqGpioGetLevel *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_get_level__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioGetLevel *
+       rpc__req__gpio_get_level__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioGetLevel *)
+     protobuf_c_message_unpack (&rpc__req__gpio_get_level__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_get_level__free_unpacked
+                     (RpcReqGpioGetLevel *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_get_level__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_get_level__init
+                     (RpcRespGpioGetLevel         *message)
+{
+  static const RpcRespGpioGetLevel init_value = RPC__RESP__GPIO_GET_LEVEL__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_get_level__get_packed_size
+                     (const RpcRespGpioGetLevel *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_get_level__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_get_level__pack
+                     (const RpcRespGpioGetLevel *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_get_level__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_get_level__pack_to_buffer
+                     (const RpcRespGpioGetLevel *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_get_level__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioGetLevel *
+       rpc__resp__gpio_get_level__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioGetLevel *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_get_level__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_get_level__free_unpacked
+                     (RpcRespGpioGetLevel *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_get_level__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_set_direction__init
+                     (RpcReqGpioSetDirection         *message)
+{
+  static const RpcReqGpioSetDirection init_value = RPC__REQ__GPIO_SET_DIRECTION__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_set_direction__get_packed_size
+                     (const RpcReqGpioSetDirection *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_direction__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_set_direction__pack
+                     (const RpcReqGpioSetDirection *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_direction__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_set_direction__pack_to_buffer
+                     (const RpcReqGpioSetDirection *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_direction__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioSetDirection *
+       rpc__req__gpio_set_direction__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioSetDirection *)
+     protobuf_c_message_unpack (&rpc__req__gpio_set_direction__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_set_direction__free_unpacked
+                     (RpcReqGpioSetDirection *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_set_direction__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_set_direction__init
+                     (RpcRespGpioSetDirection         *message)
+{
+  static const RpcRespGpioSetDirection init_value = RPC__RESP__GPIO_SET_DIRECTION__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_set_direction__get_packed_size
+                     (const RpcRespGpioSetDirection *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_direction__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_set_direction__pack
+                     (const RpcRespGpioSetDirection *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_direction__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_set_direction__pack_to_buffer
+                     (const RpcRespGpioSetDirection *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_direction__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioSetDirection *
+       rpc__resp__gpio_set_direction__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioSetDirection *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_set_direction__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_set_direction__free_unpacked
+                     (RpcRespGpioSetDirection *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_set_direction__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_input_enable__init
+                     (RpcReqGpioInputEnable         *message)
+{
+  static const RpcReqGpioInputEnable init_value = RPC__REQ__GPIO_INPUT_ENABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_input_enable__get_packed_size
+                     (const RpcReqGpioInputEnable *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_input_enable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_input_enable__pack
+                     (const RpcReqGpioInputEnable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_input_enable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_input_enable__pack_to_buffer
+                     (const RpcReqGpioInputEnable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_input_enable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioInputEnable *
+       rpc__req__gpio_input_enable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioInputEnable *)
+     protobuf_c_message_unpack (&rpc__req__gpio_input_enable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_input_enable__free_unpacked
+                     (RpcReqGpioInputEnable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_input_enable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_input_enable__init
+                     (RpcRespGpioInputEnable         *message)
+{
+  static const RpcRespGpioInputEnable init_value = RPC__RESP__GPIO_INPUT_ENABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_input_enable__get_packed_size
+                     (const RpcRespGpioInputEnable *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_input_enable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_input_enable__pack
+                     (const RpcRespGpioInputEnable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_input_enable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_input_enable__pack_to_buffer
+                     (const RpcRespGpioInputEnable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_input_enable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioInputEnable *
+       rpc__resp__gpio_input_enable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioInputEnable *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_input_enable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_input_enable__free_unpacked
+                     (RpcRespGpioInputEnable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_input_enable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__gpio_set_pull_mode__init
+                     (RpcReqGpioSetPullMode         *message)
+{
+  static const RpcReqGpioSetPullMode init_value = RPC__REQ__GPIO_SET_PULL_MODE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__gpio_set_pull_mode__get_packed_size
+                     (const RpcReqGpioSetPullMode *message)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__gpio_set_pull_mode__pack
+                     (const RpcReqGpioSetPullMode *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__gpio_set_pull_mode__pack_to_buffer
+                     (const RpcReqGpioSetPullMode *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqGpioSetPullMode *
+       rpc__req__gpio_set_pull_mode__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqGpioSetPullMode *)
+     protobuf_c_message_unpack (&rpc__req__gpio_set_pull_mode__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__gpio_set_pull_mode__free_unpacked
+                     (RpcReqGpioSetPullMode *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__gpio_set_pull_mode__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__gpio_set_pull_mode__init
+                     (RpcRespGpioSetPullMode         *message)
+{
+  static const RpcRespGpioSetPullMode init_value = RPC__RESP__GPIO_SET_PULL_MODE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__gpio_set_pull_mode__get_packed_size
+                     (const RpcRespGpioSetPullMode *message)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__gpio_set_pull_mode__pack
+                     (const RpcRespGpioSetPullMode *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__gpio_set_pull_mode__pack_to_buffer
+                     (const RpcRespGpioSetPullMode *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__gpio_set_pull_mode__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespGpioSetPullMode *
+       rpc__resp__gpio_set_pull_mode__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespGpioSetPullMode *)
+     protobuf_c_message_unpack (&rpc__resp__gpio_set_pull_mode__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__gpio_set_pull_mode__free_unpacked
+                     (RpcRespGpioSetPullMode *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__gpio_set_pull_mode__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__ext_coex__init
+                     (RpcReqExtCoex         *message)
+{
+  static const RpcReqExtCoex init_value = RPC__REQ__EXT_COEX__INIT;
+  *message = init_value;
+}
+size_t rpc__req__ext_coex__get_packed_size
+                     (const RpcReqExtCoex *message)
+{
+  assert(message->base.descriptor == &rpc__req__ext_coex__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__ext_coex__pack
+                     (const RpcReqExtCoex *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__ext_coex__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__ext_coex__pack_to_buffer
+                     (const RpcReqExtCoex *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__ext_coex__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqExtCoex *
+       rpc__req__ext_coex__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqExtCoex *)
+     protobuf_c_message_unpack (&rpc__req__ext_coex__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__ext_coex__free_unpacked
+                     (RpcReqExtCoex *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__ext_coex__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__ext_coex__init
+                     (RpcRespExtCoex         *message)
+{
+  static const RpcRespExtCoex init_value = RPC__RESP__EXT_COEX__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__ext_coex__get_packed_size
+                     (const RpcRespExtCoex *message)
+{
+  assert(message->base.descriptor == &rpc__resp__ext_coex__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__ext_coex__pack
+                     (const RpcRespExtCoex *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__ext_coex__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__ext_coex__pack_to_buffer
+                     (const RpcRespExtCoex *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__ext_coex__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespExtCoex *
+       rpc__resp__ext_coex__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespExtCoex *)
+     protobuf_c_message_unpack (&rpc__resp__ext_coex__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__ext_coex__free_unpacked
+                     (RpcRespExtCoex *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__ext_coex__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__dhcp_dns_status__init
+                     (RpcEventDhcpDnsStatus         *message)
+{
+  static const RpcEventDhcpDnsStatus init_value = RPC__EVENT__DHCP_DNS_STATUS__INIT;
+  *message = init_value;
+}
+size_t rpc__event__dhcp_dns_status__get_packed_size
+                     (const RpcEventDhcpDnsStatus *message)
+{
+  assert(message->base.descriptor == &rpc__event__dhcp_dns_status__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__dhcp_dns_status__pack
+                     (const RpcEventDhcpDnsStatus *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__dhcp_dns_status__pack_to_buffer
+                     (const RpcEventDhcpDnsStatus *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__dhcp_dns_status__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventDhcpDnsStatus *
+       rpc__event__dhcp_dns_status__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventDhcpDnsStatus *)
+     protobuf_c_message_unpack (&rpc__event__dhcp_dns_status__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__dhcp_dns_status__free_unpacked
+                     (RpcEventDhcpDnsStatus *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__dhcp_dns_status__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__sta_itwt_setup__init
+                     (RpcEventStaItwtSetup         *message)
+{
+  static const RpcEventStaItwtSetup init_value = RPC__EVENT__STA_ITWT_SETUP__INIT;
+  *message = init_value;
+}
+size_t rpc__event__sta_itwt_setup__get_packed_size
+                     (const RpcEventStaItwtSetup *message)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_setup__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__sta_itwt_setup__pack
+                     (const RpcEventStaItwtSetup *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__sta_itwt_setup__pack_to_buffer
+                     (const RpcEventStaItwtSetup *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_setup__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventStaItwtSetup *
+       rpc__event__sta_itwt_setup__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventStaItwtSetup *)
+     protobuf_c_message_unpack (&rpc__event__sta_itwt_setup__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__sta_itwt_setup__free_unpacked
+                     (RpcEventStaItwtSetup *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__sta_itwt_setup__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__sta_itwt_teardown__init
+                     (RpcEventStaItwtTeardown         *message)
+{
+  static const RpcEventStaItwtTeardown init_value = RPC__EVENT__STA_ITWT_TEARDOWN__INIT;
+  *message = init_value;
+}
+size_t rpc__event__sta_itwt_teardown__get_packed_size
+                     (const RpcEventStaItwtTeardown *message)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_teardown__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__sta_itwt_teardown__pack
+                     (const RpcEventStaItwtTeardown *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__sta_itwt_teardown__pack_to_buffer
+                     (const RpcEventStaItwtTeardown *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_teardown__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventStaItwtTeardown *
+       rpc__event__sta_itwt_teardown__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventStaItwtTeardown *)
+     protobuf_c_message_unpack (&rpc__event__sta_itwt_teardown__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__sta_itwt_teardown__free_unpacked
+                     (RpcEventStaItwtTeardown *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__sta_itwt_teardown__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__sta_itwt_suspend__init
+                     (RpcEventStaItwtSuspend         *message)
+{
+  static const RpcEventStaItwtSuspend init_value = RPC__EVENT__STA_ITWT_SUSPEND__INIT;
+  *message = init_value;
+}
+size_t rpc__event__sta_itwt_suspend__get_packed_size
+                     (const RpcEventStaItwtSuspend *message)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_suspend__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__sta_itwt_suspend__pack
+                     (const RpcEventStaItwtSuspend *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__sta_itwt_suspend__pack_to_buffer
+                     (const RpcEventStaItwtSuspend *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_suspend__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventStaItwtSuspend *
+       rpc__event__sta_itwt_suspend__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventStaItwtSuspend *)
+     protobuf_c_message_unpack (&rpc__event__sta_itwt_suspend__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__sta_itwt_suspend__free_unpacked
+                     (RpcEventStaItwtSuspend *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__sta_itwt_suspend__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__sta_itwt_probe__init
+                     (RpcEventStaItwtProbe         *message)
+{
+  static const RpcEventStaItwtProbe init_value = RPC__EVENT__STA_ITWT_PROBE__INIT;
+  *message = init_value;
+}
+size_t rpc__event__sta_itwt_probe__get_packed_size
+                     (const RpcEventStaItwtProbe *message)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_probe__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__sta_itwt_probe__pack
+                     (const RpcEventStaItwtProbe *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_probe__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__sta_itwt_probe__pack_to_buffer
+                     (const RpcEventStaItwtProbe *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__sta_itwt_probe__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventStaItwtProbe *
+       rpc__event__sta_itwt_probe__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventStaItwtProbe *)
+     protobuf_c_message_unpack (&rpc__event__sta_itwt_probe__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__sta_itwt_probe__free_unpacked
+                     (RpcEventStaItwtProbe *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__sta_itwt_probe__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_enterprise_enable__init
+                     (RpcReqWifiStaEnterpriseEnable         *message)
+{
+  static const RpcReqWifiStaEnterpriseEnable init_value = RPC__REQ__WIFI_STA_ENTERPRISE_ENABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_enterprise_enable__get_packed_size
+                     (const RpcReqWifiStaEnterpriseEnable *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_enterprise_enable__pack
+                     (const RpcReqWifiStaEnterpriseEnable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_enterprise_enable__pack_to_buffer
+                     (const RpcReqWifiStaEnterpriseEnable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaEnterpriseEnable *
+       rpc__req__wifi_sta_enterprise_enable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaEnterpriseEnable *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_enterprise_enable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_enterprise_enable__free_unpacked
+                     (RpcReqWifiStaEnterpriseEnable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_enable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_enterprise_enable__init
+                     (RpcRespWifiStaEnterpriseEnable         *message)
+{
+  static const RpcRespWifiStaEnterpriseEnable init_value = RPC__RESP__WIFI_STA_ENTERPRISE_ENABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_enterprise_enable__get_packed_size
+                     (const RpcRespWifiStaEnterpriseEnable *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_enterprise_enable__pack
+                     (const RpcRespWifiStaEnterpriseEnable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_enterprise_enable__pack_to_buffer
+                     (const RpcRespWifiStaEnterpriseEnable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_enable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaEnterpriseEnable *
+       rpc__resp__wifi_sta_enterprise_enable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaEnterpriseEnable *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_enterprise_enable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_enterprise_enable__free_unpacked
+                     (RpcRespWifiStaEnterpriseEnable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_enable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_sta_enterprise_disable__init
+                     (RpcReqWifiStaEnterpriseDisable         *message)
+{
+  static const RpcReqWifiStaEnterpriseDisable init_value = RPC__REQ__WIFI_STA_ENTERPRISE_DISABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_sta_enterprise_disable__get_packed_size
+                     (const RpcReqWifiStaEnterpriseDisable *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_sta_enterprise_disable__pack
+                     (const RpcReqWifiStaEnterpriseDisable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_sta_enterprise_disable__pack_to_buffer
+                     (const RpcReqWifiStaEnterpriseDisable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiStaEnterpriseDisable *
+       rpc__req__wifi_sta_enterprise_disable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiStaEnterpriseDisable *)
+     protobuf_c_message_unpack (&rpc__req__wifi_sta_enterprise_disable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_sta_enterprise_disable__free_unpacked
+                     (RpcReqWifiStaEnterpriseDisable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_sta_enterprise_disable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_sta_enterprise_disable__init
+                     (RpcRespWifiStaEnterpriseDisable         *message)
+{
+  static const RpcRespWifiStaEnterpriseDisable init_value = RPC__RESP__WIFI_STA_ENTERPRISE_DISABLE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_sta_enterprise_disable__get_packed_size
+                     (const RpcRespWifiStaEnterpriseDisable *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_sta_enterprise_disable__pack
+                     (const RpcRespWifiStaEnterpriseDisable *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_sta_enterprise_disable__pack_to_buffer
+                     (const RpcRespWifiStaEnterpriseDisable *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_disable__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiStaEnterpriseDisable *
+       rpc__resp__wifi_sta_enterprise_disable__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiStaEnterpriseDisable *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_sta_enterprise_disable__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_sta_enterprise_disable__free_unpacked
+                     (RpcRespWifiStaEnterpriseDisable *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_sta_enterprise_disable__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_identity__init
+                     (RpcReqEapSetIdentity         *message)
+{
+  static const RpcReqEapSetIdentity init_value = RPC__REQ__EAP_SET_IDENTITY__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_identity__get_packed_size
+                     (const RpcReqEapSetIdentity *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_identity__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_identity__pack
+                     (const RpcReqEapSetIdentity *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_identity__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_identity__pack_to_buffer
+                     (const RpcReqEapSetIdentity *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_identity__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetIdentity *
+       rpc__req__eap_set_identity__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetIdentity *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_identity__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_identity__free_unpacked
+                     (RpcReqEapSetIdentity *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_identity__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_identity__init
+                     (RpcRespEapSetIdentity         *message)
+{
+  static const RpcRespEapSetIdentity init_value = RPC__RESP__EAP_SET_IDENTITY__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_identity__get_packed_size
+                     (const RpcRespEapSetIdentity *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_identity__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_identity__pack
+                     (const RpcRespEapSetIdentity *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_identity__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_identity__pack_to_buffer
+                     (const RpcRespEapSetIdentity *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_identity__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetIdentity *
+       rpc__resp__eap_set_identity__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetIdentity *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_identity__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_identity__free_unpacked
+                     (RpcRespEapSetIdentity *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_identity__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_identity__init
+                     (RpcReqEapClearIdentity         *message)
+{
+  static const RpcReqEapClearIdentity init_value = RPC__REQ__EAP_CLEAR_IDENTITY__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_identity__get_packed_size
+                     (const RpcReqEapClearIdentity *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_identity__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_identity__pack
+                     (const RpcReqEapClearIdentity *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_identity__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_identity__pack_to_buffer
+                     (const RpcReqEapClearIdentity *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_identity__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearIdentity *
+       rpc__req__eap_clear_identity__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearIdentity *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_identity__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_identity__free_unpacked
+                     (RpcReqEapClearIdentity *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_identity__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_identity__init
+                     (RpcRespEapClearIdentity         *message)
+{
+  static const RpcRespEapClearIdentity init_value = RPC__RESP__EAP_CLEAR_IDENTITY__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_identity__get_packed_size
+                     (const RpcRespEapClearIdentity *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_identity__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_identity__pack
+                     (const RpcRespEapClearIdentity *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_identity__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_identity__pack_to_buffer
+                     (const RpcRespEapClearIdentity *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_identity__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearIdentity *
+       rpc__resp__eap_clear_identity__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearIdentity *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_identity__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_identity__free_unpacked
+                     (RpcRespEapClearIdentity *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_identity__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_username__init
+                     (RpcReqEapSetUsername         *message)
+{
+  static const RpcReqEapSetUsername init_value = RPC__REQ__EAP_SET_USERNAME__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_username__get_packed_size
+                     (const RpcReqEapSetUsername *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_username__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_username__pack
+                     (const RpcReqEapSetUsername *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_username__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_username__pack_to_buffer
+                     (const RpcReqEapSetUsername *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_username__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetUsername *
+       rpc__req__eap_set_username__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetUsername *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_username__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_username__free_unpacked
+                     (RpcReqEapSetUsername *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_username__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_username__init
+                     (RpcRespEapSetUsername         *message)
+{
+  static const RpcRespEapSetUsername init_value = RPC__RESP__EAP_SET_USERNAME__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_username__get_packed_size
+                     (const RpcRespEapSetUsername *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_username__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_username__pack
+                     (const RpcRespEapSetUsername *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_username__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_username__pack_to_buffer
+                     (const RpcRespEapSetUsername *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_username__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetUsername *
+       rpc__resp__eap_set_username__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetUsername *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_username__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_username__free_unpacked
+                     (RpcRespEapSetUsername *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_username__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_username__init
+                     (RpcReqEapClearUsername         *message)
+{
+  static const RpcReqEapClearUsername init_value = RPC__REQ__EAP_CLEAR_USERNAME__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_username__get_packed_size
+                     (const RpcReqEapClearUsername *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_username__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_username__pack
+                     (const RpcReqEapClearUsername *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_username__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_username__pack_to_buffer
+                     (const RpcReqEapClearUsername *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_username__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearUsername *
+       rpc__req__eap_clear_username__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearUsername *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_username__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_username__free_unpacked
+                     (RpcReqEapClearUsername *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_username__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_username__init
+                     (RpcRespEapClearUsername         *message)
+{
+  static const RpcRespEapClearUsername init_value = RPC__RESP__EAP_CLEAR_USERNAME__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_username__get_packed_size
+                     (const RpcRespEapClearUsername *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_username__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_username__pack
+                     (const RpcRespEapClearUsername *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_username__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_username__pack_to_buffer
+                     (const RpcRespEapClearUsername *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_username__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearUsername *
+       rpc__resp__eap_clear_username__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearUsername *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_username__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_username__free_unpacked
+                     (RpcRespEapClearUsername *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_username__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_password__init
+                     (RpcReqEapSetPassword         *message)
+{
+  static const RpcReqEapSetPassword init_value = RPC__REQ__EAP_SET_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_password__get_packed_size
+                     (const RpcReqEapSetPassword *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_password__pack
+                     (const RpcReqEapSetPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_password__pack_to_buffer
+                     (const RpcReqEapSetPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetPassword *
+       rpc__req__eap_set_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetPassword *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_password__free_unpacked
+                     (RpcReqEapSetPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_password__init
+                     (RpcRespEapSetPassword         *message)
+{
+  static const RpcRespEapSetPassword init_value = RPC__RESP__EAP_SET_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_password__get_packed_size
+                     (const RpcRespEapSetPassword *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_password__pack
+                     (const RpcRespEapSetPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_password__pack_to_buffer
+                     (const RpcRespEapSetPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetPassword *
+       rpc__resp__eap_set_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetPassword *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_password__free_unpacked
+                     (RpcRespEapSetPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_password__init
+                     (RpcReqEapClearPassword         *message)
+{
+  static const RpcReqEapClearPassword init_value = RPC__REQ__EAP_CLEAR_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_password__get_packed_size
+                     (const RpcReqEapClearPassword *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_password__pack
+                     (const RpcReqEapClearPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_password__pack_to_buffer
+                     (const RpcReqEapClearPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearPassword *
+       rpc__req__eap_clear_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearPassword *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_password__free_unpacked
+                     (RpcReqEapClearPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_password__init
+                     (RpcRespEapClearPassword         *message)
+{
+  static const RpcRespEapClearPassword init_value = RPC__RESP__EAP_CLEAR_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_password__get_packed_size
+                     (const RpcRespEapClearPassword *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_password__pack
+                     (const RpcRespEapClearPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_password__pack_to_buffer
+                     (const RpcRespEapClearPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearPassword *
+       rpc__resp__eap_clear_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearPassword *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_password__free_unpacked
+                     (RpcRespEapClearPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_new_password__init
+                     (RpcReqEapSetNewPassword         *message)
+{
+  static const RpcReqEapSetNewPassword init_value = RPC__REQ__EAP_SET_NEW_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_new_password__get_packed_size
+                     (const RpcReqEapSetNewPassword *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_new_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_new_password__pack
+                     (const RpcReqEapSetNewPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_new_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_new_password__pack_to_buffer
+                     (const RpcReqEapSetNewPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_new_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetNewPassword *
+       rpc__req__eap_set_new_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetNewPassword *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_new_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_new_password__free_unpacked
+                     (RpcReqEapSetNewPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_new_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_new_password__init
+                     (RpcRespEapSetNewPassword         *message)
+{
+  static const RpcRespEapSetNewPassword init_value = RPC__RESP__EAP_SET_NEW_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_new_password__get_packed_size
+                     (const RpcRespEapSetNewPassword *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_new_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_new_password__pack
+                     (const RpcRespEapSetNewPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_new_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_new_password__pack_to_buffer
+                     (const RpcRespEapSetNewPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_new_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetNewPassword *
+       rpc__resp__eap_set_new_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetNewPassword *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_new_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_new_password__free_unpacked
+                     (RpcRespEapSetNewPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_new_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_new_password__init
+                     (RpcReqEapClearNewPassword         *message)
+{
+  static const RpcReqEapClearNewPassword init_value = RPC__REQ__EAP_CLEAR_NEW_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_new_password__get_packed_size
+                     (const RpcReqEapClearNewPassword *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_new_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_new_password__pack
+                     (const RpcReqEapClearNewPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_new_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_new_password__pack_to_buffer
+                     (const RpcReqEapClearNewPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_new_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearNewPassword *
+       rpc__req__eap_clear_new_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearNewPassword *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_new_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_new_password__free_unpacked
+                     (RpcReqEapClearNewPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_new_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_new_password__init
+                     (RpcRespEapClearNewPassword         *message)
+{
+  static const RpcRespEapClearNewPassword init_value = RPC__RESP__EAP_CLEAR_NEW_PASSWORD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_new_password__get_packed_size
+                     (const RpcRespEapClearNewPassword *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_new_password__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_new_password__pack
+                     (const RpcRespEapClearNewPassword *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_new_password__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_new_password__pack_to_buffer
+                     (const RpcRespEapClearNewPassword *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_new_password__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearNewPassword *
+       rpc__resp__eap_clear_new_password__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearNewPassword *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_new_password__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_new_password__free_unpacked
+                     (RpcRespEapClearNewPassword *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_new_password__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_ca_cert__init
+                     (RpcReqEapSetCaCert         *message)
+{
+  static const RpcReqEapSetCaCert init_value = RPC__REQ__EAP_SET_CA_CERT__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_ca_cert__get_packed_size
+                     (const RpcReqEapSetCaCert *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_ca_cert__pack
+                     (const RpcReqEapSetCaCert *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_ca_cert__pack_to_buffer
+                     (const RpcReqEapSetCaCert *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetCaCert *
+       rpc__req__eap_set_ca_cert__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetCaCert *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_ca_cert__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_ca_cert__free_unpacked
+                     (RpcReqEapSetCaCert *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_ca_cert__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_ca_cert__init
+                     (RpcRespEapSetCaCert         *message)
+{
+  static const RpcRespEapSetCaCert init_value = RPC__RESP__EAP_SET_CA_CERT__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_ca_cert__get_packed_size
+                     (const RpcRespEapSetCaCert *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_ca_cert__pack
+                     (const RpcRespEapSetCaCert *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_ca_cert__pack_to_buffer
+                     (const RpcRespEapSetCaCert *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ca_cert__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetCaCert *
+       rpc__resp__eap_set_ca_cert__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetCaCert *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_ca_cert__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_ca_cert__free_unpacked
+                     (RpcRespEapSetCaCert *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_ca_cert__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_ca_cert__init
+                     (RpcReqEapClearCaCert         *message)
+{
+  static const RpcReqEapClearCaCert init_value = RPC__REQ__EAP_CLEAR_CA_CERT__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_ca_cert__get_packed_size
+                     (const RpcReqEapClearCaCert *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_ca_cert__pack
+                     (const RpcReqEapClearCaCert *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_ca_cert__pack_to_buffer
+                     (const RpcReqEapClearCaCert *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearCaCert *
+       rpc__req__eap_clear_ca_cert__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearCaCert *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_ca_cert__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_ca_cert__free_unpacked
+                     (RpcReqEapClearCaCert *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_ca_cert__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_ca_cert__init
+                     (RpcRespEapClearCaCert         *message)
+{
+  static const RpcRespEapClearCaCert init_value = RPC__RESP__EAP_CLEAR_CA_CERT__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_ca_cert__get_packed_size
+                     (const RpcRespEapClearCaCert *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_ca_cert__pack
+                     (const RpcRespEapClearCaCert *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_ca_cert__pack_to_buffer
+                     (const RpcRespEapClearCaCert *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_ca_cert__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearCaCert *
+       rpc__resp__eap_clear_ca_cert__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearCaCert *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_ca_cert__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_ca_cert__free_unpacked
+                     (RpcRespEapClearCaCert *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_ca_cert__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_certificate_and_key__init
+                     (RpcReqEapSetCertificateAndKey         *message)
+{
+  static const RpcReqEapSetCertificateAndKey init_value = RPC__REQ__EAP_SET_CERTIFICATE_AND_KEY__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_certificate_and_key__get_packed_size
+                     (const RpcReqEapSetCertificateAndKey *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_certificate_and_key__pack
+                     (const RpcReqEapSetCertificateAndKey *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_certificate_and_key__pack_to_buffer
+                     (const RpcReqEapSetCertificateAndKey *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetCertificateAndKey *
+       rpc__req__eap_set_certificate_and_key__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetCertificateAndKey *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_certificate_and_key__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_certificate_and_key__free_unpacked
+                     (RpcReqEapSetCertificateAndKey *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_certificate_and_key__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_certificate_and_key__init
+                     (RpcRespEapSetCertificateAndKey         *message)
+{
+  static const RpcRespEapSetCertificateAndKey init_value = RPC__RESP__EAP_SET_CERTIFICATE_AND_KEY__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_certificate_and_key__get_packed_size
+                     (const RpcRespEapSetCertificateAndKey *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_certificate_and_key__pack
+                     (const RpcRespEapSetCertificateAndKey *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_certificate_and_key__pack_to_buffer
+                     (const RpcRespEapSetCertificateAndKey *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_certificate_and_key__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetCertificateAndKey *
+       rpc__resp__eap_set_certificate_and_key__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetCertificateAndKey *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_certificate_and_key__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_certificate_and_key__free_unpacked
+                     (RpcRespEapSetCertificateAndKey *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_certificate_and_key__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_clear_certificate_and_key__init
+                     (RpcReqEapClearCertificateAndKey         *message)
+{
+  static const RpcReqEapClearCertificateAndKey init_value = RPC__REQ__EAP_CLEAR_CERTIFICATE_AND_KEY__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_clear_certificate_and_key__get_packed_size
+                     (const RpcReqEapClearCertificateAndKey *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_clear_certificate_and_key__pack
+                     (const RpcReqEapClearCertificateAndKey *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_clear_certificate_and_key__pack_to_buffer
+                     (const RpcReqEapClearCertificateAndKey *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapClearCertificateAndKey *
+       rpc__req__eap_clear_certificate_and_key__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapClearCertificateAndKey *)
+     protobuf_c_message_unpack (&rpc__req__eap_clear_certificate_and_key__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_clear_certificate_and_key__free_unpacked
+                     (RpcReqEapClearCertificateAndKey *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_clear_certificate_and_key__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_clear_certificate_and_key__init
+                     (RpcRespEapClearCertificateAndKey         *message)
+{
+  static const RpcRespEapClearCertificateAndKey init_value = RPC__RESP__EAP_CLEAR_CERTIFICATE_AND_KEY__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_clear_certificate_and_key__get_packed_size
+                     (const RpcRespEapClearCertificateAndKey *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_clear_certificate_and_key__pack
+                     (const RpcRespEapClearCertificateAndKey *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_clear_certificate_and_key__pack_to_buffer
+                     (const RpcRespEapClearCertificateAndKey *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_clear_certificate_and_key__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapClearCertificateAndKey *
+       rpc__resp__eap_clear_certificate_and_key__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapClearCertificateAndKey *)
+     protobuf_c_message_unpack (&rpc__resp__eap_clear_certificate_and_key__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_clear_certificate_and_key__free_unpacked
+                     (RpcRespEapClearCertificateAndKey *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_clear_certificate_and_key__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_disable_time_check__init
+                     (RpcReqEapSetDisableTimeCheck         *message)
+{
+  static const RpcReqEapSetDisableTimeCheck init_value = RPC__REQ__EAP_SET_DISABLE_TIME_CHECK__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_disable_time_check__get_packed_size
+                     (const RpcReqEapSetDisableTimeCheck *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_disable_time_check__pack
+                     (const RpcReqEapSetDisableTimeCheck *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_disable_time_check__pack_to_buffer
+                     (const RpcReqEapSetDisableTimeCheck *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetDisableTimeCheck *
+       rpc__req__eap_set_disable_time_check__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetDisableTimeCheck *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_disable_time_check__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_disable_time_check__free_unpacked
+                     (RpcReqEapSetDisableTimeCheck *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_disable_time_check__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_disable_time_check__init
+                     (RpcRespEapSetDisableTimeCheck         *message)
+{
+  static const RpcRespEapSetDisableTimeCheck init_value = RPC__RESP__EAP_SET_DISABLE_TIME_CHECK__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_disable_time_check__get_packed_size
+                     (const RpcRespEapSetDisableTimeCheck *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_disable_time_check__pack
+                     (const RpcRespEapSetDisableTimeCheck *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_disable_time_check__pack_to_buffer
+                     (const RpcRespEapSetDisableTimeCheck *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_disable_time_check__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetDisableTimeCheck *
+       rpc__resp__eap_set_disable_time_check__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetDisableTimeCheck *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_disable_time_check__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_disable_time_check__free_unpacked
+                     (RpcRespEapSetDisableTimeCheck *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_disable_time_check__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_get_disable_time_check__init
+                     (RpcReqEapGetDisableTimeCheck         *message)
+{
+  static const RpcReqEapGetDisableTimeCheck init_value = RPC__REQ__EAP_GET_DISABLE_TIME_CHECK__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_get_disable_time_check__get_packed_size
+                     (const RpcReqEapGetDisableTimeCheck *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_get_disable_time_check__pack
+                     (const RpcReqEapGetDisableTimeCheck *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_get_disable_time_check__pack_to_buffer
+                     (const RpcReqEapGetDisableTimeCheck *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapGetDisableTimeCheck *
+       rpc__req__eap_get_disable_time_check__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapGetDisableTimeCheck *)
+     protobuf_c_message_unpack (&rpc__req__eap_get_disable_time_check__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_get_disable_time_check__free_unpacked
+                     (RpcReqEapGetDisableTimeCheck *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_get_disable_time_check__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_get_disable_time_check__init
+                     (RpcRespEapGetDisableTimeCheck         *message)
+{
+  static const RpcRespEapGetDisableTimeCheck init_value = RPC__RESP__EAP_GET_DISABLE_TIME_CHECK__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_get_disable_time_check__get_packed_size
+                     (const RpcRespEapGetDisableTimeCheck *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_get_disable_time_check__pack
+                     (const RpcRespEapGetDisableTimeCheck *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_get_disable_time_check__pack_to_buffer
+                     (const RpcRespEapGetDisableTimeCheck *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_get_disable_time_check__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapGetDisableTimeCheck *
+       rpc__resp__eap_get_disable_time_check__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapGetDisableTimeCheck *)
+     protobuf_c_message_unpack (&rpc__resp__eap_get_disable_time_check__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_get_disable_time_check__free_unpacked
+                     (RpcRespEapGetDisableTimeCheck *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_get_disable_time_check__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_ttls_phase2_method__init
+                     (RpcReqEapSetTtlsPhase2Method         *message)
+{
+  static const RpcReqEapSetTtlsPhase2Method init_value = RPC__REQ__EAP_SET_TTLS_PHASE2_METHOD__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_ttls_phase2_method__get_packed_size
+                     (const RpcReqEapSetTtlsPhase2Method *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_ttls_phase2_method__pack
+                     (const RpcReqEapSetTtlsPhase2Method *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_ttls_phase2_method__pack_to_buffer
+                     (const RpcReqEapSetTtlsPhase2Method *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetTtlsPhase2Method *
+       rpc__req__eap_set_ttls_phase2_method__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetTtlsPhase2Method *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_ttls_phase2_method__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_ttls_phase2_method__free_unpacked
+                     (RpcReqEapSetTtlsPhase2Method *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_ttls_phase2_method__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_ttls_phase2_method__init
+                     (RpcRespEapSetTtlsPhase2Method         *message)
+{
+  static const RpcRespEapSetTtlsPhase2Method init_value = RPC__RESP__EAP_SET_TTLS_PHASE2_METHOD__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_ttls_phase2_method__get_packed_size
+                     (const RpcRespEapSetTtlsPhase2Method *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_ttls_phase2_method__pack
+                     (const RpcRespEapSetTtlsPhase2Method *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_ttls_phase2_method__pack_to_buffer
+                     (const RpcRespEapSetTtlsPhase2Method *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_ttls_phase2_method__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetTtlsPhase2Method *
+       rpc__resp__eap_set_ttls_phase2_method__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetTtlsPhase2Method *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_ttls_phase2_method__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_ttls_phase2_method__free_unpacked
+                     (RpcRespEapSetTtlsPhase2Method *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_ttls_phase2_method__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_suiteb192bit_certification__init
+                     (RpcReqEapSetSuiteb192bitCertification         *message)
+{
+  static const RpcReqEapSetSuiteb192bitCertification init_value = RPC__REQ__EAP_SET_SUITEB192BIT_CERTIFICATION__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_suiteb192bit_certification__get_packed_size
+                     (const RpcReqEapSetSuiteb192bitCertification *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_suiteb192bit_certification__pack
+                     (const RpcReqEapSetSuiteb192bitCertification *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_suiteb192bit_certification__pack_to_buffer
+                     (const RpcReqEapSetSuiteb192bitCertification *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetSuiteb192bitCertification *
+       rpc__req__eap_set_suiteb192bit_certification__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetSuiteb192bitCertification *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_suiteb192bit_certification__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_suiteb192bit_certification__free_unpacked
+                     (RpcReqEapSetSuiteb192bitCertification *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_suiteb192bit_certification__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_suiteb192bit_certification__init
+                     (RpcRespEapSetSuiteb192bitCertification         *message)
+{
+  static const RpcRespEapSetSuiteb192bitCertification init_value = RPC__RESP__EAP_SET_SUITEB192BIT_CERTIFICATION__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_suiteb192bit_certification__get_packed_size
+                     (const RpcRespEapSetSuiteb192bitCertification *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_suiteb192bit_certification__pack
+                     (const RpcRespEapSetSuiteb192bitCertification *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_suiteb192bit_certification__pack_to_buffer
+                     (const RpcRespEapSetSuiteb192bitCertification *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_suiteb192bit_certification__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetSuiteb192bitCertification *
+       rpc__resp__eap_set_suiteb192bit_certification__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetSuiteb192bitCertification *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_suiteb192bit_certification__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_suiteb192bit_certification__free_unpacked
+                     (RpcRespEapSetSuiteb192bitCertification *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_suiteb192bit_certification__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_pac_file__init
+                     (RpcReqEapSetPacFile         *message)
+{
+  static const RpcReqEapSetPacFile init_value = RPC__REQ__EAP_SET_PAC_FILE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_pac_file__get_packed_size
+                     (const RpcReqEapSetPacFile *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_pac_file__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_pac_file__pack
+                     (const RpcReqEapSetPacFile *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_pac_file__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_pac_file__pack_to_buffer
+                     (const RpcReqEapSetPacFile *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_pac_file__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetPacFile *
+       rpc__req__eap_set_pac_file__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetPacFile *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_pac_file__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_pac_file__free_unpacked
+                     (RpcReqEapSetPacFile *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_pac_file__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_pac_file__init
+                     (RpcRespEapSetPacFile         *message)
+{
+  static const RpcRespEapSetPacFile init_value = RPC__RESP__EAP_SET_PAC_FILE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_pac_file__get_packed_size
+                     (const RpcRespEapSetPacFile *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_pac_file__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_pac_file__pack
+                     (const RpcRespEapSetPacFile *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_pac_file__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_pac_file__pack_to_buffer
+                     (const RpcRespEapSetPacFile *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_pac_file__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetPacFile *
+       rpc__resp__eap_set_pac_file__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetPacFile *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_pac_file__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_pac_file__free_unpacked
+                     (RpcRespEapSetPacFile *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_pac_file__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_fast_params__init
+                     (RpcReqEapSetFastParams         *message)
+{
+  static const RpcReqEapSetFastParams init_value = RPC__REQ__EAP_SET_FAST_PARAMS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_fast_params__get_packed_size
+                     (const RpcReqEapSetFastParams *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_fast_params__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_fast_params__pack
+                     (const RpcReqEapSetFastParams *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_fast_params__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_fast_params__pack_to_buffer
+                     (const RpcReqEapSetFastParams *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_fast_params__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetFastParams *
+       rpc__req__eap_set_fast_params__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetFastParams *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_fast_params__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_fast_params__free_unpacked
+                     (RpcReqEapSetFastParams *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_fast_params__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_fast_params__init
+                     (RpcRespEapSetFastParams         *message)
+{
+  static const RpcRespEapSetFastParams init_value = RPC__RESP__EAP_SET_FAST_PARAMS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_fast_params__get_packed_size
+                     (const RpcRespEapSetFastParams *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_fast_params__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_fast_params__pack
+                     (const RpcRespEapSetFastParams *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_fast_params__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_fast_params__pack_to_buffer
+                     (const RpcRespEapSetFastParams *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_fast_params__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetFastParams *
+       rpc__resp__eap_set_fast_params__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetFastParams *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_fast_params__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_fast_params__free_unpacked
+                     (RpcRespEapSetFastParams *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_fast_params__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_use_default_cert_bundle__init
+                     (RpcReqEapUseDefaultCertBundle         *message)
+{
+  static const RpcReqEapUseDefaultCertBundle init_value = RPC__REQ__EAP_USE_DEFAULT_CERT_BUNDLE__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_use_default_cert_bundle__get_packed_size
+                     (const RpcReqEapUseDefaultCertBundle *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_use_default_cert_bundle__pack
+                     (const RpcReqEapUseDefaultCertBundle *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_use_default_cert_bundle__pack_to_buffer
+                     (const RpcReqEapUseDefaultCertBundle *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapUseDefaultCertBundle *
+       rpc__req__eap_use_default_cert_bundle__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapUseDefaultCertBundle *)
+     protobuf_c_message_unpack (&rpc__req__eap_use_default_cert_bundle__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_use_default_cert_bundle__free_unpacked
+                     (RpcReqEapUseDefaultCertBundle *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_use_default_cert_bundle__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_use_default_cert_bundle__init
+                     (RpcRespEapUseDefaultCertBundle         *message)
+{
+  static const RpcRespEapUseDefaultCertBundle init_value = RPC__RESP__EAP_USE_DEFAULT_CERT_BUNDLE__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_use_default_cert_bundle__get_packed_size
+                     (const RpcRespEapUseDefaultCertBundle *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_use_default_cert_bundle__pack
+                     (const RpcRespEapUseDefaultCertBundle *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_use_default_cert_bundle__pack_to_buffer
+                     (const RpcRespEapUseDefaultCertBundle *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_use_default_cert_bundle__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapUseDefaultCertBundle *
+       rpc__resp__eap_use_default_cert_bundle__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapUseDefaultCertBundle *)
+     protobuf_c_message_unpack (&rpc__resp__eap_use_default_cert_bundle__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_use_default_cert_bundle__free_unpacked
+                     (RpcRespEapUseDefaultCertBundle *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_use_default_cert_bundle__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__wifi_set_okc_support__init
+                     (RpcReqWifiSetOkcSupport         *message)
+{
+  static const RpcReqWifiSetOkcSupport init_value = RPC__REQ__WIFI_SET_OKC_SUPPORT__INIT;
+  *message = init_value;
+}
+size_t rpc__req__wifi_set_okc_support__get_packed_size
+                     (const RpcReqWifiSetOkcSupport *message)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__wifi_set_okc_support__pack
+                     (const RpcReqWifiSetOkcSupport *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__wifi_set_okc_support__pack_to_buffer
+                     (const RpcReqWifiSetOkcSupport *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqWifiSetOkcSupport *
+       rpc__req__wifi_set_okc_support__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqWifiSetOkcSupport *)
+     protobuf_c_message_unpack (&rpc__req__wifi_set_okc_support__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__wifi_set_okc_support__free_unpacked
+                     (RpcReqWifiSetOkcSupport *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__wifi_set_okc_support__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__wifi_set_okc_support__init
+                     (RpcRespWifiSetOkcSupport         *message)
+{
+  static const RpcRespWifiSetOkcSupport init_value = RPC__RESP__WIFI_SET_OKC_SUPPORT__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__wifi_set_okc_support__get_packed_size
+                     (const RpcRespWifiSetOkcSupport *message)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__wifi_set_okc_support__pack
+                     (const RpcRespWifiSetOkcSupport *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__wifi_set_okc_support__pack_to_buffer
+                     (const RpcRespWifiSetOkcSupport *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__wifi_set_okc_support__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespWifiSetOkcSupport *
+       rpc__resp__wifi_set_okc_support__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespWifiSetOkcSupport *)
+     protobuf_c_message_unpack (&rpc__resp__wifi_set_okc_support__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__wifi_set_okc_support__free_unpacked
+                     (RpcRespWifiSetOkcSupport *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__wifi_set_okc_support__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_domain_name__init
+                     (RpcReqEapSetDomainName         *message)
+{
+  static const RpcReqEapSetDomainName init_value = RPC__REQ__EAP_SET_DOMAIN_NAME__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_domain_name__get_packed_size
+                     (const RpcReqEapSetDomainName *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_domain_name__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_domain_name__pack
+                     (const RpcReqEapSetDomainName *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_domain_name__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_domain_name__pack_to_buffer
+                     (const RpcReqEapSetDomainName *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_domain_name__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetDomainName *
+       rpc__req__eap_set_domain_name__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetDomainName *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_domain_name__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_domain_name__free_unpacked
+                     (RpcReqEapSetDomainName *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_domain_name__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_domain_name__init
+                     (RpcRespEapSetDomainName         *message)
+{
+  static const RpcRespEapSetDomainName init_value = RPC__RESP__EAP_SET_DOMAIN_NAME__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_domain_name__get_packed_size
+                     (const RpcRespEapSetDomainName *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_domain_name__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_domain_name__pack
+                     (const RpcRespEapSetDomainName *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_domain_name__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_domain_name__pack_to_buffer
+                     (const RpcRespEapSetDomainName *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_domain_name__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetDomainName *
+       rpc__resp__eap_set_domain_name__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetDomainName *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_domain_name__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_domain_name__free_unpacked
+                     (RpcRespEapSetDomainName *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_domain_name__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__eap_set_eap_methods__init
+                     (RpcReqEapSetEapMethods         *message)
+{
+  static const RpcReqEapSetEapMethods init_value = RPC__REQ__EAP_SET_EAP_METHODS__INIT;
+  *message = init_value;
+}
+size_t rpc__req__eap_set_eap_methods__get_packed_size
+                     (const RpcReqEapSetEapMethods *message)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__eap_set_eap_methods__pack
+                     (const RpcReqEapSetEapMethods *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__eap_set_eap_methods__pack_to_buffer
+                     (const RpcReqEapSetEapMethods *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqEapSetEapMethods *
+       rpc__req__eap_set_eap_methods__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqEapSetEapMethods *)
+     protobuf_c_message_unpack (&rpc__req__eap_set_eap_methods__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__eap_set_eap_methods__free_unpacked
+                     (RpcReqEapSetEapMethods *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__eap_set_eap_methods__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__eap_set_eap_methods__init
+                     (RpcRespEapSetEapMethods         *message)
+{
+  static const RpcRespEapSetEapMethods init_value = RPC__RESP__EAP_SET_EAP_METHODS__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__eap_set_eap_methods__get_packed_size
+                     (const RpcRespEapSetEapMethods *message)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__eap_set_eap_methods__pack
+                     (const RpcRespEapSetEapMethods *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__eap_set_eap_methods__pack_to_buffer
+                     (const RpcRespEapSetEapMethods *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__eap_set_eap_methods__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespEapSetEapMethods *
+       rpc__resp__eap_set_eap_methods__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespEapSetEapMethods *)
+     protobuf_c_message_unpack (&rpc__resp__eap_set_eap_methods__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__eap_set_eap_methods__free_unpacked
+                     (RpcRespEapSetEapMethods *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__eap_set_eap_methods__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__supp_dpp_uri_ready__init
+                     (RpcEventSuppDppUriReady         *message)
+{
+  static const RpcEventSuppDppUriReady init_value = RPC__EVENT__SUPP_DPP_URI_READY__INIT;
+  *message = init_value;
+}
+size_t rpc__event__supp_dpp_uri_ready__get_packed_size
+                     (const RpcEventSuppDppUriReady *message)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_uri_ready__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__supp_dpp_uri_ready__pack
+                     (const RpcEventSuppDppUriReady *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_uri_ready__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__supp_dpp_uri_ready__pack_to_buffer
+                     (const RpcEventSuppDppUriReady *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_uri_ready__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventSuppDppUriReady *
+       rpc__event__supp_dpp_uri_ready__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventSuppDppUriReady *)
+     protobuf_c_message_unpack (&rpc__event__supp_dpp_uri_ready__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__supp_dpp_uri_ready__free_unpacked
+                     (RpcEventSuppDppUriReady *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__supp_dpp_uri_ready__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__supp_dpp_cfg_recvd__init
+                     (RpcEventSuppDppCfgRecvd         *message)
+{
+  static const RpcEventSuppDppCfgRecvd init_value = RPC__EVENT__SUPP_DPP_CFG_RECVD__INIT;
+  *message = init_value;
+}
+size_t rpc__event__supp_dpp_cfg_recvd__get_packed_size
+                     (const RpcEventSuppDppCfgRecvd *message)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__supp_dpp_cfg_recvd__pack
+                     (const RpcEventSuppDppCfgRecvd *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__supp_dpp_cfg_recvd__pack_to_buffer
+                     (const RpcEventSuppDppCfgRecvd *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventSuppDppCfgRecvd *
+       rpc__event__supp_dpp_cfg_recvd__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventSuppDppCfgRecvd *)
+     protobuf_c_message_unpack (&rpc__event__supp_dpp_cfg_recvd__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__supp_dpp_cfg_recvd__free_unpacked
+                     (RpcEventSuppDppCfgRecvd *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__supp_dpp_cfg_recvd__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__supp_dpp_fail__init
+                     (RpcEventSuppDppFail         *message)
+{
+  static const RpcEventSuppDppFail init_value = RPC__EVENT__SUPP_DPP_FAIL__INIT;
+  *message = init_value;
+}
+size_t rpc__event__supp_dpp_fail__get_packed_size
+                     (const RpcEventSuppDppFail *message)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_fail__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__supp_dpp_fail__pack
+                     (const RpcEventSuppDppFail *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_fail__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__supp_dpp_fail__pack_to_buffer
+                     (const RpcEventSuppDppFail *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__supp_dpp_fail__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventSuppDppFail *
+       rpc__event__supp_dpp_fail__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventSuppDppFail *)
+     protobuf_c_message_unpack (&rpc__event__supp_dpp_fail__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__supp_dpp_fail__free_unpacked
+                     (RpcEventSuppDppFail *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__supp_dpp_fail__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__wifi_dpp_uri_ready__init
+                     (RpcEventWifiDppUriReady         *message)
+{
+  static const RpcEventWifiDppUriReady init_value = RPC__EVENT__WIFI_DPP_URI_READY__INIT;
+  *message = init_value;
+}
+size_t rpc__event__wifi_dpp_uri_ready__get_packed_size
+                     (const RpcEventWifiDppUriReady *message)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_uri_ready__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__wifi_dpp_uri_ready__pack
+                     (const RpcEventWifiDppUriReady *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_uri_ready__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__wifi_dpp_uri_ready__pack_to_buffer
+                     (const RpcEventWifiDppUriReady *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_uri_ready__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventWifiDppUriReady *
+       rpc__event__wifi_dpp_uri_ready__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventWifiDppUriReady *)
+     protobuf_c_message_unpack (&rpc__event__wifi_dpp_uri_ready__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__wifi_dpp_uri_ready__free_unpacked
+                     (RpcEventWifiDppUriReady *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_uri_ready__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__wifi_dpp_cfg_recvd__init
+                     (RpcEventWifiDppCfgRecvd         *message)
+{
+  static const RpcEventWifiDppCfgRecvd init_value = RPC__EVENT__WIFI_DPP_CFG_RECVD__INIT;
+  *message = init_value;
+}
+size_t rpc__event__wifi_dpp_cfg_recvd__get_packed_size
+                     (const RpcEventWifiDppCfgRecvd *message)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__wifi_dpp_cfg_recvd__pack
+                     (const RpcEventWifiDppCfgRecvd *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__wifi_dpp_cfg_recvd__pack_to_buffer
+                     (const RpcEventWifiDppCfgRecvd *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_cfg_recvd__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventWifiDppCfgRecvd *
+       rpc__event__wifi_dpp_cfg_recvd__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventWifiDppCfgRecvd *)
+     protobuf_c_message_unpack (&rpc__event__wifi_dpp_cfg_recvd__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__wifi_dpp_cfg_recvd__free_unpacked
+                     (RpcEventWifiDppCfgRecvd *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_cfg_recvd__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__wifi_dpp_fail__init
+                     (RpcEventWifiDppFail         *message)
+{
+  static const RpcEventWifiDppFail init_value = RPC__EVENT__WIFI_DPP_FAIL__INIT;
+  *message = init_value;
+}
+size_t rpc__event__wifi_dpp_fail__get_packed_size
+                     (const RpcEventWifiDppFail *message)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_fail__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__wifi_dpp_fail__pack
+                     (const RpcEventWifiDppFail *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_fail__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__wifi_dpp_fail__pack_to_buffer
+                     (const RpcEventWifiDppFail *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_fail__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventWifiDppFail *
+       rpc__event__wifi_dpp_fail__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventWifiDppFail *)
+     protobuf_c_message_unpack (&rpc__event__wifi_dpp_fail__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__wifi_dpp_fail__free_unpacked
+                     (RpcEventWifiDppFail *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__wifi_dpp_fail__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__req__custom_rpc__init
+                     (RpcReqCustomRpc         *message)
+{
+  static const RpcReqCustomRpc init_value = RPC__REQ__CUSTOM_RPC__INIT;
+  *message = init_value;
+}
+size_t rpc__req__custom_rpc__get_packed_size
+                     (const RpcReqCustomRpc *message)
+{
+  assert(message->base.descriptor == &rpc__req__custom_rpc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__req__custom_rpc__pack
+                     (const RpcReqCustomRpc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__req__custom_rpc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__req__custom_rpc__pack_to_buffer
+                     (const RpcReqCustomRpc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__req__custom_rpc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcReqCustomRpc *
+       rpc__req__custom_rpc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcReqCustomRpc *)
+     protobuf_c_message_unpack (&rpc__req__custom_rpc__descriptor,
+                                allocator, len, data);
+}
+void   rpc__req__custom_rpc__free_unpacked
+                     (RpcReqCustomRpc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__req__custom_rpc__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__resp__custom_rpc__init
+                     (RpcRespCustomRpc         *message)
+{
+  static const RpcRespCustomRpc init_value = RPC__RESP__CUSTOM_RPC__INIT;
+  *message = init_value;
+}
+size_t rpc__resp__custom_rpc__get_packed_size
+                     (const RpcRespCustomRpc *message)
+{
+  assert(message->base.descriptor == &rpc__resp__custom_rpc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__resp__custom_rpc__pack
+                     (const RpcRespCustomRpc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__resp__custom_rpc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__resp__custom_rpc__pack_to_buffer
+                     (const RpcRespCustomRpc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__resp__custom_rpc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcRespCustomRpc *
+       rpc__resp__custom_rpc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcRespCustomRpc *)
+     protobuf_c_message_unpack (&rpc__resp__custom_rpc__descriptor,
+                                allocator, len, data);
+}
+void   rpc__resp__custom_rpc__free_unpacked
+                     (RpcRespCustomRpc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__resp__custom_rpc__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__custom_rpc__init
+                     (RpcEventCustomRpc         *message)
+{
+  static const RpcEventCustomRpc init_value = RPC__EVENT__CUSTOM_RPC__INIT;
+  *message = init_value;
+}
+size_t rpc__event__custom_rpc__get_packed_size
+                     (const RpcEventCustomRpc *message)
+{
+  assert(message->base.descriptor == &rpc__event__custom_rpc__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__custom_rpc__pack
+                     (const RpcEventCustomRpc *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__custom_rpc__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__custom_rpc__pack_to_buffer
+                     (const RpcEventCustomRpc *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__custom_rpc__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventCustomRpc *
+       rpc__event__custom_rpc__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventCustomRpc *)
+     protobuf_c_message_unpack (&rpc__event__custom_rpc__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__custom_rpc__free_unpacked
+                     (RpcEventCustomRpc *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__custom_rpc__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   rpc__event__mem_monitor__init
+                     (RpcEventMemMonitor         *message)
+{
+  static const RpcEventMemMonitor init_value = RPC__EVENT__MEM_MONITOR__INIT;
+  *message = init_value;
+}
+size_t rpc__event__mem_monitor__get_packed_size
+                     (const RpcEventMemMonitor *message)
+{
+  assert(message->base.descriptor == &rpc__event__mem_monitor__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t rpc__event__mem_monitor__pack
+                     (const RpcEventMemMonitor *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &rpc__event__mem_monitor__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t rpc__event__mem_monitor__pack_to_buffer
+                     (const RpcEventMemMonitor *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &rpc__event__mem_monitor__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+RpcEventMemMonitor *
+       rpc__event__mem_monitor__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (RpcEventMemMonitor *)
+     protobuf_c_message_unpack (&rpc__event__mem_monitor__descriptor,
+                                allocator, len, data);
+}
+void   rpc__event__mem_monitor__free_unpacked
+                     (RpcEventMemMonitor *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &rpc__event__mem_monitor__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   rpc__init
                      (Rpc         *message)
 {
@@ -7027,7 +13507,7 @@ void   rpc__free_unpacked
   assert(message->base.descriptor == &rpc__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor wifi_init_config__field_descriptors[20] =
+static const ProtobufCFieldDescriptor wifi_init_config__field_descriptors[24] =
 {
   {
     "static_rx_buf_num",
@@ -7269,6 +13749,54 @@ static const ProtobufCFieldDescriptor wifi_init_config__field_descriptors[20] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "rx_mgmt_buf_type",
+    21,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiInitConfig, rx_mgmt_buf_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "rx_mgmt_buf_num",
+    22,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiInitConfig, rx_mgmt_buf_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "tx_hetb_queue_num",
+    23,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiInitConfig, tx_hetb_queue_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dump_hesigb_enable",
+    24,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiInitConfig, dump_hesigb_enable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_init_config__field_indices_by_name[] = {
   7,   /* field[7] = ampdu_rx_enable */
@@ -7277,6 +13805,7 @@ static const unsigned wifi_init_config__field_indices_by_name[] = {
   14,   /* field[14] = beacon_max_len */
   5,   /* field[5] = cache_tx_buf_num */
   6,   /* field[6] = csi_enable */
+  23,   /* field[23] = dump_hesigb_enable */
   1,   /* field[1] = dynamic_rx_buf_num */
   4,   /* field[4] = dynamic_tx_buf_num */
   18,   /* field[18] = espnow_max_encrypt_num */
@@ -7286,16 +13815,19 @@ static const unsigned wifi_init_config__field_indices_by_name[] = {
   11,   /* field[11] = nano_enable */
   10,   /* field[10] = nvs_enable */
   12,   /* field[12] = rx_ba_win */
+  21,   /* field[21] = rx_mgmt_buf_num */
+  20,   /* field[20] = rx_mgmt_buf_type */
   17,   /* field[17] = sta_disconnected_pm */
   0,   /* field[0] = static_rx_buf_num */
   3,   /* field[3] = static_tx_buf_num */
   2,   /* field[2] = tx_buf_type */
+  22,   /* field[22] = tx_hetb_queue_num */
   13,   /* field[13] = wifi_task_core_id */
 };
 static const ProtobufCIntRange wifi_init_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 20 }
+  { 0, 24 }
 };
 const ProtobufCMessageDescriptor wifi_init_config__descriptor =
 {
@@ -7305,7 +13837,7 @@ const ProtobufCMessageDescriptor wifi_init_config__descriptor =
   "WifiInitConfig",
   "",
   sizeof(WifiInitConfig),
-  20,
+  24,
   wifi_init_config__field_descriptors,
   wifi_init_config__field_indices_by_name,
   1,  wifi_init_config__number_ranges,
@@ -7504,7 +14036,58 @@ const ProtobufCMessageDescriptor wifi_scan_time__descriptor =
   (ProtobufCMessageInit) wifi_scan_time__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wifi_scan_config__field_descriptors[7] =
+static const ProtobufCFieldDescriptor wifi_scan_channel_bitmap__field_descriptors[2] =
+{
+  {
+    "ghz_2_channels",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanChannelBitmap, ghz_2_channels),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "ghz_5_channels",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanChannelBitmap, ghz_5_channels),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned wifi_scan_channel_bitmap__field_indices_by_name[] = {
+  0,   /* field[0] = ghz_2_channels */
+  1,   /* field[1] = ghz_5_channels */
+};
+static const ProtobufCIntRange wifi_scan_channel_bitmap__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor wifi_scan_channel_bitmap__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "wifi_scan_channel_bitmap",
+  "WifiScanChannelBitmap",
+  "WifiScanChannelBitmap",
+  "",
+  sizeof(WifiScanChannelBitmap),
+  2,
+  wifi_scan_channel_bitmap__field_descriptors,
+  wifi_scan_channel_bitmap__field_indices_by_name,
+  1,  wifi_scan_channel_bitmap__number_ranges,
+  (ProtobufCMessageInit) wifi_scan_channel_bitmap__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor wifi_scan_config__field_descriptors[8] =
 {
   {
     "ssid",
@@ -7590,10 +14173,23 @@ static const ProtobufCFieldDescriptor wifi_scan_config__field_descriptors[7] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "channel_bitmap",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanConfig, channel_bitmap),
+    &wifi_scan_channel_bitmap__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_scan_config__field_indices_by_name[] = {
   1,   /* field[1] = bssid */
   2,   /* field[2] = channel */
+  7,   /* field[7] = channel_bitmap */
   6,   /* field[6] = home_chan_dwell_time */
   5,   /* field[5] = scan_time */
   4,   /* field[4] = scan_type */
@@ -7603,7 +14199,7 @@ static const unsigned wifi_scan_config__field_indices_by_name[] = {
 static const ProtobufCIntRange wifi_scan_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 7 }
+  { 0, 8 }
 };
 const ProtobufCMessageDescriptor wifi_scan_config__descriptor =
 {
@@ -7613,11 +14209,62 @@ const ProtobufCMessageDescriptor wifi_scan_config__descriptor =
   "WifiScanConfig",
   "",
   sizeof(WifiScanConfig),
-  7,
+  8,
   wifi_scan_config__field_descriptors,
   wifi_scan_config__field_indices_by_name,
   1,  wifi_scan_config__number_ranges,
   (ProtobufCMessageInit) wifi_scan_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor wifi_scan_default_params__field_descriptors[2] =
+{
+  {
+    "scan_time",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanDefaultParams, scan_time),
+    &wifi_scan_time__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "home_chan_dwell_time",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanDefaultParams, home_chan_dwell_time),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned wifi_scan_default_params__field_indices_by_name[] = {
+  1,   /* field[1] = home_chan_dwell_time */
+  0,   /* field[0] = scan_time */
+};
+static const ProtobufCIntRange wifi_scan_default_params__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor wifi_scan_default_params__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "wifi_scan_default_params",
+  "WifiScanDefaultParams",
+  "WifiScanDefaultParams",
+  "",
+  sizeof(WifiScanDefaultParams),
+  2,
+  wifi_scan_default_params__field_descriptors,
+  wifi_scan_default_params__field_indices_by_name,
+  1,  wifi_scan_default_params__number_ranges,
+  (ProtobufCMessageInit) wifi_scan_default_params__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor wifi_he_ap_info__field_descriptors[2] =
@@ -7671,7 +14318,7 @@ const ProtobufCMessageDescriptor wifi_he_ap_info__descriptor =
   (ProtobufCMessageInit) wifi_he_ap_info__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wifi_ap_record__field_descriptors[12] =
+static const ProtobufCFieldDescriptor wifi_ap_record__field_descriptors[15] =
 {
   {
     "bssid",
@@ -7817,10 +14464,47 @@ static const ProtobufCFieldDescriptor wifi_ap_record__field_descriptors[12] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "bandwidth",
+    13,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApRecord, bandwidth),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "vht_ch_freq1",
+    14,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApRecord, vht_ch_freq1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "vht_ch_freq2",
+    15,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApRecord, vht_ch_freq2),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_ap_record__field_indices_by_name[] = {
   8,   /* field[8] = ant */
   5,   /* field[5] = authmode */
+  12,   /* field[12] = bandwidth */
   9,   /* field[9] = bitmask */
   0,   /* field[0] = bssid */
   10,   /* field[10] = country */
@@ -7831,11 +14515,13 @@ static const unsigned wifi_ap_record__field_indices_by_name[] = {
   4,   /* field[4] = rssi */
   3,   /* field[3] = second */
   1,   /* field[1] = ssid */
+  13,   /* field[13] = vht_ch_freq1 */
+  14,   /* field[14] = vht_ch_freq2 */
 };
 static const ProtobufCIntRange wifi_ap_record__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 12 }
+  { 0, 15 }
 };
 const ProtobufCMessageDescriptor wifi_ap_record__descriptor =
 {
@@ -7845,14 +14531,14 @@ const ProtobufCMessageDescriptor wifi_ap_record__descriptor =
   "WifiApRecord",
   "",
   sizeof(WifiApRecord),
-  12,
+  15,
   wifi_ap_record__field_descriptors,
   wifi_ap_record__field_indices_by_name,
   1,  wifi_ap_record__number_ranges,
   (ProtobufCMessageInit) wifi_ap_record__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wifi_scan_threshold__field_descriptors[2] =
+static const ProtobufCFieldDescriptor wifi_scan_threshold__field_descriptors[3] =
 {
   {
     "rssi",
@@ -7878,15 +14564,28 @@ static const ProtobufCFieldDescriptor wifi_scan_threshold__field_descriptors[2] 
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "rssi_5g_adjustment",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiScanThreshold, rssi_5g_adjustment),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_scan_threshold__field_indices_by_name[] = {
   1,   /* field[1] = authmode */
   0,   /* field[0] = rssi */
+  2,   /* field[2] = rssi_5g_adjustment */
 };
 static const ProtobufCIntRange wifi_scan_threshold__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 2 }
+  { 0, 3 }
 };
 const ProtobufCMessageDescriptor wifi_scan_threshold__descriptor =
 {
@@ -7896,7 +14595,7 @@ const ProtobufCMessageDescriptor wifi_scan_threshold__descriptor =
   "WifiScanThreshold",
   "",
   sizeof(WifiScanThreshold),
-  2,
+  3,
   wifi_scan_threshold__field_descriptors,
   wifi_scan_threshold__field_indices_by_name,
   1,  wifi_scan_threshold__number_ranges,
@@ -7954,7 +14653,58 @@ const ProtobufCMessageDescriptor wifi_pmf_config__descriptor =
   (ProtobufCMessageInit) wifi_pmf_config__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wifi_ap_config__field_descriptors[12] =
+static const ProtobufCFieldDescriptor wifi_bss_max_idle_config__field_descriptors[2] =
+{
+  {
+    "period",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiBssMaxIdleConfig, period),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "protected_keep_alive",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(WifiBssMaxIdleConfig, protected_keep_alive),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned wifi_bss_max_idle_config__field_indices_by_name[] = {
+  0,   /* field[0] = period */
+  1,   /* field[1] = protected_keep_alive */
+};
+static const ProtobufCIntRange wifi_bss_max_idle_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor wifi_bss_max_idle_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "wifi_bss_max_idle_config",
+  "WifiBssMaxIdleConfig",
+  "WifiBssMaxIdleConfig",
+  "",
+  sizeof(WifiBssMaxIdleConfig),
+  2,
+  wifi_bss_max_idle_config__field_descriptors,
+  wifi_bss_max_idle_config__field_indices_by_name,
+  1,  wifi_bss_max_idle_config__number_ranges,
+  (ProtobufCMessageInit) wifi_bss_max_idle_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor wifi_ap_config__field_descriptors[18] =
 {
   {
     "ssid",
@@ -8100,25 +14850,103 @@ static const ProtobufCFieldDescriptor wifi_ap_config__field_descriptors[12] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "csa_count",
+    13,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, csa_count),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dtim_period",
+    14,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, dtim_period),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "transition_disable",
+    15,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, transition_disable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "sae_ext",
+    16,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, sae_ext),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "bss_max_idle_cfg",
+    17,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, bss_max_idle_cfg),
+    &wifi_bss_max_idle_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "gtk_rekey_interval",
+    18,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiApConfig, gtk_rekey_interval),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_ap_config__field_indices_by_name[] = {
   4,   /* field[4] = authmode */
   7,   /* field[7] = beacon_interval */
+  16,   /* field[16] = bss_max_idle_cfg */
   3,   /* field[3] = channel */
+  12,   /* field[12] = csa_count */
+  13,   /* field[13] = dtim_period */
   9,   /* field[9] = ftm_responder */
+  17,   /* field[17] = gtk_rekey_interval */
   6,   /* field[6] = max_connection */
   8,   /* field[8] = pairwise_cipher */
   1,   /* field[1] = password */
   10,   /* field[10] = pmf_cfg */
+  15,   /* field[15] = sae_ext */
   11,   /* field[11] = sae_pwe_h2e */
   0,   /* field[0] = ssid */
   5,   /* field[5] = ssid_hidden */
   2,   /* field[2] = ssid_len */
+  14,   /* field[14] = transition_disable */
 };
 static const ProtobufCIntRange wifi_ap_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 12 }
+  { 0, 18 }
 };
 const ProtobufCMessageDescriptor wifi_ap_config__descriptor =
 {
@@ -8128,14 +14956,14 @@ const ProtobufCMessageDescriptor wifi_ap_config__descriptor =
   "WifiApConfig",
   "",
   sizeof(WifiApConfig),
-  12,
+  18,
   wifi_ap_config__field_descriptors,
   wifi_ap_config__field_indices_by_name,
   1,  wifi_ap_config__number_ranges,
   (ProtobufCMessageInit) wifi_ap_config__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor wifi_sta_config__field_descriptors[15] =
+static const ProtobufCFieldDescriptor wifi_sta_config__field_descriptors[16] =
 {
   {
     "ssid",
@@ -8317,6 +15145,18 @@ static const ProtobufCFieldDescriptor wifi_sta_config__field_descriptors[15] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "sae_pk_mode",
+    16,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiStaConfig, sae_pk_mode),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned wifi_sta_config__field_indices_by_name[] = {
   10,   /* field[10] = bitmask */
@@ -8329,6 +15169,7 @@ static const unsigned wifi_sta_config__field_indices_by_name[] = {
   1,   /* field[1] = password */
   9,   /* field[9] = pmf_cfg */
   14,   /* field[14] = sae_h2e_identifier */
+  15,   /* field[15] = sae_pk_mode */
   11,   /* field[11] = sae_pwe_h2e */
   2,   /* field[2] = scan_method */
   7,   /* field[7] = sort_method */
@@ -8338,7 +15179,7 @@ static const unsigned wifi_sta_config__field_indices_by_name[] = {
 static const ProtobufCIntRange wifi_sta_config__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 15 }
+  { 0, 16 }
 };
 const ProtobufCMessageDescriptor wifi_sta_config__descriptor =
 {
@@ -8348,7 +15189,7 @@ const ProtobufCMessageDescriptor wifi_sta_config__descriptor =
   "WifiStaConfig",
   "",
   sizeof(WifiStaConfig),
-  15,
+  16,
   wifi_sta_config__field_descriptors,
   wifi_sta_config__field_indices_by_name,
   1,  wifi_sta_config__number_ranges,
@@ -10560,6 +17401,520 @@ const ProtobufCMessageDescriptor wifi_bandwidths__descriptor =
   (ProtobufCMessageInit) wifi_bandwidths__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+static const ProtobufCFieldDescriptor wifi_itwt_setup_config__field_descriptors[6] =
+{
+  {
+    "setup_cmd",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, setup_cmd),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "bitmask_1",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, bitmask_1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "min_wake_dura",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, min_wake_dura),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "wake_invl_mant",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, wake_invl_mant),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "twt_id",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, twt_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "timeout_time_ms",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(WifiItwtSetupConfig, timeout_time_ms),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned wifi_itwt_setup_config__field_indices_by_name[] = {
+  1,   /* field[1] = bitmask_1 */
+  2,   /* field[2] = min_wake_dura */
+  0,   /* field[0] = setup_cmd */
+  5,   /* field[5] = timeout_time_ms */
+  4,   /* field[4] = twt_id */
+  3,   /* field[3] = wake_invl_mant */
+};
+static const ProtobufCIntRange wifi_itwt_setup_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 6 }
+};
+const ProtobufCMessageDescriptor wifi_itwt_setup_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "wifi_itwt_setup_config",
+  "WifiItwtSetupConfig",
+  "WifiItwtSetupConfig",
+  "",
+  sizeof(WifiItwtSetupConfig),
+  6,
+  wifi_itwt_setup_config__field_descriptors,
+  wifi_itwt_setup_config__field_indices_by_name,
+  1,  wifi_itwt_setup_config__number_ranges,
+  (ProtobufCMessageInit) wifi_itwt_setup_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor wifi_twt_config__field_descriptors[2] =
+{
+  {
+    "post_wakeup_event",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(WifiTwtConfig, post_wakeup_event),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "twt_enable_keep_alive",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(WifiTwtConfig, twt_enable_keep_alive),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned wifi_twt_config__field_indices_by_name[] = {
+  0,   /* field[0] = post_wakeup_event */
+  1,   /* field[1] = twt_enable_keep_alive */
+};
+static const ProtobufCIntRange wifi_twt_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor wifi_twt_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "wifi_twt_config",
+  "WifiTwtConfig",
+  "WifiTwtConfig",
+  "",
+  sizeof(WifiTwtConfig),
+  2,
+  wifi_twt_config__field_descriptors,
+  wifi_twt_config__field_indices_by_name,
+  1,  wifi_twt_config__number_ranges,
+  (ProtobufCMessageInit) wifi_twt_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor esp_app_desc__field_descriptors[14] =
+{
+  {
+    "magic_word",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, magic_word),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "secure_version",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, secure_version),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reserv1",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, reserv1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "version",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, version),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "project_name",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, project_name),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "time",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, time),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "date",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, date),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "idf_ver",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, idf_ver),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "app_elf_sha256",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, app_elf_sha256),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "min_efuse_blk_rev_full",
+    10,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, min_efuse_blk_rev_full),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "max_efuse_blk_rev_full",
+    11,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, max_efuse_blk_rev_full),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mmu_page_size",
+    12,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, mmu_page_size),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reserv3",
+    13,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, reserv3),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reserv2",
+    14,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(EspAppDesc, reserv2),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned esp_app_desc__field_indices_by_name[] = {
+  8,   /* field[8] = app_elf_sha256 */
+  6,   /* field[6] = date */
+  7,   /* field[7] = idf_ver */
+  0,   /* field[0] = magic_word */
+  10,   /* field[10] = max_efuse_blk_rev_full */
+  9,   /* field[9] = min_efuse_blk_rev_full */
+  11,   /* field[11] = mmu_page_size */
+  4,   /* field[4] = project_name */
+  2,   /* field[2] = reserv1 */
+  13,   /* field[13] = reserv2 */
+  12,   /* field[12] = reserv3 */
+  1,   /* field[1] = secure_version */
+  5,   /* field[5] = time */
+  3,   /* field[3] = version */
+};
+static const ProtobufCIntRange esp_app_desc__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 14 }
+};
+const ProtobufCMessageDescriptor esp_app_desc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "esp_app_desc",
+  "EspAppDesc",
+  "EspAppDesc",
+  "",
+  sizeof(EspAppDesc),
+  14,
+  esp_app_desc__field_descriptors,
+  esp_app_desc__field_indices_by_name,
+  1,  esp_app_desc__number_ranges,
+  (ProtobufCMessageInit) esp_app_desc__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor heap_size_threshold__field_descriptors[2] =
+{
+  {
+    "threshold_mem_dma",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(HeapSizeThreshold, threshold_mem_dma),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "threshold_mem_8bit",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(HeapSizeThreshold, threshold_mem_8bit),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned heap_size_threshold__field_indices_by_name[] = {
+  1,   /* field[1] = threshold_mem_8bit */
+  0,   /* field[0] = threshold_mem_dma */
+};
+static const ProtobufCIntRange heap_size_threshold__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor heap_size_threshold__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "heap_size_threshold",
+  "HeapSizeThreshold",
+  "HeapSizeThreshold",
+  "",
+  sizeof(HeapSizeThreshold),
+  2,
+  heap_size_threshold__field_descriptors,
+  heap_size_threshold__field_indices_by_name,
+  1,  heap_size_threshold__number_ranges,
+  (ProtobufCMessageInit) heap_size_threshold__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor mem_info__field_descriptors[2] =
+{
+  {
+    "free_size",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(MemInfo, free_size),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "largest_free_block",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(MemInfo, largest_free_block),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned mem_info__field_indices_by_name[] = {
+  0,   /* field[0] = free_size */
+  1,   /* field[1] = largest_free_block */
+};
+static const ProtobufCIntRange mem_info__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor mem_info__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "mem_info",
+  "MemInfo",
+  "MemInfo",
+  "",
+  sizeof(MemInfo),
+  2,
+  mem_info__field_descriptors,
+  mem_info__field_indices_by_name,
+  1,  mem_info__number_ranges,
+  (ProtobufCMessageInit) mem_info__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor heap_info__field_descriptors[2] =
+{
+  {
+    "mem_dma",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(HeapInfo, mem_dma),
+    &mem_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mem_8bit",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(HeapInfo, mem_8bit),
+    &mem_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned heap_info__field_indices_by_name[] = {
+  1,   /* field[1] = mem_8bit */
+  0,   /* field[0] = mem_dma */
+};
+static const ProtobufCIntRange heap_info__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor heap_info__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "heap_info",
+  "HeapInfo",
+  "HeapInfo",
+  "",
+  sizeof(HeapInfo),
+  2,
+  heap_info__field_descriptors,
+  heap_info__field_indices_by_name,
+  1,  heap_info__number_ranges,
+  (ProtobufCMessageInit) heap_info__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor connected_stalist__field_descriptors[2] =
 {
   {
@@ -10609,6 +17964,70 @@ const ProtobufCMessageDescriptor connected_stalist__descriptor =
   connected_stalist__field_indices_by_name,
   1,  connected_stalist__number_ranges,
   (ProtobufCMessageInit) connected_stalist__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor eap_fast_config__field_descriptors[3] =
+{
+  {
+    "fast_provisioning",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(EapFastConfig, fast_provisioning),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "fast_max_pac_list_len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(EapFastConfig, fast_max_pac_list_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "fast_pac_format_binary",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(EapFastConfig, fast_pac_format_binary),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned eap_fast_config__field_indices_by_name[] = {
+  1,   /* field[1] = fast_max_pac_list_len */
+  2,   /* field[2] = fast_pac_format_binary */
+  0,   /* field[0] = fast_provisioning */
+};
+static const ProtobufCIntRange eap_fast_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor eap_fast_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "eap_fast_config",
+  "EapFastConfig",
+  "EapFastConfig",
+  "",
+  sizeof(EapFastConfig),
+  3,
+  eap_fast_config__field_descriptors,
+  eap_fast_config__field_indices_by_name,
+  1,  eap_fast_config__number_ranges,
+  (ProtobufCMessageInit) eap_fast_config__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor rpc__req__get_mac_address__field_descriptors[1] =
@@ -11265,6 +18684,131 @@ const ProtobufCMessageDescriptor rpc__resp__otaend__descriptor =
   rpc__resp__otaend__field_indices_by_name,
   1,  rpc__resp__otaend__number_ranges,
   (ProtobufCMessageInit) rpc__resp__otaend__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__otaactivate__field_descriptors NULL
+#define rpc__req__otaactivate__field_indices_by_name NULL
+#define rpc__req__otaactivate__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__otaactivate__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_OTAActivate",
+  "RpcReqOTAActivate",
+  "RpcReqOTAActivate",
+  "",
+  sizeof(RpcReqOTAActivate),
+  0,
+  rpc__req__otaactivate__field_descriptors,
+  rpc__req__otaactivate__field_indices_by_name,
+  0,  rpc__req__otaactivate__number_ranges,
+  (ProtobufCMessageInit) rpc__req__otaactivate__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__otaactivate__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespOTAActivate, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__otaactivate__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__otaactivate__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__otaactivate__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_OTAActivate",
+  "RpcRespOTAActivate",
+  "RpcRespOTAActivate",
+  "",
+  sizeof(RpcRespOTAActivate),
+  1,
+  rpc__resp__otaactivate__field_descriptors,
+  rpc__resp__otaactivate__field_indices_by_name,
+  1,  rpc__resp__otaactivate__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__otaactivate__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__app_get_desc__field_descriptors NULL
+#define rpc__req__app_get_desc__field_indices_by_name NULL
+#define rpc__req__app_get_desc__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__app_get_desc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_AppGetDesc",
+  "RpcReqAppGetDesc",
+  "RpcReqAppGetDesc",
+  "",
+  sizeof(RpcReqAppGetDesc),
+  0,
+  rpc__req__app_get_desc__field_descriptors,
+  rpc__req__app_get_desc__field_indices_by_name,
+  0,  rpc__req__app_get_desc__number_ranges,
+  (ProtobufCMessageInit) rpc__req__app_get_desc__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__app_get_desc__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespAppGetDesc, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "app_desc",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespAppGetDesc, app_desc),
+    &esp_app_desc__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__app_get_desc__field_indices_by_name[] = {
+  1,   /* field[1] = app_desc */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__app_get_desc__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__app_get_desc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_AppGetDesc",
+  "RpcRespAppGetDesc",
+  "RpcRespAppGetDesc",
+  "",
+  sizeof(RpcRespAppGetDesc),
+  2,
+  rpc__resp__app_get_desc__field_descriptors,
+  rpc__resp__app_get_desc__field_indices_by_name,
+  1,  rpc__resp__app_get_desc__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__app_get_desc__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor rpc__req__wifi_set_max_tx_power__field_descriptors[1] =
@@ -12377,6 +19921,75 @@ const ProtobufCMessageDescriptor rpc__resp__wifi_scan_get_ap_records__descriptor
   (ProtobufCMessageInit) rpc__resp__wifi_scan_get_ap_records__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+#define rpc__req__wifi_scan_get_ap_record__field_descriptors NULL
+#define rpc__req__wifi_scan_get_ap_record__field_indices_by_name NULL
+#define rpc__req__wifi_scan_get_ap_record__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__wifi_scan_get_ap_record__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiScanGetApRecord",
+  "RpcReqWifiScanGetApRecord",
+  "RpcReqWifiScanGetApRecord",
+  "",
+  sizeof(RpcReqWifiScanGetApRecord),
+  0,
+  rpc__req__wifi_scan_get_ap_record__field_descriptors,
+  rpc__req__wifi_scan_get_ap_record__field_indices_by_name,
+  0,  rpc__req__wifi_scan_get_ap_record__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_scan_get_ap_record__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_scan_get_ap_record__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiScanGetApRecord, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "ap_record",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiScanGetApRecord, ap_record),
+    &wifi_ap_record__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_scan_get_ap_record__field_indices_by_name[] = {
+  1,   /* field[1] = ap_record */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_scan_get_ap_record__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_scan_get_ap_record__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiScanGetApRecord",
+  "RpcRespWifiScanGetApRecord",
+  "RpcRespWifiScanGetApRecord",
+  "",
+  sizeof(RpcRespWifiScanGetApRecord),
+  2,
+  rpc__resp__wifi_scan_get_ap_record__field_descriptors,
+  rpc__resp__wifi_scan_get_ap_record__field_indices_by_name,
+  1,  rpc__resp__wifi_scan_get_ap_record__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_scan_get_ap_record__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 #define rpc__req__wifi_clear_ap_list__field_descriptors NULL
 #define rpc__req__wifi_clear_ap_list__field_indices_by_name NULL
 #define rpc__req__wifi_clear_ap_list__number_ranges NULL
@@ -12667,12 +20280,12 @@ static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_get_ap_info__field_des
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "ap_records",
+    "ap_record",
     2,
     PROTOBUF_C_LABEL_NONE,
     PROTOBUF_C_TYPE_MESSAGE,
     0,   /* quantifier_offset */
-    offsetof(RpcRespWifiStaGetApInfo, ap_records),
+    offsetof(RpcRespWifiStaGetApInfo, ap_record),
     &wifi_ap_record__descriptor,
     NULL,
     0,             /* flags */
@@ -12680,7 +20293,7 @@ static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_get_ap_info__field_des
   },
 };
 static const unsigned rpc__resp__wifi_sta_get_ap_info__field_indices_by_name[] = {
-  1,   /* field[1] = ap_records */
+  1,   /* field[1] = ap_record */
   0,   /* field[0] = resp */
 };
 static const ProtobufCIntRange rpc__resp__wifi_sta_get_ap_info__number_ranges[1 + 1] =
@@ -13716,6 +21329,75 @@ const ProtobufCMessageDescriptor rpc__req__wifi_ap_get_sta_aid__descriptor =
   (ProtobufCMessageInit) rpc__req__wifi_ap_get_sta_aid__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+#define rpc__req__wifi_sta_get_negotiated_phymode__field_descriptors NULL
+#define rpc__req__wifi_sta_get_negotiated_phymode__field_indices_by_name NULL
+#define rpc__req__wifi_sta_get_negotiated_phymode__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_get_negotiated_phymode__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaGetNegotiatedPhymode",
+  "RpcReqWifiStaGetNegotiatedPhymode",
+  "RpcReqWifiStaGetNegotiatedPhymode",
+  "",
+  sizeof(RpcReqWifiStaGetNegotiatedPhymode),
+  0,
+  rpc__req__wifi_sta_get_negotiated_phymode__field_descriptors,
+  rpc__req__wifi_sta_get_negotiated_phymode__field_indices_by_name,
+  0,  rpc__req__wifi_sta_get_negotiated_phymode__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_get_negotiated_phymode__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_get_negotiated_phymode__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaGetNegotiatedPhymode, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "phymode",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaGetNegotiatedPhymode, phymode),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_get_negotiated_phymode__field_indices_by_name[] = {
+  1,   /* field[1] = phymode */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_get_negotiated_phymode__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_get_negotiated_phymode__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaGetNegotiatedPhymode",
+  "RpcRespWifiStaGetNegotiatedPhymode",
+  "RpcRespWifiStaGetNegotiatedPhymode",
+  "",
+  sizeof(RpcRespWifiStaGetNegotiatedPhymode),
+  2,
+  rpc__resp__wifi_sta_get_negotiated_phymode__field_descriptors,
+  rpc__resp__wifi_sta_get_negotiated_phymode__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_get_negotiated_phymode__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_get_negotiated_phymode__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor rpc__resp__wifi_ap_get_sta_aid__field_descriptors[2] =
 {
   {
@@ -13834,6 +21516,121 @@ const ProtobufCMessageDescriptor rpc__resp__wifi_sta_get_rssi__descriptor =
   rpc__resp__wifi_sta_get_rssi__field_indices_by_name,
   1,  rpc__resp__wifi_sta_get_rssi__number_ranges,
   (ProtobufCMessageInit) rpc__resp__wifi_sta_get_rssi__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_scan_params__field_descriptors[3] =
+{
+  {
+    "cmd",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiScanParams, cmd),
+    &rpc_cmd__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "config",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiScanParams, config),
+    &wifi_scan_default_params__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "is_config_null",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiScanParams, is_config_null),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_scan_params__field_indices_by_name[] = {
+  0,   /* field[0] = cmd */
+  1,   /* field[1] = config */
+  2,   /* field[2] = is_config_null */
+};
+static const ProtobufCIntRange rpc__req__wifi_scan_params__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_scan_params__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiScanParams",
+  "RpcReqWifiScanParams",
+  "RpcReqWifiScanParams",
+  "",
+  sizeof(RpcReqWifiScanParams),
+  3,
+  rpc__req__wifi_scan_params__field_descriptors,
+  rpc__req__wifi_scan_params__field_indices_by_name,
+  1,  rpc__req__wifi_scan_params__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_scan_params__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_scan_params__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiScanParams, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "config",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiScanParams, config),
+    &wifi_scan_default_params__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_scan_params__field_indices_by_name[] = {
+  1,   /* field[1] = config */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_scan_params__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_scan_params__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiScanParams",
+  "RpcRespWifiScanParams",
+  "RpcRespWifiScanParams",
+  "",
+  sizeof(RpcRespWifiScanParams),
+  2,
+  rpc__resp__wifi_scan_params__field_descriptors,
+  rpc__resp__wifi_scan_params__field_indices_by_name,
+  1,  rpc__resp__wifi_scan_params__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_scan_params__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 #define rpc__req__wifi_sta_get_aid__field_descriptors NULL
@@ -14603,6 +22400,2293 @@ const ProtobufCMessageDescriptor rpc__resp__wifi_get_band_mode__descriptor =
   (ProtobufCMessageInit) rpc__resp__wifi_get_band_mode__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+static const ProtobufCFieldDescriptor rpc__req__wifi_set_inactive_time__field_descriptors[2] =
+{
+  {
+    "ifx",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiSetInactiveTime, ifx),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "sec",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiSetInactiveTime, sec),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_set_inactive_time__field_indices_by_name[] = {
+  0,   /* field[0] = ifx */
+  1,   /* field[1] = sec */
+};
+static const ProtobufCIntRange rpc__req__wifi_set_inactive_time__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_set_inactive_time__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiSetInactiveTime",
+  "RpcReqWifiSetInactiveTime",
+  "RpcReqWifiSetInactiveTime",
+  "",
+  sizeof(RpcReqWifiSetInactiveTime),
+  2,
+  rpc__req__wifi_set_inactive_time__field_descriptors,
+  rpc__req__wifi_set_inactive_time__field_indices_by_name,
+  1,  rpc__req__wifi_set_inactive_time__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_set_inactive_time__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_set_inactive_time__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiSetInactiveTime, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_set_inactive_time__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_set_inactive_time__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_set_inactive_time__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiSetInactiveTime",
+  "RpcRespWifiSetInactiveTime",
+  "RpcRespWifiSetInactiveTime",
+  "",
+  sizeof(RpcRespWifiSetInactiveTime),
+  1,
+  rpc__resp__wifi_set_inactive_time__field_descriptors,
+  rpc__resp__wifi_set_inactive_time__field_indices_by_name,
+  1,  rpc__resp__wifi_set_inactive_time__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_set_inactive_time__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_get_inactive_time__field_descriptors[1] =
+{
+  {
+    "ifx",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiGetInactiveTime, ifx),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_get_inactive_time__field_indices_by_name[] = {
+  0,   /* field[0] = ifx */
+};
+static const ProtobufCIntRange rpc__req__wifi_get_inactive_time__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_get_inactive_time__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiGetInactiveTime",
+  "RpcReqWifiGetInactiveTime",
+  "RpcReqWifiGetInactiveTime",
+  "",
+  sizeof(RpcReqWifiGetInactiveTime),
+  1,
+  rpc__req__wifi_get_inactive_time__field_descriptors,
+  rpc__req__wifi_get_inactive_time__field_indices_by_name,
+  1,  rpc__req__wifi_get_inactive_time__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_get_inactive_time__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_get_inactive_time__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiGetInactiveTime, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "sec",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiGetInactiveTime, sec),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_get_inactive_time__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+  1,   /* field[1] = sec */
+};
+static const ProtobufCIntRange rpc__resp__wifi_get_inactive_time__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_get_inactive_time__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiGetInactiveTime",
+  "RpcRespWifiGetInactiveTime",
+  "RpcRespWifiGetInactiveTime",
+  "",
+  sizeof(RpcRespWifiGetInactiveTime),
+  2,
+  rpc__resp__wifi_get_inactive_time__field_descriptors,
+  rpc__resp__wifi_get_inactive_time__field_indices_by_name,
+  1,  rpc__resp__wifi_get_inactive_time__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_get_inactive_time__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_disable_pmf_config__field_descriptors[1] =
+{
+  {
+    "ifx",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiDisablePmfConfig, ifx),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_disable_pmf_config__field_indices_by_name[] = {
+  0,   /* field[0] = ifx */
+};
+static const ProtobufCIntRange rpc__req__wifi_disable_pmf_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_disable_pmf_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiDisablePmfConfig",
+  "RpcReqWifiDisablePmfConfig",
+  "RpcReqWifiDisablePmfConfig",
+  "",
+  sizeof(RpcReqWifiDisablePmfConfig),
+  1,
+  rpc__req__wifi_disable_pmf_config__field_descriptors,
+  rpc__req__wifi_disable_pmf_config__field_indices_by_name,
+  1,  rpc__req__wifi_disable_pmf_config__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_disable_pmf_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_disable_pmf_config__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiDisablePmfConfig, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "ifx",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiDisablePmfConfig, ifx),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_disable_pmf_config__field_indices_by_name[] = {
+  1,   /* field[1] = ifx */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_disable_pmf_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_disable_pmf_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiDisablePmfConfig",
+  "RpcRespWifiDisablePmfConfig",
+  "RpcRespWifiDisablePmfConfig",
+  "",
+  sizeof(RpcRespWifiDisablePmfConfig),
+  2,
+  rpc__resp__wifi_disable_pmf_config__field_descriptors,
+  rpc__resp__wifi_disable_pmf_config__field_indices_by_name,
+  1,  rpc__resp__wifi_disable_pmf_config__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_disable_pmf_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_itwt_setup__field_descriptors[1] =
+{
+  {
+    "setup_config",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtSetup, setup_config),
+    &wifi_itwt_setup_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_itwt_setup__field_indices_by_name[] = {
+  0,   /* field[0] = setup_config */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_itwt_setup__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_setup__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtSetup",
+  "RpcReqWifiStaItwtSetup",
+  "RpcReqWifiStaItwtSetup",
+  "",
+  sizeof(RpcReqWifiStaItwtSetup),
+  1,
+  rpc__req__wifi_sta_itwt_setup__field_descriptors,
+  rpc__req__wifi_sta_itwt_setup__field_indices_by_name,
+  1,  rpc__req__wifi_sta_itwt_setup__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_setup__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_setup__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtSetup, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_setup__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_setup__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_setup__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtSetup",
+  "RpcRespWifiStaItwtSetup",
+  "RpcRespWifiStaItwtSetup",
+  "",
+  sizeof(RpcRespWifiStaItwtSetup),
+  1,
+  rpc__resp__wifi_sta_itwt_setup__field_descriptors,
+  rpc__resp__wifi_sta_itwt_setup__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_setup__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_setup__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_itwt_teardown__field_descriptors[1] =
+{
+  {
+    "flow_id",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtTeardown, flow_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_itwt_teardown__field_indices_by_name[] = {
+  0,   /* field[0] = flow_id */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_itwt_teardown__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_teardown__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtTeardown",
+  "RpcReqWifiStaItwtTeardown",
+  "RpcReqWifiStaItwtTeardown",
+  "",
+  sizeof(RpcReqWifiStaItwtTeardown),
+  1,
+  rpc__req__wifi_sta_itwt_teardown__field_descriptors,
+  rpc__req__wifi_sta_itwt_teardown__field_indices_by_name,
+  1,  rpc__req__wifi_sta_itwt_teardown__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_teardown__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_teardown__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtTeardown, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_teardown__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_teardown__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_teardown__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtTeardown",
+  "RpcRespWifiStaItwtTeardown",
+  "RpcRespWifiStaItwtTeardown",
+  "",
+  sizeof(RpcRespWifiStaItwtTeardown),
+  1,
+  rpc__resp__wifi_sta_itwt_teardown__field_descriptors,
+  rpc__resp__wifi_sta_itwt_teardown__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_teardown__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_teardown__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_itwt_suspend__field_descriptors[2] =
+{
+  {
+    "flow_id",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtSuspend, flow_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "suspend_time_ms",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtSuspend, suspend_time_ms),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_itwt_suspend__field_indices_by_name[] = {
+  0,   /* field[0] = flow_id */
+  1,   /* field[1] = suspend_time_ms */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_itwt_suspend__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_suspend__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtSuspend",
+  "RpcReqWifiStaItwtSuspend",
+  "RpcReqWifiStaItwtSuspend",
+  "",
+  sizeof(RpcReqWifiStaItwtSuspend),
+  2,
+  rpc__req__wifi_sta_itwt_suspend__field_descriptors,
+  rpc__req__wifi_sta_itwt_suspend__field_indices_by_name,
+  1,  rpc__req__wifi_sta_itwt_suspend__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_suspend__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_suspend__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtSuspend, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_suspend__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_suspend__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_suspend__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtSuspend",
+  "RpcRespWifiStaItwtSuspend",
+  "RpcRespWifiStaItwtSuspend",
+  "",
+  sizeof(RpcRespWifiStaItwtSuspend),
+  1,
+  rpc__resp__wifi_sta_itwt_suspend__field_descriptors,
+  rpc__resp__wifi_sta_itwt_suspend__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_suspend__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_suspend__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__wifi_sta_itwt_get_flow_id_status__field_descriptors NULL
+#define rpc__req__wifi_sta_itwt_get_flow_id_status__field_indices_by_name NULL
+#define rpc__req__wifi_sta_itwt_get_flow_id_status__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtGetFlowIdStatus",
+  "RpcReqWifiStaItwtGetFlowIdStatus",
+  "RpcReqWifiStaItwtGetFlowIdStatus",
+  "",
+  sizeof(RpcReqWifiStaItwtGetFlowIdStatus),
+  0,
+  rpc__req__wifi_sta_itwt_get_flow_id_status__field_descriptors,
+  rpc__req__wifi_sta_itwt_get_flow_id_status__field_indices_by_name,
+  0,  rpc__req__wifi_sta_itwt_get_flow_id_status__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_get_flow_id_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_get_flow_id_status__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtGetFlowIdStatus, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "flow_id_bitmap",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtGetFlowIdStatus, flow_id_bitmap),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_get_flow_id_status__field_indices_by_name[] = {
+  1,   /* field[1] = flow_id_bitmap */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_get_flow_id_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtGetFlowIdStatus",
+  "RpcRespWifiStaItwtGetFlowIdStatus",
+  "RpcRespWifiStaItwtGetFlowIdStatus",
+  "",
+  sizeof(RpcRespWifiStaItwtGetFlowIdStatus),
+  2,
+  rpc__resp__wifi_sta_itwt_get_flow_id_status__field_descriptors,
+  rpc__resp__wifi_sta_itwt_get_flow_id_status__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_get_flow_id_status__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_get_flow_id_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_itwt_send_probe_req__field_descriptors[1] =
+{
+  {
+    "timeout_ms",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtSendProbeReq, timeout_ms),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_itwt_send_probe_req__field_indices_by_name[] = {
+  0,   /* field[0] = timeout_ms */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_itwt_send_probe_req__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_send_probe_req__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtSendProbeReq",
+  "RpcReqWifiStaItwtSendProbeReq",
+  "RpcReqWifiStaItwtSendProbeReq",
+  "",
+  sizeof(RpcReqWifiStaItwtSendProbeReq),
+  1,
+  rpc__req__wifi_sta_itwt_send_probe_req__field_descriptors,
+  rpc__req__wifi_sta_itwt_send_probe_req__field_indices_by_name,
+  1,  rpc__req__wifi_sta_itwt_send_probe_req__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_send_probe_req__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_send_probe_req__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtSendProbeReq, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_send_probe_req__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_send_probe_req__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_send_probe_req__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtSendProbeReq",
+  "RpcRespWifiStaItwtSendProbeReq",
+  "RpcRespWifiStaItwtSendProbeReq",
+  "",
+  sizeof(RpcRespWifiStaItwtSendProbeReq),
+  1,
+  rpc__resp__wifi_sta_itwt_send_probe_req__field_descriptors,
+  rpc__resp__wifi_sta_itwt_send_probe_req__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_send_probe_req__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_send_probe_req__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_itwt_set_target_wake_time_offset__field_descriptors[1] =
+{
+  {
+    "offset_us",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaItwtSetTargetWakeTimeOffset, offset_us),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_itwt_set_target_wake_time_offset__field_indices_by_name[] = {
+  0,   /* field[0] = offset_us */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_itwt_set_target_wake_time_offset__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaItwtSetTargetWakeTimeOffset",
+  "RpcReqWifiStaItwtSetTargetWakeTimeOffset",
+  "RpcReqWifiStaItwtSetTargetWakeTimeOffset",
+  "",
+  sizeof(RpcReqWifiStaItwtSetTargetWakeTimeOffset),
+  1,
+  rpc__req__wifi_sta_itwt_set_target_wake_time_offset__field_descriptors,
+  rpc__req__wifi_sta_itwt_set_target_wake_time_offset__field_indices_by_name,
+  1,  rpc__req__wifi_sta_itwt_set_target_wake_time_offset__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_itwt_set_target_wake_time_offset__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaItwtSetTargetWakeTimeOffset, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaItwtSetTargetWakeTimeOffset",
+  "RpcRespWifiStaItwtSetTargetWakeTimeOffset",
+  "RpcRespWifiStaItwtSetTargetWakeTimeOffset",
+  "",
+  sizeof(RpcRespWifiStaItwtSetTargetWakeTimeOffset),
+  1,
+  rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__field_descriptors,
+  rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_sta_twt_config__field_descriptors[1] =
+{
+  {
+    "config",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiStaTwtConfig, config),
+    &wifi_twt_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_sta_twt_config__field_indices_by_name[] = {
+  0,   /* field[0] = config */
+};
+static const ProtobufCIntRange rpc__req__wifi_sta_twt_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_twt_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaTwtConfig",
+  "RpcReqWifiStaTwtConfig",
+  "RpcReqWifiStaTwtConfig",
+  "",
+  sizeof(RpcReqWifiStaTwtConfig),
+  1,
+  rpc__req__wifi_sta_twt_config__field_descriptors,
+  rpc__req__wifi_sta_twt_config__field_indices_by_name,
+  1,  rpc__req__wifi_sta_twt_config__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_twt_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_twt_config__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaTwtConfig, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_twt_config__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_twt_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_twt_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaTwtConfig",
+  "RpcRespWifiStaTwtConfig",
+  "RpcRespWifiStaTwtConfig",
+  "",
+  sizeof(RpcRespWifiStaTwtConfig),
+  1,
+  rpc__resp__wifi_sta_twt_config__field_descriptors,
+  rpc__resp__wifi_sta_twt_config__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_twt_config__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_twt_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__get_coprocessor_fw_version__field_descriptors NULL
+#define rpc__req__get_coprocessor_fw_version__field_indices_by_name NULL
+#define rpc__req__get_coprocessor_fw_version__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__get_coprocessor_fw_version__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GetCoprocessorFwVersion",
+  "RpcReqGetCoprocessorFwVersion",
+  "RpcReqGetCoprocessorFwVersion",
+  "",
+  sizeof(RpcReqGetCoprocessorFwVersion),
+  0,
+  rpc__req__get_coprocessor_fw_version__field_descriptors,
+  rpc__req__get_coprocessor_fw_version__field_indices_by_name,
+  0,  rpc__req__get_coprocessor_fw_version__number_ranges,
+  (ProtobufCMessageInit) rpc__req__get_coprocessor_fw_version__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__get_coprocessor_fw_version__field_descriptors[9] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "major1",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, major1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "minor1",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, minor1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "patch1",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, patch1),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "revision",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, revision),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "prerelease",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, prerelease),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "build",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, build),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "chip_id",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, chip_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "idf_target",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetCoprocessorFwVersion, idf_target),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__get_coprocessor_fw_version__field_indices_by_name[] = {
+  6,   /* field[6] = build */
+  7,   /* field[7] = chip_id */
+  8,   /* field[8] = idf_target */
+  1,   /* field[1] = major1 */
+  2,   /* field[2] = minor1 */
+  3,   /* field[3] = patch1 */
+  5,   /* field[5] = prerelease */
+  0,   /* field[0] = resp */
+  4,   /* field[4] = revision */
+};
+static const ProtobufCIntRange rpc__resp__get_coprocessor_fw_version__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 9 }
+};
+const ProtobufCMessageDescriptor rpc__resp__get_coprocessor_fw_version__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GetCoprocessorFwVersion",
+  "RpcRespGetCoprocessorFwVersion",
+  "RpcRespGetCoprocessorFwVersion",
+  "",
+  sizeof(RpcRespGetCoprocessorFwVersion),
+  9,
+  rpc__resp__get_coprocessor_fw_version__field_descriptors,
+  rpc__resp__get_coprocessor_fw_version__field_indices_by_name,
+  1,  rpc__resp__get_coprocessor_fw_version__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__get_coprocessor_fw_version__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__set_dhcp_dns_status__field_descriptors[9] =
+{
+  {
+    "iface",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, iface),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "net_link_up",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, net_link_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_up",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dhcp_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_ip",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dhcp_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_nm",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dhcp_nm),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_gw",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dhcp_gw),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_up",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dns_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_ip",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dns_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_type",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSetDhcpDnsStatus, dns_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__set_dhcp_dns_status__field_indices_by_name[] = {
+  5,   /* field[5] = dhcp_gw */
+  3,   /* field[3] = dhcp_ip */
+  4,   /* field[4] = dhcp_nm */
+  2,   /* field[2] = dhcp_up */
+  7,   /* field[7] = dns_ip */
+  8,   /* field[8] = dns_type */
+  6,   /* field[6] = dns_up */
+  0,   /* field[0] = iface */
+  1,   /* field[1] = net_link_up */
+};
+static const ProtobufCIntRange rpc__req__set_dhcp_dns_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 9 }
+};
+const ProtobufCMessageDescriptor rpc__req__set_dhcp_dns_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SetDhcpDnsStatus",
+  "RpcReqSetDhcpDnsStatus",
+  "RpcReqSetDhcpDnsStatus",
+  "",
+  sizeof(RpcReqSetDhcpDnsStatus),
+  9,
+  rpc__req__set_dhcp_dns_status__field_descriptors,
+  rpc__req__set_dhcp_dns_status__field_indices_by_name,
+  1,  rpc__req__set_dhcp_dns_status__number_ranges,
+  (ProtobufCMessageInit) rpc__req__set_dhcp_dns_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__set_dhcp_dns_status__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSetDhcpDnsStatus, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__set_dhcp_dns_status__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__set_dhcp_dns_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__set_dhcp_dns_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SetDhcpDnsStatus",
+  "RpcRespSetDhcpDnsStatus",
+  "RpcRespSetDhcpDnsStatus",
+  "",
+  sizeof(RpcRespSetDhcpDnsStatus),
+  1,
+  rpc__resp__set_dhcp_dns_status__field_descriptors,
+  rpc__resp__set_dhcp_dns_status__field_indices_by_name,
+  1,  rpc__resp__set_dhcp_dns_status__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__set_dhcp_dns_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__get_dhcp_dns_status__field_descriptors[1] =
+{
+  {
+    "iface",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGetDhcpDnsStatus, iface),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__get_dhcp_dns_status__field_indices_by_name[] = {
+  0,   /* field[0] = iface */
+};
+static const ProtobufCIntRange rpc__req__get_dhcp_dns_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__get_dhcp_dns_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GetDhcpDnsStatus",
+  "RpcReqGetDhcpDnsStatus",
+  "RpcReqGetDhcpDnsStatus",
+  "",
+  sizeof(RpcReqGetDhcpDnsStatus),
+  1,
+  rpc__req__get_dhcp_dns_status__field_descriptors,
+  rpc__req__get_dhcp_dns_status__field_indices_by_name,
+  1,  rpc__req__get_dhcp_dns_status__number_ranges,
+  (ProtobufCMessageInit) rpc__req__get_dhcp_dns_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__get_dhcp_dns_status__field_descriptors[10] =
+{
+  {
+    "iface",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, iface),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "net_link_up",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, net_link_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_up",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dhcp_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_ip",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dhcp_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_nm",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dhcp_nm),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_gw",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dhcp_gw),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_up",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dns_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_ip",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dns_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_type",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, dns_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp",
+    10,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGetDhcpDnsStatus, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__get_dhcp_dns_status__field_indices_by_name[] = {
+  5,   /* field[5] = dhcp_gw */
+  3,   /* field[3] = dhcp_ip */
+  4,   /* field[4] = dhcp_nm */
+  2,   /* field[2] = dhcp_up */
+  7,   /* field[7] = dns_ip */
+  8,   /* field[8] = dns_type */
+  6,   /* field[6] = dns_up */
+  0,   /* field[0] = iface */
+  1,   /* field[1] = net_link_up */
+  9,   /* field[9] = resp */
+};
+static const ProtobufCIntRange rpc__resp__get_dhcp_dns_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 10 }
+};
+const ProtobufCMessageDescriptor rpc__resp__get_dhcp_dns_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GetDhcpDnsStatus",
+  "RpcRespGetDhcpDnsStatus",
+  "RpcRespGetDhcpDnsStatus",
+  "",
+  sizeof(RpcRespGetDhcpDnsStatus),
+  10,
+  rpc__resp__get_dhcp_dns_status__field_descriptors,
+  rpc__resp__get_dhcp_dns_status__field_indices_by_name,
+  1,  rpc__resp__get_dhcp_dns_status__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__get_dhcp_dns_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__supp_dpp_init__field_descriptors[1] =
+{
+  {
+    "cb",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSuppDppInit, cb),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__supp_dpp_init__field_indices_by_name[] = {
+  0,   /* field[0] = cb */
+};
+static const ProtobufCIntRange rpc__req__supp_dpp_init__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__supp_dpp_init__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SuppDppInit",
+  "RpcReqSuppDppInit",
+  "RpcReqSuppDppInit",
+  "",
+  sizeof(RpcReqSuppDppInit),
+  1,
+  rpc__req__supp_dpp_init__field_descriptors,
+  rpc__req__supp_dpp_init__field_indices_by_name,
+  1,  rpc__req__supp_dpp_init__number_ranges,
+  (ProtobufCMessageInit) rpc__req__supp_dpp_init__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__supp_dpp_init__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSuppDppInit, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__supp_dpp_init__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__supp_dpp_init__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__supp_dpp_init__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SuppDppInit",
+  "RpcRespSuppDppInit",
+  "RpcRespSuppDppInit",
+  "",
+  sizeof(RpcRespSuppDppInit),
+  1,
+  rpc__resp__supp_dpp_init__field_descriptors,
+  rpc__resp__supp_dpp_init__field_indices_by_name,
+  1,  rpc__resp__supp_dpp_init__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__supp_dpp_init__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__supp_dpp_deinit__field_descriptors NULL
+#define rpc__req__supp_dpp_deinit__field_indices_by_name NULL
+#define rpc__req__supp_dpp_deinit__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__supp_dpp_deinit__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SuppDppDeinit",
+  "RpcReqSuppDppDeinit",
+  "RpcReqSuppDppDeinit",
+  "",
+  sizeof(RpcReqSuppDppDeinit),
+  0,
+  rpc__req__supp_dpp_deinit__field_descriptors,
+  rpc__req__supp_dpp_deinit__field_indices_by_name,
+  0,  rpc__req__supp_dpp_deinit__number_ranges,
+  (ProtobufCMessageInit) rpc__req__supp_dpp_deinit__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__supp_dpp_deinit__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSuppDppDeinit, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__supp_dpp_deinit__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__supp_dpp_deinit__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__supp_dpp_deinit__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SuppDppDeinit",
+  "RpcRespSuppDppDeinit",
+  "RpcRespSuppDppDeinit",
+  "",
+  sizeof(RpcRespSuppDppDeinit),
+  1,
+  rpc__resp__supp_dpp_deinit__field_descriptors,
+  rpc__resp__supp_dpp_deinit__field_indices_by_name,
+  1,  rpc__resp__supp_dpp_deinit__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__supp_dpp_deinit__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__supp_dpp_bootstrap_gen__field_descriptors[4] =
+{
+  {
+    "chan_list",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSuppDppBootstrapGen, chan_list),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "type",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSuppDppBootstrapGen, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "key",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSuppDppBootstrapGen, key),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "info",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqSuppDppBootstrapGen, info),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__supp_dpp_bootstrap_gen__field_indices_by_name[] = {
+  0,   /* field[0] = chan_list */
+  3,   /* field[3] = info */
+  2,   /* field[2] = key */
+  1,   /* field[1] = type */
+};
+static const ProtobufCIntRange rpc__req__supp_dpp_bootstrap_gen__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor rpc__req__supp_dpp_bootstrap_gen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SuppDppBootstrapGen",
+  "RpcReqSuppDppBootstrapGen",
+  "RpcReqSuppDppBootstrapGen",
+  "",
+  sizeof(RpcReqSuppDppBootstrapGen),
+  4,
+  rpc__req__supp_dpp_bootstrap_gen__field_descriptors,
+  rpc__req__supp_dpp_bootstrap_gen__field_indices_by_name,
+  1,  rpc__req__supp_dpp_bootstrap_gen__number_ranges,
+  (ProtobufCMessageInit) rpc__req__supp_dpp_bootstrap_gen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__supp_dpp_bootstrap_gen__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSuppDppBootstrapGen, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__supp_dpp_bootstrap_gen__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__supp_dpp_bootstrap_gen__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__supp_dpp_bootstrap_gen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SuppDppBootstrapGen",
+  "RpcRespSuppDppBootstrapGen",
+  "RpcRespSuppDppBootstrapGen",
+  "",
+  sizeof(RpcRespSuppDppBootstrapGen),
+  1,
+  rpc__resp__supp_dpp_bootstrap_gen__field_descriptors,
+  rpc__resp__supp_dpp_bootstrap_gen__field_indices_by_name,
+  1,  rpc__resp__supp_dpp_bootstrap_gen__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__supp_dpp_bootstrap_gen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__supp_dpp_start_listen__field_descriptors NULL
+#define rpc__req__supp_dpp_start_listen__field_indices_by_name NULL
+#define rpc__req__supp_dpp_start_listen__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__supp_dpp_start_listen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SuppDppStartListen",
+  "RpcReqSuppDppStartListen",
+  "RpcReqSuppDppStartListen",
+  "",
+  sizeof(RpcReqSuppDppStartListen),
+  0,
+  rpc__req__supp_dpp_start_listen__field_descriptors,
+  rpc__req__supp_dpp_start_listen__field_indices_by_name,
+  0,  rpc__req__supp_dpp_start_listen__number_ranges,
+  (ProtobufCMessageInit) rpc__req__supp_dpp_start_listen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__supp_dpp_start_listen__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSuppDppStartListen, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__supp_dpp_start_listen__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__supp_dpp_start_listen__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__supp_dpp_start_listen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SuppDppStartListen",
+  "RpcRespSuppDppStartListen",
+  "RpcRespSuppDppStartListen",
+  "",
+  sizeof(RpcRespSuppDppStartListen),
+  1,
+  rpc__resp__supp_dpp_start_listen__field_descriptors,
+  rpc__resp__supp_dpp_start_listen__field_indices_by_name,
+  1,  rpc__resp__supp_dpp_start_listen__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__supp_dpp_start_listen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__supp_dpp_stop_listen__field_descriptors NULL
+#define rpc__req__supp_dpp_stop_listen__field_indices_by_name NULL
+#define rpc__req__supp_dpp_stop_listen__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__supp_dpp_stop_listen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_SuppDppStopListen",
+  "RpcReqSuppDppStopListen",
+  "RpcReqSuppDppStopListen",
+  "",
+  sizeof(RpcReqSuppDppStopListen),
+  0,
+  rpc__req__supp_dpp_stop_listen__field_descriptors,
+  rpc__req__supp_dpp_stop_listen__field_indices_by_name,
+  0,  rpc__req__supp_dpp_stop_listen__number_ranges,
+  (ProtobufCMessageInit) rpc__req__supp_dpp_stop_listen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__supp_dpp_stop_listen__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespSuppDppStopListen, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__supp_dpp_stop_listen__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__supp_dpp_stop_listen__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__supp_dpp_stop_listen__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_SuppDppStopListen",
+  "RpcRespSuppDppStopListen",
+  "RpcRespSuppDppStopListen",
+  "",
+  sizeof(RpcRespSuppDppStopListen),
+  1,
+  rpc__resp__supp_dpp_stop_listen__field_descriptors,
+  rpc__resp__supp_dpp_stop_listen__field_indices_by_name,
+  1,  rpc__resp__supp_dpp_stop_listen__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__supp_dpp_stop_listen__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__iface_mac_addr_set_get__field_descriptors[3] =
+{
+  {
+    "set",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqIfaceMacAddrSetGet, set),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "type",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqIfaceMacAddrSetGet, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mac",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqIfaceMacAddrSetGet, mac),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__iface_mac_addr_set_get__field_indices_by_name[] = {
+  2,   /* field[2] = mac */
+  0,   /* field[0] = set */
+  1,   /* field[1] = type */
+};
+static const ProtobufCIntRange rpc__req__iface_mac_addr_set_get__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__req__iface_mac_addr_set_get__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_IfaceMacAddrSetGet",
+  "RpcReqIfaceMacAddrSetGet",
+  "RpcReqIfaceMacAddrSetGet",
+  "",
+  sizeof(RpcReqIfaceMacAddrSetGet),
+  3,
+  rpc__req__iface_mac_addr_set_get__field_descriptors,
+  rpc__req__iface_mac_addr_set_get__field_indices_by_name,
+  1,  rpc__req__iface_mac_addr_set_get__number_ranges,
+  (ProtobufCMessageInit) rpc__req__iface_mac_addr_set_get__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__iface_mac_addr_set_get__field_descriptors[4] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrSetGet, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrSetGet, set),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "type",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrSetGet, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mac",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrSetGet, mac),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__iface_mac_addr_set_get__field_indices_by_name[] = {
+  3,   /* field[3] = mac */
+  0,   /* field[0] = resp */
+  1,   /* field[1] = set */
+  2,   /* field[2] = type */
+};
+static const ProtobufCIntRange rpc__resp__iface_mac_addr_set_get__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor rpc__resp__iface_mac_addr_set_get__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_IfaceMacAddrSetGet",
+  "RpcRespIfaceMacAddrSetGet",
+  "RpcRespIfaceMacAddrSetGet",
+  "",
+  sizeof(RpcRespIfaceMacAddrSetGet),
+  4,
+  rpc__resp__iface_mac_addr_set_get__field_descriptors,
+  rpc__resp__iface_mac_addr_set_get__field_indices_by_name,
+  1,  rpc__resp__iface_mac_addr_set_get__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__iface_mac_addr_set_get__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__iface_mac_addr_len_get__field_descriptors[1] =
+{
+  {
+    "type",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqIfaceMacAddrLenGet, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__iface_mac_addr_len_get__field_indices_by_name[] = {
+  0,   /* field[0] = type */
+};
+static const ProtobufCIntRange rpc__req__iface_mac_addr_len_get__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__iface_mac_addr_len_get__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_IfaceMacAddrLenGet",
+  "RpcReqIfaceMacAddrLenGet",
+  "RpcReqIfaceMacAddrLenGet",
+  "",
+  sizeof(RpcReqIfaceMacAddrLenGet),
+  1,
+  rpc__req__iface_mac_addr_len_get__field_descriptors,
+  rpc__req__iface_mac_addr_len_get__field_indices_by_name,
+  1,  rpc__req__iface_mac_addr_len_get__number_ranges,
+  (ProtobufCMessageInit) rpc__req__iface_mac_addr_len_get__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__iface_mac_addr_len_get__field_descriptors[3] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrLenGet, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "type",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrLenGet, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "len",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespIfaceMacAddrLenGet, len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__iface_mac_addr_len_get__field_indices_by_name[] = {
+  2,   /* field[2] = len */
+  0,   /* field[0] = resp */
+  1,   /* field[1] = type */
+};
+static const ProtobufCIntRange rpc__resp__iface_mac_addr_len_get__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__resp__iface_mac_addr_len_get__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_IfaceMacAddrLenGet",
+  "RpcRespIfaceMacAddrLenGet",
+  "RpcRespIfaceMacAddrLenGet",
+  "",
+  sizeof(RpcRespIfaceMacAddrLenGet),
+  3,
+  rpc__resp__iface_mac_addr_len_get__field_descriptors,
+  rpc__resp__iface_mac_addr_len_get__field_indices_by_name,
+  1,  rpc__resp__iface_mac_addr_len_get__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__iface_mac_addr_len_get__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__feature_control__field_descriptors[3] =
+{
+  {
+    "feature",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqFeatureControl, feature),
+    &rpc_feature__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "command",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqFeatureControl, command),
+    &rpc_feature_command__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "option",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqFeatureControl, option),
+    &rpc_feature_option__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__feature_control__field_indices_by_name[] = {
+  1,   /* field[1] = command */
+  0,   /* field[0] = feature */
+  2,   /* field[2] = option */
+};
+static const ProtobufCIntRange rpc__req__feature_control__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__req__feature_control__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_FeatureControl",
+  "RpcReqFeatureControl",
+  "RpcReqFeatureControl",
+  "",
+  sizeof(RpcReqFeatureControl),
+  3,
+  rpc__req__feature_control__field_descriptors,
+  rpc__req__feature_control__field_indices_by_name,
+  1,  rpc__req__feature_control__number_ranges,
+  (ProtobufCMessageInit) rpc__req__feature_control__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__feature_control__field_descriptors[4] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespFeatureControl, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "feature",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespFeatureControl, feature),
+    &rpc_feature__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "command",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespFeatureControl, command),
+    &rpc_feature_command__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "option",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespFeatureControl, option),
+    &rpc_feature_option__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__feature_control__field_indices_by_name[] = {
+  2,   /* field[2] = command */
+  1,   /* field[1] = feature */
+  3,   /* field[3] = option */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__feature_control__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor rpc__resp__feature_control__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_FeatureControl",
+  "RpcRespFeatureControl",
+  "RpcRespFeatureControl",
+  "",
+  sizeof(RpcRespFeatureControl),
+  4,
+  rpc__resp__feature_control__field_descriptors,
+  rpc__resp__feature_control__field_indices_by_name,
+  1,  rpc__resp__feature_control__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__feature_control__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__mem_monitor__field_descriptors[5] =
+{
+  {
+    "config",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqMemMonitor, config),
+    &rpc__mem_monitor_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "report_always",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqMemMonitor, report_always),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "interval_sec",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqMemMonitor, interval_sec),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "internal",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqMemMonitor, internal),
+    &heap_size_threshold__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "external",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqMemMonitor, external),
+    &heap_size_threshold__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__mem_monitor__field_indices_by_name[] = {
+  0,   /* field[0] = config */
+  4,   /* field[4] = external */
+  3,   /* field[3] = internal */
+  2,   /* field[2] = interval_sec */
+  1,   /* field[1] = report_always */
+};
+static const ProtobufCIntRange rpc__req__mem_monitor__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 5 }
+};
+const ProtobufCMessageDescriptor rpc__req__mem_monitor__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_MemMonitor",
+  "RpcReqMemMonitor",
+  "RpcReqMemMonitor",
+  "",
+  sizeof(RpcReqMemMonitor),
+  5,
+  rpc__req__mem_monitor__field_descriptors,
+  rpc__req__mem_monitor__field_indices_by_name,
+  1,  rpc__req__mem_monitor__number_ranges,
+  (ProtobufCMessageInit) rpc__req__mem_monitor__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__mem_monitor__field_descriptors[7] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "config",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, config),
+    &rpc__mem_monitor_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "report_always",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, report_always),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "interval_sec",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, interval_sec),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_total_heap_size",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, curr_total_heap_size),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_internal",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, curr_internal),
+    &heap_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_external",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespMemMonitor, curr_external),
+    &heap_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__mem_monitor__field_indices_by_name[] = {
+  1,   /* field[1] = config */
+  6,   /* field[6] = curr_external */
+  5,   /* field[5] = curr_internal */
+  4,   /* field[4] = curr_total_heap_size */
+  3,   /* field[3] = interval_sec */
+  2,   /* field[2] = report_always */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__mem_monitor__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 7 }
+};
+const ProtobufCMessageDescriptor rpc__resp__mem_monitor__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_MemMonitor",
+  "RpcRespMemMonitor",
+  "RpcRespMemMonitor",
+  "",
+  sizeof(RpcRespMemMonitor),
+  7,
+  rpc__resp__mem_monitor__field_descriptors,
+  rpc__resp__mem_monitor__field_indices_by_name,
+  1,  rpc__resp__mem_monitor__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__mem_monitor__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor rpc__event__wifi_event_no_args__field_descriptors[2] =
 {
   {
@@ -14654,7 +24738,7 @@ const ProtobufCMessageDescriptor rpc__event__wifi_event_no_args__descriptor =
   (ProtobufCMessageInit) rpc__event__wifi_event_no_args__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor rpc__event__espinit__field_descriptors[1] =
+static const ProtobufCFieldDescriptor rpc__event__espinit__field_descriptors[2] =
 {
   {
     "init_data",
@@ -14668,14 +24752,27 @@ static const ProtobufCFieldDescriptor rpc__event__espinit__field_descriptors[1] 
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "cp_reset_reason",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventESPInit, cp_reset_reason),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned rpc__event__espinit__field_indices_by_name[] = {
+  1,   /* field[1] = cp_reset_reason */
   0,   /* field[0] = init_data */
 };
 static const ProtobufCIntRange rpc__event__espinit__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 1 }
+  { 0, 2 }
 };
 const ProtobufCMessageDescriptor rpc__event__espinit__descriptor =
 {
@@ -14685,7 +24782,7 @@ const ProtobufCMessageDescriptor rpc__event__espinit__descriptor =
   "RpcEventESPInit",
   "",
   sizeof(RpcEventESPInit),
-  1,
+  2,
   rpc__event__espinit__field_descriptors,
   rpc__event__espinit__field_indices_by_name,
   1,  rpc__event__espinit__number_ranges,
@@ -15050,7 +25147,3686 @@ const ProtobufCMessageDescriptor rpc__event__sta_disconnected__descriptor =
   (ProtobufCMessageInit) rpc__event__sta_disconnected__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
+static const ProtobufCFieldDescriptor rpc__gpio_config__field_descriptors[5] =
+{
+  {
+    "pin_bit_mask",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT64,
+    0,   /* quantifier_offset */
+    offsetof(RpcGpioConfig, pin_bit_mask),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mode",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcGpioConfig, mode),
+    &rpc__gpio_mode__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pull_up_en",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcGpioConfig, pull_up_en),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pull_down_en",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcGpioConfig, pull_down_en),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "intr_type",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcGpioConfig, intr_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__gpio_config__field_indices_by_name[] = {
+  4,   /* field[4] = intr_type */
+  1,   /* field[1] = mode */
+  0,   /* field[0] = pin_bit_mask */
+  3,   /* field[3] = pull_down_en */
+  2,   /* field[2] = pull_up_en */
+};
+static const ProtobufCIntRange rpc__gpio_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 5 }
+};
+const ProtobufCMessageDescriptor rpc__gpio_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_GpioConfig",
+  "RpcGpioConfig",
+  "RpcGpioConfig",
+  "",
+  sizeof(RpcGpioConfig),
+  5,
+  rpc__gpio_config__field_descriptors,
+  rpc__gpio_config__field_indices_by_name,
+  1,  rpc__gpio_config__number_ranges,
+  (ProtobufCMessageInit) rpc__gpio_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_config__field_descriptors[1] =
+{
+  {
+    "config",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioConfig, config),
+    &rpc__gpio_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_config__field_indices_by_name[] = {
+  0,   /* field[0] = config */
+};
+static const ProtobufCIntRange rpc__req__gpio_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioConfig",
+  "RpcReqGpioConfig",
+  "RpcReqGpioConfig",
+  "",
+  sizeof(RpcReqGpioConfig),
+  1,
+  rpc__req__gpio_config__field_descriptors,
+  rpc__req__gpio_config__field_indices_by_name,
+  1,  rpc__req__gpio_config__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_config__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioConfig, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_config__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_config__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_config__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioConfig",
+  "RpcRespGpioConfig",
+  "RpcRespGpioConfig",
+  "",
+  sizeof(RpcRespGpioConfig),
+  1,
+  rpc__resp__gpio_config__field_descriptors,
+  rpc__resp__gpio_config__field_indices_by_name,
+  1,  rpc__resp__gpio_config__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_config__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_reset_pin__field_descriptors[1] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioResetPin, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_reset_pin__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+};
+static const ProtobufCIntRange rpc__req__gpio_reset_pin__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_reset_pin__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioResetPin",
+  "RpcReqGpioResetPin",
+  "RpcReqGpioResetPin",
+  "",
+  sizeof(RpcReqGpioResetPin),
+  1,
+  rpc__req__gpio_reset_pin__field_descriptors,
+  rpc__req__gpio_reset_pin__field_indices_by_name,
+  1,  rpc__req__gpio_reset_pin__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_reset_pin__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_reset_pin__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioResetPin, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_reset_pin__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_reset_pin__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_reset_pin__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioResetPin",
+  "RpcRespGpioResetPin",
+  "RpcRespGpioResetPin",
+  "",
+  sizeof(RpcRespGpioResetPin),
+  1,
+  rpc__resp__gpio_reset_pin__field_descriptors,
+  rpc__resp__gpio_reset_pin__field_indices_by_name,
+  1,  rpc__resp__gpio_reset_pin__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_reset_pin__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_set_level__field_descriptors[2] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetLevel, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "level",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetLevel, level),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_set_level__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+  1,   /* field[1] = level */
+};
+static const ProtobufCIntRange rpc__req__gpio_set_level__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_set_level__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioSetLevel",
+  "RpcReqGpioSetLevel",
+  "RpcReqGpioSetLevel",
+  "",
+  sizeof(RpcReqGpioSetLevel),
+  2,
+  rpc__req__gpio_set_level__field_descriptors,
+  rpc__req__gpio_set_level__field_indices_by_name,
+  1,  rpc__req__gpio_set_level__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_set_level__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_set_level__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioSetLevel, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_set_level__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_set_level__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_set_level__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioSetLevel",
+  "RpcRespGpioSetLevel",
+  "RpcRespGpioSetLevel",
+  "",
+  sizeof(RpcRespGpioSetLevel),
+  1,
+  rpc__resp__gpio_set_level__field_descriptors,
+  rpc__resp__gpio_set_level__field_indices_by_name,
+  1,  rpc__resp__gpio_set_level__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_set_level__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_get_level__field_descriptors[1] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioGetLevel, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_get_level__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+};
+static const ProtobufCIntRange rpc__req__gpio_get_level__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_get_level__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioGetLevel",
+  "RpcReqGpioGetLevel",
+  "RpcReqGpioGetLevel",
+  "",
+  sizeof(RpcReqGpioGetLevel),
+  1,
+  rpc__req__gpio_get_level__field_descriptors,
+  rpc__req__gpio_get_level__field_indices_by_name,
+  1,  rpc__req__gpio_get_level__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_get_level__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_get_level__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioGetLevel, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "level",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioGetLevel, level),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_get_level__field_indices_by_name[] = {
+  1,   /* field[1] = level */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_get_level__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_get_level__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioGetLevel",
+  "RpcRespGpioGetLevel",
+  "RpcRespGpioGetLevel",
+  "",
+  sizeof(RpcRespGpioGetLevel),
+  2,
+  rpc__resp__gpio_get_level__field_descriptors,
+  rpc__resp__gpio_get_level__field_indices_by_name,
+  1,  rpc__resp__gpio_get_level__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_get_level__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_set_direction__field_descriptors[2] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetDirection, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "mode",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetDirection, mode),
+    &rpc__gpio_mode__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_set_direction__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+  1,   /* field[1] = mode */
+};
+static const ProtobufCIntRange rpc__req__gpio_set_direction__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_set_direction__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioSetDirection",
+  "RpcReqGpioSetDirection",
+  "RpcReqGpioSetDirection",
+  "",
+  sizeof(RpcReqGpioSetDirection),
+  2,
+  rpc__req__gpio_set_direction__field_descriptors,
+  rpc__req__gpio_set_direction__field_indices_by_name,
+  1,  rpc__req__gpio_set_direction__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_set_direction__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_set_direction__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioSetDirection, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_set_direction__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_set_direction__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_set_direction__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioSetDirection",
+  "RpcRespGpioSetDirection",
+  "RpcRespGpioSetDirection",
+  "",
+  sizeof(RpcRespGpioSetDirection),
+  1,
+  rpc__resp__gpio_set_direction__field_descriptors,
+  rpc__resp__gpio_set_direction__field_indices_by_name,
+  1,  rpc__resp__gpio_set_direction__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_set_direction__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_input_enable__field_descriptors[1] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioInputEnable, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_input_enable__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+};
+static const ProtobufCIntRange rpc__req__gpio_input_enable__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_input_enable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioInputEnable",
+  "RpcReqGpioInputEnable",
+  "RpcReqGpioInputEnable",
+  "",
+  sizeof(RpcReqGpioInputEnable),
+  1,
+  rpc__req__gpio_input_enable__field_descriptors,
+  rpc__req__gpio_input_enable__field_indices_by_name,
+  1,  rpc__req__gpio_input_enable__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_input_enable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_input_enable__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioInputEnable, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_input_enable__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_input_enable__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_input_enable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioInputEnable",
+  "RpcRespGpioInputEnable",
+  "RpcRespGpioInputEnable",
+  "",
+  sizeof(RpcRespGpioInputEnable),
+  1,
+  rpc__resp__gpio_input_enable__field_descriptors,
+  rpc__resp__gpio_input_enable__field_indices_by_name,
+  1,  rpc__resp__gpio_input_enable__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_input_enable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__gpio_set_pull_mode__field_descriptors[2] =
+{
+  {
+    "gpio_num",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetPullMode, gpio_num),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pull",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_ENUM,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqGpioSetPullMode, pull),
+    &rpc__gpio_pull_mode__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__gpio_set_pull_mode__field_indices_by_name[] = {
+  0,   /* field[0] = gpio_num */
+  1,   /* field[1] = pull */
+};
+static const ProtobufCIntRange rpc__req__gpio_set_pull_mode__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__gpio_set_pull_mode__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_GpioSetPullMode",
+  "RpcReqGpioSetPullMode",
+  "RpcReqGpioSetPullMode",
+  "",
+  sizeof(RpcReqGpioSetPullMode),
+  2,
+  rpc__req__gpio_set_pull_mode__field_descriptors,
+  rpc__req__gpio_set_pull_mode__field_indices_by_name,
+  1,  rpc__req__gpio_set_pull_mode__number_ranges,
+  (ProtobufCMessageInit) rpc__req__gpio_set_pull_mode__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__gpio_set_pull_mode__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespGpioSetPullMode, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__gpio_set_pull_mode__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__gpio_set_pull_mode__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__gpio_set_pull_mode__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_GpioSetPullMode",
+  "RpcRespGpioSetPullMode",
+  "RpcRespGpioSetPullMode",
+  "",
+  sizeof(RpcRespGpioSetPullMode),
+  1,
+  rpc__resp__gpio_set_pull_mode__field_descriptors,
+  rpc__resp__gpio_set_pull_mode__field_indices_by_name,
+  1,  rpc__resp__gpio_set_pull_mode__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__gpio_set_pull_mode__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__ext_coex__field_descriptors[9] =
+{
+  {
+    "cmd",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, cmd),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_gpio_wire_type",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_gpio_wire_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_gpio_request_pin",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_gpio_request_pin),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_gpio_priority_pin",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_gpio_priority_pin),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_gpio_grant_pin",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_gpio_grant_pin),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_gpio_tx_line_pin",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_gpio_tx_line_pin),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_work_mode",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_work_mode),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_grant_delay_us",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_grant_delay_us),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_validate_high",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqExtCoex, set_validate_high),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__ext_coex__field_indices_by_name[] = {
+  0,   /* field[0] = cmd */
+  4,   /* field[4] = set_gpio_grant_pin */
+  3,   /* field[3] = set_gpio_priority_pin */
+  2,   /* field[2] = set_gpio_request_pin */
+  5,   /* field[5] = set_gpio_tx_line_pin */
+  1,   /* field[1] = set_gpio_wire_type */
+  7,   /* field[7] = set_grant_delay_us */
+  8,   /* field[8] = set_validate_high */
+  6,   /* field[6] = set_work_mode */
+};
+static const ProtobufCIntRange rpc__req__ext_coex__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 9 }
+};
+const ProtobufCMessageDescriptor rpc__req__ext_coex__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_ExtCoex",
+  "RpcReqExtCoex",
+  "RpcReqExtCoex",
+  "",
+  sizeof(RpcReqExtCoex),
+  9,
+  rpc__req__ext_coex__field_descriptors,
+  rpc__req__ext_coex__field_indices_by_name,
+  1,  rpc__req__ext_coex__number_ranges,
+  (ProtobufCMessageInit) rpc__req__ext_coex__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__ext_coex__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespExtCoex, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__ext_coex__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__ext_coex__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__ext_coex__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_ExtCoex",
+  "RpcRespExtCoex",
+  "RpcRespExtCoex",
+  "",
+  sizeof(RpcRespExtCoex),
+  1,
+  rpc__resp__ext_coex__field_descriptors,
+  rpc__resp__ext_coex__field_indices_by_name,
+  1,  rpc__resp__ext_coex__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__ext_coex__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__dhcp_dns_status__field_descriptors[10] =
+{
+  {
+    "iface",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, iface),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "net_link_up",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, net_link_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_up",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dhcp_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_ip",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dhcp_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_nm",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dhcp_nm),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dhcp_gw",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dhcp_gw),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_up",
+    7,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dns_up),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_ip",
+    8,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dns_ip),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dns_type",
+    9,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, dns_type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp",
+    10,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventDhcpDnsStatus, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__dhcp_dns_status__field_indices_by_name[] = {
+  5,   /* field[5] = dhcp_gw */
+  3,   /* field[3] = dhcp_ip */
+  4,   /* field[4] = dhcp_nm */
+  2,   /* field[2] = dhcp_up */
+  7,   /* field[7] = dns_ip */
+  8,   /* field[8] = dns_type */
+  6,   /* field[6] = dns_up */
+  0,   /* field[0] = iface */
+  1,   /* field[1] = net_link_up */
+  9,   /* field[9] = resp */
+};
+static const ProtobufCIntRange rpc__event__dhcp_dns_status__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 10 }
+};
+const ProtobufCMessageDescriptor rpc__event__dhcp_dns_status__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_DhcpDnsStatus",
+  "RpcEventDhcpDnsStatus",
+  "RpcEventDhcpDnsStatus",
+  "",
+  sizeof(RpcEventDhcpDnsStatus),
+  10,
+  rpc__event__dhcp_dns_status__field_descriptors,
+  rpc__event__dhcp_dns_status__field_indices_by_name,
+  1,  rpc__event__dhcp_dns_status__number_ranges,
+  (ProtobufCMessageInit) rpc__event__dhcp_dns_status__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__sta_itwt_setup__field_descriptors[5] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSetup, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "config",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSetup, config),
+    &wifi_itwt_setup_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "status",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSetup, status),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reason",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSetup, reason),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "target_wake_time",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT64,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSetup, target_wake_time),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__sta_itwt_setup__field_indices_by_name[] = {
+  1,   /* field[1] = config */
+  3,   /* field[3] = reason */
+  0,   /* field[0] = resp */
+  2,   /* field[2] = status */
+  4,   /* field[4] = target_wake_time */
+};
+static const ProtobufCIntRange rpc__event__sta_itwt_setup__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 5 }
+};
+const ProtobufCMessageDescriptor rpc__event__sta_itwt_setup__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_StaItwtSetup",
+  "RpcEventStaItwtSetup",
+  "RpcEventStaItwtSetup",
+  "",
+  sizeof(RpcEventStaItwtSetup),
+  5,
+  rpc__event__sta_itwt_setup__field_descriptors,
+  rpc__event__sta_itwt_setup__field_indices_by_name,
+  1,  rpc__event__sta_itwt_setup__number_ranges,
+  (ProtobufCMessageInit) rpc__event__sta_itwt_setup__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__sta_itwt_teardown__field_descriptors[3] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtTeardown, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "flow_id",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtTeardown, flow_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "status",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtTeardown, status),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__sta_itwt_teardown__field_indices_by_name[] = {
+  1,   /* field[1] = flow_id */
+  0,   /* field[0] = resp */
+  2,   /* field[2] = status */
+};
+static const ProtobufCIntRange rpc__event__sta_itwt_teardown__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__event__sta_itwt_teardown__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_StaItwtTeardown",
+  "RpcEventStaItwtTeardown",
+  "RpcEventStaItwtTeardown",
+  "",
+  sizeof(RpcEventStaItwtTeardown),
+  3,
+  rpc__event__sta_itwt_teardown__field_descriptors,
+  rpc__event__sta_itwt_teardown__field_indices_by_name,
+  1,  rpc__event__sta_itwt_teardown__number_ranges,
+  (ProtobufCMessageInit) rpc__event__sta_itwt_teardown__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__sta_itwt_suspend__field_descriptors[4] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSuspend, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "status",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSuspend, status),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "flow_id_bitmap",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtSuspend, flow_id_bitmap),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "actual_suspend_time_ms",
+    4,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_UINT32,
+    offsetof(RpcEventStaItwtSuspend, n_actual_suspend_time_ms),
+    offsetof(RpcEventStaItwtSuspend, actual_suspend_time_ms),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_PACKED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__sta_itwt_suspend__field_indices_by_name[] = {
+  3,   /* field[3] = actual_suspend_time_ms */
+  2,   /* field[2] = flow_id_bitmap */
+  0,   /* field[0] = resp */
+  1,   /* field[1] = status */
+};
+static const ProtobufCIntRange rpc__event__sta_itwt_suspend__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor rpc__event__sta_itwt_suspend__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_StaItwtSuspend",
+  "RpcEventStaItwtSuspend",
+  "RpcEventStaItwtSuspend",
+  "",
+  sizeof(RpcEventStaItwtSuspend),
+  4,
+  rpc__event__sta_itwt_suspend__field_descriptors,
+  rpc__event__sta_itwt_suspend__field_indices_by_name,
+  1,  rpc__event__sta_itwt_suspend__number_ranges,
+  (ProtobufCMessageInit) rpc__event__sta_itwt_suspend__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__sta_itwt_probe__field_descriptors[3] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtProbe, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "status",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtProbe, status),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reason",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventStaItwtProbe, reason),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__sta_itwt_probe__field_indices_by_name[] = {
+  2,   /* field[2] = reason */
+  0,   /* field[0] = resp */
+  1,   /* field[1] = status */
+};
+static const ProtobufCIntRange rpc__event__sta_itwt_probe__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__event__sta_itwt_probe__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_StaItwtProbe",
+  "RpcEventStaItwtProbe",
+  "RpcEventStaItwtProbe",
+  "",
+  sizeof(RpcEventStaItwtProbe),
+  3,
+  rpc__event__sta_itwt_probe__field_descriptors,
+  rpc__event__sta_itwt_probe__field_indices_by_name,
+  1,  rpc__event__sta_itwt_probe__number_ranges,
+  (ProtobufCMessageInit) rpc__event__sta_itwt_probe__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__wifi_sta_enterprise_enable__field_descriptors NULL
+#define rpc__req__wifi_sta_enterprise_enable__field_indices_by_name NULL
+#define rpc__req__wifi_sta_enterprise_enable__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_enterprise_enable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaEnterpriseEnable",
+  "RpcReqWifiStaEnterpriseEnable",
+  "RpcReqWifiStaEnterpriseEnable",
+  "",
+  sizeof(RpcReqWifiStaEnterpriseEnable),
+  0,
+  rpc__req__wifi_sta_enterprise_enable__field_descriptors,
+  rpc__req__wifi_sta_enterprise_enable__field_indices_by_name,
+  0,  rpc__req__wifi_sta_enterprise_enable__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_enterprise_enable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_enterprise_enable__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaEnterpriseEnable, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_enterprise_enable__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_enterprise_enable__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_enterprise_enable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaEnterpriseEnable",
+  "RpcRespWifiStaEnterpriseEnable",
+  "RpcRespWifiStaEnterpriseEnable",
+  "",
+  sizeof(RpcRespWifiStaEnterpriseEnable),
+  1,
+  rpc__resp__wifi_sta_enterprise_enable__field_descriptors,
+  rpc__resp__wifi_sta_enterprise_enable__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_enterprise_enable__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_enterprise_enable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__wifi_sta_enterprise_disable__field_descriptors NULL
+#define rpc__req__wifi_sta_enterprise_disable__field_indices_by_name NULL
+#define rpc__req__wifi_sta_enterprise_disable__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__wifi_sta_enterprise_disable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiStaEnterpriseDisable",
+  "RpcReqWifiStaEnterpriseDisable",
+  "RpcReqWifiStaEnterpriseDisable",
+  "",
+  sizeof(RpcReqWifiStaEnterpriseDisable),
+  0,
+  rpc__req__wifi_sta_enterprise_disable__field_descriptors,
+  rpc__req__wifi_sta_enterprise_disable__field_indices_by_name,
+  0,  rpc__req__wifi_sta_enterprise_disable__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_sta_enterprise_disable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_sta_enterprise_disable__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiStaEnterpriseDisable, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_sta_enterprise_disable__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_sta_enterprise_disable__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_sta_enterprise_disable__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiStaEnterpriseDisable",
+  "RpcRespWifiStaEnterpriseDisable",
+  "RpcRespWifiStaEnterpriseDisable",
+  "",
+  sizeof(RpcRespWifiStaEnterpriseDisable),
+  1,
+  rpc__resp__wifi_sta_enterprise_disable__field_descriptors,
+  rpc__resp__wifi_sta_enterprise_disable__field_indices_by_name,
+  1,  rpc__resp__wifi_sta_enterprise_disable__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_sta_enterprise_disable__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_identity__field_descriptors[2] =
+{
+  {
+    "identity",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetIdentity, identity),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetIdentity, len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_identity__field_indices_by_name[] = {
+  0,   /* field[0] = identity */
+  1,   /* field[1] = len */
+};
+static const ProtobufCIntRange rpc__req__eap_set_identity__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_identity__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetIdentity",
+  "RpcReqEapSetIdentity",
+  "RpcReqEapSetIdentity",
+  "",
+  sizeof(RpcReqEapSetIdentity),
+  2,
+  rpc__req__eap_set_identity__field_descriptors,
+  rpc__req__eap_set_identity__field_indices_by_name,
+  1,  rpc__req__eap_set_identity__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_identity__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_identity__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetIdentity, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_identity__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_identity__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_identity__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetIdentity",
+  "RpcRespEapSetIdentity",
+  "RpcRespEapSetIdentity",
+  "",
+  sizeof(RpcRespEapSetIdentity),
+  1,
+  rpc__resp__eap_set_identity__field_descriptors,
+  rpc__resp__eap_set_identity__field_indices_by_name,
+  1,  rpc__resp__eap_set_identity__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_identity__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_identity__field_descriptors NULL
+#define rpc__req__eap_clear_identity__field_indices_by_name NULL
+#define rpc__req__eap_clear_identity__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_identity__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearIdentity",
+  "RpcReqEapClearIdentity",
+  "RpcReqEapClearIdentity",
+  "",
+  sizeof(RpcReqEapClearIdentity),
+  0,
+  rpc__req__eap_clear_identity__field_descriptors,
+  rpc__req__eap_clear_identity__field_indices_by_name,
+  0,  rpc__req__eap_clear_identity__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_identity__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_identity__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearIdentity, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_identity__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_identity__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_identity__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearIdentity",
+  "RpcRespEapClearIdentity",
+  "RpcRespEapClearIdentity",
+  "",
+  sizeof(RpcRespEapClearIdentity),
+  1,
+  rpc__resp__eap_clear_identity__field_descriptors,
+  rpc__resp__eap_clear_identity__field_indices_by_name,
+  1,  rpc__resp__eap_clear_identity__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_identity__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_username__field_descriptors[2] =
+{
+  {
+    "username",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetUsername, username),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetUsername, len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_username__field_indices_by_name[] = {
+  1,   /* field[1] = len */
+  0,   /* field[0] = username */
+};
+static const ProtobufCIntRange rpc__req__eap_set_username__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_username__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetUsername",
+  "RpcReqEapSetUsername",
+  "RpcReqEapSetUsername",
+  "",
+  sizeof(RpcReqEapSetUsername),
+  2,
+  rpc__req__eap_set_username__field_descriptors,
+  rpc__req__eap_set_username__field_indices_by_name,
+  1,  rpc__req__eap_set_username__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_username__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_username__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetUsername, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_username__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_username__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_username__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetUsername",
+  "RpcRespEapSetUsername",
+  "RpcRespEapSetUsername",
+  "",
+  sizeof(RpcRespEapSetUsername),
+  1,
+  rpc__resp__eap_set_username__field_descriptors,
+  rpc__resp__eap_set_username__field_indices_by_name,
+  1,  rpc__resp__eap_set_username__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_username__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_username__field_descriptors NULL
+#define rpc__req__eap_clear_username__field_indices_by_name NULL
+#define rpc__req__eap_clear_username__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_username__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearUsername",
+  "RpcReqEapClearUsername",
+  "RpcReqEapClearUsername",
+  "",
+  sizeof(RpcReqEapClearUsername),
+  0,
+  rpc__req__eap_clear_username__field_descriptors,
+  rpc__req__eap_clear_username__field_indices_by_name,
+  0,  rpc__req__eap_clear_username__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_username__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_username__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearUsername, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_username__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_username__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_username__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearUsername",
+  "RpcRespEapClearUsername",
+  "RpcRespEapClearUsername",
+  "",
+  sizeof(RpcRespEapClearUsername),
+  1,
+  rpc__resp__eap_clear_username__field_descriptors,
+  rpc__resp__eap_clear_username__field_indices_by_name,
+  1,  rpc__resp__eap_clear_username__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_username__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_password__field_descriptors[2] =
+{
+  {
+    "password",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetPassword, password),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetPassword, len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_password__field_indices_by_name[] = {
+  1,   /* field[1] = len */
+  0,   /* field[0] = password */
+};
+static const ProtobufCIntRange rpc__req__eap_set_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetPassword",
+  "RpcReqEapSetPassword",
+  "RpcReqEapSetPassword",
+  "",
+  sizeof(RpcReqEapSetPassword),
+  2,
+  rpc__req__eap_set_password__field_descriptors,
+  rpc__req__eap_set_password__field_indices_by_name,
+  1,  rpc__req__eap_set_password__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_password__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetPassword, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_password__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetPassword",
+  "RpcRespEapSetPassword",
+  "RpcRespEapSetPassword",
+  "",
+  sizeof(RpcRespEapSetPassword),
+  1,
+  rpc__resp__eap_set_password__field_descriptors,
+  rpc__resp__eap_set_password__field_indices_by_name,
+  1,  rpc__resp__eap_set_password__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_password__field_descriptors NULL
+#define rpc__req__eap_clear_password__field_indices_by_name NULL
+#define rpc__req__eap_clear_password__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearPassword",
+  "RpcReqEapClearPassword",
+  "RpcReqEapClearPassword",
+  "",
+  sizeof(RpcReqEapClearPassword),
+  0,
+  rpc__req__eap_clear_password__field_descriptors,
+  rpc__req__eap_clear_password__field_indices_by_name,
+  0,  rpc__req__eap_clear_password__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_password__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearPassword, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_password__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearPassword",
+  "RpcRespEapClearPassword",
+  "RpcRespEapClearPassword",
+  "",
+  sizeof(RpcRespEapClearPassword),
+  1,
+  rpc__resp__eap_clear_password__field_descriptors,
+  rpc__resp__eap_clear_password__field_indices_by_name,
+  1,  rpc__resp__eap_clear_password__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_new_password__field_descriptors[2] =
+{
+  {
+    "new_password",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetNewPassword, new_password),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetNewPassword, len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_new_password__field_indices_by_name[] = {
+  1,   /* field[1] = len */
+  0,   /* field[0] = new_password */
+};
+static const ProtobufCIntRange rpc__req__eap_set_new_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_new_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetNewPassword",
+  "RpcReqEapSetNewPassword",
+  "RpcReqEapSetNewPassword",
+  "",
+  sizeof(RpcReqEapSetNewPassword),
+  2,
+  rpc__req__eap_set_new_password__field_descriptors,
+  rpc__req__eap_set_new_password__field_indices_by_name,
+  1,  rpc__req__eap_set_new_password__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_new_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_new_password__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetNewPassword, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_new_password__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_new_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_new_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetNewPassword",
+  "RpcRespEapSetNewPassword",
+  "RpcRespEapSetNewPassword",
+  "",
+  sizeof(RpcRespEapSetNewPassword),
+  1,
+  rpc__resp__eap_set_new_password__field_descriptors,
+  rpc__resp__eap_set_new_password__field_indices_by_name,
+  1,  rpc__resp__eap_set_new_password__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_new_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_new_password__field_descriptors NULL
+#define rpc__req__eap_clear_new_password__field_indices_by_name NULL
+#define rpc__req__eap_clear_new_password__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_new_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearNewPassword",
+  "RpcReqEapClearNewPassword",
+  "RpcReqEapClearNewPassword",
+  "",
+  sizeof(RpcReqEapClearNewPassword),
+  0,
+  rpc__req__eap_clear_new_password__field_descriptors,
+  rpc__req__eap_clear_new_password__field_indices_by_name,
+  0,  rpc__req__eap_clear_new_password__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_new_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_new_password__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearNewPassword, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_new_password__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_new_password__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_new_password__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearNewPassword",
+  "RpcRespEapClearNewPassword",
+  "RpcRespEapClearNewPassword",
+  "",
+  sizeof(RpcRespEapClearNewPassword),
+  1,
+  rpc__resp__eap_clear_new_password__field_descriptors,
+  rpc__resp__eap_clear_new_password__field_indices_by_name,
+  1,  rpc__resp__eap_clear_new_password__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_new_password__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_ca_cert__field_descriptors[2] =
+{
+  {
+    "ca_cert",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCaCert, ca_cert),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "ca_cert_len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCaCert, ca_cert_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_ca_cert__field_indices_by_name[] = {
+  0,   /* field[0] = ca_cert */
+  1,   /* field[1] = ca_cert_len */
+};
+static const ProtobufCIntRange rpc__req__eap_set_ca_cert__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_ca_cert__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetCaCert",
+  "RpcReqEapSetCaCert",
+  "RpcReqEapSetCaCert",
+  "",
+  sizeof(RpcReqEapSetCaCert),
+  2,
+  rpc__req__eap_set_ca_cert__field_descriptors,
+  rpc__req__eap_set_ca_cert__field_indices_by_name,
+  1,  rpc__req__eap_set_ca_cert__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_ca_cert__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_ca_cert__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetCaCert, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_ca_cert__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_ca_cert__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_ca_cert__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetCaCert",
+  "RpcRespEapSetCaCert",
+  "RpcRespEapSetCaCert",
+  "",
+  sizeof(RpcRespEapSetCaCert),
+  1,
+  rpc__resp__eap_set_ca_cert__field_descriptors,
+  rpc__resp__eap_set_ca_cert__field_indices_by_name,
+  1,  rpc__resp__eap_set_ca_cert__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_ca_cert__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_ca_cert__field_descriptors NULL
+#define rpc__req__eap_clear_ca_cert__field_indices_by_name NULL
+#define rpc__req__eap_clear_ca_cert__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_ca_cert__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearCaCert",
+  "RpcReqEapClearCaCert",
+  "RpcReqEapClearCaCert",
+  "",
+  sizeof(RpcReqEapClearCaCert),
+  0,
+  rpc__req__eap_clear_ca_cert__field_descriptors,
+  rpc__req__eap_clear_ca_cert__field_indices_by_name,
+  0,  rpc__req__eap_clear_ca_cert__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_ca_cert__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_ca_cert__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearCaCert, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_ca_cert__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_ca_cert__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_ca_cert__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearCaCert",
+  "RpcRespEapClearCaCert",
+  "RpcRespEapClearCaCert",
+  "",
+  sizeof(RpcRespEapClearCaCert),
+  1,
+  rpc__resp__eap_clear_ca_cert__field_descriptors,
+  rpc__resp__eap_clear_ca_cert__field_indices_by_name,
+  1,  rpc__resp__eap_clear_ca_cert__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_ca_cert__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_certificate_and_key__field_descriptors[6] =
+{
+  {
+    "client_cert",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, client_cert),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "client_cert_len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, client_cert_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "private_key",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, private_key),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "private_key_len",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, private_key_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "private_key_password",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, private_key_password),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "private_key_passwd_len",
+    6,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetCertificateAndKey, private_key_passwd_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_certificate_and_key__field_indices_by_name[] = {
+  0,   /* field[0] = client_cert */
+  1,   /* field[1] = client_cert_len */
+  2,   /* field[2] = private_key */
+  3,   /* field[3] = private_key_len */
+  5,   /* field[5] = private_key_passwd_len */
+  4,   /* field[4] = private_key_password */
+};
+static const ProtobufCIntRange rpc__req__eap_set_certificate_and_key__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 6 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_certificate_and_key__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetCertificateAndKey",
+  "RpcReqEapSetCertificateAndKey",
+  "RpcReqEapSetCertificateAndKey",
+  "",
+  sizeof(RpcReqEapSetCertificateAndKey),
+  6,
+  rpc__req__eap_set_certificate_and_key__field_descriptors,
+  rpc__req__eap_set_certificate_and_key__field_indices_by_name,
+  1,  rpc__req__eap_set_certificate_and_key__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_certificate_and_key__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_certificate_and_key__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetCertificateAndKey, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_certificate_and_key__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_certificate_and_key__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_certificate_and_key__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetCertificateAndKey",
+  "RpcRespEapSetCertificateAndKey",
+  "RpcRespEapSetCertificateAndKey",
+  "",
+  sizeof(RpcRespEapSetCertificateAndKey),
+  1,
+  rpc__resp__eap_set_certificate_and_key__field_descriptors,
+  rpc__resp__eap_set_certificate_and_key__field_indices_by_name,
+  1,  rpc__resp__eap_set_certificate_and_key__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_certificate_and_key__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_clear_certificate_and_key__field_descriptors NULL
+#define rpc__req__eap_clear_certificate_and_key__field_indices_by_name NULL
+#define rpc__req__eap_clear_certificate_and_key__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_clear_certificate_and_key__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapClearCertificateAndKey",
+  "RpcReqEapClearCertificateAndKey",
+  "RpcReqEapClearCertificateAndKey",
+  "",
+  sizeof(RpcReqEapClearCertificateAndKey),
+  0,
+  rpc__req__eap_clear_certificate_and_key__field_descriptors,
+  rpc__req__eap_clear_certificate_and_key__field_indices_by_name,
+  0,  rpc__req__eap_clear_certificate_and_key__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_clear_certificate_and_key__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_clear_certificate_and_key__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapClearCertificateAndKey, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_clear_certificate_and_key__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_clear_certificate_and_key__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_clear_certificate_and_key__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapClearCertificateAndKey",
+  "RpcRespEapClearCertificateAndKey",
+  "RpcRespEapClearCertificateAndKey",
+  "",
+  sizeof(RpcRespEapClearCertificateAndKey),
+  1,
+  rpc__resp__eap_clear_certificate_and_key__field_descriptors,
+  rpc__resp__eap_clear_certificate_and_key__field_indices_by_name,
+  1,  rpc__resp__eap_clear_certificate_and_key__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_clear_certificate_and_key__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_disable_time_check__field_descriptors[1] =
+{
+  {
+    "disable",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetDisableTimeCheck, disable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_disable_time_check__field_indices_by_name[] = {
+  0,   /* field[0] = disable */
+};
+static const ProtobufCIntRange rpc__req__eap_set_disable_time_check__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_disable_time_check__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetDisableTimeCheck",
+  "RpcReqEapSetDisableTimeCheck",
+  "RpcReqEapSetDisableTimeCheck",
+  "",
+  sizeof(RpcReqEapSetDisableTimeCheck),
+  1,
+  rpc__req__eap_set_disable_time_check__field_descriptors,
+  rpc__req__eap_set_disable_time_check__field_indices_by_name,
+  1,  rpc__req__eap_set_disable_time_check__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_disable_time_check__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_disable_time_check__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetDisableTimeCheck, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_disable_time_check__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_disable_time_check__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_disable_time_check__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetDisableTimeCheck",
+  "RpcRespEapSetDisableTimeCheck",
+  "RpcRespEapSetDisableTimeCheck",
+  "",
+  sizeof(RpcRespEapSetDisableTimeCheck),
+  1,
+  rpc__resp__eap_set_disable_time_check__field_descriptors,
+  rpc__resp__eap_set_disable_time_check__field_indices_by_name,
+  1,  rpc__resp__eap_set_disable_time_check__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_disable_time_check__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define rpc__req__eap_get_disable_time_check__field_descriptors NULL
+#define rpc__req__eap_get_disable_time_check__field_indices_by_name NULL
+#define rpc__req__eap_get_disable_time_check__number_ranges NULL
+const ProtobufCMessageDescriptor rpc__req__eap_get_disable_time_check__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapGetDisableTimeCheck",
+  "RpcReqEapGetDisableTimeCheck",
+  "RpcReqEapGetDisableTimeCheck",
+  "",
+  sizeof(RpcReqEapGetDisableTimeCheck),
+  0,
+  rpc__req__eap_get_disable_time_check__field_descriptors,
+  rpc__req__eap_get_disable_time_check__field_indices_by_name,
+  0,  rpc__req__eap_get_disable_time_check__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_get_disable_time_check__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_get_disable_time_check__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapGetDisableTimeCheck, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "disable",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapGetDisableTimeCheck, disable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_get_disable_time_check__field_indices_by_name[] = {
+  1,   /* field[1] = disable */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_get_disable_time_check__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_get_disable_time_check__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapGetDisableTimeCheck",
+  "RpcRespEapGetDisableTimeCheck",
+  "RpcRespEapGetDisableTimeCheck",
+  "",
+  sizeof(RpcRespEapGetDisableTimeCheck),
+  2,
+  rpc__resp__eap_get_disable_time_check__field_descriptors,
+  rpc__resp__eap_get_disable_time_check__field_indices_by_name,
+  1,  rpc__resp__eap_get_disable_time_check__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_get_disable_time_check__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_ttls_phase2_method__field_descriptors[1] =
+{
+  {
+    "type",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetTtlsPhase2Method, type),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_ttls_phase2_method__field_indices_by_name[] = {
+  0,   /* field[0] = type */
+};
+static const ProtobufCIntRange rpc__req__eap_set_ttls_phase2_method__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_ttls_phase2_method__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetTtlsPhase2Method",
+  "RpcReqEapSetTtlsPhase2Method",
+  "RpcReqEapSetTtlsPhase2Method",
+  "",
+  sizeof(RpcReqEapSetTtlsPhase2Method),
+  1,
+  rpc__req__eap_set_ttls_phase2_method__field_descriptors,
+  rpc__req__eap_set_ttls_phase2_method__field_indices_by_name,
+  1,  rpc__req__eap_set_ttls_phase2_method__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_ttls_phase2_method__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_ttls_phase2_method__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetTtlsPhase2Method, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_ttls_phase2_method__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_ttls_phase2_method__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_ttls_phase2_method__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetTtlsPhase2Method",
+  "RpcRespEapSetTtlsPhase2Method",
+  "RpcRespEapSetTtlsPhase2Method",
+  "",
+  sizeof(RpcRespEapSetTtlsPhase2Method),
+  1,
+  rpc__resp__eap_set_ttls_phase2_method__field_descriptors,
+  rpc__resp__eap_set_ttls_phase2_method__field_indices_by_name,
+  1,  rpc__resp__eap_set_ttls_phase2_method__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_ttls_phase2_method__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_suiteb192bit_certification__field_descriptors[1] =
+{
+  {
+    "enable",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetSuiteb192bitCertification, enable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_suiteb192bit_certification__field_indices_by_name[] = {
+  0,   /* field[0] = enable */
+};
+static const ProtobufCIntRange rpc__req__eap_set_suiteb192bit_certification__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_suiteb192bit_certification__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetSuiteb192bitCertification",
+  "RpcReqEapSetSuiteb192bitCertification",
+  "RpcReqEapSetSuiteb192bitCertification",
+  "",
+  sizeof(RpcReqEapSetSuiteb192bitCertification),
+  1,
+  rpc__req__eap_set_suiteb192bit_certification__field_descriptors,
+  rpc__req__eap_set_suiteb192bit_certification__field_indices_by_name,
+  1,  rpc__req__eap_set_suiteb192bit_certification__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_suiteb192bit_certification__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_suiteb192bit_certification__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetSuiteb192bitCertification, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_suiteb192bit_certification__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_suiteb192bit_certification__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_suiteb192bit_certification__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetSuiteb192bitCertification",
+  "RpcRespEapSetSuiteb192bitCertification",
+  "RpcRespEapSetSuiteb192bitCertification",
+  "",
+  sizeof(RpcRespEapSetSuiteb192bitCertification),
+  1,
+  rpc__resp__eap_set_suiteb192bit_certification__field_descriptors,
+  rpc__resp__eap_set_suiteb192bit_certification__field_indices_by_name,
+  1,  rpc__resp__eap_set_suiteb192bit_certification__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_suiteb192bit_certification__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_pac_file__field_descriptors[2] =
+{
+  {
+    "pac_file",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetPacFile, pac_file),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pac_file_len",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetPacFile, pac_file_len),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_pac_file__field_indices_by_name[] = {
+  0,   /* field[0] = pac_file */
+  1,   /* field[1] = pac_file_len */
+};
+static const ProtobufCIntRange rpc__req__eap_set_pac_file__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_pac_file__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetPacFile",
+  "RpcReqEapSetPacFile",
+  "RpcReqEapSetPacFile",
+  "",
+  sizeof(RpcReqEapSetPacFile),
+  2,
+  rpc__req__eap_set_pac_file__field_descriptors,
+  rpc__req__eap_set_pac_file__field_indices_by_name,
+  1,  rpc__req__eap_set_pac_file__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_pac_file__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_pac_file__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetPacFile, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_pac_file__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_pac_file__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_pac_file__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetPacFile",
+  "RpcRespEapSetPacFile",
+  "RpcRespEapSetPacFile",
+  "",
+  sizeof(RpcRespEapSetPacFile),
+  1,
+  rpc__resp__eap_set_pac_file__field_descriptors,
+  rpc__resp__eap_set_pac_file__field_indices_by_name,
+  1,  rpc__resp__eap_set_pac_file__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_pac_file__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_fast_params__field_descriptors[1] =
+{
+  {
+    "eap_fast_config",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetFastParams, eap_fast_config),
+    &eap_fast_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_fast_params__field_indices_by_name[] = {
+  0,   /* field[0] = eap_fast_config */
+};
+static const ProtobufCIntRange rpc__req__eap_set_fast_params__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_fast_params__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetFastParams",
+  "RpcReqEapSetFastParams",
+  "RpcReqEapSetFastParams",
+  "",
+  sizeof(RpcReqEapSetFastParams),
+  1,
+  rpc__req__eap_set_fast_params__field_descriptors,
+  rpc__req__eap_set_fast_params__field_indices_by_name,
+  1,  rpc__req__eap_set_fast_params__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_fast_params__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_fast_params__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetFastParams, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_fast_params__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_fast_params__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_fast_params__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetFastParams",
+  "RpcRespEapSetFastParams",
+  "RpcRespEapSetFastParams",
+  "",
+  sizeof(RpcRespEapSetFastParams),
+  1,
+  rpc__resp__eap_set_fast_params__field_descriptors,
+  rpc__resp__eap_set_fast_params__field_indices_by_name,
+  1,  rpc__resp__eap_set_fast_params__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_fast_params__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_use_default_cert_bundle__field_descriptors[1] =
+{
+  {
+    "use_default_bundle",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapUseDefaultCertBundle, use_default_bundle),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_use_default_cert_bundle__field_indices_by_name[] = {
+  0,   /* field[0] = use_default_bundle */
+};
+static const ProtobufCIntRange rpc__req__eap_use_default_cert_bundle__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_use_default_cert_bundle__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapUseDefaultCertBundle",
+  "RpcReqEapUseDefaultCertBundle",
+  "RpcReqEapUseDefaultCertBundle",
+  "",
+  sizeof(RpcReqEapUseDefaultCertBundle),
+  1,
+  rpc__req__eap_use_default_cert_bundle__field_descriptors,
+  rpc__req__eap_use_default_cert_bundle__field_indices_by_name,
+  1,  rpc__req__eap_use_default_cert_bundle__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_use_default_cert_bundle__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_use_default_cert_bundle__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapUseDefaultCertBundle, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_use_default_cert_bundle__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_use_default_cert_bundle__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_use_default_cert_bundle__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapUseDefaultCertBundle",
+  "RpcRespEapUseDefaultCertBundle",
+  "RpcRespEapUseDefaultCertBundle",
+  "",
+  sizeof(RpcRespEapUseDefaultCertBundle),
+  1,
+  rpc__resp__eap_use_default_cert_bundle__field_descriptors,
+  rpc__resp__eap_use_default_cert_bundle__field_indices_by_name,
+  1,  rpc__resp__eap_use_default_cert_bundle__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_use_default_cert_bundle__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__wifi_set_okc_support__field_descriptors[1] =
+{
+  {
+    "enable",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqWifiSetOkcSupport, enable),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__wifi_set_okc_support__field_indices_by_name[] = {
+  0,   /* field[0] = enable */
+};
+static const ProtobufCIntRange rpc__req__wifi_set_okc_support__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__wifi_set_okc_support__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_WifiSetOkcSupport",
+  "RpcReqWifiSetOkcSupport",
+  "RpcReqWifiSetOkcSupport",
+  "",
+  sizeof(RpcReqWifiSetOkcSupport),
+  1,
+  rpc__req__wifi_set_okc_support__field_descriptors,
+  rpc__req__wifi_set_okc_support__field_indices_by_name,
+  1,  rpc__req__wifi_set_okc_support__number_ranges,
+  (ProtobufCMessageInit) rpc__req__wifi_set_okc_support__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__wifi_set_okc_support__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespWifiSetOkcSupport, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__wifi_set_okc_support__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__wifi_set_okc_support__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__wifi_set_okc_support__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_WifiSetOkcSupport",
+  "RpcRespWifiSetOkcSupport",
+  "RpcRespWifiSetOkcSupport",
+  "",
+  sizeof(RpcRespWifiSetOkcSupport),
+  1,
+  rpc__resp__wifi_set_okc_support__field_descriptors,
+  rpc__resp__wifi_set_okc_support__field_indices_by_name,
+  1,  rpc__resp__wifi_set_okc_support__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__wifi_set_okc_support__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_domain_name__field_descriptors[1] =
+{
+  {
+    "domain_name",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetDomainName, domain_name),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_domain_name__field_indices_by_name[] = {
+  0,   /* field[0] = domain_name */
+};
+static const ProtobufCIntRange rpc__req__eap_set_domain_name__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_domain_name__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetDomainName",
+  "RpcReqEapSetDomainName",
+  "RpcReqEapSetDomainName",
+  "",
+  sizeof(RpcReqEapSetDomainName),
+  1,
+  rpc__req__eap_set_domain_name__field_descriptors,
+  rpc__req__eap_set_domain_name__field_indices_by_name,
+  1,  rpc__req__eap_set_domain_name__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_domain_name__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_domain_name__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetDomainName, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_domain_name__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_domain_name__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_domain_name__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetDomainName",
+  "RpcRespEapSetDomainName",
+  "RpcRespEapSetDomainName",
+  "",
+  sizeof(RpcRespEapSetDomainName),
+  1,
+  rpc__resp__eap_set_domain_name__field_descriptors,
+  rpc__resp__eap_set_domain_name__field_indices_by_name,
+  1,  rpc__resp__eap_set_domain_name__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_domain_name__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__eap_set_eap_methods__field_descriptors[1] =
+{
+  {
+    "methods",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqEapSetEapMethods, methods),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__eap_set_eap_methods__field_indices_by_name[] = {
+  0,   /* field[0] = methods */
+};
+static const ProtobufCIntRange rpc__req__eap_set_eap_methods__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__req__eap_set_eap_methods__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_EapSetEapMethods",
+  "RpcReqEapSetEapMethods",
+  "RpcReqEapSetEapMethods",
+  "",
+  sizeof(RpcReqEapSetEapMethods),
+  1,
+  rpc__req__eap_set_eap_methods__field_descriptors,
+  rpc__req__eap_set_eap_methods__field_indices_by_name,
+  1,  rpc__req__eap_set_eap_methods__number_ranges,
+  (ProtobufCMessageInit) rpc__req__eap_set_eap_methods__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__eap_set_eap_methods__field_descriptors[1] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespEapSetEapMethods, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__eap_set_eap_methods__field_indices_by_name[] = {
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__eap_set_eap_methods__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor rpc__resp__eap_set_eap_methods__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_EapSetEapMethods",
+  "RpcRespEapSetEapMethods",
+  "RpcRespEapSetEapMethods",
+  "",
+  sizeof(RpcRespEapSetEapMethods),
+  1,
+  rpc__resp__eap_set_eap_methods__field_descriptors,
+  rpc__resp__eap_set_eap_methods__field_indices_by_name,
+  1,  rpc__resp__eap_set_eap_methods__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__eap_set_eap_methods__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__supp_dpp_uri_ready__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppUriReady, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "qrcode",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppUriReady, qrcode),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__supp_dpp_uri_ready__field_indices_by_name[] = {
+  1,   /* field[1] = qrcode */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__supp_dpp_uri_ready__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__supp_dpp_uri_ready__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_SuppDppUriReady",
+  "RpcEventSuppDppUriReady",
+  "RpcEventSuppDppUriReady",
+  "",
+  sizeof(RpcEventSuppDppUriReady),
+  2,
+  rpc__event__supp_dpp_uri_ready__field_descriptors,
+  rpc__event__supp_dpp_uri_ready__field_indices_by_name,
+  1,  rpc__event__supp_dpp_uri_ready__number_ranges,
+  (ProtobufCMessageInit) rpc__event__supp_dpp_uri_ready__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__supp_dpp_cfg_recvd__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppCfgRecvd, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "cfg",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppCfgRecvd, cfg),
+    &wifi_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__supp_dpp_cfg_recvd__field_indices_by_name[] = {
+  1,   /* field[1] = cfg */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__supp_dpp_cfg_recvd__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__supp_dpp_cfg_recvd__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_SuppDppCfgRecvd",
+  "RpcEventSuppDppCfgRecvd",
+  "RpcEventSuppDppCfgRecvd",
+  "",
+  sizeof(RpcEventSuppDppCfgRecvd),
+  2,
+  rpc__event__supp_dpp_cfg_recvd__field_descriptors,
+  rpc__event__supp_dpp_cfg_recvd__field_indices_by_name,
+  1,  rpc__event__supp_dpp_cfg_recvd__number_ranges,
+  (ProtobufCMessageInit) rpc__event__supp_dpp_cfg_recvd__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__supp_dpp_fail__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppFail, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reason",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventSuppDppFail, reason),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__supp_dpp_fail__field_indices_by_name[] = {
+  1,   /* field[1] = reason */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__supp_dpp_fail__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__supp_dpp_fail__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_SuppDppFail",
+  "RpcEventSuppDppFail",
+  "RpcEventSuppDppFail",
+  "",
+  sizeof(RpcEventSuppDppFail),
+  2,
+  rpc__event__supp_dpp_fail__field_descriptors,
+  rpc__event__supp_dpp_fail__field_indices_by_name,
+  1,  rpc__event__supp_dpp_fail__number_ranges,
+  (ProtobufCMessageInit) rpc__event__supp_dpp_fail__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__wifi_dpp_uri_ready__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppUriReady, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "qrcode",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppUriReady, qrcode),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__wifi_dpp_uri_ready__field_indices_by_name[] = {
+  1,   /* field[1] = qrcode */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__wifi_dpp_uri_ready__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__wifi_dpp_uri_ready__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_WifiDppUriReady",
+  "RpcEventWifiDppUriReady",
+  "RpcEventWifiDppUriReady",
+  "",
+  sizeof(RpcEventWifiDppUriReady),
+  2,
+  rpc__event__wifi_dpp_uri_ready__field_descriptors,
+  rpc__event__wifi_dpp_uri_ready__field_indices_by_name,
+  1,  rpc__event__wifi_dpp_uri_ready__number_ranges,
+  (ProtobufCMessageInit) rpc__event__wifi_dpp_uri_ready__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__wifi_dpp_cfg_recvd__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppCfgRecvd, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "cfg",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppCfgRecvd, cfg),
+    &wifi_config__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__wifi_dpp_cfg_recvd__field_indices_by_name[] = {
+  1,   /* field[1] = cfg */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__wifi_dpp_cfg_recvd__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__wifi_dpp_cfg_recvd__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_WifiDppCfgRecvd",
+  "RpcEventWifiDppCfgRecvd",
+  "RpcEventWifiDppCfgRecvd",
+  "",
+  sizeof(RpcEventWifiDppCfgRecvd),
+  2,
+  rpc__event__wifi_dpp_cfg_recvd__field_descriptors,
+  rpc__event__wifi_dpp_cfg_recvd__field_indices_by_name,
+  1,  rpc__event__wifi_dpp_cfg_recvd__number_ranges,
+  (ProtobufCMessageInit) rpc__event__wifi_dpp_cfg_recvd__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__wifi_dpp_fail__field_descriptors[2] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppFail, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "reason",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventWifiDppFail, reason),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__wifi_dpp_fail__field_indices_by_name[] = {
+  1,   /* field[1] = reason */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__wifi_dpp_fail__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__event__wifi_dpp_fail__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_WifiDppFail",
+  "RpcEventWifiDppFail",
+  "RpcEventWifiDppFail",
+  "",
+  sizeof(RpcEventWifiDppFail),
+  2,
+  rpc__event__wifi_dpp_fail__field_descriptors,
+  rpc__event__wifi_dpp_fail__field_indices_by_name,
+  1,  rpc__event__wifi_dpp_fail__number_ranges,
+  (ProtobufCMessageInit) rpc__event__wifi_dpp_fail__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__req__custom_rpc__field_descriptors[2] =
+{
+  {
+    "custom_msg_id",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqCustomRpc, custom_msg_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "data",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcReqCustomRpc, data),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__req__custom_rpc__field_indices_by_name[] = {
+  0,   /* field[0] = custom_msg_id */
+  1,   /* field[1] = data */
+};
+static const ProtobufCIntRange rpc__req__custom_rpc__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor rpc__req__custom_rpc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Req_CustomRpc",
+  "RpcReqCustomRpc",
+  "RpcReqCustomRpc",
+  "",
+  sizeof(RpcReqCustomRpc),
+  2,
+  rpc__req__custom_rpc__field_descriptors,
+  rpc__req__custom_rpc__field_indices_by_name,
+  1,  rpc__req__custom_rpc__number_ranges,
+  (ProtobufCMessageInit) rpc__req__custom_rpc__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__resp__custom_rpc__field_descriptors[3] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespCustomRpc, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "custom_msg_id",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespCustomRpc, custom_msg_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "data",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcRespCustomRpc, data),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__resp__custom_rpc__field_indices_by_name[] = {
+  1,   /* field[1] = custom_msg_id */
+  2,   /* field[2] = data */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__resp__custom_rpc__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__resp__custom_rpc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Resp_CustomRpc",
+  "RpcRespCustomRpc",
+  "RpcRespCustomRpc",
+  "",
+  sizeof(RpcRespCustomRpc),
+  3,
+  rpc__resp__custom_rpc__field_descriptors,
+  rpc__resp__custom_rpc__field_indices_by_name,
+  1,  rpc__resp__custom_rpc__number_ranges,
+  (ProtobufCMessageInit) rpc__resp__custom_rpc__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__custom_rpc__field_descriptors[3] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventCustomRpc, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "custom_event_id",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventCustomRpc, custom_event_id),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "data",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventCustomRpc, data),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__custom_rpc__field_indices_by_name[] = {
+  1,   /* field[1] = custom_event_id */
+  2,   /* field[2] = data */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__custom_rpc__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor rpc__event__custom_rpc__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_CustomRpc",
+  "RpcEventCustomRpc",
+  "RpcEventCustomRpc",
+  "",
+  sizeof(RpcEventCustomRpc),
+  3,
+  rpc__event__custom_rpc__field_descriptors,
+  rpc__event__custom_rpc__field_indices_by_name,
+  1,  rpc__event__custom_rpc__number_ranges,
+  (ProtobufCMessageInit) rpc__event__custom_rpc__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__event__mem_monitor__field_descriptors[5] =
+{
+  {
+    "resp",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventMemMonitor, resp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_total_free_heap_size",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventMemMonitor, curr_total_free_heap_size),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_min_free_heap_size",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventMemMonitor, curr_min_free_heap_size),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_internal",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventMemMonitor, curr_internal),
+    &heap_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "curr_external",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    0,   /* quantifier_offset */
+    offsetof(RpcEventMemMonitor, curr_external),
+    &heap_info__descriptor,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned rpc__event__mem_monitor__field_indices_by_name[] = {
+  4,   /* field[4] = curr_external */
+  3,   /* field[3] = curr_internal */
+  2,   /* field[2] = curr_min_free_heap_size */
+  1,   /* field[1] = curr_total_free_heap_size */
+  0,   /* field[0] = resp */
+};
+static const ProtobufCIntRange rpc__event__mem_monitor__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 5 }
+};
+const ProtobufCMessageDescriptor rpc__event__mem_monitor__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "Rpc_Event_MemMonitor",
+  "RpcEventMemMonitor",
+  "RpcEventMemMonitor",
+  "",
+  sizeof(RpcEventMemMonitor),
+  5,
+  rpc__event__mem_monitor__field_descriptors,
+  rpc__event__mem_monitor__field_indices_by_name,
+  1,  rpc__event__mem_monitor__number_ranges,
+  (ProtobufCMessageInit) rpc__event__mem_monitor__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor rpc__field_descriptors[248] =
 {
   {
     "msg_type",
@@ -15132,6 +28908,114 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     offsetof(Rpc, payload_case),
     offsetof(Rpc, req_set_wifi_mode),
     &rpc__req__set_mode__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_supp_dpp_init",
+    261,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_supp_dpp_init),
+    &rpc__req__supp_dpp_init__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_supp_dpp_deinit",
+    262,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_supp_dpp_deinit),
+    &rpc__req__supp_dpp_deinit__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_supp_dpp_bootstrap_gen",
+    263,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_supp_dpp_bootstrap_gen),
+    &rpc__req__supp_dpp_bootstrap_gen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_supp_dpp_start_listen",
+    264,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_supp_dpp_start_listen),
+    &rpc__req__supp_dpp_start_listen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_supp_dpp_stop_listen",
+    265,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_supp_dpp_stop_listen),
+    &rpc__req__supp_dpp_stop_listen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_ota_activate",
+    266,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_ota_activate),
+    &rpc__req__otaactivate__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_app_get_desc",
+    267,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_app_get_desc),
+    &rpc__req__app_get_desc__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_mem_monitor",
+    268,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_mem_monitor),
+    &rpc__req__mem_monitor__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_scan_params",
+    269,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_scan_params),
+    &rpc__req__wifi_scan_params__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -15569,6 +29453,30 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "req_wifi_set_inactive_time",
+    325,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_set_inactive_time),
+    &rpc__req__wifi_set_inactive_time__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_get_inactive_time",
+    326,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_get_inactive_time),
+    &rpc__req__wifi_get_inactive_time__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "req_wifi_set_country_code",
     334,
     PROTOBUF_C_LABEL_NONE,
@@ -15593,6 +29501,18 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "req_wifi_disable_pmf_config",
+    337,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_disable_pmf_config),
+    &rpc__req__wifi_disable_pmf_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "req_wifi_sta_get_aid",
     338,
     PROTOBUF_C_LABEL_NONE,
@@ -15600,6 +29520,18 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     offsetof(Rpc, payload_case),
     offsetof(Rpc, req_wifi_sta_get_aid),
     &rpc__req__wifi_sta_get_aid__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_get_negotiated_phymode",
+    339,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_get_negotiated_phymode),
+    &rpc__req__wifi_sta_get_negotiated_phymode__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -15713,6 +29645,570 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "req_get_coprocessor_fwversion",
+    350,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_get_coprocessor_fwversion),
+    &rpc__req__get_coprocessor_fw_version__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_scan_get_ap_record",
+    351,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_scan_get_ap_record),
+    &rpc__req__wifi_scan_get_ap_record__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_set_dhcp_dns",
+    352,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_set_dhcp_dns),
+    &rpc__req__set_dhcp_dns_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_get_dhcp_dns",
+    353,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_get_dhcp_dns),
+    &rpc__req__get_dhcp_dns_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_twt_config",
+    354,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_twt_config),
+    &rpc__req__wifi_sta_twt_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_setup",
+    355,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_setup),
+    &rpc__req__wifi_sta_itwt_setup__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_teardown",
+    356,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_teardown),
+    &rpc__req__wifi_sta_itwt_teardown__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_suspend",
+    357,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_suspend),
+    &rpc__req__wifi_sta_itwt_suspend__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_get_flow_id_status",
+    358,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_get_flow_id_status),
+    &rpc__req__wifi_sta_itwt_get_flow_id_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_send_probe_req",
+    359,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_send_probe_req),
+    &rpc__req__wifi_sta_itwt_send_probe_req__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_itwt_set_target_wake_time_offset",
+    360,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_itwt_set_target_wake_time_offset),
+    &rpc__req__wifi_sta_itwt_set_target_wake_time_offset__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_enterprise_enable",
+    361,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_enterprise_enable),
+    &rpc__req__wifi_sta_enterprise_enable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_sta_enterprise_disable",
+    362,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_sta_enterprise_disable),
+    &rpc__req__wifi_sta_enterprise_disable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_identity",
+    363,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_identity),
+    &rpc__req__eap_set_identity__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_identity",
+    364,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_identity),
+    &rpc__req__eap_clear_identity__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_username",
+    365,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_username),
+    &rpc__req__eap_set_username__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_username",
+    366,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_username),
+    &rpc__req__eap_clear_username__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_password",
+    367,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_password),
+    &rpc__req__eap_set_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_password",
+    368,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_password),
+    &rpc__req__eap_clear_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_new_password",
+    369,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_new_password),
+    &rpc__req__eap_set_new_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_new_password",
+    370,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_new_password),
+    &rpc__req__eap_clear_new_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_ca_cert",
+    371,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_ca_cert),
+    &rpc__req__eap_set_ca_cert__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_ca_cert",
+    372,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_ca_cert),
+    &rpc__req__eap_clear_ca_cert__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_certificate_and_key",
+    373,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_certificate_and_key),
+    &rpc__req__eap_set_certificate_and_key__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_clear_certificate_and_key",
+    374,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_clear_certificate_and_key),
+    &rpc__req__eap_clear_certificate_and_key__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_get_disable_time_check",
+    375,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_get_disable_time_check),
+    &rpc__req__eap_get_disable_time_check__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_ttls_phase2_method",
+    376,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_ttls_phase2_method),
+    &rpc__req__eap_set_ttls_phase2_method__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_suiteb_certification",
+    377,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_suiteb_certification),
+    &rpc__req__eap_set_suiteb192bit_certification__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_pac_file",
+    378,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_pac_file),
+    &rpc__req__eap_set_pac_file__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_fast_params",
+    379,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_fast_params),
+    &rpc__req__eap_set_fast_params__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_use_default_cert_bundle",
+    380,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_use_default_cert_bundle),
+    &rpc__req__eap_use_default_cert_bundle__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_wifi_set_okc_support",
+    381,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_wifi_set_okc_support),
+    &rpc__req__wifi_set_okc_support__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_domain_name",
+    382,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_domain_name),
+    &rpc__req__eap_set_domain_name__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_disable_time_check",
+    383,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_disable_time_check),
+    &rpc__req__eap_set_disable_time_check__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_eap_set_eap_methods",
+    384,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_eap_set_eap_methods),
+    &rpc__req__eap_set_eap_methods__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_iface_mac_addr_set_get",
+    385,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_iface_mac_addr_set_get),
+    &rpc__req__iface_mac_addr_set_get__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_iface_mac_addr_len_get",
+    386,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_iface_mac_addr_len_get),
+    &rpc__req__iface_mac_addr_len_get__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_feature_control",
+    387,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_feature_control),
+    &rpc__req__feature_control__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_custom_rpc",
+    388,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_custom_rpc),
+    &rpc__req__custom_rpc__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_config",
+    389,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_config),
+    &rpc__req__gpio_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_reset_pin",
+    390,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_reset_pin),
+    &rpc__req__gpio_reset_pin__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_set_level",
+    391,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_set_level),
+    &rpc__req__gpio_set_level__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_get_level",
+    392,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_get_level),
+    &rpc__req__gpio_get_level__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_set_direction",
+    393,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_set_direction),
+    &rpc__req__gpio_set_direction__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_input_enable",
+    394,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_input_enable),
+    &rpc__req__gpio_input_enable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_gpio_set_pull_mode",
+    395,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_gpio_set_pull_mode),
+    &rpc__req__gpio_set_pull_mode__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "req_ext_coex",
+    396,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, req_ext_coex),
+    &rpc__req__ext_coex__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "resp_get_mac_address",
     513,
     PROTOBUF_C_LABEL_NONE,
@@ -15756,6 +30252,114 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     offsetof(Rpc, payload_case),
     offsetof(Rpc, resp_set_wifi_mode),
     &rpc__resp__set_mode__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_supp_dpp_init",
+    517,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_supp_dpp_init),
+    &rpc__resp__supp_dpp_init__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_supp_dpp_deinit",
+    518,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_supp_dpp_deinit),
+    &rpc__resp__supp_dpp_deinit__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_supp_dpp_bootstrap_gen",
+    519,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_supp_dpp_bootstrap_gen),
+    &rpc__resp__supp_dpp_bootstrap_gen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_supp_dpp_start_listen",
+    520,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_supp_dpp_start_listen),
+    &rpc__resp__supp_dpp_start_listen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_supp_dpp_stop_listen",
+    521,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_supp_dpp_stop_listen),
+    &rpc__resp__supp_dpp_stop_listen__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_ota_activate",
+    522,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_ota_activate),
+    &rpc__resp__otaactivate__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_app_get_desc",
+    523,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_app_get_desc),
+    &rpc__resp__app_get_desc__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_mem_monitor",
+    524,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_mem_monitor),
+    &rpc__resp__mem_monitor__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_scan_params",
+    525,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_scan_params),
+    &rpc__resp__wifi_scan_params__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -16193,6 +30797,30 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "resp_wifi_set_inactive_time",
+    581,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_set_inactive_time),
+    &rpc__resp__wifi_set_inactive_time__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_get_inactive_time",
+    582,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_get_inactive_time),
+    &rpc__resp__wifi_get_inactive_time__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "resp_wifi_set_country_code",
     590,
     PROTOBUF_C_LABEL_NONE,
@@ -16217,6 +30845,18 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "resp_wifi_disable_pmf_config",
+    593,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_disable_pmf_config),
+    &rpc__resp__wifi_disable_pmf_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "resp_wifi_sta_get_aid",
     594,
     PROTOBUF_C_LABEL_NONE,
@@ -16224,6 +30864,18 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     offsetof(Rpc, payload_case),
     offsetof(Rpc, resp_wifi_sta_get_aid),
     &rpc__resp__wifi_sta_get_aid__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_get_negotiated_phymode",
+    595,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_get_negotiated_phymode),
+    &rpc__resp__wifi_sta_get_negotiated_phymode__descriptor,
     NULL,
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
@@ -16337,6 +30989,570 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
+    "resp_get_coprocessor_fwversion",
+    606,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_get_coprocessor_fwversion),
+    &rpc__resp__get_coprocessor_fw_version__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_scan_get_ap_record",
+    607,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_scan_get_ap_record),
+    &rpc__resp__wifi_scan_get_ap_record__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_set_dhcp_dns",
+    608,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_set_dhcp_dns),
+    &rpc__resp__set_dhcp_dns_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_get_dhcp_dns",
+    609,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_get_dhcp_dns),
+    &rpc__resp__get_dhcp_dns_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_twt_config",
+    610,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_twt_config),
+    &rpc__resp__wifi_sta_twt_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_setup",
+    611,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_setup),
+    &rpc__resp__wifi_sta_itwt_setup__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_teardown",
+    612,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_teardown),
+    &rpc__resp__wifi_sta_itwt_teardown__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_suspend",
+    613,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_suspend),
+    &rpc__resp__wifi_sta_itwt_suspend__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_get_flow_id_status",
+    614,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_get_flow_id_status),
+    &rpc__resp__wifi_sta_itwt_get_flow_id_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_send_probe_req",
+    615,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_send_probe_req),
+    &rpc__resp__wifi_sta_itwt_send_probe_req__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_itwt_set_target_wake_time_offset",
+    616,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_itwt_set_target_wake_time_offset),
+    &rpc__resp__wifi_sta_itwt_set_target_wake_time_offset__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_enterprise_enable",
+    617,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_enterprise_enable),
+    &rpc__resp__wifi_sta_enterprise_enable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_sta_enterprise_disable",
+    618,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_sta_enterprise_disable),
+    &rpc__resp__wifi_sta_enterprise_disable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_identity",
+    619,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_identity),
+    &rpc__resp__eap_set_identity__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_identity",
+    620,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_identity),
+    &rpc__resp__eap_clear_identity__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_username",
+    621,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_username),
+    &rpc__resp__eap_set_username__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_username",
+    622,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_username),
+    &rpc__resp__eap_clear_username__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_password",
+    623,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_password),
+    &rpc__resp__eap_set_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_password",
+    624,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_password),
+    &rpc__resp__eap_clear_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_new_password",
+    625,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_new_password),
+    &rpc__resp__eap_set_new_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_new_password",
+    626,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_new_password),
+    &rpc__resp__eap_clear_new_password__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_ca_cert",
+    627,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_ca_cert),
+    &rpc__resp__eap_set_ca_cert__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_ca_cert",
+    628,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_ca_cert),
+    &rpc__resp__eap_clear_ca_cert__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_certificate_and_key",
+    629,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_certificate_and_key),
+    &rpc__resp__eap_set_certificate_and_key__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_clear_certificate_and_key",
+    630,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_clear_certificate_and_key),
+    &rpc__resp__eap_clear_certificate_and_key__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_get_disable_time_check",
+    631,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_get_disable_time_check),
+    &rpc__resp__eap_get_disable_time_check__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_ttls_phase2_method",
+    632,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_ttls_phase2_method),
+    &rpc__resp__eap_set_ttls_phase2_method__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_suiteb_certification",
+    633,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_suiteb_certification),
+    &rpc__resp__eap_set_suiteb192bit_certification__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_pac_file",
+    634,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_pac_file),
+    &rpc__resp__eap_set_pac_file__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_fast_params",
+    635,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_fast_params),
+    &rpc__resp__eap_set_fast_params__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_use_default_cert_bundle",
+    636,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_use_default_cert_bundle),
+    &rpc__resp__eap_use_default_cert_bundle__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_wifi_set_okc_support",
+    637,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_wifi_set_okc_support),
+    &rpc__resp__wifi_set_okc_support__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_domain_name",
+    638,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_domain_name),
+    &rpc__resp__eap_set_domain_name__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_disable_time_check",
+    639,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_disable_time_check),
+    &rpc__resp__eap_set_disable_time_check__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_eap_set_eap_methods",
+    640,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_eap_set_eap_methods),
+    &rpc__resp__eap_set_eap_methods__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_iface_mac_addr_set_get",
+    641,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_iface_mac_addr_set_get),
+    &rpc__resp__iface_mac_addr_set_get__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_iface_mac_addr_len_get",
+    642,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_iface_mac_addr_len_get),
+    &rpc__resp__iface_mac_addr_len_get__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_feature_control",
+    643,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_feature_control),
+    &rpc__resp__feature_control__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_custom_rpc",
+    644,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_custom_rpc),
+    &rpc__resp__custom_rpc__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_config",
+    645,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_config),
+    &rpc__resp__gpio_config__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_reset",
+    646,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_reset),
+    &rpc__resp__gpio_reset_pin__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_set_level",
+    647,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_set_level),
+    &rpc__resp__gpio_set_level__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_get_level",
+    648,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_get_level),
+    &rpc__resp__gpio_get_level__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_set_direction",
+    649,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_set_direction),
+    &rpc__resp__gpio_set_direction__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_input_enable",
+    650,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_input_enable),
+    &rpc__resp__gpio_input_enable__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_gpio_set_pull_mode",
+    651,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_gpio_set_pull_mode),
+    &rpc__resp__gpio_set_pull_mode__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "resp_ext_coex",
+    652,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, resp_ext_coex),
+    &rpc__resp__ext_coex__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
     "event_esp_init",
     769,
     PROTOBUF_C_LABEL_NONE,
@@ -16432,143 +31648,432 @@ static const ProtobufCFieldDescriptor rpc__field_descriptors[115] =
     0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "event_dhcp_dns",
+    777,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_dhcp_dns),
+    &rpc__event__dhcp_dns_status__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_sta_itwt_setup",
+    778,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_sta_itwt_setup),
+    &rpc__event__sta_itwt_setup__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_sta_itwt_teardown",
+    779,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_sta_itwt_teardown),
+    &rpc__event__sta_itwt_teardown__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_sta_itwt_suspend",
+    780,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_sta_itwt_suspend),
+    &rpc__event__sta_itwt_suspend__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_sta_itwt_probe",
+    781,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_sta_itwt_probe),
+    &rpc__event__sta_itwt_probe__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_supp_dpp_uri_ready",
+    782,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_supp_dpp_uri_ready),
+    &rpc__event__supp_dpp_uri_ready__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_supp_dpp_cfg_recvd",
+    783,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_supp_dpp_cfg_recvd),
+    &rpc__event__supp_dpp_cfg_recvd__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_supp_dpp_fail",
+    784,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_supp_dpp_fail),
+    &rpc__event__supp_dpp_fail__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_wifi_dpp_uri_ready",
+    785,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_wifi_dpp_uri_ready),
+    &rpc__event__wifi_dpp_uri_ready__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_wifi_dpp_cfg_recvd",
+    786,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_wifi_dpp_cfg_recvd),
+    &rpc__event__wifi_dpp_cfg_recvd__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_wifi_dpp_fail",
+    787,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_wifi_dpp_fail),
+    &rpc__event__wifi_dpp_fail__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_custom_rpc",
+    788,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_custom_rpc),
+    &rpc__event__custom_rpc__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "event_mem_monitor",
+    789,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_MESSAGE,
+    offsetof(Rpc, payload_case),
+    offsetof(Rpc, event_mem_monitor),
+    &rpc__event__mem_monitor__descriptor,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_ONEOF,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned rpc__field_indices_by_name[] = {
-  109,   /* field[109] = event_ap_sta_connected */
-  110,   /* field[110] = event_ap_sta_disconnected */
-  107,   /* field[107] = event_esp_init */
-  108,   /* field[108] = event_heartbeat */
-  113,   /* field[113] = event_sta_connected */
-  114,   /* field[114] = event_sta_disconnected */
-  112,   /* field[112] = event_sta_scan_done */
-  111,   /* field[111] = event_wifi_event_no_args */
+  229,   /* field[229] = event_ap_sta_connected */
+  230,   /* field[230] = event_ap_sta_disconnected */
+  246,   /* field[246] = event_custom_rpc */
+  235,   /* field[235] = event_dhcp_dns */
+  227,   /* field[227] = event_esp_init */
+  228,   /* field[228] = event_heartbeat */
+  247,   /* field[247] = event_mem_monitor */
+  233,   /* field[233] = event_sta_connected */
+  234,   /* field[234] = event_sta_disconnected */
+  239,   /* field[239] = event_sta_itwt_probe */
+  236,   /* field[236] = event_sta_itwt_setup */
+  238,   /* field[238] = event_sta_itwt_suspend */
+  237,   /* field[237] = event_sta_itwt_teardown */
+  232,   /* field[232] = event_sta_scan_done */
+  241,   /* field[241] = event_supp_dpp_cfg_recvd */
+  242,   /* field[242] = event_supp_dpp_fail */
+  240,   /* field[240] = event_supp_dpp_uri_ready */
+  244,   /* field[244] = event_wifi_dpp_cfg_recvd */
+  245,   /* field[245] = event_wifi_dpp_fail */
+  243,   /* field[243] = event_wifi_dpp_uri_ready */
+  231,   /* field[231] = event_wifi_event_no_args */
   1,   /* field[1] = msg_id */
   0,   /* field[0] = msg_type */
-  14,   /* field[14] = req_config_heartbeat */
+  13,   /* field[13] = req_app_get_desc */
+  23,   /* field[23] = req_config_heartbeat */
+  106,   /* field[106] = req_custom_rpc */
+  90,   /* field[90] = req_eap_clear_ca_cert */
+  92,   /* field[92] = req_eap_clear_certificate_and_key */
+  82,   /* field[82] = req_eap_clear_identity */
+  88,   /* field[88] = req_eap_clear_new_password */
+  86,   /* field[86] = req_eap_clear_password */
+  84,   /* field[84] = req_eap_clear_username */
+  93,   /* field[93] = req_eap_get_disable_time_check */
+  89,   /* field[89] = req_eap_set_ca_cert */
+  91,   /* field[91] = req_eap_set_certificate_and_key */
+  101,   /* field[101] = req_eap_set_disable_time_check */
+  100,   /* field[100] = req_eap_set_domain_name */
+  102,   /* field[102] = req_eap_set_eap_methods */
+  97,   /* field[97] = req_eap_set_fast_params */
+  81,   /* field[81] = req_eap_set_identity */
+  87,   /* field[87] = req_eap_set_new_password */
+  96,   /* field[96] = req_eap_set_pac_file */
+  85,   /* field[85] = req_eap_set_password */
+  95,   /* field[95] = req_eap_set_suiteb_certification */
+  94,   /* field[94] = req_eap_set_ttls_phase2_method */
+  83,   /* field[83] = req_eap_set_username */
+  98,   /* field[98] = req_eap_use_default_cert_bundle */
+  114,   /* field[114] = req_ext_coex */
+  105,   /* field[105] = req_feature_control */
+  68,   /* field[68] = req_get_coprocessor_fwversion */
+  71,   /* field[71] = req_get_dhcp_dns */
   3,   /* field[3] = req_get_mac_address */
-  13,   /* field[13] = req_get_wifi_max_tx_power */
+  22,   /* field[22] = req_get_wifi_max_tx_power */
   5,   /* field[5] = req_get_wifi_mode */
-  9,   /* field[9] = req_ota_begin */
-  11,   /* field[11] = req_ota_end */
-  10,   /* field[10] = req_ota_write */
+  107,   /* field[107] = req_gpio_config */
+  110,   /* field[110] = req_gpio_get_level */
+  112,   /* field[112] = req_gpio_input_enable */
+  108,   /* field[108] = req_gpio_reset_pin */
+  111,   /* field[111] = req_gpio_set_direction */
+  109,   /* field[109] = req_gpio_set_level */
+  113,   /* field[113] = req_gpio_set_pull_mode */
+  104,   /* field[104] = req_iface_mac_addr_len_get */
+  103,   /* field[103] = req_iface_mac_addr_set_get */
+  14,   /* field[14] = req_mem_monitor */
+  12,   /* field[12] = req_ota_activate */
+  18,   /* field[18] = req_ota_begin */
+  20,   /* field[20] = req_ota_end */
+  19,   /* field[19] = req_ota_write */
+  70,   /* field[70] = req_set_dhcp_dns */
   4,   /* field[4] = req_set_mac_address */
-  12,   /* field[12] = req_set_wifi_max_tx_power */
+  21,   /* field[21] = req_set_wifi_max_tx_power */
   6,   /* field[6] = req_set_wifi_mode */
-  41,   /* field[41] = req_wifi_ap_get_sta_aid */
-  40,   /* field[40] = req_wifi_ap_get_sta_list */
-  27,   /* field[27] = req_wifi_clear_ap_list */
-  29,   /* field[29] = req_wifi_clear_fast_connect */
-  19,   /* field[19] = req_wifi_connect */
-  30,   /* field[30] = req_wifi_deauth_sta */
-  16,   /* field[16] = req_wifi_deinit */
-  20,   /* field[20] = req_wifi_disconnect */
-  52,   /* field[52] = req_wifi_get_band */
-  54,   /* field[54] = req_wifi_get_bandmode */
-  35,   /* field[35] = req_wifi_get_bandwidth */
-  50,   /* field[50] = req_wifi_get_bandwidths */
-  37,   /* field[37] = req_wifi_get_channel */
-  22,   /* field[22] = req_wifi_get_config */
-  39,   /* field[39] = req_wifi_get_country */
-  44,   /* field[44] = req_wifi_get_country_code */
-  33,   /* field[33] = req_wifi_get_protocol */
-  48,   /* field[48] = req_wifi_get_protocols */
-  8,   /* field[8] = req_wifi_get_ps */
-  15,   /* field[15] = req_wifi_init */
-  28,   /* field[28] = req_wifi_restore */
-  25,   /* field[25] = req_wifi_scan_get_ap_num */
-  26,   /* field[26] = req_wifi_scan_get_ap_records */
-  23,   /* field[23] = req_wifi_scan_start */
-  24,   /* field[24] = req_wifi_scan_stop */
-  51,   /* field[51] = req_wifi_set_band */
-  53,   /* field[53] = req_wifi_set_bandmode */
-  34,   /* field[34] = req_wifi_set_bandwidth */
-  49,   /* field[49] = req_wifi_set_bandwidths */
-  36,   /* field[36] = req_wifi_set_channel */
-  21,   /* field[21] = req_wifi_set_config */
-  38,   /* field[38] = req_wifi_set_country */
-  43,   /* field[43] = req_wifi_set_country_code */
-  32,   /* field[32] = req_wifi_set_protocol */
-  47,   /* field[47] = req_wifi_set_protocols */
-  7,   /* field[7] = req_wifi_set_ps */
-  42,   /* field[42] = req_wifi_set_storage */
-  45,   /* field[45] = req_wifi_sta_get_aid */
-  31,   /* field[31] = req_wifi_sta_get_ap_info */
-  46,   /* field[46] = req_wifi_sta_get_rssi */
-  17,   /* field[17] = req_wifi_start */
-  18,   /* field[18] = req_wifi_stop */
-  66,   /* field[66] = resp_config_heartbeat */
-  55,   /* field[55] = resp_get_mac_address */
-  65,   /* field[65] = resp_get_wifi_max_tx_power */
-  57,   /* field[57] = resp_get_wifi_mode */
-  61,   /* field[61] = resp_ota_begin */
-  63,   /* field[63] = resp_ota_end */
-  62,   /* field[62] = resp_ota_write */
-  56,   /* field[56] = resp_set_mac_address */
-  64,   /* field[64] = resp_set_wifi_max_tx_power */
-  58,   /* field[58] = resp_set_wifi_mode */
-  93,   /* field[93] = resp_wifi_ap_get_sta_aid */
-  92,   /* field[92] = resp_wifi_ap_get_sta_list */
-  79,   /* field[79] = resp_wifi_clear_ap_list */
-  81,   /* field[81] = resp_wifi_clear_fast_connect */
-  71,   /* field[71] = resp_wifi_connect */
-  82,   /* field[82] = resp_wifi_deauth_sta */
-  68,   /* field[68] = resp_wifi_deinit */
-  72,   /* field[72] = resp_wifi_disconnect */
-  104,   /* field[104] = resp_wifi_get_band */
-  106,   /* field[106] = resp_wifi_get_bandmode */
-  87,   /* field[87] = resp_wifi_get_bandwidth */
-  102,   /* field[102] = resp_wifi_get_bandwidths */
-  89,   /* field[89] = resp_wifi_get_channel */
-  74,   /* field[74] = resp_wifi_get_config */
-  91,   /* field[91] = resp_wifi_get_country */
-  96,   /* field[96] = resp_wifi_get_country_code */
-  85,   /* field[85] = resp_wifi_get_protocol */
-  100,   /* field[100] = resp_wifi_get_protocols */
-  60,   /* field[60] = resp_wifi_get_ps */
-  67,   /* field[67] = resp_wifi_init */
-  80,   /* field[80] = resp_wifi_restore */
-  77,   /* field[77] = resp_wifi_scan_get_ap_num */
-  78,   /* field[78] = resp_wifi_scan_get_ap_records */
-  75,   /* field[75] = resp_wifi_scan_start */
-  76,   /* field[76] = resp_wifi_scan_stop */
-  103,   /* field[103] = resp_wifi_set_band */
-  105,   /* field[105] = resp_wifi_set_bandmode */
-  86,   /* field[86] = resp_wifi_set_bandwidth */
-  101,   /* field[101] = resp_wifi_set_bandwidths */
-  88,   /* field[88] = resp_wifi_set_channel */
-  73,   /* field[73] = resp_wifi_set_config */
-  90,   /* field[90] = resp_wifi_set_country */
-  95,   /* field[95] = resp_wifi_set_country_code */
-  84,   /* field[84] = resp_wifi_set_protocol */
-  99,   /* field[99] = resp_wifi_set_protocols */
-  59,   /* field[59] = resp_wifi_set_ps */
-  94,   /* field[94] = resp_wifi_set_storage */
-  97,   /* field[97] = resp_wifi_sta_get_aid */
-  83,   /* field[83] = resp_wifi_sta_get_ap_info */
-  98,   /* field[98] = resp_wifi_sta_get_rssi */
-  69,   /* field[69] = resp_wifi_start */
-  70,   /* field[70] = resp_wifi_stop */
+  9,   /* field[9] = req_supp_dpp_bootstrap_gen */
+  8,   /* field[8] = req_supp_dpp_deinit */
+  7,   /* field[7] = req_supp_dpp_init */
+  10,   /* field[10] = req_supp_dpp_start_listen */
+  11,   /* field[11] = req_supp_dpp_stop_listen */
+  50,   /* field[50] = req_wifi_ap_get_sta_aid */
+  49,   /* field[49] = req_wifi_ap_get_sta_list */
+  36,   /* field[36] = req_wifi_clear_ap_list */
+  38,   /* field[38] = req_wifi_clear_fast_connect */
+  28,   /* field[28] = req_wifi_connect */
+  39,   /* field[39] = req_wifi_deauth_sta */
+  25,   /* field[25] = req_wifi_deinit */
+  56,   /* field[56] = req_wifi_disable_pmf_config */
+  29,   /* field[29] = req_wifi_disconnect */
+  65,   /* field[65] = req_wifi_get_band */
+  67,   /* field[67] = req_wifi_get_bandmode */
+  44,   /* field[44] = req_wifi_get_bandwidth */
+  63,   /* field[63] = req_wifi_get_bandwidths */
+  46,   /* field[46] = req_wifi_get_channel */
+  31,   /* field[31] = req_wifi_get_config */
+  48,   /* field[48] = req_wifi_get_country */
+  55,   /* field[55] = req_wifi_get_country_code */
+  53,   /* field[53] = req_wifi_get_inactive_time */
+  42,   /* field[42] = req_wifi_get_protocol */
+  61,   /* field[61] = req_wifi_get_protocols */
+  17,   /* field[17] = req_wifi_get_ps */
+  24,   /* field[24] = req_wifi_init */
+  37,   /* field[37] = req_wifi_restore */
+  34,   /* field[34] = req_wifi_scan_get_ap_num */
+  69,   /* field[69] = req_wifi_scan_get_ap_record */
+  35,   /* field[35] = req_wifi_scan_get_ap_records */
+  15,   /* field[15] = req_wifi_scan_params */
+  32,   /* field[32] = req_wifi_scan_start */
+  33,   /* field[33] = req_wifi_scan_stop */
+  64,   /* field[64] = req_wifi_set_band */
+  66,   /* field[66] = req_wifi_set_bandmode */
+  43,   /* field[43] = req_wifi_set_bandwidth */
+  62,   /* field[62] = req_wifi_set_bandwidths */
+  45,   /* field[45] = req_wifi_set_channel */
+  30,   /* field[30] = req_wifi_set_config */
+  47,   /* field[47] = req_wifi_set_country */
+  54,   /* field[54] = req_wifi_set_country_code */
+  52,   /* field[52] = req_wifi_set_inactive_time */
+  99,   /* field[99] = req_wifi_set_okc_support */
+  41,   /* field[41] = req_wifi_set_protocol */
+  60,   /* field[60] = req_wifi_set_protocols */
+  16,   /* field[16] = req_wifi_set_ps */
+  51,   /* field[51] = req_wifi_set_storage */
+  80,   /* field[80] = req_wifi_sta_enterprise_disable */
+  79,   /* field[79] = req_wifi_sta_enterprise_enable */
+  57,   /* field[57] = req_wifi_sta_get_aid */
+  40,   /* field[40] = req_wifi_sta_get_ap_info */
+  58,   /* field[58] = req_wifi_sta_get_negotiated_phymode */
+  59,   /* field[59] = req_wifi_sta_get_rssi */
+  76,   /* field[76] = req_wifi_sta_itwt_get_flow_id_status */
+  77,   /* field[77] = req_wifi_sta_itwt_send_probe_req */
+  78,   /* field[78] = req_wifi_sta_itwt_set_target_wake_time_offset */
+  73,   /* field[73] = req_wifi_sta_itwt_setup */
+  75,   /* field[75] = req_wifi_sta_itwt_suspend */
+  74,   /* field[74] = req_wifi_sta_itwt_teardown */
+  72,   /* field[72] = req_wifi_sta_twt_config */
+  26,   /* field[26] = req_wifi_start */
+  27,   /* field[27] = req_wifi_stop */
+  125,   /* field[125] = resp_app_get_desc */
+  135,   /* field[135] = resp_config_heartbeat */
+  218,   /* field[218] = resp_custom_rpc */
+  202,   /* field[202] = resp_eap_clear_ca_cert */
+  204,   /* field[204] = resp_eap_clear_certificate_and_key */
+  194,   /* field[194] = resp_eap_clear_identity */
+  200,   /* field[200] = resp_eap_clear_new_password */
+  198,   /* field[198] = resp_eap_clear_password */
+  196,   /* field[196] = resp_eap_clear_username */
+  205,   /* field[205] = resp_eap_get_disable_time_check */
+  201,   /* field[201] = resp_eap_set_ca_cert */
+  203,   /* field[203] = resp_eap_set_certificate_and_key */
+  213,   /* field[213] = resp_eap_set_disable_time_check */
+  212,   /* field[212] = resp_eap_set_domain_name */
+  214,   /* field[214] = resp_eap_set_eap_methods */
+  209,   /* field[209] = resp_eap_set_fast_params */
+  193,   /* field[193] = resp_eap_set_identity */
+  199,   /* field[199] = resp_eap_set_new_password */
+  208,   /* field[208] = resp_eap_set_pac_file */
+  197,   /* field[197] = resp_eap_set_password */
+  207,   /* field[207] = resp_eap_set_suiteb_certification */
+  206,   /* field[206] = resp_eap_set_ttls_phase2_method */
+  195,   /* field[195] = resp_eap_set_username */
+  210,   /* field[210] = resp_eap_use_default_cert_bundle */
+  226,   /* field[226] = resp_ext_coex */
+  217,   /* field[217] = resp_feature_control */
+  180,   /* field[180] = resp_get_coprocessor_fwversion */
+  183,   /* field[183] = resp_get_dhcp_dns */
+  115,   /* field[115] = resp_get_mac_address */
+  134,   /* field[134] = resp_get_wifi_max_tx_power */
+  117,   /* field[117] = resp_get_wifi_mode */
+  219,   /* field[219] = resp_gpio_config */
+  222,   /* field[222] = resp_gpio_get_level */
+  224,   /* field[224] = resp_gpio_input_enable */
+  220,   /* field[220] = resp_gpio_reset */
+  223,   /* field[223] = resp_gpio_set_direction */
+  221,   /* field[221] = resp_gpio_set_level */
+  225,   /* field[225] = resp_gpio_set_pull_mode */
+  216,   /* field[216] = resp_iface_mac_addr_len_get */
+  215,   /* field[215] = resp_iface_mac_addr_set_get */
+  126,   /* field[126] = resp_mem_monitor */
+  124,   /* field[124] = resp_ota_activate */
+  130,   /* field[130] = resp_ota_begin */
+  132,   /* field[132] = resp_ota_end */
+  131,   /* field[131] = resp_ota_write */
+  182,   /* field[182] = resp_set_dhcp_dns */
+  116,   /* field[116] = resp_set_mac_address */
+  133,   /* field[133] = resp_set_wifi_max_tx_power */
+  118,   /* field[118] = resp_set_wifi_mode */
+  121,   /* field[121] = resp_supp_dpp_bootstrap_gen */
+  120,   /* field[120] = resp_supp_dpp_deinit */
+  119,   /* field[119] = resp_supp_dpp_init */
+  122,   /* field[122] = resp_supp_dpp_start_listen */
+  123,   /* field[123] = resp_supp_dpp_stop_listen */
+  162,   /* field[162] = resp_wifi_ap_get_sta_aid */
+  161,   /* field[161] = resp_wifi_ap_get_sta_list */
+  148,   /* field[148] = resp_wifi_clear_ap_list */
+  150,   /* field[150] = resp_wifi_clear_fast_connect */
+  140,   /* field[140] = resp_wifi_connect */
+  151,   /* field[151] = resp_wifi_deauth_sta */
+  137,   /* field[137] = resp_wifi_deinit */
+  168,   /* field[168] = resp_wifi_disable_pmf_config */
+  141,   /* field[141] = resp_wifi_disconnect */
+  177,   /* field[177] = resp_wifi_get_band */
+  179,   /* field[179] = resp_wifi_get_bandmode */
+  156,   /* field[156] = resp_wifi_get_bandwidth */
+  175,   /* field[175] = resp_wifi_get_bandwidths */
+  158,   /* field[158] = resp_wifi_get_channel */
+  143,   /* field[143] = resp_wifi_get_config */
+  160,   /* field[160] = resp_wifi_get_country */
+  167,   /* field[167] = resp_wifi_get_country_code */
+  165,   /* field[165] = resp_wifi_get_inactive_time */
+  154,   /* field[154] = resp_wifi_get_protocol */
+  173,   /* field[173] = resp_wifi_get_protocols */
+  129,   /* field[129] = resp_wifi_get_ps */
+  136,   /* field[136] = resp_wifi_init */
+  149,   /* field[149] = resp_wifi_restore */
+  146,   /* field[146] = resp_wifi_scan_get_ap_num */
+  181,   /* field[181] = resp_wifi_scan_get_ap_record */
+  147,   /* field[147] = resp_wifi_scan_get_ap_records */
+  127,   /* field[127] = resp_wifi_scan_params */
+  144,   /* field[144] = resp_wifi_scan_start */
+  145,   /* field[145] = resp_wifi_scan_stop */
+  176,   /* field[176] = resp_wifi_set_band */
+  178,   /* field[178] = resp_wifi_set_bandmode */
+  155,   /* field[155] = resp_wifi_set_bandwidth */
+  174,   /* field[174] = resp_wifi_set_bandwidths */
+  157,   /* field[157] = resp_wifi_set_channel */
+  142,   /* field[142] = resp_wifi_set_config */
+  159,   /* field[159] = resp_wifi_set_country */
+  166,   /* field[166] = resp_wifi_set_country_code */
+  164,   /* field[164] = resp_wifi_set_inactive_time */
+  211,   /* field[211] = resp_wifi_set_okc_support */
+  153,   /* field[153] = resp_wifi_set_protocol */
+  172,   /* field[172] = resp_wifi_set_protocols */
+  128,   /* field[128] = resp_wifi_set_ps */
+  163,   /* field[163] = resp_wifi_set_storage */
+  192,   /* field[192] = resp_wifi_sta_enterprise_disable */
+  191,   /* field[191] = resp_wifi_sta_enterprise_enable */
+  169,   /* field[169] = resp_wifi_sta_get_aid */
+  152,   /* field[152] = resp_wifi_sta_get_ap_info */
+  170,   /* field[170] = resp_wifi_sta_get_negotiated_phymode */
+  171,   /* field[171] = resp_wifi_sta_get_rssi */
+  188,   /* field[188] = resp_wifi_sta_itwt_get_flow_id_status */
+  189,   /* field[189] = resp_wifi_sta_itwt_send_probe_req */
+  190,   /* field[190] = resp_wifi_sta_itwt_set_target_wake_time_offset */
+  185,   /* field[185] = resp_wifi_sta_itwt_setup */
+  187,   /* field[187] = resp_wifi_sta_itwt_suspend */
+  186,   /* field[186] = resp_wifi_sta_itwt_teardown */
+  184,   /* field[184] = resp_wifi_sta_twt_config */
+  138,   /* field[138] = resp_wifi_start */
+  139,   /* field[139] = resp_wifi_stop */
   2,   /* field[2] = uid */
 };
 static const ProtobufCIntRange rpc__number_ranges[16 + 1] =
 {
   { 1, 0 },
   { 257, 3 },
-  { 270, 7 },
-  { 297, 32 },
-  { 311, 40 },
-  { 334, 43 },
-  { 338, 45 },
-  { 341, 46 },
-  { 513, 55 },
-  { 526, 59 },
-  { 553, 84 },
-  { 567, 92 },
-  { 590, 95 },
-  { 594, 97 },
-  { 597, 98 },
-  { 769, 107 },
-  { 0, 115 }
+  { 297, 41 },
+  { 311, 49 },
+  { 325, 52 },
+  { 334, 54 },
+  { 337, 56 },
+  { 341, 59 },
+  { 513, 115 },
+  { 553, 153 },
+  { 567, 161 },
+  { 581, 164 },
+  { 590, 166 },
+  { 593, 168 },
+  { 597, 171 },
+  { 769, 227 },
+  { 0, 248 }
 };
 const ProtobufCMessageDescriptor rpc__descriptor =
 {
@@ -16578,7 +32083,7 @@ const ProtobufCMessageDescriptor rpc__descriptor =
   "Rpc",
   "",
   sizeof(Rpc),
-  115,
+  248,
   rpc__field_descriptors,
   rpc__field_indices_by_name,
   16,  rpc__number_ranges,
@@ -16721,6 +32226,36 @@ const ProtobufCEnumDescriptor rpc__status__descriptor =
   rpc__status__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
+static const ProtobufCEnumValue rpc_cmd__enum_values_by_number[3] =
+{
+  { "Invalid", "RPC_CMD__Invalid", 0 },
+  { "Get", "RPC_CMD__Get", 1 },
+  { "Set", "RPC_CMD__Set", 2 },
+};
+static const ProtobufCIntRange rpc_cmd__value_ranges[] = {
+{0, 0},{0, 3}
+};
+static const ProtobufCEnumValueIndex rpc_cmd__enum_values_by_name[3] =
+{
+  { "Get", 1 },
+  { "Invalid", 0 },
+  { "Set", 2 },
+};
+const ProtobufCEnumDescriptor rpc_cmd__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "RpcCmd",
+  "RpcCmd",
+  "RpcCmd",
+  "",
+  3,
+  rpc_cmd__enum_values_by_number,
+  3,
+  rpc_cmd__enum_values_by_name,
+  1,
+  rpc_cmd__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
 static const ProtobufCEnumValue rpc_type__enum_values_by_number[5] =
 {
   { "MsgType_Invalid", "RPC_TYPE__MsgType_Invalid", 0 },
@@ -16755,7 +32290,117 @@ const ProtobufCEnumDescriptor rpc_type__descriptor =
   rpc_type__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
-static const ProtobufCEnumValue rpc_id__enum_values_by_number[179] =
+static const ProtobufCEnumValue rpc_feature__enum_values_by_number[3] =
+{
+  { "Feature_None", "RPC_FEATURE__Feature_None", 0 },
+  { "Feature_Bluetooth", "RPC_FEATURE__Feature_Bluetooth", 1 },
+  { "Feature_Openthread_Rcp", "RPC_FEATURE__Feature_Openthread_Rcp", 2 },
+};
+static const ProtobufCIntRange rpc_feature__value_ranges[] = {
+{0, 0},{0, 3}
+};
+static const ProtobufCEnumValueIndex rpc_feature__enum_values_by_name[3] =
+{
+  { "Feature_Bluetooth", 1 },
+  { "Feature_None", 0 },
+  { "Feature_Openthread_Rcp", 2 },
+};
+const ProtobufCEnumDescriptor rpc_feature__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "RpcFeature",
+  "RpcFeature",
+  "RpcFeature",
+  "",
+  3,
+  rpc_feature__enum_values_by_number,
+  3,
+  rpc_feature__enum_values_by_name,
+  1,
+  rpc_feature__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc_feature_command__enum_values_by_number[10] =
+{
+  { "Feature_Command_None", "RPC_FEATURE_COMMAND__Feature_Command_None", 0 },
+  { "Feature_Command_BT_Init", "RPC_FEATURE_COMMAND__Feature_Command_BT_Init", 1 },
+  { "Feature_Command_BT_Deinit", "RPC_FEATURE_COMMAND__Feature_Command_BT_Deinit", 2 },
+  { "Feature_Command_BT_Enable", "RPC_FEATURE_COMMAND__Feature_Command_BT_Enable", 3 },
+  { "Feature_Command_BT_Disable", "RPC_FEATURE_COMMAND__Feature_Command_BT_Disable", 4 },
+  { "Feature_Command_Init", "RPC_FEATURE_COMMAND__Feature_Command_Init", 5 },
+  { "Feature_Command_Deinit", "RPC_FEATURE_COMMAND__Feature_Command_Deinit", 6 },
+  { "Feature_Command_Enable", "RPC_FEATURE_COMMAND__Feature_Command_Enable", 7 },
+  { "Feature_Command_Disable", "RPC_FEATURE_COMMAND__Feature_Command_Disable", 8 },
+  { "Feature_Command_Query", "RPC_FEATURE_COMMAND__Feature_Command_Query", 9 },
+};
+static const ProtobufCIntRange rpc_feature_command__value_ranges[] = {
+{0, 0},{0, 10}
+};
+static const ProtobufCEnumValueIndex rpc_feature_command__enum_values_by_name[10] =
+{
+  { "Feature_Command_BT_Deinit", 2 },
+  { "Feature_Command_BT_Disable", 4 },
+  { "Feature_Command_BT_Enable", 3 },
+  { "Feature_Command_BT_Init", 1 },
+  { "Feature_Command_Deinit", 6 },
+  { "Feature_Command_Disable", 8 },
+  { "Feature_Command_Enable", 7 },
+  { "Feature_Command_Init", 5 },
+  { "Feature_Command_None", 0 },
+  { "Feature_Command_Query", 9 },
+};
+const ProtobufCEnumDescriptor rpc_feature_command__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "RpcFeatureCommand",
+  "RpcFeatureCommand",
+  "RpcFeatureCommand",
+  "",
+  10,
+  rpc_feature_command__enum_values_by_number,
+  10,
+  rpc_feature_command__enum_values_by_name,
+  1,
+  rpc_feature_command__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc_feature_option__enum_values_by_number[6] =
+{
+  { "Feature_Option_None", "RPC_FEATURE_OPTION__Feature_Option_None", 0 },
+  { "Feature_Option_BT_Deinit_Release_Memory", "RPC_FEATURE_OPTION__Feature_Option_BT_Deinit_Release_Memory", 1 },
+  { "Feature_Option_Query_Configured", "RPC_FEATURE_OPTION__Feature_Option_Query_Configured", 2 },
+  { "Feature_Option_Query_Inited", "RPC_FEATURE_OPTION__Feature_Option_Query_Inited", 3 },
+  { "Feature_Option_Query_Enabled", "RPC_FEATURE_OPTION__Feature_Option_Query_Enabled", 4 },
+  { "Feature_Option_Query_Ready", "RPC_FEATURE_OPTION__Feature_Option_Query_Ready", 5 },
+};
+static const ProtobufCIntRange rpc_feature_option__value_ranges[] = {
+{0, 0},{0, 6}
+};
+static const ProtobufCEnumValueIndex rpc_feature_option__enum_values_by_name[6] =
+{
+  { "Feature_Option_BT_Deinit_Release_Memory", 1 },
+  { "Feature_Option_None", 0 },
+  { "Feature_Option_Query_Configured", 2 },
+  { "Feature_Option_Query_Enabled", 4 },
+  { "Feature_Option_Query_Inited", 3 },
+  { "Feature_Option_Query_Ready", 5 },
+};
+const ProtobufCEnumDescriptor rpc_feature_option__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "RpcFeatureOption",
+  "RpcFeatureOption",
+  "RpcFeatureOption",
+  "",
+  6,
+  rpc_feature_option__enum_values_by_number,
+  6,
+  rpc_feature_option__enum_values_by_name,
+  1,
+  rpc_feature_option__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc_id__enum_values_by_number[304] =
 {
   { "MsgId_Invalid", "RPC_ID__MsgId_Invalid", 0 },
   { "Req_Base", "RPC_ID__Req_Base", 256 },
@@ -16763,6 +32408,15 @@ static const ProtobufCEnumValue rpc_id__enum_values_by_number[179] =
   { "Req_SetMacAddress", "RPC_ID__Req_SetMacAddress", 258 },
   { "Req_GetWifiMode", "RPC_ID__Req_GetWifiMode", 259 },
   { "Req_SetWifiMode", "RPC_ID__Req_SetWifiMode", 260 },
+  { "Req_SuppDppInit", "RPC_ID__Req_SuppDppInit", 261 },
+  { "Req_SuppDppDeinit", "RPC_ID__Req_SuppDppDeinit", 262 },
+  { "Req_SuppDppBootstrapGen", "RPC_ID__Req_SuppDppBootstrapGen", 263 },
+  { "Req_SuppDppStartListen", "RPC_ID__Req_SuppDppStartListen", 264 },
+  { "Req_SuppDppStopListen", "RPC_ID__Req_SuppDppStopListen", 265 },
+  { "Req_OTAActivate", "RPC_ID__Req_OTAActivate", 266 },
+  { "Req_AppGetDesc", "RPC_ID__Req_AppGetDesc", 267 },
+  { "Req_MemMonitor", "RPC_ID__Req_MemMonitor", 268 },
+  { "Req_WifiScanParams", "RPC_ID__Req_WifiScanParams", 269 },
   { "Req_WifiSetPs", "RPC_ID__Req_WifiSetPs", 270 },
   { "Req_WifiGetPs", "RPC_ID__Req_WifiGetPs", 271 },
   { "Req_OTABegin", "RPC_ID__Req_OTABegin", 272 },
@@ -16841,12 +32495,68 @@ static const ProtobufCEnumValue rpc_id__enum_values_by_number[179] =
   { "Req_WifiGetBand", "RPC_ID__Req_WifiGetBand", 347 },
   { "Req_WifiSetBandMode", "RPC_ID__Req_WifiSetBandMode", 348 },
   { "Req_WifiGetBandMode", "RPC_ID__Req_WifiGetBandMode", 349 },
-  { "Req_Max", "RPC_ID__Req_Max", 350 },
+  { "Req_GetCoprocessorFwVersion", "RPC_ID__Req_GetCoprocessorFwVersion", 350 },
+  { "Req_WifiScanGetApRecord", "RPC_ID__Req_WifiScanGetApRecord", 351 },
+  { "Req_SetDhcpDnsStatus", "RPC_ID__Req_SetDhcpDnsStatus", 352 },
+  { "Req_GetDhcpDnsStatus", "RPC_ID__Req_GetDhcpDnsStatus", 353 },
+  { "Req_WifiStaTwtConfig", "RPC_ID__Req_WifiStaTwtConfig", 354 },
+  { "Req_WifiStaItwtSetup", "RPC_ID__Req_WifiStaItwtSetup", 355 },
+  { "Req_WifiStaItwtTeardown", "RPC_ID__Req_WifiStaItwtTeardown", 356 },
+  { "Req_WifiStaItwtSuspend", "RPC_ID__Req_WifiStaItwtSuspend", 357 },
+  { "Req_WifiStaItwtGetFlowIdStatus", "RPC_ID__Req_WifiStaItwtGetFlowIdStatus", 358 },
+  { "Req_WifiStaItwtSendProbeReq", "RPC_ID__Req_WifiStaItwtSendProbeReq", 359 },
+  { "Req_WifiStaItwtSetTargetWakeTimeOffset", "RPC_ID__Req_WifiStaItwtSetTargetWakeTimeOffset", 360 },
+  { "Req_WifiStaEnterpriseEnable", "RPC_ID__Req_WifiStaEnterpriseEnable", 361 },
+  { "Req_WifiStaEnterpriseDisable", "RPC_ID__Req_WifiStaEnterpriseDisable", 362 },
+  { "Req_EapSetIdentity", "RPC_ID__Req_EapSetIdentity", 363 },
+  { "Req_EapClearIdentity", "RPC_ID__Req_EapClearIdentity", 364 },
+  { "Req_EapSetUsername", "RPC_ID__Req_EapSetUsername", 365 },
+  { "Req_EapClearUsername", "RPC_ID__Req_EapClearUsername", 366 },
+  { "Req_EapSetPassword", "RPC_ID__Req_EapSetPassword", 367 },
+  { "Req_EapClearPassword", "RPC_ID__Req_EapClearPassword", 368 },
+  { "Req_EapSetNewPassword", "RPC_ID__Req_EapSetNewPassword", 369 },
+  { "Req_EapClearNewPassword", "RPC_ID__Req_EapClearNewPassword", 370 },
+  { "Req_EapSetCaCert", "RPC_ID__Req_EapSetCaCert", 371 },
+  { "Req_EapClearCaCert", "RPC_ID__Req_EapClearCaCert", 372 },
+  { "Req_EapSetCertificateAndKey", "RPC_ID__Req_EapSetCertificateAndKey", 373 },
+  { "Req_EapClearCertificateAndKey", "RPC_ID__Req_EapClearCertificateAndKey", 374 },
+  { "Req_EapGetDisableTimeCheck", "RPC_ID__Req_EapGetDisableTimeCheck", 375 },
+  { "Req_EapSetTtlsPhase2Method", "RPC_ID__Req_EapSetTtlsPhase2Method", 376 },
+  { "Req_EapSetSuitebCertification", "RPC_ID__Req_EapSetSuitebCertification", 377 },
+  { "Req_EapSetPacFile", "RPC_ID__Req_EapSetPacFile", 378 },
+  { "Req_EapSetFastParams", "RPC_ID__Req_EapSetFastParams", 379 },
+  { "Req_EapUseDefaultCertBundle", "RPC_ID__Req_EapUseDefaultCertBundle", 380 },
+  { "Req_WifiSetOkcSupport", "RPC_ID__Req_WifiSetOkcSupport", 381 },
+  { "Req_EapSetDomainName", "RPC_ID__Req_EapSetDomainName", 382 },
+  { "Req_EapSetDisableTimeCheck", "RPC_ID__Req_EapSetDisableTimeCheck", 383 },
+  { "Req_EapSetEapMethods", "RPC_ID__Req_EapSetEapMethods", 384 },
+  { "Req_IfaceMacAddrSetGet", "RPC_ID__Req_IfaceMacAddrSetGet", 385 },
+  { "Req_IfaceMacAddrLenGet", "RPC_ID__Req_IfaceMacAddrLenGet", 386 },
+  { "Req_FeatureControl", "RPC_ID__Req_FeatureControl", 387 },
+  { "Req_CustomRpc", "RPC_ID__Req_CustomRpc", 388 },
+  { "Req_GpioConfig", "RPC_ID__Req_GpioConfig", 389 },
+  { "Req_GpioResetPin", "RPC_ID__Req_GpioResetPin", 390 },
+  { "Req_GpioSetLevel", "RPC_ID__Req_GpioSetLevel", 391 },
+  { "Req_GpioGetLevel", "RPC_ID__Req_GpioGetLevel", 392 },
+  { "Req_GpioSetDirection", "RPC_ID__Req_GpioSetDirection", 393 },
+  { "Req_GpioInputEnable", "RPC_ID__Req_GpioInputEnable", 394 },
+  { "Req_GpioSetPullMode", "RPC_ID__Req_GpioSetPullMode", 395 },
+  { "Req_ExtCoex", "RPC_ID__Req_ExtCoex", 396 },
+  { "Req_Max", "RPC_ID__Req_Max", 397 },
   { "Resp_Base", "RPC_ID__Resp_Base", 512 },
   { "Resp_GetMACAddress", "RPC_ID__Resp_GetMACAddress", 513 },
   { "Resp_SetMacAddress", "RPC_ID__Resp_SetMacAddress", 514 },
   { "Resp_GetWifiMode", "RPC_ID__Resp_GetWifiMode", 515 },
   { "Resp_SetWifiMode", "RPC_ID__Resp_SetWifiMode", 516 },
+  { "Resp_SuppDppInit", "RPC_ID__Resp_SuppDppInit", 517 },
+  { "Resp_SuppDppDeinit", "RPC_ID__Resp_SuppDppDeinit", 518 },
+  { "Resp_SuppDppBootstrapGen", "RPC_ID__Resp_SuppDppBootstrapGen", 519 },
+  { "Resp_SuppDppStartListen", "RPC_ID__Resp_SuppDppStartListen", 520 },
+  { "Resp_SuppDppStopListen", "RPC_ID__Resp_SuppDppStopListen", 521 },
+  { "Resp_OTAActivate", "RPC_ID__Resp_OTAActivate", 522 },
+  { "Resp_AppGetDesc", "RPC_ID__Resp_AppGetDesc", 523 },
+  { "Resp_MemMonitor", "RPC_ID__Resp_MemMonitor", 524 },
+  { "Resp_WifiScanParams", "RPC_ID__Resp_WifiScanParams", 525 },
   { "Resp_WifiSetPs", "RPC_ID__Resp_WifiSetPs", 526 },
   { "Resp_WifiGetPs", "RPC_ID__Resp_WifiGetPs", 527 },
   { "Resp_OTABegin", "RPC_ID__Resp_OTABegin", 528 },
@@ -16925,7 +32635,54 @@ static const ProtobufCEnumValue rpc_id__enum_values_by_number[179] =
   { "Resp_WifiGetBand", "RPC_ID__Resp_WifiGetBand", 603 },
   { "Resp_WifiSetBandMode", "RPC_ID__Resp_WifiSetBandMode", 604 },
   { "Resp_WifiGetBandMode", "RPC_ID__Resp_WifiGetBandMode", 605 },
-  { "Resp_Max", "RPC_ID__Resp_Max", 606 },
+  { "Resp_GetCoprocessorFwVersion", "RPC_ID__Resp_GetCoprocessorFwVersion", 606 },
+  { "Resp_WifiScanGetApRecord", "RPC_ID__Resp_WifiScanGetApRecord", 607 },
+  { "Resp_SetDhcpDnsStatus", "RPC_ID__Resp_SetDhcpDnsStatus", 608 },
+  { "Resp_GetDhcpDnsStatus", "RPC_ID__Resp_GetDhcpDnsStatus", 609 },
+  { "Resp_WifiStaTwtConfig", "RPC_ID__Resp_WifiStaTwtConfig", 610 },
+  { "Resp_WifiStaItwtSetup", "RPC_ID__Resp_WifiStaItwtSetup", 611 },
+  { "Resp_WifiStaItwtTeardown", "RPC_ID__Resp_WifiStaItwtTeardown", 612 },
+  { "Resp_WifiStaItwtSuspend", "RPC_ID__Resp_WifiStaItwtSuspend", 613 },
+  { "Resp_WifiStaItwtGetFlowIdStatus", "RPC_ID__Resp_WifiStaItwtGetFlowIdStatus", 614 },
+  { "Resp_WifiStaItwtSendProbeReq", "RPC_ID__Resp_WifiStaItwtSendProbeReq", 615 },
+  { "Resp_WifiStaItwtSetTargetWakeTimeOffset", "RPC_ID__Resp_WifiStaItwtSetTargetWakeTimeOffset", 616 },
+  { "Resp_WifiStaEnterpriseEnable", "RPC_ID__Resp_WifiStaEnterpriseEnable", 617 },
+  { "Resp_WifiStaEnterpriseDisable", "RPC_ID__Resp_WifiStaEnterpriseDisable", 618 },
+  { "Resp_EapSetIdentity", "RPC_ID__Resp_EapSetIdentity", 619 },
+  { "Resp_EapClearIdentity", "RPC_ID__Resp_EapClearIdentity", 620 },
+  { "Resp_EapSetUsername", "RPC_ID__Resp_EapSetUsername", 621 },
+  { "Resp_EapClearUsername", "RPC_ID__Resp_EapClearUsername", 622 },
+  { "Resp_EapSetPassword", "RPC_ID__Resp_EapSetPassword", 623 },
+  { "Resp_EapClearPassword", "RPC_ID__Resp_EapClearPassword", 624 },
+  { "Resp_EapSetNewPassword", "RPC_ID__Resp_EapSetNewPassword", 625 },
+  { "Resp_EapClearNewPassword", "RPC_ID__Resp_EapClearNewPassword", 626 },
+  { "Resp_EapSetCaCert", "RPC_ID__Resp_EapSetCaCert", 627 },
+  { "Resp_EapClearCaCert", "RPC_ID__Resp_EapClearCaCert", 628 },
+  { "Resp_EapSetCertificateAndKey", "RPC_ID__Resp_EapSetCertificateAndKey", 629 },
+  { "Resp_EapClearCertificateAndKey", "RPC_ID__Resp_EapClearCertificateAndKey", 630 },
+  { "Resp_EapGetDisableTimeCheck", "RPC_ID__Resp_EapGetDisableTimeCheck", 631 },
+  { "Resp_EapSetTtlsPhase2Method", "RPC_ID__Resp_EapSetTtlsPhase2Method", 632 },
+  { "Resp_EapSetSuitebCertification", "RPC_ID__Resp_EapSetSuitebCertification", 633 },
+  { "Resp_EapSetPacFile", "RPC_ID__Resp_EapSetPacFile", 634 },
+  { "Resp_EapSetFastParams", "RPC_ID__Resp_EapSetFastParams", 635 },
+  { "Resp_EapUseDefaultCertBundle", "RPC_ID__Resp_EapUseDefaultCertBundle", 636 },
+  { "Resp_WifiSetOkcSupport", "RPC_ID__Resp_WifiSetOkcSupport", 637 },
+  { "Resp_EapSetDomainName", "RPC_ID__Resp_EapSetDomainName", 638 },
+  { "Resp_EapSetDisableTimeCheck", "RPC_ID__Resp_EapSetDisableTimeCheck", 639 },
+  { "Resp_EapSetEapMethods", "RPC_ID__Resp_EapSetEapMethods", 640 },
+  { "Resp_IfaceMacAddrSetGet", "RPC_ID__Resp_IfaceMacAddrSetGet", 641 },
+  { "Resp_IfaceMacAddrLenGet", "RPC_ID__Resp_IfaceMacAddrLenGet", 642 },
+  { "Resp_FeatureControl", "RPC_ID__Resp_FeatureControl", 643 },
+  { "Resp_CustomRpc", "RPC_ID__Resp_CustomRpc", 644 },
+  { "Resp_GpioConfig", "RPC_ID__Resp_GpioConfig", 645 },
+  { "Resp_GpioResetPin", "RPC_ID__Resp_GpioResetPin", 646 },
+  { "Resp_GpioSetLevel", "RPC_ID__Resp_GpioSetLevel", 647 },
+  { "Resp_GpioGetLevel", "RPC_ID__Resp_GpioGetLevel", 648 },
+  { "Resp_GpioSetDirection", "RPC_ID__Resp_GpioSetDirection", 649 },
+  { "Resp_GpioInputEnable", "RPC_ID__Resp_GpioInputEnable", 650 },
+  { "Resp_GpioSetPullMode", "RPC_ID__Resp_GpioSetPullMode", 651 },
+  { "Resp_ExtCoex", "RPC_ID__Resp_ExtCoex", 652 },
+  { "Resp_Max", "RPC_ID__Resp_Max", 653 },
   { "Event_Base", "RPC_ID__Event_Base", 768 },
   { "Event_ESPInit", "RPC_ID__Event_ESPInit", 769 },
   { "Event_Heartbeat", "RPC_ID__Event_Heartbeat", 770 },
@@ -16935,192 +32692,330 @@ static const ProtobufCEnumValue rpc_id__enum_values_by_number[179] =
   { "Event_StaScanDone", "RPC_ID__Event_StaScanDone", 774 },
   { "Event_StaConnected", "RPC_ID__Event_StaConnected", 775 },
   { "Event_StaDisconnected", "RPC_ID__Event_StaDisconnected", 776 },
-  { "Event_Max", "RPC_ID__Event_Max", 777 },
+  { "Event_DhcpDnsStatus", "RPC_ID__Event_DhcpDnsStatus", 777 },
+  { "Event_StaItwtSetup", "RPC_ID__Event_StaItwtSetup", 778 },
+  { "Event_StaItwtTeardown", "RPC_ID__Event_StaItwtTeardown", 779 },
+  { "Event_StaItwtSuspend", "RPC_ID__Event_StaItwtSuspend", 780 },
+  { "Event_StaItwtProbe", "RPC_ID__Event_StaItwtProbe", 781 },
+  { "Event_SuppDppUriReady", "RPC_ID__Event_SuppDppUriReady", 782 },
+  { "Event_SuppDppCfgRecvd", "RPC_ID__Event_SuppDppCfgRecvd", 783 },
+  { "Event_SuppDppFail", "RPC_ID__Event_SuppDppFail", 784 },
+  { "Event_WifiDppUriReady", "RPC_ID__Event_WifiDppUriReady", 785 },
+  { "Event_WifiDppCfgRecvd", "RPC_ID__Event_WifiDppCfgRecvd", 786 },
+  { "Event_WifiDppFail", "RPC_ID__Event_WifiDppFail", 787 },
+  { "Event_CustomRpc", "RPC_ID__Event_CustomRpc", 788 },
+  { "Event_MemMonitor", "RPC_ID__Event_MemMonitor", 789 },
+  { "Event_Max", "RPC_ID__Event_Max", 790 },
 };
 static const ProtobufCIntRange rpc_id__value_ranges[] = {
-{0, 0},{256, 1},{270, 6},{297, 31},{512, 85},{526, 90},{553, 115},{768, 169},{0, 179}
+{0, 0},{256, 1},{297, 40},{512, 141},{553, 180},{768, 281},{0, 304}
 };
-static const ProtobufCEnumValueIndex rpc_id__enum_values_by_name[179] =
+static const ProtobufCEnumValueIndex rpc_id__enum_values_by_name[304] =
 {
-  { "Event_AP_StaConnected", 172 },
-  { "Event_AP_StaDisconnected", 173 },
-  { "Event_Base", 169 },
-  { "Event_ESPInit", 170 },
-  { "Event_Heartbeat", 171 },
-  { "Event_Max", 178 },
-  { "Event_StaConnected", 176 },
-  { "Event_StaDisconnected", 177 },
-  { "Event_StaScanDone", 175 },
-  { "Event_WifiEventNoArgs", 174 },
+  { "Event_AP_StaConnected", 284 },
+  { "Event_AP_StaDisconnected", 285 },
+  { "Event_Base", 281 },
+  { "Event_CustomRpc", 301 },
+  { "Event_DhcpDnsStatus", 290 },
+  { "Event_ESPInit", 282 },
+  { "Event_Heartbeat", 283 },
+  { "Event_Max", 303 },
+  { "Event_MemMonitor", 302 },
+  { "Event_StaConnected", 288 },
+  { "Event_StaDisconnected", 289 },
+  { "Event_StaItwtProbe", 294 },
+  { "Event_StaItwtSetup", 291 },
+  { "Event_StaItwtSuspend", 293 },
+  { "Event_StaItwtTeardown", 292 },
+  { "Event_StaScanDone", 287 },
+  { "Event_SuppDppCfgRecvd", 296 },
+  { "Event_SuppDppFail", 297 },
+  { "Event_SuppDppUriReady", 295 },
+  { "Event_WifiDppCfgRecvd", 299 },
+  { "Event_WifiDppFail", 300 },
+  { "Event_WifiDppUriReady", 298 },
+  { "Event_WifiEventNoArgs", 286 },
   { "MsgId_Invalid", 0 },
+  { "Req_AppGetDesc", 12 },
   { "Req_Base", 1 },
-  { "Req_ConfigHeartbeat", 13 },
+  { "Req_ConfigHeartbeat", 22 },
+  { "Req_CustomRpc", 131 },
+  { "Req_EapClearCaCert", 115 },
+  { "Req_EapClearCertificateAndKey", 117 },
+  { "Req_EapClearIdentity", 107 },
+  { "Req_EapClearNewPassword", 113 },
+  { "Req_EapClearPassword", 111 },
+  { "Req_EapClearUsername", 109 },
+  { "Req_EapGetDisableTimeCheck", 118 },
+  { "Req_EapSetCaCert", 114 },
+  { "Req_EapSetCertificateAndKey", 116 },
+  { "Req_EapSetDisableTimeCheck", 126 },
+  { "Req_EapSetDomainName", 125 },
+  { "Req_EapSetEapMethods", 127 },
+  { "Req_EapSetFastParams", 122 },
+  { "Req_EapSetIdentity", 106 },
+  { "Req_EapSetNewPassword", 112 },
+  { "Req_EapSetPacFile", 121 },
+  { "Req_EapSetPassword", 110 },
+  { "Req_EapSetSuitebCertification", 120 },
+  { "Req_EapSetTtlsPhase2Method", 119 },
+  { "Req_EapSetUsername", 108 },
+  { "Req_EapUseDefaultCertBundle", 123 },
+  { "Req_ExtCoex", 139 },
+  { "Req_FeatureControl", 130 },
+  { "Req_GetCoprocessorFwVersion", 93 },
+  { "Req_GetDhcpDnsStatus", 96 },
   { "Req_GetMACAddress", 2 },
   { "Req_GetWifiMode", 4 },
-  { "Req_Max", 84 },
-  { "Req_OTABegin", 8 },
-  { "Req_OTAEnd", 10 },
-  { "Req_OTAWrite", 9 },
+  { "Req_GpioConfig", 132 },
+  { "Req_GpioGetLevel", 135 },
+  { "Req_GpioInputEnable", 137 },
+  { "Req_GpioResetPin", 133 },
+  { "Req_GpioSetDirection", 136 },
+  { "Req_GpioSetLevel", 134 },
+  { "Req_GpioSetPullMode", 138 },
+  { "Req_IfaceMacAddrLenGet", 129 },
+  { "Req_IfaceMacAddrSetGet", 128 },
+  { "Req_Max", 140 },
+  { "Req_MemMonitor", 13 },
+  { "Req_OTAActivate", 11 },
+  { "Req_OTABegin", 17 },
+  { "Req_OTAEnd", 19 },
+  { "Req_OTAWrite", 18 },
+  { "Req_SetDhcpDnsStatus", 95 },
   { "Req_SetMacAddress", 3 },
   { "Req_SetWifiMode", 5 },
-  { "Req_Wifi80211Tx", 51 },
-  { "Req_WifiApGetStaAid", 46 },
-  { "Req_WifiApGetStaList", 45 },
-  { "Req_WifiClearApList", 26 },
-  { "Req_WifiClearFastConnect", 28 },
-  { "Req_WifiConfig11bRate", 66 },
-  { "Req_WifiConfig80211TxRate", 70 },
-  { "Req_WifiConnect", 18 },
-  { "Req_WifiConnectionlessModuleSetWakeInterval", 67 },
-  { "Req_WifiDeauthSta", 29 },
-  { "Req_WifiDeinit", 15 },
-  { "Req_WifiDisablePmfConfig", 71 },
-  { "Req_WifiDisconnect", 19 },
-  { "Req_WifiFtmEndSession", 64 },
-  { "Req_WifiFtmInitiateSession", 63 },
-  { "Req_WifiFtmRespSetOffset", 65 },
-  { "Req_WifiGetAnt", 57 },
-  { "Req_WifiGetAntGpio", 55 },
-  { "Req_WifiGetBand", 81 },
-  { "Req_WifiGetBandMode", 83 },
-  { "Req_WifiGetBandwidth", 34 },
-  { "Req_WifiGetBandwidths", 79 },
-  { "Req_WifiGetChannel", 36 },
-  { "Req_WifiGetConfig", 21 },
-  { "Req_WifiGetCountry", 38 },
-  { "Req_WifiGetCountryCode", 69 },
-  { "Req_WifiGetEventMask", 50 },
-  { "Req_WifiGetInactiveTime", 60 },
-  { "Req_WifiGetMaxTxPower", 12 },
-  { "Req_WifiGetPromiscuous", 40 },
-  { "Req_WifiGetPromiscuousCtrlFilter", 44 },
-  { "Req_WifiGetPromiscuousFilter", 42 },
-  { "Req_WifiGetProtocol", 32 },
-  { "Req_WifiGetProtocols", 77 },
-  { "Req_WifiGetPs", 7 },
-  { "Req_WifiGetTsfTime", 58 },
-  { "Req_WifiInit", 14 },
-  { "Req_WifiRestore", 27 },
-  { "Req_WifiScanGetApNum", 24 },
-  { "Req_WifiScanGetApRecords", 25 },
-  { "Req_WifiScanStart", 22 },
-  { "Req_WifiScanStop", 23 },
-  { "Req_WifiSetAnt", 56 },
-  { "Req_WifiSetAntGpio", 54 },
-  { "Req_WifiSetBand", 80 },
-  { "Req_WifiSetBandMode", 82 },
-  { "Req_WifiSetBandwidth", 33 },
-  { "Req_WifiSetBandwidths", 78 },
-  { "Req_WifiSetChannel", 35 },
-  { "Req_WifiSetConfig", 20 },
-  { "Req_WifiSetCountry", 37 },
-  { "Req_WifiSetCountryCode", 68 },
-  { "Req_WifiSetCsi", 53 },
-  { "Req_WifiSetCsiConfig", 52 },
-  { "Req_WifiSetDynamicCs", 74 },
-  { "Req_WifiSetEventMask", 49 },
-  { "Req_WifiSetInactiveTime", 59 },
-  { "Req_WifiSetMaxTxPower", 11 },
-  { "Req_WifiSetPromiscuous", 39 },
-  { "Req_WifiSetPromiscuousCtrlFilter", 43 },
-  { "Req_WifiSetPromiscuousFilter", 41 },
-  { "Req_WifiSetProtocol", 31 },
-  { "Req_WifiSetProtocols", 76 },
-  { "Req_WifiSetPs", 6 },
-  { "Req_WifiSetRssiThreshold", 62 },
-  { "Req_WifiSetStorage", 47 },
-  { "Req_WifiSetVendorIe", 48 },
-  { "Req_WifiStaGetAid", 72 },
-  { "Req_WifiStaGetApInfo", 30 },
-  { "Req_WifiStaGetNegotiatedPhymode", 73 },
-  { "Req_WifiStaGetRssi", 75 },
-  { "Req_WifiStart", 16 },
-  { "Req_WifiStatisDump", 61 },
-  { "Req_WifiStop", 17 },
-  { "Resp_Base", 85 },
-  { "Resp_ConfigHeartbeat", 97 },
-  { "Resp_GetMACAddress", 86 },
-  { "Resp_GetWifiMode", 88 },
-  { "Resp_Max", 168 },
-  { "Resp_OTABegin", 92 },
-  { "Resp_OTAEnd", 94 },
-  { "Resp_OTAWrite", 93 },
-  { "Resp_SetMacAddress", 87 },
-  { "Resp_SetWifiMode", 89 },
-  { "Resp_Wifi80211Tx", 135 },
-  { "Resp_WifiApGetStaAid", 130 },
-  { "Resp_WifiApGetStaList", 129 },
-  { "Resp_WifiClearApList", 110 },
-  { "Resp_WifiClearFastConnect", 112 },
-  { "Resp_WifiConfig11bRate", 150 },
-  { "Resp_WifiConfig80211TxRate", 154 },
-  { "Resp_WifiConnect", 102 },
-  { "Resp_WifiConnectionlessModuleSetWakeInterval", 151 },
-  { "Resp_WifiDeauthSta", 113 },
-  { "Resp_WifiDeinit", 99 },
-  { "Resp_WifiDisablePmfConfig", 155 },
-  { "Resp_WifiDisconnect", 103 },
-  { "Resp_WifiFtmEndSession", 148 },
-  { "Resp_WifiFtmInitiateSession", 147 },
-  { "Resp_WifiFtmRespSetOffset", 149 },
-  { "Resp_WifiGetAnt", 141 },
-  { "Resp_WifiGetAntGpio", 139 },
-  { "Resp_WifiGetBand", 165 },
-  { "Resp_WifiGetBandMode", 167 },
-  { "Resp_WifiGetBandwidth", 118 },
-  { "Resp_WifiGetBandwidths", 163 },
-  { "Resp_WifiGetChannel", 120 },
-  { "Resp_WifiGetConfig", 105 },
-  { "Resp_WifiGetCountry", 122 },
-  { "Resp_WifiGetCountryCode", 153 },
-  { "Resp_WifiGetEventMask", 134 },
-  { "Resp_WifiGetInactiveTime", 144 },
-  { "Resp_WifiGetMaxTxPower", 96 },
-  { "Resp_WifiGetPromiscuous", 124 },
-  { "Resp_WifiGetPromiscuousCtrlFilter", 128 },
-  { "Resp_WifiGetPromiscuousFilter", 126 },
-  { "Resp_WifiGetProtocol", 116 },
-  { "Resp_WifiGetProtocols", 161 },
-  { "Resp_WifiGetPs", 91 },
-  { "Resp_WifiGetTsfTime", 142 },
-  { "Resp_WifiInit", 98 },
-  { "Resp_WifiRestore", 111 },
-  { "Resp_WifiScanGetApNum", 108 },
-  { "Resp_WifiScanGetApRecords", 109 },
-  { "Resp_WifiScanStart", 106 },
-  { "Resp_WifiScanStop", 107 },
-  { "Resp_WifiSetAnt", 140 },
-  { "Resp_WifiSetAntGpio", 138 },
-  { "Resp_WifiSetBand", 164 },
-  { "Resp_WifiSetBandMode", 166 },
-  { "Resp_WifiSetBandwidth", 117 },
-  { "Resp_WifiSetBandwidths", 162 },
-  { "Resp_WifiSetChannel", 119 },
-  { "Resp_WifiSetConfig", 104 },
-  { "Resp_WifiSetCountry", 121 },
-  { "Resp_WifiSetCountryCode", 152 },
-  { "Resp_WifiSetCsi", 137 },
-  { "Resp_WifiSetCsiConfig", 136 },
-  { "Resp_WifiSetDynamicCs", 158 },
-  { "Resp_WifiSetEventMask", 133 },
-  { "Resp_WifiSetInactiveTime", 143 },
-  { "Resp_WifiSetMaxTxPower", 95 },
-  { "Resp_WifiSetPromiscuous", 123 },
-  { "Resp_WifiSetPromiscuousCtrlFilter", 127 },
-  { "Resp_WifiSetPromiscuousFilter", 125 },
-  { "Resp_WifiSetProtocol", 115 },
-  { "Resp_WifiSetProtocols", 160 },
-  { "Resp_WifiSetPs", 90 },
-  { "Resp_WifiSetRssiThreshold", 146 },
-  { "Resp_WifiSetStorage", 131 },
-  { "Resp_WifiSetVendorIe", 132 },
-  { "Resp_WifiStaGetAid", 156 },
-  { "Resp_WifiStaGetApInfo", 114 },
-  { "Resp_WifiStaGetNegotiatedPhymode", 157 },
-  { "Resp_WifiStaGetRssi", 159 },
-  { "Resp_WifiStart", 100 },
-  { "Resp_WifiStatisDump", 145 },
-  { "Resp_WifiStop", 101 },
+  { "Req_SuppDppBootstrapGen", 8 },
+  { "Req_SuppDppDeinit", 7 },
+  { "Req_SuppDppInit", 6 },
+  { "Req_SuppDppStartListen", 9 },
+  { "Req_SuppDppStopListen", 10 },
+  { "Req_Wifi80211Tx", 60 },
+  { "Req_WifiApGetStaAid", 55 },
+  { "Req_WifiApGetStaList", 54 },
+  { "Req_WifiClearApList", 35 },
+  { "Req_WifiClearFastConnect", 37 },
+  { "Req_WifiConfig11bRate", 75 },
+  { "Req_WifiConfig80211TxRate", 79 },
+  { "Req_WifiConnect", 27 },
+  { "Req_WifiConnectionlessModuleSetWakeInterval", 76 },
+  { "Req_WifiDeauthSta", 38 },
+  { "Req_WifiDeinit", 24 },
+  { "Req_WifiDisablePmfConfig", 80 },
+  { "Req_WifiDisconnect", 28 },
+  { "Req_WifiFtmEndSession", 73 },
+  { "Req_WifiFtmInitiateSession", 72 },
+  { "Req_WifiFtmRespSetOffset", 74 },
+  { "Req_WifiGetAnt", 66 },
+  { "Req_WifiGetAntGpio", 64 },
+  { "Req_WifiGetBand", 90 },
+  { "Req_WifiGetBandMode", 92 },
+  { "Req_WifiGetBandwidth", 43 },
+  { "Req_WifiGetBandwidths", 88 },
+  { "Req_WifiGetChannel", 45 },
+  { "Req_WifiGetConfig", 30 },
+  { "Req_WifiGetCountry", 47 },
+  { "Req_WifiGetCountryCode", 78 },
+  { "Req_WifiGetEventMask", 59 },
+  { "Req_WifiGetInactiveTime", 69 },
+  { "Req_WifiGetMaxTxPower", 21 },
+  { "Req_WifiGetPromiscuous", 49 },
+  { "Req_WifiGetPromiscuousCtrlFilter", 53 },
+  { "Req_WifiGetPromiscuousFilter", 51 },
+  { "Req_WifiGetProtocol", 41 },
+  { "Req_WifiGetProtocols", 86 },
+  { "Req_WifiGetPs", 16 },
+  { "Req_WifiGetTsfTime", 67 },
+  { "Req_WifiInit", 23 },
+  { "Req_WifiRestore", 36 },
+  { "Req_WifiScanGetApNum", 33 },
+  { "Req_WifiScanGetApRecord", 94 },
+  { "Req_WifiScanGetApRecords", 34 },
+  { "Req_WifiScanParams", 14 },
+  { "Req_WifiScanStart", 31 },
+  { "Req_WifiScanStop", 32 },
+  { "Req_WifiSetAnt", 65 },
+  { "Req_WifiSetAntGpio", 63 },
+  { "Req_WifiSetBand", 89 },
+  { "Req_WifiSetBandMode", 91 },
+  { "Req_WifiSetBandwidth", 42 },
+  { "Req_WifiSetBandwidths", 87 },
+  { "Req_WifiSetChannel", 44 },
+  { "Req_WifiSetConfig", 29 },
+  { "Req_WifiSetCountry", 46 },
+  { "Req_WifiSetCountryCode", 77 },
+  { "Req_WifiSetCsi", 62 },
+  { "Req_WifiSetCsiConfig", 61 },
+  { "Req_WifiSetDynamicCs", 83 },
+  { "Req_WifiSetEventMask", 58 },
+  { "Req_WifiSetInactiveTime", 68 },
+  { "Req_WifiSetMaxTxPower", 20 },
+  { "Req_WifiSetOkcSupport", 124 },
+  { "Req_WifiSetPromiscuous", 48 },
+  { "Req_WifiSetPromiscuousCtrlFilter", 52 },
+  { "Req_WifiSetPromiscuousFilter", 50 },
+  { "Req_WifiSetProtocol", 40 },
+  { "Req_WifiSetProtocols", 85 },
+  { "Req_WifiSetPs", 15 },
+  { "Req_WifiSetRssiThreshold", 71 },
+  { "Req_WifiSetStorage", 56 },
+  { "Req_WifiSetVendorIe", 57 },
+  { "Req_WifiStaEnterpriseDisable", 105 },
+  { "Req_WifiStaEnterpriseEnable", 104 },
+  { "Req_WifiStaGetAid", 81 },
+  { "Req_WifiStaGetApInfo", 39 },
+  { "Req_WifiStaGetNegotiatedPhymode", 82 },
+  { "Req_WifiStaGetRssi", 84 },
+  { "Req_WifiStaItwtGetFlowIdStatus", 101 },
+  { "Req_WifiStaItwtSendProbeReq", 102 },
+  { "Req_WifiStaItwtSetTargetWakeTimeOffset", 103 },
+  { "Req_WifiStaItwtSetup", 98 },
+  { "Req_WifiStaItwtSuspend", 100 },
+  { "Req_WifiStaItwtTeardown", 99 },
+  { "Req_WifiStaTwtConfig", 97 },
+  { "Req_WifiStart", 25 },
+  { "Req_WifiStatisDump", 70 },
+  { "Req_WifiStop", 26 },
+  { "Resp_AppGetDesc", 152 },
+  { "Resp_Base", 141 },
+  { "Resp_ConfigHeartbeat", 162 },
+  { "Resp_CustomRpc", 271 },
+  { "Resp_EapClearCaCert", 255 },
+  { "Resp_EapClearCertificateAndKey", 257 },
+  { "Resp_EapClearIdentity", 247 },
+  { "Resp_EapClearNewPassword", 253 },
+  { "Resp_EapClearPassword", 251 },
+  { "Resp_EapClearUsername", 249 },
+  { "Resp_EapGetDisableTimeCheck", 258 },
+  { "Resp_EapSetCaCert", 254 },
+  { "Resp_EapSetCertificateAndKey", 256 },
+  { "Resp_EapSetDisableTimeCheck", 266 },
+  { "Resp_EapSetDomainName", 265 },
+  { "Resp_EapSetEapMethods", 267 },
+  { "Resp_EapSetFastParams", 262 },
+  { "Resp_EapSetIdentity", 246 },
+  { "Resp_EapSetNewPassword", 252 },
+  { "Resp_EapSetPacFile", 261 },
+  { "Resp_EapSetPassword", 250 },
+  { "Resp_EapSetSuitebCertification", 260 },
+  { "Resp_EapSetTtlsPhase2Method", 259 },
+  { "Resp_EapSetUsername", 248 },
+  { "Resp_EapUseDefaultCertBundle", 263 },
+  { "Resp_ExtCoex", 279 },
+  { "Resp_FeatureControl", 270 },
+  { "Resp_GetCoprocessorFwVersion", 233 },
+  { "Resp_GetDhcpDnsStatus", 236 },
+  { "Resp_GetMACAddress", 142 },
+  { "Resp_GetWifiMode", 144 },
+  { "Resp_GpioConfig", 272 },
+  { "Resp_GpioGetLevel", 275 },
+  { "Resp_GpioInputEnable", 277 },
+  { "Resp_GpioResetPin", 273 },
+  { "Resp_GpioSetDirection", 276 },
+  { "Resp_GpioSetLevel", 274 },
+  { "Resp_GpioSetPullMode", 278 },
+  { "Resp_IfaceMacAddrLenGet", 269 },
+  { "Resp_IfaceMacAddrSetGet", 268 },
+  { "Resp_Max", 280 },
+  { "Resp_MemMonitor", 153 },
+  { "Resp_OTAActivate", 151 },
+  { "Resp_OTABegin", 157 },
+  { "Resp_OTAEnd", 159 },
+  { "Resp_OTAWrite", 158 },
+  { "Resp_SetDhcpDnsStatus", 235 },
+  { "Resp_SetMacAddress", 143 },
+  { "Resp_SetWifiMode", 145 },
+  { "Resp_SuppDppBootstrapGen", 148 },
+  { "Resp_SuppDppDeinit", 147 },
+  { "Resp_SuppDppInit", 146 },
+  { "Resp_SuppDppStartListen", 149 },
+  { "Resp_SuppDppStopListen", 150 },
+  { "Resp_Wifi80211Tx", 200 },
+  { "Resp_WifiApGetStaAid", 195 },
+  { "Resp_WifiApGetStaList", 194 },
+  { "Resp_WifiClearApList", 175 },
+  { "Resp_WifiClearFastConnect", 177 },
+  { "Resp_WifiConfig11bRate", 215 },
+  { "Resp_WifiConfig80211TxRate", 219 },
+  { "Resp_WifiConnect", 167 },
+  { "Resp_WifiConnectionlessModuleSetWakeInterval", 216 },
+  { "Resp_WifiDeauthSta", 178 },
+  { "Resp_WifiDeinit", 164 },
+  { "Resp_WifiDisablePmfConfig", 220 },
+  { "Resp_WifiDisconnect", 168 },
+  { "Resp_WifiFtmEndSession", 213 },
+  { "Resp_WifiFtmInitiateSession", 212 },
+  { "Resp_WifiFtmRespSetOffset", 214 },
+  { "Resp_WifiGetAnt", 206 },
+  { "Resp_WifiGetAntGpio", 204 },
+  { "Resp_WifiGetBand", 230 },
+  { "Resp_WifiGetBandMode", 232 },
+  { "Resp_WifiGetBandwidth", 183 },
+  { "Resp_WifiGetBandwidths", 228 },
+  { "Resp_WifiGetChannel", 185 },
+  { "Resp_WifiGetConfig", 170 },
+  { "Resp_WifiGetCountry", 187 },
+  { "Resp_WifiGetCountryCode", 218 },
+  { "Resp_WifiGetEventMask", 199 },
+  { "Resp_WifiGetInactiveTime", 209 },
+  { "Resp_WifiGetMaxTxPower", 161 },
+  { "Resp_WifiGetPromiscuous", 189 },
+  { "Resp_WifiGetPromiscuousCtrlFilter", 193 },
+  { "Resp_WifiGetPromiscuousFilter", 191 },
+  { "Resp_WifiGetProtocol", 181 },
+  { "Resp_WifiGetProtocols", 226 },
+  { "Resp_WifiGetPs", 156 },
+  { "Resp_WifiGetTsfTime", 207 },
+  { "Resp_WifiInit", 163 },
+  { "Resp_WifiRestore", 176 },
+  { "Resp_WifiScanGetApNum", 173 },
+  { "Resp_WifiScanGetApRecord", 234 },
+  { "Resp_WifiScanGetApRecords", 174 },
+  { "Resp_WifiScanParams", 154 },
+  { "Resp_WifiScanStart", 171 },
+  { "Resp_WifiScanStop", 172 },
+  { "Resp_WifiSetAnt", 205 },
+  { "Resp_WifiSetAntGpio", 203 },
+  { "Resp_WifiSetBand", 229 },
+  { "Resp_WifiSetBandMode", 231 },
+  { "Resp_WifiSetBandwidth", 182 },
+  { "Resp_WifiSetBandwidths", 227 },
+  { "Resp_WifiSetChannel", 184 },
+  { "Resp_WifiSetConfig", 169 },
+  { "Resp_WifiSetCountry", 186 },
+  { "Resp_WifiSetCountryCode", 217 },
+  { "Resp_WifiSetCsi", 202 },
+  { "Resp_WifiSetCsiConfig", 201 },
+  { "Resp_WifiSetDynamicCs", 223 },
+  { "Resp_WifiSetEventMask", 198 },
+  { "Resp_WifiSetInactiveTime", 208 },
+  { "Resp_WifiSetMaxTxPower", 160 },
+  { "Resp_WifiSetOkcSupport", 264 },
+  { "Resp_WifiSetPromiscuous", 188 },
+  { "Resp_WifiSetPromiscuousCtrlFilter", 192 },
+  { "Resp_WifiSetPromiscuousFilter", 190 },
+  { "Resp_WifiSetProtocol", 180 },
+  { "Resp_WifiSetProtocols", 225 },
+  { "Resp_WifiSetPs", 155 },
+  { "Resp_WifiSetRssiThreshold", 211 },
+  { "Resp_WifiSetStorage", 196 },
+  { "Resp_WifiSetVendorIe", 197 },
+  { "Resp_WifiStaEnterpriseDisable", 245 },
+  { "Resp_WifiStaEnterpriseEnable", 244 },
+  { "Resp_WifiStaGetAid", 221 },
+  { "Resp_WifiStaGetApInfo", 179 },
+  { "Resp_WifiStaGetNegotiatedPhymode", 222 },
+  { "Resp_WifiStaGetRssi", 224 },
+  { "Resp_WifiStaItwtGetFlowIdStatus", 241 },
+  { "Resp_WifiStaItwtSendProbeReq", 242 },
+  { "Resp_WifiStaItwtSetTargetWakeTimeOffset", 243 },
+  { "Resp_WifiStaItwtSetup", 238 },
+  { "Resp_WifiStaItwtSuspend", 240 },
+  { "Resp_WifiStaItwtTeardown", 239 },
+  { "Resp_WifiStaTwtConfig", 237 },
+  { "Resp_WifiStart", 165 },
+  { "Resp_WifiStatisDump", 210 },
+  { "Resp_WifiStop", 166 },
 };
 const ProtobufCEnumDescriptor rpc_id__descriptor =
 {
@@ -17129,11 +33024,137 @@ const ProtobufCEnumDescriptor rpc_id__descriptor =
   "RpcId",
   "RpcId",
   "",
-  179,
+  304,
   rpc_id__enum_values_by_number,
-  179,
+  304,
   rpc_id__enum_values_by_name,
-  8,
+  6,
   rpc_id__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc__gpio_mode__enum_values_by_number[4] =
+{
+  { "GPIO_MODE_DISABLE", "RPC__GPIO_MODE__GPIO_MODE_DISABLE", 0 },
+  { "GPIO_MODE_INPUT", "RPC__GPIO_MODE__GPIO_MODE_INPUT", 1 },
+  { "GPIO_MODE_OUTPUT", "RPC__GPIO_MODE__GPIO_MODE_OUTPUT", 2 },
+  { "GPIO_MODE_INPUT_OUTPUT", "RPC__GPIO_MODE__GPIO_MODE_INPUT_OUTPUT", 3 },
+};
+static const ProtobufCIntRange rpc__gpio_mode__value_ranges[] = {
+{0, 0},{0, 4}
+};
+static const ProtobufCEnumValueIndex rpc__gpio_mode__enum_values_by_name[4] =
+{
+  { "GPIO_MODE_DISABLE", 0 },
+  { "GPIO_MODE_INPUT", 1 },
+  { "GPIO_MODE_INPUT_OUTPUT", 3 },
+  { "GPIO_MODE_OUTPUT", 2 },
+};
+const ProtobufCEnumDescriptor rpc__gpio_mode__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "Rpc_GpioMode",
+  "Rpc_GpioMode",
+  "RpcGpioMode",
+  "",
+  4,
+  rpc__gpio_mode__enum_values_by_number,
+  4,
+  rpc__gpio_mode__enum_values_by_name,
+  1,
+  rpc__gpio_mode__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc__gpio_pull_mode__enum_values_by_number[3] =
+{
+  { "GPIO_PULL_NONE", "RPC__GPIO_PULL_MODE__GPIO_PULL_NONE", 0 },
+  { "GPIO_PULL_UP", "RPC__GPIO_PULL_MODE__GPIO_PULL_UP", 1 },
+  { "GPIO_PULL_DOWN", "RPC__GPIO_PULL_MODE__GPIO_PULL_DOWN", 2 },
+};
+static const ProtobufCIntRange rpc__gpio_pull_mode__value_ranges[] = {
+{0, 0},{0, 3}
+};
+static const ProtobufCEnumValueIndex rpc__gpio_pull_mode__enum_values_by_name[3] =
+{
+  { "GPIO_PULL_DOWN", 2 },
+  { "GPIO_PULL_NONE", 0 },
+  { "GPIO_PULL_UP", 1 },
+};
+const ProtobufCEnumDescriptor rpc__gpio_pull_mode__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "Rpc_GpioPullMode",
+  "Rpc_GpioPullMode",
+  "RpcGpioPullMode",
+  "",
+  3,
+  rpc__gpio_pull_mode__enum_values_by_number,
+  3,
+  rpc__gpio_pull_mode__enum_values_by_name,
+  1,
+  rpc__gpio_pull_mode__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc__mem_monitor_config__enum_values_by_number[3] =
+{
+  { "MEMMONITOR_NO_CHANGE", "RPC__MEM_MONITOR_CONFIG__MEMMONITOR_NO_CHANGE", 0 },
+  { "MEMMONITOR_DISABLE", "RPC__MEM_MONITOR_CONFIG__MEMMONITOR_DISABLE", 1 },
+  { "MEMMONITOR_ENABLE", "RPC__MEM_MONITOR_CONFIG__MEMMONITOR_ENABLE", 2 },
+};
+static const ProtobufCIntRange rpc__mem_monitor_config__value_ranges[] = {
+{0, 0},{0, 3}
+};
+static const ProtobufCEnumValueIndex rpc__mem_monitor_config__enum_values_by_name[3] =
+{
+  { "MEMMONITOR_DISABLE", 1 },
+  { "MEMMONITOR_ENABLE", 2 },
+  { "MEMMONITOR_NO_CHANGE", 0 },
+};
+const ProtobufCEnumDescriptor rpc__mem_monitor_config__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "Rpc_MemMonitorConfig",
+  "Rpc_MemMonitorConfig",
+  "RpcMemMonitorConfig",
+  "",
+  3,
+  rpc__mem_monitor_config__enum_values_by_number,
+  3,
+  rpc__mem_monitor_config__enum_values_by_name,
+  1,
+  rpc__mem_monitor_config__value_ranges,
+  NULL,NULL,NULL,NULL   /* reserved[1234] */
+};
+static const ProtobufCEnumValue rpc__ext_coex_cmd__enum_values_by_number[5] =
+{
+  { "SetGpioPin", "RPC__EXT_COEX_CMD__SetGpioPin", 0 },
+  { "Disable", "RPC__EXT_COEX_CMD__Disable", 1 },
+  { "SetWorkMode", "RPC__EXT_COEX_CMD__SetWorkMode", 2 },
+  { "SetGrantDelay", "RPC__EXT_COEX_CMD__SetGrantDelay", 3 },
+  { "SetValidateHigh", "RPC__EXT_COEX_CMD__SetValidateHigh", 4 },
+};
+static const ProtobufCIntRange rpc__ext_coex_cmd__value_ranges[] = {
+{0, 0},{0, 5}
+};
+static const ProtobufCEnumValueIndex rpc__ext_coex_cmd__enum_values_by_name[5] =
+{
+  { "Disable", 1 },
+  { "SetGpioPin", 0 },
+  { "SetGrantDelay", 3 },
+  { "SetValidateHigh", 4 },
+  { "SetWorkMode", 2 },
+};
+const ProtobufCEnumDescriptor rpc__ext_coex_cmd__descriptor =
+{
+  PROTOBUF_C__ENUM_DESCRIPTOR_MAGIC,
+  "Rpc_ExtCoexCmd",
+  "Rpc_ExtCoexCmd",
+  "RpcExtCoexCmd",
+  "",
+  5,
+  rpc__ext_coex_cmd__enum_values_by_number,
+  5,
+  rpc__ext_coex_cmd__enum_values_by_name,
+  1,
+  rpc__ext_coex_cmd__value_ranges,
   NULL,NULL,NULL,NULL   /* reserved[1234] */
 };
