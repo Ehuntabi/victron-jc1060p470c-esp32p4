@@ -72,6 +72,19 @@ arregla con el paso 4.
   firmware de P4 con el host viejo (v3.14 o anterior); con el host nuevo el C6
   viejo no da BLE.
 
+## Hasta dónde está probado
+
+- Lo que **sí** está probado en placa (23-sep-2026): la grabación del C6 con el
+  firmware viejo puesto, con el mismo código de OTA y la misma estructura de
+  tarea (se hizo con la imagen empotrada, antes de pasar a leerla de la SD) —
+  se grabó dos veces, en los dos sentidos, sin un error.
+- Lo que **no** está probado en placa: la lectura del fichero desde la SD (esa
+  parte es nueva). Compila y, si el fichero no está o no parece una imagen, el
+  módulo **no hace nada** y lo dice por el log: el modo de fallo es «no
+  actualiza», nunca «actualiza a medias».
+- El árbol ya está preparado en `~/joint/.scratch/c6_carrier` (con los
+  componentes descargados), así que `./aplicar.sh flash` tarda poco.
+
 ## Cómo funciona por dentro
 
 - El árbol lo saca `aplicar.sh` con `git worktree` del tag **v3.14**, el último
