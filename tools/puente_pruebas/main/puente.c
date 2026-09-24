@@ -236,14 +236,33 @@ static void wifi_arrancar(void)
 }
 
 /* ── Ordenes ────────────────────────────────────────────────────────────── */
+/* La IP se lee SIEMPRE de la netif, no de una copia cacheada: el camino
+ * 'wifista' y el camino 'sat' son dos formas de asociarse a la MISMA estacion,
+ * y tener dos copias hacia que 'wifiip' dijera "(sin IP)" con el 'sat' ya
+ * conectado (la copia de puente.c solo la rellenaba 'wifista'). */
+static const char *ip_sta_actual(void)
+{
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta) {
+        esp_netif_ip_info_t info;
+        if (esp_netif_get_ip_info(sta, &info) == ESP_OK && info.ip.addr) {
+            snprintf(s_ip, sizeof(s_ip), IPSTR, IP2STR(&info.ip));
+            return s_ip;
+        }
+    }
+    return s_ip[0] ? s_ip : NULL;   /* ultimo valor conocido, si no hay netif */
+}
+
 static int cmd_status(int argc, char **argv)
 {
     (void)argc; (void)argv;
+    const char *ip  = ip_sta_actual();
+    const char *ssid = s_ssid[0] ? s_ssid : sat_ssid();
     printf("BLE  : %s%s%s\n", s_ble_listo ? "listo" : "no listo",
            s_anunciando ? ", emitiendo" : "", s_escaneando ? ", escaneando" : "");
     if (s_anunciando) printf("BLE  : como %s (%d bytes de fabricante)\n", s_addr_txt, s_mfg_len);
-    printf("WIFI : %s%s%s\n", s_ssid[0] ? s_ssid : "(sin configurar)",
-           s_ip[0] ? " IP=" : "", s_ip);
+    printf("WIFI : %s%s%s\n", ssid[0] ? ssid : "(sin configurar)",
+           ip ? " IP=" : "", ip ? ip : "");
     printf("OK\n");
     return 0;
 }
@@ -373,7 +392,8 @@ static int cmd_wifioff(int argc, char **argv)
 static int cmd_wifiip(int argc, char **argv)
 {
     (void)argc; (void)argv;
-    printf("IP %s\n", s_ip[0] ? s_ip : "(sin IP)");
+    const char *ip = ip_sta_actual();
+    printf("IP %s\n", ip ? ip : "(sin IP)");
     printf("OK\n");
     return 0;
 }

@@ -251,6 +251,11 @@ void sat_parar(void)
 
 bool sat_activo(void) { return s_activo; }
 
+/* El SSID al que estamos asociados: 'status' lo usa en vez de su propia copia,
+ * que solo rellenaba el camino 'wifista' y por eso decia "(sin configurar)"
+ * con el satelite ya conectado. */
+const char *sat_ssid(void) { return s_ssid; }
+
 void sat_informe(void)
 {
     int64_t ahora = esp_timer_get_time();

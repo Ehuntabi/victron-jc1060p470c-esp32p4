@@ -8,3 +8,4 @@ bool sat_iniciar(const char *ssid, const char *clave,
 void sat_parar(void);
 void sat_informe(void);
 bool sat_activo(void);
+const char *sat_ssid(void);   /* SSID al que esta asociado (o "") */

@@ -54,7 +54,22 @@ PRUEBAS = [
 
 def main():
     p = Puente()
+    p.sincronizar()
     print(f"barrido de {len(PRUEBAS)} endpoints (puente en {p.puerto})\n")
+
+    # El puente se reinicia al abrir el puerto y arranca SIN red: hay que
+    # asociarlo al AP de la P4 antes de nada (si no, todo sale "?").
+    ssid    = os.environ.get("PUENTE_AP_SSID", "VictronConfig")
+    apclave = os.environ.get("PUENTE_AP_CLAVE", "")
+    if apclave:
+        ip, _ = p.asociar(ssid, apclave, USUARIO, CLAVE)
+        if not ip:
+            print("  !! el puente NO se ha asociado: no se pueden pedir endpoints\n")
+            p.cerrar(); return 1
+        print(f"  puente dentro de la red de la P4 (IP={ip})\n")
+    else:
+        print("  (sin PUENTE_AP_CLAVE: se supone que el puente ya estaba asociado)\n")
+
     print(f"  {'endpoint':28} {'met':4} {'esperado':12} {'obtenido':8} veredicto")
     fallos = []
     for ruta, metodo, esperados, pesado in PRUEBAS:
@@ -62,13 +77,18 @@ def main():
         if metodo == "POST":
             cuerpo = '{"prueba_invalida":1}' if ruta != "/settime" else \
                      json.dumps({"epoch": int(time.time())})
-            salida = p.cmd(f"httppost {url} {USUARIO} {CLAVE} '{cuerpo}'", espera=20)
+            orden = f"httppost {url} {USUARIO} {CLAVE} '{cuerpo}'"
         else:
-            salida = p.cmd(f"httpget {url} {USUARIO} {CLAVE}", espera=20)
+            orden = f"httpget {url} {USUARIO} {CLAVE}"
         codigo = "?"
-        for l in salida:
-            if l.startswith("HTTP "):
-                codigo = l.split()[1]
+        for intento in (1, 2):          # la primera orden tras arrancar se pierde a veces
+            salida = p.cmd(orden, espera=20)
+            for l in salida:
+                if l.startswith("HTTP "):
+                    codigo = l.split()[1]
+            if codigo != "?" or intento == 2:
+                break
+            time.sleep(2)
         ok = codigo.isdigit() and int(codigo) in esperados
         if not ok:
             fallos.append((ruta, metodo, esperados, codigo, salida[-2:]))

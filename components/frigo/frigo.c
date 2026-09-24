@@ -734,6 +734,10 @@ void frigo_set_heartbeat_cb(frigo_heartbeat_cb_t cb) { s_hb_cb = cb; }
 void frigo_sim_inject(float t_aletas, float t_congelador,
                       float t_exterior, uint8_t fan_percent)
 {
+    /* Sin init no hay mutex NI estado: inyectar aqui seria tocar memoria que
+     * todavia no existe (y xSemaphoreTake(NULL) es un assert, no un fallo
+     * suave). Se descarta la inyeccion, igual que hacen ne185 y gps. */
+    if (!s_mutex) return;
     s_sim_mode = true;   /* a partir de ahora manda el sim: frigo_task no pisa */
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         s_state.T_Aletas     = t_aletas;
