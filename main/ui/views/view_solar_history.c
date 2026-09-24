@@ -192,7 +192,9 @@ static void sol_cargar_dias(void)
     lv_chart_refresh(s_chart);
 
     if (n > 0) {
-        char f[5][8];
+        /* 32 y no 8: "%d/%d" con dos int cualesquiera siempre cabe (con 8 el
+         * compilador avisaba de truncado posible, y con 12 seguia avisando). */
+        char f[5][32];
         for (int i = 0; i < 5; ++i) {
             const int idx = (n > 1) ? ((n - 1) * i / 4) : 0;
             time_t t = (time_t)dias[idx].day_id * 86400;

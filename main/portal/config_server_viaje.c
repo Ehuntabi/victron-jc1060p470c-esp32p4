@@ -786,13 +786,25 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     char destino[RUTA_MAX + 32];
-    snprintf(destino, sizeof(destino), VIAJES_DIR "/" MARCA_DESCARTADO "%s", nombre);
+    /* 'nombre' sale de la carpeta del viaje (64 max), asi que no puede no caber,
+     * pero se comprueba: si algun dia no cupiera, un snprintf recortado
+     * renombraria a OTRA ruta y aqui se estan moviendo carpetas de la SD. */
+    int n_dst = snprintf(destino, sizeof(destino),
+                         VIAJES_DIR "/" MARCA_DESCARTADO "%s", nombre);
+    if (n_dst < 0 || n_dst >= (int)sizeof(destino)) {
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "nombre de viaje demasiado largo para descartar: %.32s", nombre);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "nombre demasiado largo");
+        return ESP_OK;
+    }
     /* rename() falla si el destino ya existe, y con dos pruebas del mismo dia
      * eso pasa a la primera. Se numera en vez de dar error. */
     struct stat st;
     for (int k = 2; k < 100 && stat(destino, &st) == 0; k++) {
-        snprintf(destino, sizeof(destino), VIAJES_DIR "/" MARCA_DESCARTADO "%s_%d",
-                 nombre, k);
+        n_dst = snprintf(destino, sizeof(destino),
+                         VIAJES_DIR "/" MARCA_DESCARTADO "%s_%d", nombre, k);
+        if (n_dst < 0 || n_dst >= (int)sizeof(destino)) break;
     }
 
     diario(carpeta, "descartado", "");
