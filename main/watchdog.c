@@ -62,10 +62,12 @@ static uint32_t s_arranque_epoch = 0;                         /* ultimo arranque
 
 /* Vigilancia de tareas por heartbeat. Umbral POR TAREA, no uno global: NE185
  * y FRIGO laten en su bucle de polling (segundos), pero DL_FLUSH/BH_FLUSH/
- * VIAJE_TICK solo laten cuando su timer periodico las despierta (30 s, 60 s
- * y 600 s respectivamente -- ver FLUSH_INTERVAL_MS/BH_FLUSH_INTERVAL_MS/
- * RUTA_SEG en sus ficheros). Un umbral unico de 10s habria disparado un
- * reset falso en CADA ciclo normal de esas tres. Cada umbral es ~2-2.5x su
+ * VIAJE_TICK solo laten cuando su timer periodico las despierta: 60 s, 600 s y
+ * 30 s respectivamente (FLUSH_INTERVAL_MS en datalogger.c, BH_FLUSH_INTERVAL_MS
+ * en battery_history.c, RUTA_SEG en portal/config_server_viaje.c). El
+ * comentario ponia "30 s, 60 s y 600 s": eran los mismos numeros con la tarea
+ * cambiada, corregido el 24-sep-2026. Un umbral unico de 10s habria disparado
+ * un reset falso en CADA ciclo normal de esas tres. Cada umbral es ~2-2.5x su
  * periodo: margen para que una escritura a SD lenta (tarjeta grande, bus
  * ocupado por la camara) no dispare un reset, sin tardar demasiado en pillar
  * un atasco real. Detectado por el usuario el 09-sep-2026. */
