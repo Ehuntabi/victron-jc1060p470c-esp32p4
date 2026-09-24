@@ -298,7 +298,12 @@ static void tarea_sim(void *arg)
     int fase = 0;
     int tipo = 0;
     int dev = 0;
-    int aviso_cada = 60;      /* cada 60 tramas (~12 s), una de aviso */
+    /* Cada 61 tramas, una de AVISO (SOC bajo, estado de alarma, error). 61 y 6
+     * son primos entre si, asi que el aviso cae en un tipo de registro distinto
+     * cada vez: con 60 (multiplo de 6) le tocaba SIEMPRE al mismo y la alarma de
+     * bateria no se probaba nunca. Fallo mio, visto el 24-sep-2026 con el banco:
+     * la P4 jamas activaba MINI_ALARM_BATERIA porque nunca le llegaba un SOC bajo. */
+    int aviso_cada = 61;
     int contador = 0;
 
     int caos_reloj = 0;
