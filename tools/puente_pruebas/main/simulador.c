@@ -318,8 +318,14 @@ static void tarea_sim(void *arg)
             printf("CAOS: ahora en fase %s\n", sim_ble_modo());
         }
 
+        /* Una sola trama de aviso dura ~50 ms y la P4 evalua las alarmas cada
+         * 500 ms, asi que muchas veces no la pilla. El aviso va en racha de 20
+         * tramas (~1 s), que es lo que hace que la alarma salte de verdad. */
+        bool en_racha_aviso = (contador % (aviso_cada * 20)) >= (aviso_cada * 20 - 20);
+        bool aviso_ahora = aviso || (en_racha_aviso && tipo == 1);
+
         if (s_caos && s_fase_caos == 3) emitir_fuzz(fase, &s_disp[dev]);
-        else                            emitir(tipo, fase, aviso, &s_disp[dev]);
+        else                            emitir(tipo, fase, aviso_ahora, &s_disp[dev]);
 
         if (++tipo >= TIPOS) { tipo = 0; if (++dev >= s_ndisp) dev = 0; fase++; }
 

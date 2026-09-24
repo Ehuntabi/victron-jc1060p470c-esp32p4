@@ -151,6 +151,26 @@ PUENTE_AP_CLAVE=... PUENTE_PORTAL_CLAVE=... setsid nohup python3 banco.py 4 300 
 - **Los CSV y `/ota` viven en el puerto 8081**, no en el 80: pedirlos al 80 da
   **404** (el cazatodo del portal). Apuntado aquí porque es una trampa fácil.
 
+## Medidas finas (24-sep-2026, banco de 4 h)
+
+- **La P4 no pierde nada por su lado**: lleva su propia cuenta (`udp_tx: TX ok=...
+  err=...`) y en 11 minutos iba por 660 envios con **0 errores**, uno por segundo
+  clavado (`vTaskDelayUntil(..., 1000)`).
+- **Lo que se pierde es el aire**: el satelite recibio el 80 % de esos paquetes,
+  todos con el CRC bien. Es lo esperado: la difusion UDP no se reintenta nunca
+  (best effort, sin ACK) y ademas el receptor esta emitiendo BLE a 20/s con la
+  misma radio. El protocolo ya lo asume (manda el estado entero cada segundo).
+- **Con el ahorro de energia del receptor puesto se perdia un 23 % mas** (76,7 %
+  frente a 87,7 %): una estacion con modem-sleep se pierde las difusiones que
+  caen entre balizas DTIM. Por eso el satelite lleva `esp_wifi_set_ps(WIFI_PS_NONE)`.
+- **La alarma de bateria salta**: con la simulacion mandando SOC bajo (22 %),
+  la P4 registra `alarma: alarma de bateria activa` y su telemetria publica
+  `alarmas=0x04` (MINI_ALARM_BATERIA). Las ordenes de silencio del satelite
+  tambien se atienden (`orden de silencio mask=0x0f`).
+- **La P4 sanea lo imposible antes de publicar**: los centinelas se convierten en
+  "sin dato" (`MINI_NO_DATA_I16`, `MINI_NO_DATA_I32`) y el 0x7FFF de tension en 0,
+  en vez de propagar 327,67 V o 102,3 % como si fueran buenos.
+
 ## Trampas de taller de esta herramienta
 
 - **Abrir el puerto serie reinicia la placa** (USB-Serial-JTAG). Por eso
