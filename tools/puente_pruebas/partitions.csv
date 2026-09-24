@@ -1,0 +1,6 @@
+# Tabla del PUENTE DE PRUEBAS (herramienta de banco, no va al proyecto).
+# La placa tiene 8 MB; la app por defecto (1 MB) no da para WiFi + BLE + HTTP.
+# Name,   Type, SubType, Offset,  Size,    Flags
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x400000,
