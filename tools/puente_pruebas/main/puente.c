@@ -39,6 +39,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "mbedtls/aes.h"
+#include "mbedtls/base64.h"
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -50,6 +51,9 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
+
+#include "simulador.h"
+#include "satelite.h"
 
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
@@ -390,6 +394,19 @@ static int cmd_httpget(int argc, char **argv)
                                      .event_handler = http_evento };
     esp_http_client_handle_t c = esp_http_client_init(&cfg);
     if (!c) { printf("ERR no puedo crear el cliente HTTP\n"); return 1; }
+    /* httpget <url> [usuario] [clave]  -> con Basic Auth (el portal lo pide) */
+    if (argc >= 4) {
+        char plano[100], cab[200];
+        unsigned char b64[128];
+        size_t n = 0;
+        snprintf(plano, sizeof(plano), "%.32s:%.64s", argv[2], argv[3]);
+        if (mbedtls_base64_encode(b64, sizeof(b64) - 1, &n,
+                                  (const unsigned char *)plano, strlen(plano)) == 0) {
+            b64[n] = 0;
+            snprintf(cab, sizeof(cab), "Basic %s", (char *)b64);
+            esp_http_client_set_header(c, "Authorization", cab);
+        }
+    }
     esp_err_t err = esp_http_client_perform(c);
     int codigo = esp_http_client_get_status_code(c);
     /* El portal de la P4 contesta y cierra: el cliente a veces se queja al
@@ -434,6 +451,88 @@ static int cmd_udp(int argc, char **argv)
     return 0;
 }
 
+/* sat <ssid> <clave> <usuario> <claveportal> | sat informe | sat stop
+ *   Hace de cabina: se conecta al AP de la P4, escucha su telemetria UDP y le
+ *   manda las mismas peticiones HTTP. */
+static int cmd_sat(int argc, char **argv)
+{
+    if (argc < 2 || !strcmp(argv[1], "informe")) {
+        sat_informe();
+        printf("OK\n");
+        return 0;
+    }
+    if (!strcmp(argv[1], "stop")) {
+        sat_parar();
+        printf("OK satelite parado\n");
+        return 0;
+    }
+    if (argc >= 5) {
+        if (!sat_iniciar(argv[1], argv[2], argv[3], argv[4])) {
+            printf("ERR no arranco el satelite\n");
+            return 1;
+        }
+        printf("OK satelite conectando a \"%s\"\n", argv[1]);
+        return 0;
+    }
+    printf("ERR uso: sat <ssid> <clave> <usuario> <claveportal> | sat informe | sat stop\n");
+    return 1;
+}
+
+/* sim [ble <mac> <clave32> [<mac> <clave32> ...] | stop]
+ *   sin argumentos: informe de lo que lleva enviado
+ *   ble ...       : empieza a emitir con esos aparatos, rotando los 6 tipos
+ *   stop          : para */
+static int cmd_sim(int argc, char **argv)
+{
+    if (argc < 2) { sim_ble_informe(); printf("OK\n"); return 0; }
+    if (!strcmp(argv[1], "stop")) {
+        sim_ble_parar();
+        printf("OK simulacion parada\n");
+        return 0;
+    }
+    if (!strcmp(argv[1], "ritmo")) {
+        if (argc < 3) { printf("ERR uso: sim ritmo <ms>\n"); return 1; }
+        sim_ble_ritmo(atoi(argv[2]));
+        printf("OK ritmo %d ms\n", atoi(argv[2]));
+        return 0;
+    }
+    if (!strcmp(argv[1], "caos")) {
+        bool on = (argc > 2) ? (strcmp(argv[2], "off") != 0) : true;
+        sim_ble_caos(on);
+        printf("OK modo caos %s\n", on ? "ACTIVADO (rota solo cada 2 min)" : "quitado");
+        return 0;
+    }
+    if (!strcmp(argv[1], "fijo")) {
+        if (argc >= 5) sim_ble_fijo(true, atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
+        else sim_ble_fijo(false, -1, -1, 0);
+        printf("OK modo fijo %s\n", (argc >= 5) ? "ACTIVADO" : "quitado");
+        return 0;
+    }
+    if (!strcmp(argv[1], "extremo")) {
+        bool on = (argc > 2) ? (strcmp(argv[2], "off") != 0) : true;
+        sim_ble_extremo(on);
+        printf("OK modo extremo %s\n", on ? "ACTIVADO (centinelas y maximos)" : "quitado");
+        return 0;
+    }
+    if (!strcmp(argv[1], "ble")) {
+        int n = (argc - 2) / 2;
+        if (n < 1 || n > 4) {
+            printf("ERR uso: sim ble <mac> <clave32hex> [<mac> <clave32hex> ...]\n");
+            return 1;
+        }
+        const char *macs[4], *claves[4];
+        for (int k = 0; k < n; k++) { macs[k] = argv[2 + 2 * k]; claves[k] = argv[3 + 2 * k]; }
+        if (!sim_ble_iniciar(n, macs, claves)) {
+            printf("ERR no arranco: mira la MAC (AA:BB:..) o que la clave tenga 32 hex\n");
+            return 1;
+        }
+        printf("OK emitiendo con %d aparato(s), rotando los 6 tipos de registro\n", n);
+        return 0;
+    }
+    printf("ERR uso: sim [ble <mac> <clave32hex> ... | extremo on|off | stop]\n");
+    return 1;
+}
+
 static void registrar(const char *nombre, const char *ayuda, esp_console_cmd_func_t fn)
 {
     const esp_console_cmd_t c = { .command = nombre, .help = ayuda, .func = fn };
@@ -456,6 +555,10 @@ static void ble_host_task(void *arg)
 
 void app_main(void)
 {
+    /* La consola se llenaba con los avisos de NimBLE: aqui solo interesa lo
+     * que se manda y lo que se recibe, no cada anuncio que arranca. */
+    esp_log_level_set("NimBLE", ESP_LOG_WARN);
+
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
@@ -491,6 +594,8 @@ void app_main(void)
     registrar("wifiip",     "IP actual", cmd_wifiip);
     registrar("httpget",    "httpget <url>", cmd_httpget);
     registrar("udp",        "udp <ip> <puerto> <hex...> [cada_ms] [veces]", cmd_udp);
+    registrar("sim",        "sim [ble ... | extremo on|off | stop]", cmd_sim);
+    registrar("sat",        "sat <ssid> <clave> <usuario> <claveportal> | informe | stop", cmd_sat);
 
     printf("\n=== PUENTE DE PRUEBAS listo. Escribe 'help'. ===\n");
     esp_console_start_repl(repl);

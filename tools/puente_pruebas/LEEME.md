@@ -78,3 +78,85 @@ equipo simulado, con `ble_hs_id_set_rnd`).
   los valores salen en la pantalla.
 - El puente se conecta al AP de la P4 y recibe IP por DHCP (`192.168.4.2`).
 - El portal contesta a la petición HTTP del puente (`Auth required`).
+
+## Simulador de uso completo (BLE y WiFi)
+
+Además de las órdenes sueltas, el puente lleva un **simulador** que machaca la P4
+como si el vehículo estuviera en marcha, y un **satélite** que hace de cabina.
+
+```bash
+# Emitir con los 3 aparatos configurados, rotando los SEIS tipos de registro
+python3 puente.py "sim ble <mac1> <clave1> <mac2> <clave2> <mac3> <clave3>"
+
+python3 puente.py "sim ritmo 50"      # ms entre tramas (50 = ~20/s; 30 = a tope)
+python3 puente.py "sim caos on"       # rota solo: normal -> fijos -> extremos -> fuzz
+python3 puente.py "sim fijo 637 1337 -4444"   # valores fijos, para comparar
+python3 puente.py "sim extremo on"    # centinelas de "sin dato" y maximos de 32 bits
+python3 puente.py "sim"               # informe: cuantas tramas de cada tipo
+python3 puente.py "sim stop"
+
+# Hacer de cabina/satelite contra la P4
+python3 puente.py "sat VictronConfig <clave del AP> victron <clave del portal>"
+python3 puente.py "sat informe"
+python3 puente.py "sat stop"
+```
+
+Modos del simulador, para qué sirve cada uno:
+
+| Modo | Qué manda | Para qué |
+|---|---|---|
+| normal | los 6 tipos con valores que se mueven (onda triangular) | uso normal |
+| fijos | monitor de batería con números reconocibles | comparar envío/recepción número a número |
+| extremos | centinelas 0x7FFF/0xFFFF, máximos de 32 bits, SOC 102,3 %, 215 °C | buscar desbordes y basura en pantalla |
+| fuzz | tramas malformadas: fabricante que no es Victron, tipo desconocido, longitudes raras, clave que no cuadra | comprobar que la P4 se defiende |
+
+## Banco de pruebas de las dos placas (banco.py)
+
+```bash
+PUENTE_AP_CLAVE=<clave del AP> PUENTE_PORTAL_CLAVE=<clave del portal> \
+    python3 banco.py 4 300          # 4 horas, informe cada 300 s
+```
+
+Abre **un solo dueño por puerto** (importante: abrir el puerto de la P4 la
+reinicia, así que se abre una vez y no se vuelve a tocar), lee las dos placas a
+la vez, cuenta lo que se envía y lo que se descifra, y **se re-arma solo** si el
+puente se reinicia. Deja:
+
+- `/tmp/banco_p4.log` y `/tmp/banco_esp.log`: todo lo que dicen las dos placas.
+- `/tmp/banco_informe.txt`: un informe cada periodo (reinicios, asserts, pánicos,
+  watchdog, registros descifrados por tipo, contadores del satélite).
+
+Se lanza desacoplado para que no dependa de la sesión:
+
+```bash
+PUENTE_AP_CLAVE=... PUENTE_PORTAL_CLAVE=... setsid nohup python3 banco.py 4 300 \
+    > /tmp/banco_salida.txt 2>&1 < /dev/null &
+```
+
+## Lo que ha salido de las pruebas (24-sep-2026, 4 h a tope)
+
+- **La cadena entera cuadra**: emitiendo en modo fijos (63,7 % | 13,37 V |
+  −4,444 A), la P4 lo descifra igual (`Vbat=13.37V Ibat=-4.444A SOC=63.7%`) y lo
+  publica igual en su telemetría UDP (`soc=637 V=1337 I=-4444`), que el satélite
+  recibe con **0 CRC malos**.
+- **Los valores imposibles no la rompen**: 327,67 V, SOC 102,3 %, 215 °C,
+  `OffReason=0xFFFFFFFF`, `Flags=0xFFFFFFFF`… todo se parsea, se registra y se
+  publica, con **0 asserts, 0 pánicos y 0 reinicios** en la P4.
+- **El reparto por tipo es uniforme** (~47 % de lo enviado, igual en los seis):
+  no hay ningún camino roto; lo que no se descifra es la cuota de tramas
+  malformadas del modo fuzz y el ciclo de escaneo de la P4.
+- **La cámara de la placa de reserva está caída**: `/snapshot` contesta **503** y
+  la P4 lo dice claro (`la camara no ha dado un fotograma nuevo a tiempo; NO
+  sirvo una foto vieja`). No es un fallo del firmware: prefiere no servir basura.
+- **Los CSV y `/ota` viven en el puerto 8081**, no en el 80: pedirlos al 80 da
+  **404** (el cazatodo del portal). Apuntado aquí porque es una trampa fácil.
+
+## Trampas de taller de esta herramienta
+
+- **Abrir el puerto serie reinicia la placa** (USB-Serial-JTAG). Por eso
+  `banco.py` abre cada puerto una sola vez y nunca lo vuelve a tocar; y por eso
+  `puente.py` espera al aviso `puente>` antes de mandar nada.
+- **Un solo dueño por puerto**: con dos procesos leyendo el mismo puerto, los
+  datos se reparten y se pierden la mitad (pasó y costó un rato entenderlo).
+- Las credenciales van **por variables de entorno** (`PUENTE_AP_CLAVE`,
+  `PUENTE_PORTAL_CLAVE`), nunca dentro del fichero: así se puede versionar.
