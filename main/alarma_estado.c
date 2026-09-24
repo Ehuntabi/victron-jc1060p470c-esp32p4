@@ -31,8 +31,9 @@ static const char *TAG = "alarma";
 typedef struct {
     volatile bool activa;      /* la condicion se cumple (suene o no) */
     volatile bool silenciada;  /* el usuario la ha callado */
-    /* Cuando empezo a cumplirse la condicion, para los rebotes. 0 = no se
-     * cumple o todavia no ha llegado a alarma. */
+    /* Cuando empezo a cumplirse la condicion CRUDA, para los rebotes. 0 = no se
+     * cumple. Lo lleva evaluar_todo() (no evaluar(), que recibe la condicion ya
+     * rebotada); que nadie mas lo toque -- ver el comentario de evaluar(). */
     uint32_t      desde_ms;
     /* Ultimo pitido, para el intervalo de 5 min. 0 = no ha sonado todavia. */
     uint32_t      ultimo_pitido_ms;
@@ -117,7 +118,16 @@ static void evaluar(const alarma_tipo_t t, const bool condicion, const uint32_t 
         }
         a->activa     = false;
         a->silenciada = false;
-        a->desde_ms   = 0;
+        /* OJO: aqui NO se toca a->desde_ms. Es el reloj del REBOTE y lo lleva
+         * evaluar_todo() a partir de la condicion CRUDA (lo pone cuando empieza
+         * a cumplirse y lo limpia cuando deja de cumplirse). Ponerlo a 0 aqui
+         * -- y esta funcion recibe la condicion YA REBOTADA, que es false
+         * durante todo el rebote -- reiniciaba el rebote en cada vuelta del
+         * tick (500 ms), asi que la alarma de agua y la de grises NO PODIAN
+         * DISPARARSE NUNCA. Visto en el banco el 24-sep-2026: 2,5 h inyectando
+         * "agua limpia vacia" y "grises llenas" con datos frescos y los bits
+         * 0x01/0x02 no aparecieron ni una vez (bateria y congelador, que no
+         * tienen rebote, si). */
         a->ultimo_pitido_ms = 0;
         return;
     }
