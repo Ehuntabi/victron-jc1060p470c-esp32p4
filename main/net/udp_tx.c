@@ -60,7 +60,14 @@ static void build_msg(mini_msg_t *out)
      * ensena apagado, que es la verdad. Las aguas ya lo hacian bien (cd.fresh).
      * Visto auditando el 24-ago-2026. */
     if (snap.bat_fresh) {
-        out->shunt_soc_deci      = (int16_t)snap.soc_deci;
+        /* El SoC puede ser "sin dato" aunque el shunt este hablando (hasta que
+         * sincroniza manda el NA). Se traduce al centinela del protocolo, en vez
+         * de mandar un 102.3 % que la cabina saturaba a "100 %" en verde: el
+         * porcentaje es el unico campo que decide si la bateria esta llena, asi
+         * que un valor falso ahi no es cosmetico. Visto en el banco el
+         * 24-sep-2026 (2.619 tramas con SOC=102.3 % en una tanda). */
+        out->shunt_soc_deci      = (snap.soc_deci <= 1000)
+                                   ? (int16_t)snap.soc_deci : MINI_NO_DATA_I16;
         out->shunt_voltage_centi = (int16_t)snap.bat_v_centi;
         out->shunt_current_milli = snap.bat_i_milli;
         out->aux_value_raw       = snap.aux_value;

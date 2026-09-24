@@ -681,6 +681,13 @@ static void format_lynx_soc(lv_obj_t *label, const victron_data_t *data)
         return;
     }
     const victron_record_lynx_smart_bms_t *r = &data->record.lynx;
+    /* >1000 (0xFFFF incluido, que es el centinela que pone el parser) es "sin
+     * dato": si no, la etiqueta ensenaria "6553.5 %". Misma regla que
+     * ui_arc_soc_set(). 24-sep-2026. */
+    if (r->soc_deci_percent > 1000) {
+        lv_label_set_text(label, "--");
+        return;
+    }
     ui_label_set_unsigned_fixed(label, r->soc_deci_percent, 10, 1, " %");
 }
 

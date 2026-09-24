@@ -13,6 +13,13 @@
 // y el bound es el mismo, por lo que memcpy nunca escribe fuera.
 #define VICTRON_ENCRYPTED_DATA_MAX_SIZE 32
 
+/* Centinela "sin dato" del SoC. El Victron lo manda en un campo de 10 bits con
+ * 0x3FF (1023 = "no disponible" hasta que el shunt sincroniza); el parser lo
+ * traduce a este 0xFFFF en la frontera para que TODO el firmware hable de un
+ * solo centinela (la UI ya lo pinta como "--" con >1000 y los consumidores de
+ * umbrales comprueban != 0xFFFF). Ver victron_ble.c, 24-sep-2026. */
+#define VICTRON_SOC_NA 0xFFFF
+
 // ---------------------------------------------------------------------------
 // Record Type Enum
 // ---------------------------------------------------------------------------
@@ -111,7 +118,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  aux_input;               // 0=voltage2,1=mid,2=temp
     int32_t  battery_current_milli;   // 0.001 A
     int32_t  consumed_ah_deci;        // 0.1 Ah (negative=discharge)
-    uint16_t soc_deci_percent;        // 0.1 %
+    uint16_t soc_deci_percent;        // 0.1 %; VICTRON_SOC_NA si el SoC es NA
 } victron_record_battery_monitor_t;
 
 // 0x03 - Inverter

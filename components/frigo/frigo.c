@@ -816,6 +816,15 @@ void frigo_addr_to_str(const frigo_sensor_addr_t *sensor, char *buf, size_t len)
 void frigo_solar_feed(uint16_t soc_deci, uint16_t pv_w, bool shore, bool fresh)
 {
     if (!s_mutex) return;
+    /* Sin SoC no se puede decidir si sobra energia: el rele se queda APAGADO.
+     * Antes un SoC "sin dato" (102.3 % de mentira) cumplia el "SoC alto" que
+     * exige la activacion y habria dado 12 V al frigo con la bateria a saber
+     * como. Falla del lado seguro: no activar. Visto en el banco el
+     * 24-sep-2026. */
+    if (soc_deci > 1000) {
+        fresh   = false;
+        soc_deci = 0;
+    }
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE) return;
     s_sol_soc_deci = soc_deci;
     s_sol_pv_w     = pv_w;

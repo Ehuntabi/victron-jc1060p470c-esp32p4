@@ -540,9 +540,29 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
 
             float current_A   = current_bits / 1000.0f;
 
+            /* El SoC de 10 bits tiene su PROPIO "no disponible" (0x3FF = 1023):
+             * el SmartShunt lo manda asi hasta que sincroniza con la bateria.
+             * Antes se dejaba pasar tal cual "para que lo gestionara la UI
+             * (>1000)", y ese 102.3 % falso se escapaba por cuatro sitios a la
+             * vez: la telemetria UDP (la cabina lo saturaba a 100 % en verde),
+             * la pantalla de dispositivos, el rele de excedente solar (que se
+             * activa con SoC alto) y las dos comprobaciones de umbral de
+             * ble_ingest/device_tracker, que miraban 0xFFFF -- imposible en un
+             * campo de 10 bits, o sea codigo muerto. Se traduce AQUI, en la
+             * frontera, al centinela que el resto del firmware ya usa (0xFFFF),
+             * y asi esas dos comprobaciones vuelven a vivir.
+             * Visto en el banco el 24-sep-2026: 2.619 tramas con SOC=102.3 %
+             * en una sola tanda de dos horas. */
+            const bool soc_sin_dato = (soc_bits >= NA_U10);
+            if (soc_sin_dato) soc_bits = VICTRON_SOC_NA;
+
             ESP_LOGI(TAG, "=== Battery Monitor ===");
-            ESP_LOGI(TAG, "Vbat=%.2fV Ibat=%.3fA SOC=%.1f%% TTG=%u min",
-                     voltage_raw / 100.0f, current_A, soc_bits / 10.0f, ttg_raw);
+            if (soc_sin_dato)
+                ESP_LOGI(TAG, "Vbat=%.2fV Ibat=%.3fA SOC=-- (sin dato) TTG=%u min",
+                         voltage_raw / 100.0f, current_A, ttg_raw);
+            else
+                ESP_LOGI(TAG, "Vbat=%.2fV Ibat=%.3fA SOC=%.1f%% TTG=%u min",
+                         voltage_raw / 100.0f, current_A, soc_bits / 10.0f, ttg_raw);
             ESP_LOGI(TAG, "Aux=%u (%.2fV), Alarm=0x%04X",
                      aux_input, aux_raw / 100.0f, alarm_raw);
 
@@ -558,9 +578,9 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
                 parsed.record.battery.aux_input = aux_input;
                 parsed.record.battery.battery_current_milli = current_bits;
                 parsed.record.battery.consumed_ah_deci = consumed_bits;
-                parsed.record.battery.soc_deci_percent = soc_bits;
-                /* NA -> 0 para voltaje (el UI muestra "--" si es 0). SoC NA
-                 * (0x3FF) lo gestiona el UI (>1000). */
+                parsed.record.battery.soc_deci_percent = (uint16_t)soc_bits;
+                /* NA -> 0 para voltaje (el UI muestra "--" si es 0). El SoC NA
+                 * ya viene traducido a VICTRON_SOC_NA aqui arriba. */
                 if (voltage_raw == 0x7FFF)
                     parsed.record.battery.battery_voltage_centi = 0;
                 /* Corriente (22-bit) y consumed Ah (20-bit) tienen su propio

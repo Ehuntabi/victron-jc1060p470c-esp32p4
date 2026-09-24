@@ -200,7 +200,17 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
          * ultimo porcentaje indefinidamente y con toda la confianza. Misma
          * regla de 30 s que el resto (auditoria del 24-ago-2026). */
         uint32_t ahora_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        bat_has = s.bat_has && ((uint32_t)(ahora_ms - s.bat_ms) < 30000u);
+        /* SoC "sin dato" (VICTRON_SOC_NA): el shunt habla pero no sabe el
+         * porcentaje (pasa hasta que sincroniza la bateria). El protocolo de la
+         * cabina y este JSON solo tienen UNA bandera para todo el bloque del
+         * shunt, asi que el bloque entero va como "sin datos" y el porcentaje
+         * sale -1: antes se publicaba un 102.3 % que significaba "bateria
+         * llena", y eso no es cosmetico -- con eso el rele de excedente solar
+         * daba 12 V al frigo creyendo la bateria al 102 %. Visto en el banco el
+         * 24-sep-2026. (Mejora posible para el protocolo v6: un NA por campo,
+         * para poder enseñar V e I aunque el SoC no se sepa.) */
+        const bool soc_ok = (s.soc_deci <= 1000);
+        bat_has = soc_ok && s.bat_has && ((uint32_t)(ahora_ms - s.bat_ms) < 30000u);
         soc_deci = s.soc_deci;
         bat_v_centi = s.bat_v_centi;
         bat_i_milli = s.bat_i_milli;
@@ -265,7 +275,10 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
           "}"
         "}",
         bat_has   ? "true" : "false",
-        (float)soc_deci / 10.0f,
+        /* -1 = "sin dato" cuando el bloque va apagado (incluido el SoC NA):
+         * asi quien lea el JSON crudo no ve un 6553.5 % ni un 0 % que parezca
+         * bateria vacia. */
+        bat_has ? ((float)soc_deci / 10.0f) : -1.0f,
         (float)bat_v_centi / 100.0f,
         (float)bat_i_milli / 1000.0f,
         p_w,
