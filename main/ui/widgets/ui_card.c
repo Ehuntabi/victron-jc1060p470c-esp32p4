@@ -76,8 +76,11 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
 
     if (icon_utf8 && icon_utf8[0]) {
         lv_obj_t *icon = lv_label_create(left);
-        /* Icono = LV_SYMBOL_*: la fuente _es (Inter) NO trae esos glifos -> salia
-         * un rectangulo (tofu) en Inverter/DC-DC. Montserrat built-in si los tiene. */
+        /* Icono = LV_SYMBOL_*. El nombre lv_font_montserrat_28 esta aliasado a
+         * Inter en fonts_es.h: los simbolos salen por su fallback a Montserrat.
+         * (El comentario viejo, "Montserrat built-in", describia la fuente de
+         * antes del cambio a Inter; sin ese fallback salia un rectangulo, el
+         * "tofu", en Inverter/DC-DC.) */
         lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
         lv_obj_set_style_text_color(icon, accent, 0);
         lv_label_set_text(icon, icon_utf8);

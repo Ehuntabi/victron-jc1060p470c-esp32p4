@@ -57,7 +57,8 @@ bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms);
  * espureo mientras dura. */
 TaskHandle_t camera_stream_task_handle(void);
 
-/* Codifica el ultimo frame a JPEG por HW (recorte 960x544). THREAD-SAFE (mutex del
+/* Codifica el ultimo frame a JPEG por HW (recorte 960x528: el valor real esta en
+ * JPEG_H, camera.c -- el 544 de antes era del thumbnail). THREAD-SAFE (mutex del
  * encoder). Devuelve una COPIA nueva en PSRAM: el que llama hace free(*out). false
  * si no hay frame o falla el encoder. Salida ~80-150KB. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len);

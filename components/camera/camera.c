@@ -250,8 +250,9 @@ static bool downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
  * esp-idf/examples/peripherals/jpeg/jpeg_encode. */
 #define JPEG_W        960   /* el thumbnail ya es 960 (multiplo de 16) */
 #define JPEG_H        528   /* recorte del thumbnail 540 -> 528 (multiplo de 16) */
-/* 85: mejora sobre 80 sin disparar el tamano. 92+YUV444 daba ~500KB/foto -> el
- * tráfico del encoder (2D-DMA) + servir esas imagenes por WiFi saturaba el bus -> INT WDT. */
+/* 78, no 85: se bajo al medir el tamano real. 92+YUV444 daba ~500KB/foto y el
+ * trafico del encoder (2D-DMA) mas servir esas imagenes por WiFi saturaba el bus
+ * -> INT WDT. El 85 del comentario era el valor de una prueba anterior. */
 #define JPEG_QUALITY  78
 /* 4:2:0 en vez de 4:2:2: la mitad de datos de color; el grano de color (el que
  * peor comprime) se promedia y casi desaparece. */
@@ -273,7 +274,8 @@ static bool camera_jpeg_init(void)
     jpeg_encode_memory_alloc_cfg_t in_cfg  = { .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER };
     jpeg_encode_memory_alloc_cfg_t out_cfg = { .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER };
     s_jpeg_in  = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3, &in_cfg,  &s_jpeg_in_sz);
-    /* Salida = 1/2 del RGB. A q85 con frames nocturnos ruidosos (ganancia alta) el
+    /* Salida = 1/2 del RGB. A la calidad que se usa (78, ver JPEG_QUALITY) con
+     * frames nocturnos ruidosos (ganancia alta) el
      * JPEG comprime poco; 1/3 (~522KB) se quedaba corto y la captura se perdia en
      * silencio. 1/2 (~783KB) da margen amplio. */
     s_jpeg_out = jpeg_alloc_encoder_mem((size_t)JPEG_W * JPEG_H * 3 / 2, &out_cfg, &s_jpeg_out_sz);

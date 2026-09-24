@@ -626,7 +626,9 @@ void battery_history_get_totals(bh_source_t src,
     BH_LOCK();
     bh_buffer_t *b = &s_bufs[src];
     /* Trapezoidal integration: each step BH_SAMPLE_MS apart.
-     * Ah = sum(milli_amps * dt_h) / 1000  with dt_h = 3min/60 = 0.05 */
+     * Ah = sum(milli_amps * dt_h) / 1000  with dt_h = 10s/3600 = 0.0027778
+     * (el comentario decia "3min/60 = 0.05", de cuando se muestreaba cada 3 min;
+     * BH_SAMPLE_MS son 10 s desde el 24-ago-2026). */
     const float dt_h = (BH_SAMPLE_MS / 1000.0f) / 3600.0f;
     float charge_mah = 0, discharge_mah = 0;
     size_t total = b->wrapped ? BH_POINTS : b->write_idx;

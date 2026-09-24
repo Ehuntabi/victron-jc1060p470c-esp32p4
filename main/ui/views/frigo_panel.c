@@ -484,8 +484,10 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_set_flex_grow(dd, 1);
     lv_obj_set_height(dd, 44);
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_20_es, 0);
-    /* La flecha (LV_PART_INDICATOR) es LV_SYMBOL_DOWN; Inter(_es) no la trae ->
-     * Montserrat built-in para el indicator. */
+    /* La flecha (LV_PART_INDICATOR) es LV_SYMBOL_DOWN. OJO: el nombre
+     * lv_font_montserrat_20 ya NO es la Montserrat de LVGL -- fonts_es.h lo
+     * aliasa a Inter, que lleva Montserrat de fallback justo para estos glifos
+     * (el comentario decia "Montserrat built-in"). */
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, LV_PART_INDICATOR);
     lv_obj_t *dd_list = lv_dropdown_get_list(dd);
     if (dd_list) {
