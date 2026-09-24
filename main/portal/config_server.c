@@ -644,7 +644,12 @@ static esp_err_t handle_settime(httpd_req_t *req)
         const char *p = strstr(buf, "timestamp=");
         if (p) sscanf(p, "timestamp=%ld", &ts);
     }
-    if (ts > 1000000000L) {
+    /* Ventana de fechas razonables. El tope superior faltaba: con credenciales
+     * se le podia poner al reloj una fecha del año 5000 y los ficheros del
+     * datalogger se llaman por fecha. 4102444800 = 2100-01-01 UTC. */
+    const long TS_MIN = 1000000000L;   /* 2001-09-09 */
+    const long TS_MAX = 4102444800L;   /* 2100-01-01 */
+    if (ts > TS_MIN && ts <= TS_MAX) {
         time_t epoch = (time_t)ts;
         /* El epoch que envía el móvil es Unix UTC. Lo convertimos a hora LOCAL
          * (Madrid, ya configurada en main.c) para guardarla en el RTC, de modo
@@ -670,6 +675,8 @@ static esp_err_t handle_settime(httpd_req_t *req)
         }
         /* Refrescar el label del reloj inmediatamente */
         ui_refresh_clock();
+    } else if (ts != 0) {
+        ESP_LOGW(TAG, "hora rechazada: %ld fuera de %ld..%ld", ts, TS_MIN, TS_MAX);
     }
 
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");

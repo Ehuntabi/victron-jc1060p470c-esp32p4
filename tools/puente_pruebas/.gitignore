@@ -1,0 +1,8 @@
+# El puente (ESP32-C6) se compila con IDF 5.4 y su propio target; el sdkconfig lo
+# genera 'idf.py set-target esp32c6' a partir de sdkconfig.defaults, que SI va al
+# repo. No se versiona el generado (es larguisimo y depende de la maquina).
+build/
+sdkconfig
+sdkconfig.old
+__pycache__/
+*.pyc

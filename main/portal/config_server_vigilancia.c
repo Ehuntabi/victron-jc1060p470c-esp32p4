@@ -105,7 +105,12 @@ static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
         if (dses->d_name[0] == '.') continue;
 
         char sesdir[64];
-        snprintf(sesdir, sizeof(sesdir), "%s/%s", VIG_SD_DIR_PATH, dses->d_name);
+        /* El nombre de la carpeta de sesion lo escribe el firmware (fecha +
+         * contador), pero si viniera uno larguisimo de la tarjeta el snprintf lo
+         * recortaria y abririamos OTRA ruta: mejor saltarselo. */
+        int n_ses = snprintf(sesdir, sizeof(sesdir), "%s/%s",
+                             VIG_SD_DIR_PATH, dses->d_name);
+        if (n_ses < 0 || n_ses >= (int)sizeof(sesdir)) continue;
         if (!camera_sd_bus_lock(1000)) break;
         DIR *dsub = opendir(sesdir);
         camera_sd_bus_unlock();
@@ -199,13 +204,14 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *base_dir, const char 
  * los nombres/fechas se veian bien y solo las imagenes salian rotas. */
 static bool vig_sd_name_safe(const char *s)
 {
-    if (strstr(s, "..")) return false;
     /* Ni un ".." en todo el nombre. El filtro de abajo deja pasar el punto y una
      * barra -- hacen falta para "sesion/AAAAMMDD_HHMMSS_001.jpg" -- y con eso
      * solo, un nombre como "../algo.jpg" pasaba y se salia de la carpeta: la
      * ruta acababa siendo /sdcard/algo.jpg. Se lee cualquier .jpg de la tarjeta,
      * y esto lo puede pedir cualquiera que este en el Wi-Fi (auditoria del
-     * 24-ago-2026). */
+     * 24-ago-2026).
+     * (Estaba DUPLICADA: habia una comprobacion identica y sin comentario justo
+     * encima, resto de una fusion. Se quito el 24-sep-2026.) */
     if (strstr(s, "..")) return false;
 
     int slashes = 0;
