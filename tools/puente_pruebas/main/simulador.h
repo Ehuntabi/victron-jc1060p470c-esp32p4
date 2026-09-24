@@ -19,6 +19,11 @@ const char *sim_ble_modo(void);
 void sim_ble_informe(void);
 bool sim_ble_activo(void);
 
+/* Calla el resumen periodico (RESUMEN ...) mientras se vuelca un fichero por la
+ * consola: esa linea se colaba EN MEDIO de una linea base64 y rompia la
+ * captura. Solo afecta al resumen; el simulador sigue emitiendo igual. */
+void sim_silencio(bool on);
+
 /* Modo extremo: manda centinelas de "sin dato" (0x7FFF/0xFFFF), maximos de 32
  * bits, SOC fuera de rango y temperaturas imposibles. Es para BUSCAR PROBLEMAS:
  * desbordamientos en las cuentas de energia, valores raros en pantalla, etc. */

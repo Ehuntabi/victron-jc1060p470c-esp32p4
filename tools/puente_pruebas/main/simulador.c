@@ -60,6 +60,7 @@ typedef struct {
 static dispos_t s_disp[MAX_DISPOS];
 static int      s_ndisp = 0;
 static volatile bool s_activo = false;
+static volatile bool s_silencio = false;   /* ver sim_silencio() */
 static TaskHandle_t s_task = NULL;
 
 /* Contadores del informe */
@@ -331,7 +332,7 @@ static void tarea_sim(void *arg)
 
         /* Cada 30 s (150 tramas), un resumen que el PC pueda leer del puerto y
          * cruzar con lo que la P4 dice que ha descifrado. */
-        if ((s_total % 150) == 0) {
+        if ((s_total % 150) == 0 && !s_silencio) {
             printf("RESUMEN ble=%u solar=%u bat=%u inv=%u dcdc=%u litio=%u orion=%u modo=%s\n",
                    (unsigned)s_total, (unsigned)s_enviados[0], (unsigned)s_enviados[1],
                    (unsigned)s_enviados[2], (unsigned)s_enviados[3],
@@ -382,6 +383,7 @@ void sim_ble_parar(void)
 }
 
 bool sim_ble_activo(void) { return s_activo; }
+void sim_silencio(bool on) { s_silencio = on; }
 
 void sim_ble_fijo(bool activar, int soc_deci, int v_centi, int i_milli)
 {

@@ -51,6 +51,7 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "esp_http_client.h"
+#include "esp_crc.h"
 
 #include "simulador.h"
 #include "satelite.h"
@@ -444,6 +445,138 @@ static int cmd_httpget(int argc, char **argv)
     return 1;
 }
 
+/* httpb64 <url> [usuario] [clave]
+ *
+ * Baja un fichero del portal de la P4 y lo escupe por la CONSOLA en base64
+ * (lineas de 64 caracteres, al final "FINB64 <bytes>"). Sirve para traerse las
+ * capturas de pantalla (/captura?n=i, BMP de ~1,2 MB) sin que el PC tenga que
+ * estar en la red de la P4: el que esta dentro es el puente.
+ *
+ * Se codifica AL VUELO en cada trozo que llega (el C6 no tiene PSRAM: 1,6 MB de
+ * base64 no caben en el heap). El trozo se procesa en multiplos de 3 bytes para
+ * que el base64 no se descuadre entre llamadas; lo que sobra se guarda para el
+ * trozo siguiente. */
+static uint8_t  s_b64_resto[3];
+static int      s_b64_nresto = 0;
+static uint32_t s_b64_bytes  = 0;
+static int      s_b64_cola   = 0;
+static uint32_t s_b64_crc    = 0;
+
+/* Se acumula en un buffer y se suelta de golpe: con putchar() por caracter,
+ * una captura de 1,8 MB tardaba MINUTOS (y son ~20 pantallas). */
+static char s_b64_buf[1088];
+static int  s_b64_len = 0;
+
+static void b64_soltar(void)
+{
+    if (s_b64_len > 0) {
+        fwrite(s_b64_buf, 1, s_b64_len, stdout);
+        s_b64_len = 0;
+        /* Ritmo: el USB-CDC no tiene control de flujo y el buffer del PC se
+         * desborda si se le sueltan 2,4 MB de golpe (se perdian 3 KB por
+         * captura, o casi toda si el PC iba cargado). 1 ms por KB son ~1,8 s
+         * por pantalla y el fichero llega entero. Visto el 24-sep-2026. */
+        vTaskDelay(1);
+    }
+}
+
+static void b64_emitir(const uint8_t *d, int n)
+{
+    static const char T[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (int i = 0; i < n; i += 3) {
+        uint32_t v = ((uint32_t)d[i] << 16) |
+                     ((uint32_t)(i + 1 < n ? d[i + 1] : 0) << 8) |
+                     (uint32_t)(i + 2 < n ? d[i + 2] : 0);
+        char out[4] = { T[(v >> 18) & 63], T[(v >> 12) & 63],
+                        (i + 1 < n) ? T[(v >> 6) & 63] : '=',
+                        (i + 2 < n) ? T[v & 63]        : '=' };
+        for (int k = 0; k < 4; k++) {
+            if (s_b64_cola == 0) s_b64_buf[s_b64_len++] = '#';   /* marca de dato */
+            s_b64_buf[s_b64_len++] = out[k];
+            if (++s_b64_cola == 64) {
+                s_b64_buf[s_b64_len++] = '\n';
+                s_b64_cola = 0;
+                if (s_b64_len >= (int)sizeof(s_b64_buf) - 96) b64_soltar();
+            }
+        }
+    }
+}
+
+static esp_err_t http_evento_b64(esp_http_client_event_t *ev)
+{
+    if (ev->event_id != HTTP_EVENT_ON_DATA || ev->data_len <= 0) return ESP_OK;
+    const uint8_t *p = (const uint8_t *)ev->data;
+    int n = ev->data_len;
+    s_b64_bytes += (uint32_t)n;
+    s_b64_crc = esp_crc32_le(s_b64_crc, p, (uint32_t)n);
+
+    /* Completar con lo que sobro del trozo anterior. */
+    uint8_t buf[3];
+    while (s_b64_nresto > 0 && s_b64_nresto < 3 && n > 0) {
+        s_b64_resto[s_b64_nresto++] = *p++;
+        n--;
+    }
+    if (s_b64_nresto == 3) {
+        b64_emitir(s_b64_resto, 3);
+        s_b64_nresto = 0;
+    }
+    /* El grueso, en multiplos de 3. */
+    int m = (n / 3) * 3;
+    if (m > 0) { b64_emitir(p, m); p += m; n -= m; }
+    /* Y lo que sobre, para la proxima. */
+    while (n > 0 && s_b64_nresto < 3) s_b64_resto[s_b64_nresto++] = *p++;
+    return ESP_OK;
+}
+
+static int cmd_httpb64(int argc, char **argv)
+{
+    if (argc < 2) { printf("ERR uso: httpb64 <url> [usuario] [clave]\n"); return 1; }
+    esp_http_client_config_t cfg = { .url = argv[1], .timeout_ms = 20000,
+                                     .buffer_size = 4096,
+                                     .event_handler = http_evento_b64 };
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (!c) { printf("ERR no puedo crear el cliente HTTP\n"); return 1; }
+    if (argc >= 4) {
+        char plano[100], cab[200];
+        unsigned char b64[128];
+        size_t n = 0;
+        snprintf(plano, sizeof(plano), "%.32s:%.64s", argv[2], argv[3]);
+        if (mbedtls_base64_encode(b64, sizeof(b64) - 1, &n,
+                                  (const unsigned char *)plano, strlen(plano)) == 0) {
+            b64[n] = 0;
+            snprintf(cab, sizeof(cab), "Basic %s", (char *)b64);
+            esp_http_client_set_header(c, "Authorization", cab);
+        }
+    }
+    s_b64_nresto = 0; s_b64_bytes = 0; s_b64_cola = 0; s_b64_crc = 0;
+    /* Sin logs propios durante el volcado: cualquier linea del sistema que
+     * cayera EN MEDIO de una linea base64 la rompia (se veia como "faltan
+     * bytes"). Las lineas de datos van marcadas con '#' de todas formas. */
+    esp_log_level_t nivel_previo = esp_log_level_get("*");
+    esp_log_level_set("*", ESP_LOG_NONE);
+    sim_silencio(true);
+    esp_err_t err = esp_http_client_perform(c);
+    int codigo = esp_http_client_get_status_code(c);
+    /* Relleno del ultimo grupo si el fichero no es multiplo de 3. */
+    if (s_b64_nresto > 0) { b64_emitir(s_b64_resto, s_b64_nresto); s_b64_nresto = 0; }
+    if (s_b64_len > 0) { s_b64_buf[s_b64_len++] = '\n'; }
+    b64_soltar();
+    fflush(stdout);
+    esp_log_level_set("*", nivel_previo);
+    sim_silencio(false);
+    if (codigo > 0) {
+        printf("FINB64 %u %08x\n", (unsigned)s_b64_bytes, (unsigned)s_b64_crc);
+        printf("HTTP %d\n", codigo);
+        printf("OK\n");
+        esp_http_client_cleanup(c);
+        return 0;
+    }
+    printf("ERR http: %s\n", esp_err_to_name(err));
+    esp_http_client_cleanup(c);
+    return 1;
+}
+
 static int cmd_udp(int argc, char **argv)
 {
     if (argc < 4) { printf("ERR uso: udp <ip> <puerto> <hex...> [cada_ms] [veces]\n"); return 1; }
@@ -651,6 +784,7 @@ void app_main(void)
     registrar("wifioff",    "desconectar el WiFi", cmd_wifioff);
     registrar("wifiip",     "IP actual", cmd_wifiip);
     registrar("httpget",    "httpget <url> [usuario] [clave]", cmd_httpget);
+    registrar("httpb64",      "httpb64 <url> [usuario] [clave]: vuelca el fichero en base64", cmd_httpb64);
     registrar("httppost",   "httppost <url> <usuario> <clave> <cuerpo>", cmd_httppost);
     registrar("udp",        "udp <ip> <puerto> <hex...> [cada_ms] [veces]", cmd_udp);
     registrar("sim",        "sim [ble ... | extremo on|off | stop]", cmd_sim);
