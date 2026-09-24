@@ -478,6 +478,44 @@ static int cmd_sat(int argc, char **argv)
     return 1;
 }
 
+/* httppost <url> <usuario> <clave> <cuerpo>
+ *   Peticion POST con Basic Auth, para probar los endpoints que reciben JSON.
+ *   OJO: los cuerpos de verdad pueden cambiar configuracion (o abrir un viaje);
+ *   para probar se manda uno invalido y se comprueba que la P4 lo RECHAZA. */
+static int cmd_httppost(int argc, char **argv)
+{
+    if (argc < 5) { printf("ERR uso: httppost <url> <usuario> <clave> <cuerpo>\n"); return 1; }
+    esp_http_client_config_t cfg = { .url = argv[1], .timeout_ms = 8000,
+                                     .method = HTTP_METHOD_POST };
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (!c) { printf("ERR no puedo crear el cliente\n"); return 1; }
+
+    char plano[100], cab[200];
+    unsigned char b64[128];
+    size_t n = 0;
+    snprintf(plano, sizeof(plano), "%.32s:%.64s", argv[2], argv[3]);
+    if (mbedtls_base64_encode(b64, sizeof(b64) - 1, &n,
+                              (const unsigned char *)plano, strlen(plano)) == 0) {
+        b64[n] = 0;
+        snprintf(cab, sizeof(cab), "Basic %s", (char *)b64);
+        esp_http_client_set_header(c, "Authorization", cab);
+    }
+    esp_http_client_set_header(c, "Content-Type", "application/json");
+    esp_http_client_set_post_field(c, argv[4], strlen(argv[4]));
+
+    esp_err_t err = esp_http_client_perform(c);
+    int codigo = esp_http_client_get_status_code(c);
+    if (codigo > 0) {
+        printf("HTTP %d\n", codigo);
+        printf("OK\n");
+        esp_http_client_cleanup(c);
+        return 0;
+    }
+    printf("ERR http: %s\n", esp_err_to_name(err));
+    esp_http_client_cleanup(c);
+    return 1;
+}
+
 /* sim [ble <mac> <clave32> [<mac> <clave32> ...] | stop]
  *   sin argumentos: informe de lo que lleva enviado
  *   ble ...       : empieza a emitir con esos aparatos, rotando los 6 tipos
@@ -592,7 +630,8 @@ void app_main(void)
     registrar("wifista",    "wifista <ssid> <clave>", cmd_wifista);
     registrar("wifioff",    "desconectar el WiFi", cmd_wifioff);
     registrar("wifiip",     "IP actual", cmd_wifiip);
-    registrar("httpget",    "httpget <url>", cmd_httpget);
+    registrar("httpget",    "httpget <url> [usuario] [clave]", cmd_httpget);
+    registrar("httppost",   "httppost <url> <usuario> <clave> <cuerpo>", cmd_httppost);
     registrar("udp",        "udp <ip> <puerto> <hex...> [cada_ms] [veces]", cmd_udp);
     registrar("sim",        "sim [ble ... | extremo on|off | stop]", cmd_sim);
     registrar("sat",        "sat <ssid> <clave> <usuario> <claveportal> | informe | stop", cmd_sat);
