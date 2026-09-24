@@ -105,7 +105,7 @@ logsaves = len(re.findall(r"LOGSAVE: autosave OK", p4))
 print(f"\nDATOS EN LA SD")
 print(f"  volcados del datalogger: {volcados}")
 print(f"  autosave del log:        {logsaves}")
-print(f"  registros del frigo:     {len(re.findall(r'DATALOGGER: Log\\[', p4))}")
+print(f"  registros del frigo:     {len(re.findall(r'DATALOGGER: Log', p4))}")
 
 # ── Tendencia: se mantiene el ritmo o se degrada? ───────────────────────────
 if len(desc) >= 3:
