@@ -45,29 +45,6 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color)
  * sombra obliga a LVGL a redifuminarla en CADA fotograma de la animacion (y con
  * radio 14 eso es carisimo justo cuando mas se nota, en las alertas). El borde
  * se repinta sin desenfoque y el aviso se ve igual. */
-static void card_pulse_anim_cb(void *card, int32_t v)
-{
-    lv_obj_set_style_border_opa((lv_obj_t *)card, (lv_opa_t)v, 0);
-}
-
-void ui_card_pulse(lv_obj_t *card)
-{
-    if (!card) return;
-    /* Cancela cualquier pulso anterior pendiente sobre esta card */
-    lv_anim_del(card, card_pulse_anim_cb);
-
-    lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, card);
-    /* De opaco a tenue y vuelta (playback): el borde "late" sin tocar la sombra */
-    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_40);
-    lv_anim_set_time(&a, 250);
-    lv_anim_set_playback_time(&a, 350);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_set_exec_cb(&a, card_pulse_anim_cb);
-    lv_anim_start(&a);
-}
-
 lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
                             const char *title, lv_color_t accent)
 {

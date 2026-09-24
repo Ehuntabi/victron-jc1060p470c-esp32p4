@@ -46,7 +46,6 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color);
 /* Dispara un pulso visual breve (~600 ms) sobre la sombra del card para
  * indicar actividad (p. ej. recepcion de un nuevo BLE record). Cancela
  * cualquier animacion previa para evitar acumulacion. */
-void ui_card_pulse(lv_obj_t *card);
 
 /* Cabecera de card: icono UTF-8 (puede ser LV_SYMBOL_*), título y color de
  * acento. Devuelve el contenedor del header — el caller puede añadir un

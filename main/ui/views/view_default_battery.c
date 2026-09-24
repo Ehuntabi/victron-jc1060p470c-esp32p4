@@ -222,7 +222,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                     lv_chart_set_next_value(bv->spark_chart, bv->spark_ser,
                                             (lv_coord_t)p_w);
                 }
-                ui_card_pulse(bv->card_battery);
                 break;
             }
             case VICTRON_BLE_RECORD_LYNX_SMART_BMS: {
@@ -232,7 +231,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->battery_state.battery_voltage_cv = b->battery_voltage_centi;
                 bv->battery_state.ttg_minutes = b->time_to_go_min;
                 bv->battery_state.last_update_time = now;
-                ui_card_pulse(bv->card_battery);
                 break;
             }
             case VICTRON_BLE_RECORD_VE_BUS: {
@@ -240,7 +238,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->battery_state.has_data = true;
                 bv->battery_state.soc_deci_percent = (uint16_t)b->soc_percent * 10;
                 bv->battery_state.last_update_time = now;
-                ui_card_pulse(bv->card_battery);
                 break;
             }
             case VICTRON_BLE_RECORD_DCDC_CONVERTER: {
@@ -253,7 +250,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->dcdc_state.charger_error        = d->charger_error;
                 bv->dcdc_state.device_type          = VICTRON_BLE_RECORD_DCDC_CONVERTER;
                 bv->dcdc_state.last_update_time     = now;
-                ui_card_pulse(bv->card_dcdc);
                 break;
             }
             case VICTRON_BLE_RECORD_ORION_XS: {
@@ -266,7 +262,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->dcdc_state.charger_error        = o->charger_error;
                 bv->dcdc_state.device_type          = VICTRON_BLE_RECORD_ORION_XS;
                 bv->dcdc_state.last_update_time     = now;
-                ui_card_pulse(bv->card_dcdc);
                 break;
             }
             case VICTRON_BLE_RECORD_SOLAR_CHARGER: {
@@ -277,7 +272,6 @@ static void default_battery_view_update(ui_device_view_t *view, const victron_da
                 bv->solar_state.battery_current_deci = s->battery_current_deci;
                 bv->solar_state.charger_error = s->charger_error;
                 bv->solar_state.last_update_time = now;
-                ui_card_pulse(bv->card_solar);
                 break;
             }
             default: return;
