@@ -227,6 +227,13 @@ bool sat_iniciar(const char *ssid, const char *clave, const char *usuario, const
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* SIN ahorro de energia: la telemetria de la P4 va por DIFUSION, y una
+     * estacion con modem-sleep (el defecto de ESP-IDF) se pierde los paquetes
+     * que caen entre balizas DTIM. Medido el 24-sep-2026: con el defecto se
+     * recibia el 75 % de los paquetes; sin ahorro debe llegar todo.
+     * OJO: esto es del RECEPTOR; la P4 los manda a 1 Hz clavado. */
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
     s_udp_total = s_udp_crc_mal = s_udp_version_mal = 0;
     s_http_total = s_http_ok = s_http_4xx = s_http_error = 0;
     s_activo = true;
