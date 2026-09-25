@@ -66,8 +66,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 void password_toggle_btn_event_cb(lv_event_t *e);
 /* Energia del viaje + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
 /* Energia del viaje: vive en trip_manager.c. */
-void create_trip_card(lv_obj_t *cont);
-void trip_label_refresh(void);
+void trip_eject_button_create(lv_obj_t *parent);   /* boton "Soltar tarjeta" */
 void create_bombona_card(lv_obj_t *cont);
 void bombona_label_refresh(void);
 static void backup_export_cb(lv_event_t *e);
@@ -268,13 +267,12 @@ static void autostart_switch_cb(lv_event_t *e)
 }
 
 /* Pagina "Tarjeta SD": carrusel de capturas + visor de imagenes de la SD. */
-/* Refresco del Energia del viaje (card reubicada en Tarjeta SD): solo si esta
- * visible, para no gastar cada segundo cuando no se mira. */
+/* Refresco de las etiquetas de la pagina Tarjeta SD (bombonas, hueco libre):
+ * cada una sale sola si no esta visible, para no gastar cada segundo. */
 static void sd_trip_timer_cb(lv_timer_t *t)
 {
     (void)t;
     ui_state_t *ui = t ? (ui_state_t *)t->user_data : NULL;
-    trip_label_refresh();
     /* Los dias que lleva puesta la bombona cambian una vez al dia, pero la
      * etiqueta se recalcula aqui igual: la funcion sale sola si la tarjeta no
      * esta visible, asi que no cuesta nada y evita otro timer. */
@@ -354,6 +352,47 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_color(ui->lbl_about_sd, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
+    /* === Card Sacar la tarjeta ===
+     * Antes vivia (con los numeros del viaje) en el submenu Autocaravana, que no
+     * es su sitio: esto es una accion de la SD. Vuelve aqui, que es de donde
+     * salio. 24-sep-2026. */
+    lv_obj_t *card_eject = lv_obj_create(cont);
+    lv_obj_set_width(card_eject, lv_pct(100));
+    lv_obj_set_height(card_eject, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card_eject, UI_COLOR_CARD, 0);
+    lv_obj_set_style_bg_opa(card_eject, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card_eject, lv_color_hex(0x5D4037), 0);
+    lv_obj_set_style_border_width(card_eject, 2, 0);
+    lv_obj_set_style_radius(card_eject, UI_RADIUS_CARD, 0);
+    lv_obj_set_style_pad_all(card_eject, 12, 0);
+    lv_obj_set_style_pad_gap(card_eject, 8, 0);
+    lv_obj_set_layout(card_eject, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(card_eject, LV_FLEX_FLOW_COLUMN);
+
+    lv_obj_t *eject_title = lv_label_create(card_eject);
+    lv_obj_set_style_text_font(eject_title, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_text_color(eject_title, lv_color_hex(0x8D6E63), 0);
+    lv_label_set_text(eject_title, LV_SYMBOL_SD_CARD "  Sacar la tarjeta");
+    ui_card_wrap_title(card_eject, eject_title, lv_color_hex(0x5D4037));
+
+    lv_obj_t *eject_hint = lv_label_create(card_eject);
+    lv_obj_set_style_text_font(eject_hint, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(eject_hint, lv_color_hex(0x888888), 0);
+    lv_label_set_text(eject_hint,
+                      "Guarda todo lo pendiente y suelta la tarjeta para poder sacarla");
+
+    /* El boton va en su fila, alineado a la derecha (mismo patron que el resto) */
+    lv_obj_t *fila_eject = lv_obj_create(card_eject);
+    lv_obj_remove_style_all(fila_eject);
+    lv_obj_set_width(fila_eject, lv_pct(100));
+    lv_obj_set_height(fila_eject, LV_SIZE_CONTENT);
+    lv_obj_set_layout(fila_eject, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fila_eject, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_eject, LV_FLEX_ALIGN_END,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(fila_eject, LV_OBJ_FLAG_SCROLLABLE);
+    trip_eject_button_create(fila_eject);
+
     /* === Card Visor de imagenes (separado del carrusel) === */
     lv_obj_t *card_view = lv_obj_create(cont);
     lv_obj_set_width(card_view, lv_pct(100));
@@ -393,8 +432,9 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
 
 
-    /* (La card "Energia del viaje" se movio al submenu Autocaravana:
-     *  ver create_trip_card / populate_autocaravana.) */
+    /* (La card "Energia del viaje" ya no existe: sus numeros estaban
+     *  duplicados y sus dos botones se repartieron entre Historico solar y
+     *  Tarjeta SD. 24-sep-2026.) */
 
     /* === Card 4: Backup/Restore configuracion === */
     lv_obj_t *card_bak = lv_obj_create(cont);
@@ -523,11 +563,12 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
 {
     (void)ctx;
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
-     * (anadidas en el init). Orden: Modo ausente, Energia del viaje, Bombonas,
-     * Auto-encendido.
-     * El timer que refresca el trip se crea en el init. */
+     * (anadidas en el init). Orden: Modo ausente, Bombonas, Auto-encendido.
+     * (La card "Energia del viaje" se quito el 24-sep-2026: sus numeros ya
+     * estan en Historico solar, en los CSV del viaje y en el portal, y sus dos
+     * botones se fueron a su sitio -- "Poner a cero" a Historico solar y
+     * "Soltar tarjeta" a Tarjeta SD.) */
     create_ausente_card(page);
-    create_trip_card(page);
     create_bombona_card(page);
     create_autostart_card(page);
 }

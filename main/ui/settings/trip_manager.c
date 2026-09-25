@@ -7,9 +7,16 @@
  * segundo viaje en paralelo que nadie sincronizaba: si no te acordabas de
  * pulsarlo, el resumen.txt del viaje se llevaba la energia del anterior.
  *
- * Lo que queda: mirar los numeros, ponerlos a cero suelto si hace falta, y
- * soltar la tarjeta para poder sacarla (que no tiene nada que ver con el
- * viaje, pero es el unico sitio donde estaba).
+ * 24-sep-2026: FUERA la tarjeta de datos del submenu Autocaravana. Los numeros
+ * (cargado, consumido, medias por dia) ya estan en tres sitios -- los CSV del
+ * viaje en la SD, la vista Historico solar ("Viaje X kWh") y el portal -- y
+ * tenerlos ademas dentro de un menu de AJUSTES era datos en el sitio
+ * equivocado. Lo que si era unico eran los dos botones, y cada uno se ha ido a
+ * su casa:
+ *   - "Poner a cero" (viaje)  -> vista Historico solar, junto al dato del viaje
+ *   - "Soltar tarjeta"        -> Ajustes -> Tarjeta SD (de donde salio)
+ * Aqui quedan los dos constructores, para que el aspecto y los avisos sean los
+ * mismos en los dos sitios (y no haya dos copias que diverjan).
  */
 #include "settings_panel.h"
 #include "settings_common.h"
@@ -27,65 +34,12 @@
 #include "ne185_vlog.h"
 #include "datalogger.h"
 
-static lv_obj_t *s_trip_label = NULL;
-
-/* ── Energia del viaje: refresco periodico y reset ─────────────────── */
-void trip_label_refresh(void)
-{
-    if (!s_trip_label || !lv_obj_is_visible(s_trip_label)) return;
-    trip_computer_t t;
-    trip_computer_get(&t);
-    char start_str[24] = "--";
-    if (t.reset_epoch > 0) {
-        struct tm tm_l;
-        localtime_r((time_t *)&t.reset_epoch, &tm_l);
-        strftime(start_str, sizeof(start_str), "%d/%m %H:%M", &tm_l);
-    }
-    /* Tiempo de viaje = reloj transcurrido desde la puesta a cero, que
-     * normalmente es el inicio del viaje declarado en la cabina (siempre
-     * avanza, aunque no llegue telemetria del BMV). */
-    int64_t elapsed = 0;
-    if (t.reset_epoch > 0) {
-        time_t now = time(NULL);
-        if (now >= (time_t)t.reset_epoch) elapsed = (int64_t)now - t.reset_epoch;
-    }
-    /* Los viajes duran dias: "130h 18m" no se lee de un vistazo. Los dias solo
-     * aparecen cuando los hay, para que un viaje recien empezado no ensene
-     * un "0d" que no aporta nada. */
-    int e_days  = (int)(elapsed / 86400);
-    int hours   = (int)((elapsed % 86400) / 3600);
-    int minutes = (int)((elapsed % 3600) / 60);
-    char elapsed_str[24];
-    if (e_days > 0) {
-        snprintf(elapsed_str, sizeof(elapsed_str), "%dd %dh %02dm",
-                 e_days, hours, minutes);
-    } else {
-        snprintf(elapsed_str, sizeof(elapsed_str), "%dh %02dm", hours, minutes);
-    }
-
-    /* Medias solares por dia (proyeccion: divide por los dias exactos
-     * transcurridos, aunque sean horas). Guardamos contra division por cero. */
-    double days = (elapsed > 0) ? (double)elapsed / 86400.0 : 0.0;
-    double solar_h_day  = (days > 0.0) ? (t.solar_seconds / 3600.0) / days : 0.0;
-    double solar_ah_day = (days > 0.0) ? t.ah_solar / days : 0.0;
-
-    char buf[288];
-    snprintf(buf, sizeof(buf),
-        "Iniciado %s   |   %s\n"
-        "Total cargado: %.2f kWh %.1f Ah  "
-        "(Solar: %.2f kWh %.1f Ah, %.1f h/dia, %.0f Ah/dia)\n"
-        "Consumido: %.2f kWh  %.1f Ah",
-        start_str, elapsed_str,
-        t.wh_charged / 1000.0, t.ah_charged,
-        t.wh_solar / 1000.0, t.ah_solar, solar_h_day, solar_ah_day,
-        t.wh_discharged / 1000.0, t.ah_discharged);
-    lv_label_set_text(s_trip_label, buf);
-}
-
+/* ── Reset del viaje y soltar tarjeta ──────────────────────────────── */
 static void do_trip_reset_action(void)
 {
+    /* Los contadores del viaje. La tarjeta que los enseñaba ya no existe: el
+     * dato vive en Historico solar y en los CSV del viaje. */
     trip_computer_reset();
-    trip_label_refresh();
 }
 
 static void trip_reset_btn_cb(lv_event_t *e)
@@ -134,63 +88,33 @@ static void trip_finish_btn_cb(lv_event_t *e)
         "Soltar", do_soltar_tarjeta_action);
 }
 
-void create_trip_card(lv_obj_t *cont)
+/* ── Botones, para colocarlos donde toque ────────────────────────────────
+ * Devuelven el boton ya hecho (con su aviso de confirmacion), sin padre fijo:
+ * quien llame decide donde ponerlo. */
+lv_obj_t *trip_reset_button_create(lv_obj_t *parent)
 {
-    /* Energia del viaje: contadores reseteables del viaje. */
-    lv_obj_t *card_trip = lv_obj_create(cont);
-    lv_obj_set_width(card_trip, lv_pct(100));
-    lv_obj_set_height(card_trip, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(card_trip, UI_COLOR_CARD, 0);
-    lv_obj_set_style_bg_opa(card_trip, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_trip, lv_color_hex(0x90A4AE), 0);
-    lv_obj_set_style_border_width(card_trip, 2, 0);
-    lv_obj_set_style_radius(card_trip, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_hor(card_trip, 16, 0);
-    lv_obj_set_style_pad_ver(card_trip, 2, 0);     /* menos alto: menos relleno arriba/abajo */
-    lv_obj_set_style_pad_gap(card_trip, 4, 0);
-    lv_obj_set_layout(card_trip, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(card_trip, LV_FLEX_FLOW_COLUMN);
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 190, 44);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x00897B), 0);
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, "Poner a cero");
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl);
+    lv_obj_add_event_cb(btn, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
+    return btn;
+}
 
-    lv_obj_t *trip_title = lv_label_create(card_trip);
-    lv_obj_set_style_text_font(trip_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(trip_title, lv_color_hex(0x90A4AE), 0);
-    lv_label_set_text(trip_title, LV_SYMBOL_REFRESH "  Energía del viaje");
-
-    /* Dos botones sueltos: poner los contadores a cero (normalmente lo hace
-     * solo el inicio de viaje de la cabina) y soltar la tarjeta. */
-    lv_obj_t *trip_btns = lv_obj_create(card_trip);
-    lv_obj_remove_style_all(trip_btns);
-    lv_obj_set_size(trip_btns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_layout(trip_btns, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(trip_btns, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(trip_btns, 8, 0);
-
-    lv_obj_t *btn_trip_rst = lv_btn_create(trip_btns);
-    lv_obj_set_size(btn_trip_rst, 190, 44);
-    lv_obj_set_style_bg_color(btn_trip_rst, lv_color_hex(0x00897B), 0);
-    lv_obj_set_style_radius(btn_trip_rst, 8, 0);
-    lv_obj_t *lbl_trip_rst = lv_label_create(btn_trip_rst);
-    lv_label_set_text(lbl_trip_rst, "Poner a cero");
-    lv_obj_set_style_text_font(lbl_trip_rst, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_trip_rst);
-    lv_obj_add_event_cb(btn_trip_rst, trip_reset_btn_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *btn_trip_fin = lv_btn_create(trip_btns);
-    lv_obj_set_size(btn_trip_fin, 190, 44);
-    lv_obj_set_style_bg_color(btn_trip_fin, lv_color_hex(0x5D4037), 0);
-    lv_obj_set_style_radius(btn_trip_fin, 8, 0);
-    lv_obj_t *lbl_trip_fin = lv_label_create(btn_trip_fin);
-    lv_label_set_text(lbl_trip_fin, "Soltar tarjeta");
-    lv_obj_set_style_text_font(lbl_trip_fin, &lv_font_montserrat_20_es, 0);
-    lv_obj_center(lbl_trip_fin);
-    ui_card_wrap_title_with(card_trip, trip_title, lv_color_hex(0x90A4AE), trip_btns);
-    lv_obj_add_event_cb(btn_trip_fin, trip_finish_btn_cb, LV_EVENT_CLICKED, NULL);
-
-    s_trip_label = lv_label_create(card_trip);
-    lv_obj_set_style_text_font(s_trip_label, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_trip_label, lv_color_hex(0xDDDDDD), 0);
-    lv_obj_set_width(s_trip_label, lv_pct(100));
-    /* LONG_DOT en vez de WRAP por riesgo WDT al construir. */
-    lv_label_set_long_mode(s_trip_label, LV_LABEL_LONG_DOT);
-    trip_label_refresh();
+lv_obj_t *trip_eject_button_create(lv_obj_t *parent)
+{
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 190, 44);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x5D4037), 0);
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text(lbl, LV_SYMBOL_SD_CARD "  Soltar tarjeta");
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
+    lv_obj_center(lbl);
+    lv_obj_add_event_cb(btn, trip_finish_btn_cb, LV_EVENT_CLICKED, NULL);
+    return btn;
 }

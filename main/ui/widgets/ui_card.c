@@ -138,9 +138,23 @@ lv_obj_t *ui_card_wrap_title_with(lv_obj_t *card, lv_obj_t *title,
     lv_obj_move_to_index(hueco, 0);
 
     lv_obj_set_parent(control, header);   /* queda detras del titulo */
+    /* Separacion entre el titulo y el control (switch, boton...). Sin esto van
+     * PEGADOS y queda feo: el usuario lo vio en Autocaravana el 24-sep-2026. */
+    lv_obj_set_style_pad_column(header, 16, 0);
+    lv_obj_set_style_pad_left(header, 8, 0);
+    lv_obj_set_style_pad_right(header, 8, 0);
     lv_obj_update_layout(control);
     lv_coord_t w = lv_obj_get_width(control);
     if (w > 0) lv_obj_set_width(hueco, w);
+
+    /* Y si el titulo + el control no caben en el ancho de la tarjeta (titulo
+     * largo con letra grande, como "Version, Repo y Creditos" + Reiniciar), el
+     * titulo se RECORTA con puntos en vez de montarse encima: antes el flex los
+     * apilaba y el control salia SOBRE el texto. Con flex_grow el titulo se
+     * queda con el hueco libre y el control conserva su tamano. */
+    lv_obj_set_flex_grow(title, 1);
+    if (lv_obj_check_type(title, &lv_label_class))
+        lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
     return header;
 }
 

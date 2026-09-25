@@ -18,6 +18,10 @@
  */
 #include "lvgl.h"
 #include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_BG / _CARD) */
+
+/* Boton "Poner a cero" del viaje (definido en ui/settings/trip_manager.c):
+ * el dato de viaje vive AQUI desde el 24-sep-2026, asi que el boton tambien. */
+lv_obj_t *trip_reset_button_create(lv_obj_t *parent);
 #include "ui.h"
 #include "ui/widgets/ui_state.h"
 #include "fonts/fonts_es.h"
@@ -318,6 +322,14 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     lv_obj_set_style_text_font(s_lbl_modo, &lv_font_montserrat_20_es, 0);
     lv_obj_center(s_lbl_modo);
     lv_obj_add_event_cb(bmode, sol_toggle_modo_cb, LV_EVENT_CLICKED, NULL);
+
+    /* Poner a cero los contadores del viaje: al lado del boton de modo, en la
+     * banda libre que queda arriba a la derecha (el boton de cerrar esta mas
+     * arriba y el grafico empieza en y=134, asi que 84+44 entra de sobra). */
+    {
+        lv_obj_t *btn_rst = trip_reset_button_create(scr);
+        lv_obj_align(btn_rst, LV_ALIGN_TOP_RIGHT, -16, 84);
+    }
 
     s_lbl_hint = lv_label_create(scr);
     lv_obj_set_style_text_color(s_lbl_hint, UI_COLOR_TEXT_SOFT, 0);
