@@ -582,42 +582,37 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
         create_autostart_card(page),
     };
 
-    /* ── Reparto del alto ────────────────────────────────────────────────
-     * La pagina tiene mas alto que contenido (lo dijo el usuario: "hay espacio
-     * vertical y esta todo muy comprimido"), asi que se mide lo que ocupa DE
-     * VERDAD -- el fondo del hijo mas bajo, no la suma de alturas: las dos
-     * entradas (Frigo / Victron) van en la MISMA fila y sumarlas contaria una de
-     * mas -- y lo que sobra se reparte a partes iguales entre las tres tarjetas.
-     * Nada de alturas fijas a mano: si mañana cambia el header del menu o el
-     * texto de una tarjeta, el reparto se recalcula solo. Dentro, cada tarjeta
-     * reparte su contenido con SPACE_EVENLY (ver create_ausente_card), asi que
-     * crecen "por dentro" y no dejan un hueco muerto abajo. */
-    lv_obj_update_layout(page);
-    lv_coord_t fondo = 0;
-    uint32_t n_hijos = lv_obj_get_child_cnt(page);
-    for (uint32_t i = 0; i < n_hijos; i++) {
-        lv_obj_t *h = lv_obj_get_child(page, i);
-        lv_coord_t b = lv_obj_get_y(h) + lv_obj_get_height(h);
-        if (b > fondo) fondo = b;
+    /* ── Alto de las tres tarjetas ───────────────────────────────────────
+     * El usuario: "reordena la pantalla autocaravana, hay espacio vertical y
+     * esta todo muy comprimido; espacialo y agrandalo en vertical". El reparto
+     * automatico (medir el hueco libre de la pagina) NO servia: la pagina
+     * reporta 370 px con el contenido ya llenandola, asi que el hueco que se ve
+     * esta fuera de ella y el calculo daba 0.
+     *
+     * Ahora el alto se calcula desde la PANTALLA, que es lo que el usuario ve:
+     * 600 px menos la cabecera de Ajustes, los margenes, la fila de entradas
+     * (Frigo / Victron Keys, 58 px) y los huecos entre filas. Cada tarjeta se
+     * lleva un tercio de lo que queda. Si la pagina dijera un alto creible mas
+     * pequeno, se respeta para no provocar scroll. Dentro, cada tarjeta reparte
+     * su contenido con SPACE_EVENLY (ver create_ausente_card). */
+    lv_coord_t alto_pagina = lv_obj_get_content_height(page);
+    lv_coord_t alto_card = (LV_VER_RES - 226) / 3;      /* 600 -> 124 px por tarjeta */
+    if (alto_pagina > 300) {                            /* medida creible: no pasarse */
+        lv_coord_t cabe = (alto_pagina - 58 - 42) / 3;  /* entradas + huecos */
+        if (cabe > 60 && cabe < alto_card) alto_card = cabe;
     }
-    lv_coord_t libre = lv_obj_get_content_height(page) - fondo
-                       - lv_obj_get_style_pad_bottom(page, 0);
-    lv_coord_t extra = (libre > 30) ? (libre / 3) : 0;  /* <30 px ni se nota */
-    if (extra > 0) {
-        for (int i = 0; i < 3; i++) {
-            lv_obj_set_height(tarjetas[i], lv_obj_get_height(tarjetas[i]) + extra);
-        }
+    for (int i = 0; i < 3; i++) {
+        lv_obj_set_height(tarjetas[i], alto_card);
     }
-    /* Diagnostico (una linea por arranque, la pagina se construye una vez):
-     * de donde sale el alto de la pagina y cuanto sobra de verdad. */
+
     lv_obj_t *padre = lv_obj_get_parent(page);
     ESP_LOGI(TAG_SETTINGS,
-             "Autocaravana: page=%d content=%d padre=%d menu=%d tab=%d hijos=%u ocupado=%d libre=%d extra=%d",
-             (int)lv_obj_get_height(page), (int)lv_obj_get_content_height(page),
+             "Autocaravana: page=%d content=%d padre=%d menu=%d tab=%d -> tarjetas de %d px",
+             (int)lv_obj_get_height(page), (int)alto_pagina,
              padre ? (int)lv_obj_get_height(padre) : -1,
              s_settings_menu ? (int)lv_obj_get_height(s_settings_menu) : -1,
              (ctx->ui && ctx->ui->tab_settings) ? (int)lv_obj_get_height(ctx->ui->tab_settings) : -1,
-             (unsigned)n_hijos, (int)fondo, (int)libre, (int)extra);
+             (int)alto_card);
 }
 
 void ui_settings_panel_init(ui_state_t *ui,
@@ -818,6 +813,19 @@ void ui_settings_panel_init(ui_state_t *ui,
     /* Timer 1 s: refresca el Energia del viaje y el espacio libre de la SD (cada
      * card solo cuando esta visible). Antes se creaba al abrir la pagina SD. */
     lv_timer_create(sd_trip_timer_cb, 1000, ui);
+
+    /* DIAGNOSTICO (25-sep-2026): el usuario dice que la pagina Autocaravana esta
+     * "muy comprimida" y que sobra alto. Aqui se apunta el alto de TODA la
+     * cadena de contenedores al arrancar, para saber donde se queda ese hueco
+     * sin depender de navegar a la pagina (ni del puente). */
+    lv_obj_update_layout(page_autocaravana);
+    ESP_LOGI(TAG_SETTINGS,
+             "ALTOS tab=%d menu=%d cabecera=%d pag_auto=%d padre_auto=%d",
+             (int)lv_obj_get_height(ui->tab_settings),
+             (int)lv_obj_get_height(menu),
+             (int)lv_obj_get_height(lv_menu_get_main_header(menu)),
+             (int)lv_obj_get_height(page_autocaravana),
+             (int)lv_obj_get_height(lv_obj_get_parent(page_autocaravana)));
 
     lv_obj_t *tab = ui->tab_settings;
 
