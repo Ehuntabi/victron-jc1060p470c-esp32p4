@@ -320,7 +320,9 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(cont, 10, 0);
-    lv_obj_set_style_pad_gap(cont, 10, 0);
+    /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
+     * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
+    lv_obj_set_style_pad_gap(cont, 12, 0);
 
     /* === Card Carrusel captura pantalla === */
     lv_obj_t *card_cap = lv_obj_create(cont);
@@ -332,7 +334,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_cap, 2, 0);
     lv_obj_set_style_radius(card_cap, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_cap, 12, 0);
-    lv_obj_set_style_pad_gap(card_cap, 6, 0);
+    lv_obj_set_style_pad_gap(card_cap, 10, 0);
     lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
 
@@ -374,7 +376,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_flex_flow(fila2, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila2, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(fila2, 10, 0);
+    lv_obj_set_style_pad_gap(fila2, 12, 0);
     lv_obj_clear_flag(fila2, LV_OBJ_FLAG_SCROLLABLE);
 
     /* === Card Sacar la tarjeta ===
@@ -386,19 +388,19 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_height(card_eject, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_eject, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_eject, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_eject, lv_color_hex(0x5D4037), 0);
+    lv_obj_set_style_border_color(card_eject, lv_color_hex(0x42A5F5), 0);   /* azul: el acento de la pagina de la SD */
     lv_obj_set_style_border_width(card_eject, 2, 0);
     lv_obj_set_style_radius(card_eject, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_eject, 12, 0);
-    lv_obj_set_style_pad_gap(card_eject, 8, 0);
+    lv_obj_set_style_pad_gap(card_eject, 10, 0);
     lv_obj_set_layout(card_eject, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_eject, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *eject_title = lv_label_create(card_eject);
     lv_obj_set_style_text_font(eject_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(eject_title, lv_color_hex(0x8D6E63), 0);
+    lv_obj_set_style_text_color(eject_title, lv_color_hex(0x64B5F6), 0);
     lv_label_set_text(eject_title, LV_SYMBOL_SD_CARD "  Sacar la tarjeta");
-    ui_card_wrap_title(card_eject, eject_title, lv_color_hex(0x5D4037));
+    ui_card_wrap_title(card_eject, eject_title, lv_color_hex(0x42A5F5));
 
     /* El boton va directo en la tarjeta (no en una fila aparte alineada a la
      * derecha): asi queda CENTRADO, igual que el del visor de al lado. El
@@ -417,12 +419,15 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_view, 2, 0);
     lv_obj_set_style_radius(card_view, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_view, 12, 0);
-    lv_obj_set_style_pad_gap(card_view, 6, 0);
+    lv_obj_set_style_pad_gap(card_view, 10, 0);
     lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_view, LV_FLEX_FLOW_COLUMN);
 
     lv_obj_t *view_title = lv_label_create(card_view);
-    lv_obj_set_flex_grow(view_title, 1);
+    /* SIN flex_grow: con el, el titulo se comia el hueco libre y el boton
+     * quedaba pegado a el con una banda vacia debajo (el usuario: "hay cosas muy
+     * juntas y otras muy separadas"). Sin el, SPACE_EVENLY reparte titulo y
+     * boton por igual. */
     lv_obj_set_style_text_font(view_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
     lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
@@ -451,13 +456,20 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
      *  duplicados y sus dos botones se repartieron entre Historico solar y
      *  Tarjeta SD. 24-sep-2026.) */
 
-    /* Las dos tarjetas de la fila, el mismo alto (110: titulo + boton + margenes)
-     * y el contenido repartido, para que queden simetricas. */
-    lv_obj_set_height(card_view, 110);
-    lv_obj_set_height(card_eject, 110);
-    lv_obj_set_flex_align(card_view, LV_FLEX_ALIGN_SPACE_EVENLY,
+    /* Las dos tarjetas de la fila se quedan con SU TAMANO (titulo + boton +
+     * margenes): antes se forzaban a 110 px y se repartia el contenido, y eso
+     * dejaba banda vacia debajo del boton -- el usuario lo describio como "hay
+     * cosas muy juntas y otras muy separadas". Al medir lo que ocupan, las dos
+     * salen iguales (misma estructura) y sin huecos.
+     *
+     * Y el boton va CENTRADO en su tarjeta: es hijo directo, y estas tarjetas
+     * se habian quedado con la alineacion por defecto (izquierda). El titulo se
+     * veia centrado porque vive en su propia cabecera (ui_card_wrap_title), pero
+     * el boton no -- el usuario lo vio el 25-sep-2026 ("los botones ver capturas
+     * y soltar tarjeta estan descentrados con su card"). */
+    lv_obj_set_flex_align(card_view, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_flex_align(card_eject, LV_FLEX_ALIGN_SPACE_EVENLY,
+    lv_obj_set_flex_align(card_eject, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* === Card 4: Backup/Restore configuracion === */
@@ -470,7 +482,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_bak, 2, 0);
     lv_obj_set_style_radius(card_bak, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_bak, 12, 0);
-    lv_obj_set_style_pad_gap(card_bak, 8, 0);
+    lv_obj_set_style_pad_gap(card_bak, 10, 0);
     lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
 
@@ -483,7 +495,8 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *bak_desc = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
-    lv_obj_set_width(bak_desc, lv_pct(100));
+    lv_obj_set_width(bak_desc, lv_pct(96));   /* no toca los bordes */
+    lv_obj_set_style_text_align(bak_desc, LV_TEXT_ALIGN_CENTER, 0);
     /* WRAP (ancho fijo pct 100, no flex_grow -> sin riesgo WDT): las lineas
      * se reparten llenando todo el ancho de la card. */
     lv_label_set_long_mode(bak_desc, LV_LABEL_LONG_WRAP);
@@ -1606,7 +1619,9 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_all(cont, 10, 0);
-    lv_obj_set_style_pad_gap(cont, 10, 0);
+    /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
+     * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
+    lv_obj_set_style_pad_gap(cont, 12, 0);
 
     lv_obj_t *btn_frigo = settings_card_btn(cont,
         "Nevera",  "Histórico de temperaturas y ventilador",

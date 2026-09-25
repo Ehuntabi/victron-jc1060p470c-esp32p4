@@ -109,7 +109,7 @@ lv_obj_t *trip_eject_button_create(lv_obj_t *parent)
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, 190, 44);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x5D4037), 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1565C0), 0);   /* azul de la pagina de la SD */
     lv_obj_set_style_radius(btn, 8, 0);
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LV_SYMBOL_SD_CARD "  Soltar tarjeta");
