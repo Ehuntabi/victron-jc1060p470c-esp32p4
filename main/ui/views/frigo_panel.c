@@ -991,14 +991,6 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(s_lbl_exterior_overlay, "--.- \xc2\xb0""C");
 
-    /* Igualar la altura de la card de sensores a la del ventilador (la mas alta),
-     * para que ambas queden simetricas cuando van lado a lado. */
-    lv_obj_update_layout(tab);
-    lv_coord_t h_fan = lv_obj_get_height(card_fan);
-    if (h_fan > lv_obj_get_height(card_sensors)) {
-        lv_obj_set_height(card_sensors, h_fan);
-    }
-
     ESP_LOGI(TAG, "Panel frigo inicializado (%d sensores)", st->n_sensors);
 }
 
@@ -1111,4 +1103,47 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
      * bandera NO se limpia aqui sino en el boton del aviso: este update puede
      * saltarse si lvgl_port_lock caduca, y un disparo unico se perderia. */
     if (state->scan_event != 0) mostrar_aviso_sondas(state->scan_event);
+}
+
+/* Iguala el alto de las dos tarjetas de la primera fila (sensores y
+ * ventilador) a la mas alta, y reparte el contenido de cada una con
+ * SPACE_EVENLY para que no quede banda muerta ni arriba ni abajo. Se llama
+ * cuando la pagina YA se ha mostrado -- al construirla medía mal (la tarjeta
+ * del ventilador daba 649 px y la fila se iba a 649, con la pagina
+ * desplazandose 403 px). 25-sep-2026. */
+void ui_frigo_panel_equalizar(void)
+{
+    lv_obj_t *tab = s_ui ? s_ui->frigo_page : NULL;
+    if (!tab) return;
+    lv_obj_t *card_sensors = NULL, *card_fan = NULL;
+    uint32_t n = lv_obj_get_child_cnt(tab);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *c = lv_obj_get_child(tab, i);
+        if (!c) continue;
+        /* Las dos primeras tarjetas de la fila 1 son las de ancho 49% */
+        if (lv_obj_get_width(c) > 0 && lv_obj_get_width(c) < lv_obj_get_width(tab) * 3 / 4) {
+            if (!card_sensors) card_sensors = c;
+            else if (!card_fan) { card_fan = c; break; }
+        }
+    }
+    if (!card_sensors || !card_fan) return;
+    lv_obj_update_layout(tab);
+    lv_coord_t h_sens = lv_obj_get_height(card_sensors);
+    lv_coord_t h_fan  = lv_obj_get_height(card_fan);
+    /* Si alguna medida no es creible (0 o mas alta que la pantalla) no se toca
+     * nada: mejor dejarlo como estaba que romperlo. */
+    if (h_sens < 60 || h_fan < 60 || h_sens > LV_VER_RES || h_fan > LV_VER_RES) {
+        ESP_LOGW(TAG, "igualar: medidas raras (sensores %d, ventilador %d), no toco nada",
+                 (int)h_sens, (int)h_fan);
+        return;
+    }
+    lv_coord_t h_fila = (h_fan > h_sens) ? h_fan : h_sens;
+    lv_obj_set_height(card_sensors, h_fila);
+    lv_obj_set_height(card_fan, h_fila);
+    lv_obj_set_flex_align(card_sensors, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(card_fan, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    ESP_LOGI(TAG, "Cards de la fila 1 igualadas a %d px (sensores %d, ventilador %d)",
+             (int)h_fila, (int)h_sens, (int)h_fan);
 }

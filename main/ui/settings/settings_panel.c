@@ -253,6 +253,14 @@ static settings_page_ctx_t *settings_menu_add_entry(
     void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page));
 static void settings_menu_page_changed_cb(lv_event_t *e);
 
+/* Nombres de las paginas de Ajustes, EN EL MISMO ORDEN en que se registran con
+ * settings_menu_add_entry() (y el mismo que TOUR_SET_NAMES de
+ * capture_carousel.c). Solo se usan para el log de revision de la pagina. */
+static const char *SETTINGS_PAGE_NAMES[] = {
+    "frigo", "logs", "wifi", "display", "tarjeta_sd",
+    "sonido", "autocaravana", "victron_keys", "gps", "about",
+};
+
 
 
 /* ── Splash dropdown ──────────────────────────────────────────── */
@@ -352,12 +360,29 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_color(ui->lbl_about_sd, lv_color_hex(0x888888), 0);
     lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
+    /* === Fila de dos columnas: Visor de imagenes | Sacar la tarjeta ===
+     * Las dos son acciones sobre la SD, asi que van juntas y cada una ocupa
+     * media fila: antes "Sacar la tarjeta" tenia tarjeta propia de ancho completo
+     * para un solo boton y la pagina se salia por abajo (el usuario: "la tarjeta
+     * sd no la has corregido, se sale por abajo porque sacar la tarjeta esta
+     * desaprovechada"). Mismo patron de dos columnas que la pagina del frigo. */
+    lv_obj_t *fila2 = lv_obj_create(cont);
+    lv_obj_remove_style_all(fila2);
+    lv_obj_set_width(fila2, lv_pct(100));
+    lv_obj_set_height(fila2, LV_SIZE_CONTENT);
+    lv_obj_set_layout(fila2, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fila2, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila2, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(fila2, 10, 0);
+    lv_obj_clear_flag(fila2, LV_OBJ_FLAG_SCROLLABLE);
+
     /* === Card Sacar la tarjeta ===
      * Antes vivia (con los numeros del viaje) en el submenu Autocaravana, que no
      * es su sitio: esto es una accion de la SD. Vuelve aqui, que es de donde
      * salio. 24-sep-2026. */
-    lv_obj_t *card_eject = lv_obj_create(cont);
-    lv_obj_set_width(card_eject, lv_pct(100));
+    lv_obj_t *card_eject = lv_obj_create(fila2);
+    lv_obj_set_width(card_eject, lv_pct(49));
     lv_obj_set_height(card_eject, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_eject, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_eject, LV_OPA_COVER, 0);
@@ -375,27 +400,16 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_label_set_text(eject_title, LV_SYMBOL_SD_CARD "  Sacar la tarjeta");
     ui_card_wrap_title(card_eject, eject_title, lv_color_hex(0x5D4037));
 
-    lv_obj_t *eject_hint = lv_label_create(card_eject);
-    lv_obj_set_style_text_font(eject_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(eject_hint, lv_color_hex(0x888888), 0);
-    lv_label_set_text(eject_hint,
-                      "Guarda todo lo pendiente y suelta la tarjeta para poder sacarla");
+    /* El boton va directo en la tarjeta (no en una fila aparte alineada a la
+     * derecha): asi queda CENTRADO, igual que el del visor de al lado. El
+     * patron de "fila alineada a la derecha" tenia sentido cuando esta tarjeta
+     * era de ancho completo, pero al pasar a media fila el boton se veia
+     * descentrado (el usuario lo vio el 25-sep-2026). */
+    trip_eject_button_create(card_eject);
 
-    /* El boton va en su fila, alineado a la derecha (mismo patron que el resto) */
-    lv_obj_t *fila_eject = lv_obj_create(card_eject);
-    lv_obj_remove_style_all(fila_eject);
-    lv_obj_set_width(fila_eject, lv_pct(100));
-    lv_obj_set_height(fila_eject, LV_SIZE_CONTENT);
-    lv_obj_set_layout(fila_eject, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(fila_eject, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(fila_eject, LV_FLEX_ALIGN_END,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(fila_eject, LV_OBJ_FLAG_SCROLLABLE);
-    trip_eject_button_create(fila_eject);
-
-    /* === Card Visor de imagenes (separado del carrusel) === */
-    lv_obj_t *card_view = lv_obj_create(cont);
-    lv_obj_set_width(card_view, lv_pct(100));
+    /* === Card Visor de imagenes === */
+    lv_obj_t *card_view = lv_obj_create(fila2);
+    lv_obj_set_width(card_view, lv_pct(49));
     lv_obj_set_height(card_view, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_view, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_view, LV_OPA_COVER, 0);
@@ -413,6 +427,12 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
     lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
 
+    /* Titulo solo y el boton DEBAJO (convencion que pidio el usuario en
+     * Bombonas: el boton en la fila del titulo deja el titulo descentrado).
+     * La descripcion "Vigilancia y capturas del carrusel" se quita: repetia lo
+     * que ya dice el boton. */
+    ui_card_wrap_title(card_view, view_title, lv_color_hex(0x26C6DA));
+
     lv_obj_t *btn_gal = lv_btn_create(card_view);
     lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
     lv_obj_set_height(btn_gal, 46);
@@ -423,18 +443,22 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_gal, LV_SYMBOL_IMAGE "  Ver capturas");
     lv_obj_center(lbl_gal);
-    ui_card_wrap_title_with(card_view, view_title, lv_color_hex(0x26C6DA), btn_gal);
     lv_obj_add_event_cb(btn_gal, cb_open_gallery, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *view_desc = lv_label_create(card_view);
-    lv_obj_set_style_text_font(view_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(view_desc, UI_COLOR_TEXT_SOFT, 0);
-    lv_label_set_text(view_desc, "Vigilancia y capturas del carrusel");
+    lv_obj_move_to_index(card_view, 0);   /* el visor a la izquierda */
 
 
     /* (La card "Energia del viaje" ya no existe: sus numeros estaban
      *  duplicados y sus dos botones se repartieron entre Historico solar y
      *  Tarjeta SD. 24-sep-2026.) */
+
+    /* Las dos tarjetas de la fila, el mismo alto (110: titulo + boton + margenes)
+     * y el contenido repartido, para que queden simetricas. */
+    lv_obj_set_height(card_view, 110);
+    lv_obj_set_height(card_eject, 110);
+    lv_obj_set_flex_align(card_view, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(card_eject, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* === Card 4: Backup/Restore configuracion === */
     lv_obj_t *card_bak = lv_obj_create(cont);
@@ -583,37 +607,22 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
     };
 
     /* ── Encajar las tres tarjetas en lo que SE VE ───────────────────────
-     * Peticion del usuario: "hay espacio vertical y esta todo muy comprimido;
-     * espacialo y agrandalo en vertical", y despues "se solapa". Lo que se ha
-     * medido y visto en pantalla, por pasos:
-     *   - la pagina no llenaba su contenedor (394 de 596) y las tarjetas se
-     *     quedaban en 90 px;
-     *   - estirada a 596, las tarjetas de 157 px se salian POR ABAJO: la ultima
-     *     quedaba debajo de la barra inferior (reloj + iconos);
-     *   - el contenedor de la pagina (596) tampoco es el alto util: la barra
-     *     inferior se reserva aparte en ui.c (pad_bottom 62 del tab).
-     *
-     * El alto util REAL es: pantalla - cabecera del menu - 62 de la barra
-     * inferior - 12 de margen = ~430 px. Con eso la pagina no se sale ni por
-     * arriba ni por abajo, y cada tarjeta se queda con su tamano natural mas un
-     * tercio del hueco que sobre: crecen las tres por igual y ninguna recorta
-     * su contenido. Dentro, cada tarjeta reparte lo suyo con SPACE_EVENLY (ver
-     * create_ausente_card). */
+     * El alto de la pagina lo fija el cambio de pagina (ver
+     * settings_menu_page_changed_cb) antes de llamar aqui, asi que a estas
+     * alturas YA es el alto util de verdad. Todo lo que se probo antes y no
+     * funcionaba esta contado alli: no repetir el calculo aqui (se peleaban los
+     * dos y la pagina acababa con 540 px en vez de 430).
+     */
     lv_obj_t *hdr = NULL;
     if (ctx->ui && ctx->ui->settings_menu) hdr = lv_menu_get_main_header(ctx->ui->settings_menu);
     else if (s_settings_menu)               hdr = lv_menu_get_main_header(s_settings_menu);
-
-    lv_coord_t cab = 96;                                  /* cabecera tipica */
+    lv_coord_t cab = 96;
     if (hdr) {
         lv_coord_t h = lv_obj_get_height(hdr);
-        if (h >= 60 && h <= 160) cab = h;                 /* la medida, si es creible */
+        if (h >= 60 && h <= 160) cab = h;
     }
-    lv_coord_t visible = LV_VER_RES - cab - 62 - 12;       /* 600-96-62-12 = 430 */
-    if (visible < 320) visible = 320;
-    lv_obj_set_height(page, visible);
-    lv_obj_set_style_pad_top(page, 12, 0);
-    lv_obj_set_style_pad_bottom(page, 12, 0);
-    lv_obj_update_layout(page);
+    lv_coord_t visible = lv_obj_get_content_height(page);
+    if (visible < 200) visible = LV_VER_RES - cab - 62 - 12;
 
     /* Tamano natural de cada tarjeta + un tercio de lo que sobre. */
     for (int i = 0; i < 3; i++) lv_obj_set_height(tarjetas[i], LV_SIZE_CONTENT);
@@ -1496,12 +1505,50 @@ static void settings_menu_page_changed_cb(lv_event_t *e)
         ctx = (settings_page_ctx_t *)lv_obj_get_user_data(cur);
         if (ctx) {
             accent = ctx->accent;
+
+            /* ── Alto comun de TODAS las paginas de Ajustes ─────────────────
+             * El porque, medido, esta en el comentario largo de
+             * populate_autocaravana: el contenedor de una pagina NO es el alto
+             * util. Lo que se ve es la pantalla menos la cabecera del menu y
+             * los 62 px que reserva la barra inferior (ui.c). Se fija AQUI, en
+             * el cambio de pagina, y ANTES de construir la pagina, para que el
+             * constructor ya vea el alto bueno (si no, mide mal: el igualado de
+             * las tarjetas del frigo se creyo 649 px).
+             *
+             * De paso se apunta en el log cuanto contenido tiene cada una y si
+             * le sobra o le falta sitio (sobra>0 = no cabe y hay que
+             * desplazar). Asi se revisan las diez de una pasada. */
+            lv_coord_t cab = 96;                    /* cabecera tipica del menu */
+            if (s_settings_main_header) {
+                lv_coord_t h = lv_obj_get_height(s_settings_main_header);
+                if (h >= 60 && h <= 160) cab = h;   /* la medida, si es creible */
+            }
+            lv_coord_t visible = LV_VER_RES - cab - 62 - 12;
+            if (visible < 320) visible = 320;
+            lv_obj_set_height(cur, visible);
+            lv_obj_set_style_pad_top(cur, 12, 0);
+            lv_obj_set_style_pad_bottom(cur, 12, 0);
+            lv_obj_update_layout(cur);
+
             /* Lazy populate: la primera vez que se navega a la pagina,
              * construir su contenido. */
             if (!ctx->populated && ctx->populate) {
                 ctx->populate(ctx, cur);
                 ctx->populated = true;
             }
+            /* La fila de tarjetas del frigo se iguala con la pagina YA
+             * construida y dibujada (no al construir: medía mal). */
+            if (SETTINGS_PAGE_NAMES[(int)(ctx - s_page_ctxs)][0] == 'f' &&
+                !ctx->frigo_igualado) {
+                ui_frigo_panel_equalizar();
+                ctx->frigo_igualado = true;
+            }
+            lv_obj_update_layout(cur);
+            ESP_LOGI(TAG_SETTINGS, "pagina '%.14s': alto=%d contenido=%d sobra=%d",
+                     (int)(ctx - s_page_ctxs) < SETTINGS_PAGE_CTX_MAX
+                         ? SETTINGS_PAGE_NAMES[(int)(ctx - s_page_ctxs)] : "?",
+                     (int)lv_obj_get_height(cur), (int)lv_obj_get_content_height(cur),
+                     (int)lv_obj_get_scroll_bottom(cur));
         }
     }
     if (s_settings_back_btn) {

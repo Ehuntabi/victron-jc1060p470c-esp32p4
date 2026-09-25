@@ -28,6 +28,9 @@ struct settings_page_ctx_s {
                         * de pan del header ("Ajustes", "Autocaravana") */
     void (*populate)(settings_page_ctx_t *ctx, lv_obj_t *page);
     bool populated;
+    /* La fila de tarjetas del frigo se iguala UNA vez, con la pagina ya
+     * dibujada (al construir medía mal: se creyo 649 px). 25-sep-2026. */
+    bool frigo_igualado;
     /* Extras (solo Wi-Fi los usa) */
     char wifi_ssid[40];
     char wifi_pass[68];

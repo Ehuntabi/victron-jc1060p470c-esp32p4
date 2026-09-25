@@ -10,3 +10,8 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state);
  * la lista flotante del dropdown LVGL no se cierra sola y se ve flotando
  * sobre la vista Live. */
 void ui_frigo_panel_close_dropdowns(void);
+
+/* Iguala el alto de las dos tarjetas de la primera fila (sensores y
+ * ventilador) a la mas alta y reparte su contenido. Se llama al MOSTRAR la
+ * pagina: al construirla las medidas aun no son validas. 25-sep-2026. */
+void ui_frigo_panel_equalizar(void);
