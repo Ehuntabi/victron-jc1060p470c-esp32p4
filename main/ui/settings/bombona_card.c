@@ -175,7 +175,13 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
     lv_label_set_text(l2, "Deshacer");
     lv_obj_set_style_text_font(l2, &lv_font_montserrat_20_es, 0);
     lv_obj_center(l2);
-    ui_card_wrap_title_with(card, title, lv_color_hex(0xFFA726), btns);
+    /* El titulo, SOLO: los dos botones van debajo (peticion del usuario,
+     * 25-sep-2026). En la cabecera compartida se apretaban contra el titulo y el
+     * titulo dejaba de estar centrado en la tarjeta. La tarjeta es una columna
+     * con el contenido repartido (SPACE_EVENLY) y el cruce centrado, asi que los
+     * botones quedan centrados justo debajo del titulo, y el texto del estado
+     * debajo de los botones. */
+    ui_card_wrap_title(card, title, lv_color_hex(0xFFA726));
     lv_obj_add_event_cb(b2, deshacer_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl = lv_label_create(card);

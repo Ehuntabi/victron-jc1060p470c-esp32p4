@@ -582,37 +582,60 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
         create_autostart_card(page),
     };
 
-    /* ── Alto de las tres tarjetas ───────────────────────────────────────
-     * El usuario: "reordena la pantalla autocaravana, hay espacio vertical y
-     * esta todo muy comprimido; espacialo y agrandalo en vertical". El reparto
-     * automatico (medir el hueco libre de la pagina) NO servia: la pagina
-     * reporta 370 px con el contenido ya llenandola, asi que el hueco que se ve
-     * esta fuera de ella y el calculo daba 0.
+    /* ── Encajar las tres tarjetas en lo que SE VE ───────────────────────
+     * Peticion del usuario: "hay espacio vertical y esta todo muy comprimido;
+     * espacialo y agrandalo en vertical", y despues "se solapa". Lo que se ha
+     * medido y visto en pantalla, por pasos:
+     *   - la pagina no llenaba su contenedor (394 de 596) y las tarjetas se
+     *     quedaban en 90 px;
+     *   - estirada a 596, las tarjetas de 157 px se salian POR ABAJO: la ultima
+     *     quedaba debajo de la barra inferior (reloj + iconos);
+     *   - el contenedor de la pagina (596) tampoco es el alto util: la barra
+     *     inferior se reserva aparte en ui.c (pad_bottom 62 del tab).
      *
-     * Ahora el alto se calcula desde la PANTALLA, que es lo que el usuario ve:
-     * 600 px menos la cabecera de Ajustes, los margenes, la fila de entradas
-     * (Frigo / Victron Keys, 58 px) y los huecos entre filas. Cada tarjeta se
-     * lleva un tercio de lo que queda. Si la pagina dijera un alto creible mas
-     * pequeno, se respeta para no provocar scroll. Dentro, cada tarjeta reparte
-     * su contenido con SPACE_EVENLY (ver create_ausente_card). */
-    lv_coord_t alto_pagina = lv_obj_get_content_height(page);
-    lv_coord_t alto_card = (LV_VER_RES - 226) / 3;      /* 600 -> 124 px por tarjeta */
-    if (alto_pagina > 300) {                            /* medida creible: no pasarse */
-        lv_coord_t cabe = (alto_pagina - 58 - 42) / 3;  /* entradas + huecos */
-        if (cabe > 60 && cabe < alto_card) alto_card = cabe;
+     * El alto util REAL es: pantalla - cabecera del menu - 62 de la barra
+     * inferior - 12 de margen = ~430 px. Con eso la pagina no se sale ni por
+     * arriba ni por abajo, y cada tarjeta se queda con su tamano natural mas un
+     * tercio del hueco que sobre: crecen las tres por igual y ninguna recorta
+     * su contenido. Dentro, cada tarjeta reparte lo suyo con SPACE_EVENLY (ver
+     * create_ausente_card). */
+    lv_obj_t *hdr = NULL;
+    if (ctx->ui && ctx->ui->settings_menu) hdr = lv_menu_get_main_header(ctx->ui->settings_menu);
+    else if (s_settings_menu)               hdr = lv_menu_get_main_header(s_settings_menu);
+
+    lv_coord_t cab = 96;                                  /* cabecera tipica */
+    if (hdr) {
+        lv_coord_t h = lv_obj_get_height(hdr);
+        if (h >= 60 && h <= 160) cab = h;                 /* la medida, si es creible */
     }
-    for (int i = 0; i < 3; i++) {
-        lv_obj_set_height(tarjetas[i], alto_card);
+    lv_coord_t visible = LV_VER_RES - cab - 62 - 12;       /* 600-96-62-12 = 430 */
+    if (visible < 320) visible = 320;
+    lv_obj_set_height(page, visible);
+    lv_obj_set_style_pad_top(page, 12, 0);
+    lv_obj_set_style_pad_bottom(page, 12, 0);
+    lv_obj_update_layout(page);
+
+    /* Tamano natural de cada tarjeta + un tercio de lo que sobre. */
+    for (int i = 0; i < 3; i++) lv_obj_set_height(tarjetas[i], LV_SIZE_CONTENT);
+    lv_obj_update_layout(page);
+    lv_coord_t natural[3], suma = 0;
+    for (int i = 0; i < 3; i++) { natural[i] = lv_obj_get_height(tarjetas[i]); suma += natural[i]; }
+    /* 58 = fila de entradas (Frigo / Victron Keys); 42 = tres huecos de 14. */
+    lv_coord_t libre = lv_obj_get_content_height(page) - suma - 58 - 42;
+    if (libre > 3) {
+        for (int i = 0; i < 3; i++) {
+            lv_obj_set_height(tarjetas[i], natural[i] + libre / 3);
+        }
     }
 
     lv_obj_t *padre = lv_obj_get_parent(page);
     ESP_LOGI(TAG_SETTINGS,
-             "Autocaravana: page=%d content=%d padre=%d menu=%d tab=%d -> tarjetas de %d px",
-             (int)lv_obj_get_height(page), (int)alto_pagina,
-             padre ? (int)lv_obj_get_height(padre) : -1,
-             s_settings_menu ? (int)lv_obj_get_height(s_settings_menu) : -1,
-             (ctx->ui && ctx->ui->tab_settings) ? (int)lv_obj_get_height(ctx->ui->tab_settings) : -1,
-             (int)alto_card);
+             "Autocaravana: visible=%d page=%d content=%d padre=%d cabecera=%d "
+             "natural=[%d,%d,%d] libre=%d",
+             (int)visible, (int)lv_obj_get_height(page),
+             (int)lv_obj_get_content_height(page),
+             padre ? (int)lv_obj_get_height(padre) : -1, (int)cab,
+             (int)natural[0], (int)natural[1], (int)natural[2], (int)libre);
 }
 
 void ui_settings_panel_init(ui_state_t *ui,
