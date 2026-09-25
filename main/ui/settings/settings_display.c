@@ -74,7 +74,7 @@ void ss_timeout_apply(ui_state_t *ui);
 
 /* Definidas en otras partes de Ajustes, pero usadas desde esta pagina. */
 void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd);
-void create_autostart_card(lv_obj_t *cont);
+lv_obj_t *create_autostart_card(lv_obj_t *cont);
 void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page);
 
 static void ss_mode_changed_cb(lv_event_t *e)

@@ -141,7 +141,7 @@ static void ausente_switch_cb(lv_event_t *e)
 
 /* Card "Modo ausente / vigilancia", reubicada al submenu Autocaravana (antes
  * estaba en la pagina "Sonido y alertas"). */
-void create_ausente_card(lv_obj_t *cont)
+lv_obj_t *create_ausente_card(lv_obj_t *cont)
 {
     lv_obj_t *card_aus = lv_obj_create(cont);
     lv_obj_set_width(card_aus, lv_pct(100));
@@ -162,6 +162,11 @@ void create_ausente_card(lv_obj_t *cont)
     lv_obj_set_style_pad_gap(card_aus, 4, 0);
     lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
+    /* El contenido se reparte por el alto de la tarjeta (SPACE_EVENLY): es lo
+     * que hace que, al crecer la tarjeta, se vea ESPACIADA y no apelotonada
+     * arriba con un hueco muerto abajo. Peticion del usuario, 24-sep-2026. */
+    lv_obj_set_flex_align(card_aus, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* El interruptor va EN la cabecera (con su espaciador de equilibrio), asi
      * que se crea antes que el titulo y la tarjeta no crece. */
@@ -196,6 +201,7 @@ void create_ausente_card(lv_obj_t *cont)
     lv_label_set_text(aus_hint,
                       "Apaga la pantalla y vigila (arranca en 10 s). "
                       "Salir: 4 toques en cualquier esquina.");
+    return card_aus;
 }
 
 void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)

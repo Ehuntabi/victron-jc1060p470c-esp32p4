@@ -126,7 +126,7 @@ static void deshacer_cb(lv_event_t *e)
         "Borrar", do_deshacer);
 }
 
-void create_bombona_card(lv_obj_t *cont)
+lv_obj_t *create_bombona_card(lv_obj_t *cont)
 {
     lv_obj_t *card = lv_obj_create(cont);
     lv_obj_set_width(card, lv_pct(100));
@@ -141,6 +141,9 @@ void create_bombona_card(lv_obj_t *cont)
     lv_obj_set_style_pad_gap(card, 4, 0);
     lv_obj_set_layout(card, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    /* Contenido repartido por el alto de la tarjeta (ver create_ausente_card). */
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *title = lv_label_create(card);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
@@ -183,4 +186,5 @@ void create_bombona_card(lv_obj_t *cont)
      * construir ha dado sustos con el watchdog. */
     lv_label_set_long_mode(s_lbl, LV_LABEL_LONG_DOT);
     bombona_label_refresh();
+    return card;
 }

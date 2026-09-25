@@ -67,7 +67,7 @@ void password_toggle_btn_event_cb(lv_event_t *e);
 /* Energia del viaje + backup: definidos mas abajo, usados por la pagina Tarjeta SD */
 /* Energia del viaje: vive en trip_manager.c. */
 void trip_eject_button_create(lv_obj_t *parent);   /* boton "Soltar tarjeta" */
-void create_bombona_card(lv_obj_t *cont);
+lv_obj_t *create_bombona_card(lv_obj_t *cont);
 void bombona_label_refresh(void);
 static void backup_export_cb(lv_event_t *e);
 static void backup_import_cb(lv_event_t *e);
@@ -206,7 +206,7 @@ void style_settings_scrollbar(lv_obj_t *page)
 /* Pagina "Sonido y alertas" + tarjeta "Modo ausente": viven en
  * settings_sound.c. */
 void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page);
-void create_ausente_card(lv_obj_t *cont);
+lv_obj_t *create_ausente_card(lv_obj_t *cont);
 
 /* Definidas en settings_victron_keys.c (ver nota mas arriba). */
 void victron_config_add_btn_event_cb(lv_event_t *e);
@@ -523,7 +523,7 @@ void victron_keys_clicked_cb(lv_event_t *e);
 /* ── Cards del vehiculo, reubicadas al submenu Autocaravana ─────────────────
  * (antes vivian en las paginas Pantalla / Tarjeta SD). Se crean de forma
  * perezosa al abrir Autocaravana, bajo las entradas Frigo y Victron Keys. */
-void create_autostart_card(lv_obj_t *cont)
+lv_obj_t *create_autostart_card(lv_obj_t *cont)
 {
     /* Auto-encendido de cargas al arranque: luz interior + bomba de agua via
      * NE185. Estado persistido en NVS. */
@@ -542,7 +542,8 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
     /* v3.10: columna con la cabecera centrada arriba y el interruptor debajo. */
     lv_obj_set_flex_flow(card_auto, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_START,
+    /* Contenido repartido por el alto de la tarjeta (ver create_ausente_card). */
+    lv_obj_set_flex_align(card_auto, LV_FLEX_ALIGN_SPACE_EVENLY,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *auto_sw = lv_switch_create(card_auto);
@@ -556,21 +557,67 @@ void create_autostart_card(lv_obj_t *cont)
     lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
     lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
     ui_card_wrap_title_with(card_auto, auto_title, lv_color_hex(0xFFAA00), auto_sw);
+    return card_auto;
 }
 
 
 void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
 {
     (void)ctx;
+    /* Aire: 12 de margen y 14 entre filas (la pagina es un flex ROW_WRAP: las
+     * entradas Frigo/Victron van en una fila de dos, y cada tarjeta ocupa su
+     * fila entera). */
+    lv_obj_set_style_pad_all(page, 12, 0);
+    lv_obj_set_style_pad_row(page, 14, 0);
+    lv_obj_set_style_pad_column(page, 10, 0);
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
      * (anadidas en el init). Orden: Modo ausente, Bombonas, Auto-encendido.
      * (La card "Energia del viaje" se quito el 24-sep-2026: sus numeros ya
      * estan en Historico solar, en los CSV del viaje y en el portal, y sus dos
      * botones se fueron a su sitio -- "Poner a cero" a Historico solar y
      * "Soltar tarjeta" a Tarjeta SD.) */
-    create_ausente_card(page);
-    create_bombona_card(page);
-    create_autostart_card(page);
+    lv_obj_t *tarjetas[3] = {
+        create_ausente_card(page),
+        create_bombona_card(page),
+        create_autostart_card(page),
+    };
+
+    /* ── Reparto del alto ────────────────────────────────────────────────
+     * La pagina tiene mas alto que contenido (lo dijo el usuario: "hay espacio
+     * vertical y esta todo muy comprimido"), asi que se mide lo que ocupa DE
+     * VERDAD -- el fondo del hijo mas bajo, no la suma de alturas: las dos
+     * entradas (Frigo / Victron) van en la MISMA fila y sumarlas contaria una de
+     * mas -- y lo que sobra se reparte a partes iguales entre las tres tarjetas.
+     * Nada de alturas fijas a mano: si mañana cambia el header del menu o el
+     * texto de una tarjeta, el reparto se recalcula solo. Dentro, cada tarjeta
+     * reparte su contenido con SPACE_EVENLY (ver create_ausente_card), asi que
+     * crecen "por dentro" y no dejan un hueco muerto abajo. */
+    lv_obj_update_layout(page);
+    lv_coord_t fondo = 0;
+    uint32_t n_hijos = lv_obj_get_child_cnt(page);
+    for (uint32_t i = 0; i < n_hijos; i++) {
+        lv_obj_t *h = lv_obj_get_child(page, i);
+        lv_coord_t b = lv_obj_get_y(h) + lv_obj_get_height(h);
+        if (b > fondo) fondo = b;
+    }
+    lv_coord_t libre = lv_obj_get_content_height(page) - fondo
+                       - lv_obj_get_style_pad_bottom(page, 0);
+    lv_coord_t extra = (libre > 30) ? (libre / 3) : 0;  /* <30 px ni se nota */
+    if (extra > 0) {
+        for (int i = 0; i < 3; i++) {
+            lv_obj_set_height(tarjetas[i], lv_obj_get_height(tarjetas[i]) + extra);
+        }
+    }
+    /* Diagnostico (una linea por arranque, la pagina se construye una vez):
+     * de donde sale el alto de la pagina y cuanto sobra de verdad. */
+    lv_obj_t *padre = lv_obj_get_parent(page);
+    ESP_LOGI(TAG_SETTINGS,
+             "Autocaravana: page=%d content=%d padre=%d menu=%d tab=%d hijos=%u ocupado=%d libre=%d extra=%d",
+             (int)lv_obj_get_height(page), (int)lv_obj_get_content_height(page),
+             padre ? (int)lv_obj_get_height(padre) : -1,
+             s_settings_menu ? (int)lv_obj_get_height(s_settings_menu) : -1,
+             (ctx->ui && ctx->ui->tab_settings) ? (int)lv_obj_get_height(ctx->ui->tab_settings) : -1,
+             (unsigned)n_hijos, (int)fondo, (int)libre, (int)extra);
 }
 
 void ui_settings_panel_init(ui_state_t *ui,
