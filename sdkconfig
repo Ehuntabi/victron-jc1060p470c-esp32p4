@@ -3089,6 +3089,13 @@ CONFIG_CODEC_TAS5805M_SUPPORT=y
 # end of Audio Codec Device Configuration
 
 #
+# ESP H264 Configuration
+#
+CONFIG_ESP_H264_DECODER_IRAM=y
+# CONFIG_ESP_H264_DUAL_TASK is not set
+# end of ESP H264 Configuration
+
+#
 # Espressif Image Process Algorithm Configuration
 #
 CONFIG_ESP_IPA_CONFIG_PARAM_VERSION=1
@@ -3574,13 +3581,6 @@ CONFIG_LV_BUILD_EXAMPLES=y
 # CONFIG_LV_USE_DEMO_MUSIC is not set
 # end of Demos
 # end of LVGL configuration
-
-#
-# ESP H264 Configuration
-#
-CONFIG_ESP_H264_DECODER_IRAM=y
-# CONFIG_ESP_H264_DUAL_TASK is not set
-# end of ESP H264 Configuration
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set
