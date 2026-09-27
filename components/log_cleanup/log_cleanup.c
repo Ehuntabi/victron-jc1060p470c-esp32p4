@@ -251,19 +251,19 @@ static int borrar_sesiones_dir(const char *dir, int max_days)
     return borradas;
 }
 
-/* Espacio libre en la tarjeta, en MB (0 si no se puede saber). Con FatFs y el
+/* Espacio libre en la tarjeta, en MB, o -1 si no se puede saber. Con FatFs y el
  * cerrojo del bus, igual que hace Ajustes para enseñar el hueco: f_getfree
- * recorre la FAT (bloqueante) y el bus es el mismo que necesita la camara. */
-static unsigned libre_mb(void)
+ * recorre la FAT (bloqueante) y el bus es el mismo que necesita la camara.
+ * OJO: 0 es un valor legitimo (tarjeta llena) y no significa "no se sabe"; por
+ * eso el desconocido es -1 (lo cazo la simulacion del 27-sep-2026). */
+static int libre_mb(void)
 {
-    if (!camera_sd_bus_lock(2000)) return 0;   /* ocupada: mejor no borrar a ciegas */
+    if (!camera_sd_bus_lock(2000)) return -1;   /* ocupada: mejor no borrar a ciegas */
     FATFS *fs = NULL;
     DWORD libre_cl = 0;
-    unsigned mb = 0;
+    int mb = -1;
     if (f_getfree("0:", &libre_cl, &fs) == FR_OK && fs) {
-        const uint64_t bytes = (uint64_t)libre_cl * fs->csize * 512ULL;
-        mb = (unsigned)(bytes / (1024ULL * 1024ULL));
-        if (mb == 0 && bytes > 0) mb = 1;      /* poco pero hay: no confundir con "no se sabe" */
+        mb = (int)(((uint64_t)libre_cl * fs->csize * 512ULL) / (1024ULL * 1024ULL));
     }
     camera_sd_bus_unlock();
     return mb;
@@ -274,10 +274,12 @@ static unsigned libre_mb(void)
  * tocar nunca la sesion que se esta grabando. Ver el comentario de arriba. */
 static int vig_libera_espacio(void)
 {
-    unsigned libre = libre_mb();
-    if (libre == 0 || libre >= VIG_LIBRE_MIN_MB) return 0;
+    int libre = libre_mb();
+    /* -1 = no se pudo saber (tarjeta ocupada o sin montar): no se borra nada a
+     * ciegas. 0 si es un dato (tarjeta llena) y entonces hay que limpiar. */
+    if (libre < 0 || libre >= VIG_LIBRE_MIN_MB) return 0;
 
-    ESP_LOGW(TAG, "quedan %u MB libres en la tarjeta: borro sesiones de vigilancia "
+    ESP_LOGW(TAG, "quedan %d MB libres en la tarjeta: borro sesiones de vigilancia "
                   "antiguas (objetivo %d MB)", libre, VIG_LIBRE_OBJETIVO_MB);
     char en_curso[24];
     sesion_en_curso(en_curso, sizeof(en_curso));
@@ -303,11 +305,12 @@ static int vig_libera_espacio(void)
         borra_sesion(VIG_DIR, vieja);
         borra_sesion(VIG_THUMBS_DIR, vieja);  /* la miniatura de esa sesion, si la hay */
         borradas++;
-        const unsigned antes = libre;
+        const int antes = libre;
         libre = libre_mb();
+        if (libre < 0) break;                 /* ya no se puede medir: parar */
         if (libre <= antes) break;            /* no sube: no insistir en bucle */
     }
-    ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia; quedan %u MB libres",
+    ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia; quedan %d MB libres",
              borradas, libre_mb());
     return borradas;
 }

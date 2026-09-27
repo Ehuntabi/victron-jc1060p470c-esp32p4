@@ -159,7 +159,7 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
         json_texto(r ? r : "", mot, sizeof(mot));
         json_texto(salud, sal, sizeof(sal));
         json_texto(aviso ? aviso : "", avi, sizeof(avi));
-        char js[560];
+        char js[640];   /* margen: el peor caso son ~540 */
         snprintf(js, sizeof(js),
                  "{\"vigilancia\":%s,\"motivo\":\"%s\",\"salud\":\"%s\","
                  "\"aviso\":\"%s\",\"fotos\":%d,\"rotando\":%s}",

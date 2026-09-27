@@ -713,7 +713,7 @@ bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
  * autocaravana vacia y a oscuras (luz interior encendida y constante): el ruido de
  * sensor en poca luz da picos de diff aislados enormes (celda suelta, maxdiff hasta
  * 151) que con el umbral anterior (4 celdas) disparaban falsos positivos en rafaga
- * -> las 300 fotos de la sesion (tope MOT_MAX_PHOTOS) eran casi todas la misma
+ * -> las 300 fotos de la sesion (el tope de entonces, hoy VIG_SESION_MAX) eran casi todas la misma
  * cocina vacia. Midiendo con la MISMA rejilla sobre pares de fotogramas reales:
  * ruido en reposo cambia como mucho 19 celdas de 576; una persona delante de la
  * camara cambia 296-381. 30 deja margen amplio a los dos lados (~6x sobre el pico
