@@ -114,8 +114,23 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
      * ahora el firmware no lo decia por HTTP y la app lo suponia. */
     if (!on && !off) {
         httpd_resp_set_type(req, "application/json");
-        char js[64];
-        snprintf(js, sizeof(js), "{\"vigilancia\":%s}", ausente_is_active() ? "true" : "false");
+        /* Se incluye el motivo del ultimo rechazo: si no, la app solo puede
+         * decir "apagado" y el usuario no sabe POR QUE no se puede poner (sin
+         * SD, camara que no responde...). */
+        const char *r = ausente_rechazo_razon();
+        char js[320];
+        if (r && *r) {
+            char limpio[220];
+            size_t j = 0;
+            for (size_t i = 0; r[i] && j < sizeof(limpio) - 1; i++)
+                limpio[j++] = (r[i] == '\n') ? ' ' : r[i];
+            limpio[j] = '\0';
+            snprintf(js, sizeof(js), "{\"vigilancia\":%s,\"motivo\":\"%s\"}",
+                     ausente_is_active() ? "true" : "false", limpio);
+        } else {
+            snprintf(js, sizeof(js), "{\"vigilancia\":%s,\"motivo\":\"\"}",
+                     ausente_is_active() ? "true" : "false");
+        }
         httpd_resp_sendstr(req, js);
         return ESP_OK;
     }
@@ -130,8 +145,16 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
          * ausente_rechazo_razon() (ver ausente_mode.c). */
         char msg[256];
         if (!done) {
+            /* 503: no pude ni intentarlo (lock de pantalla) */
+            httpd_resp_set_status(req, "503 Service Unavailable");
             snprintf(msg, sizeof(msg), "No pude tomar el lock de pantalla, reintenta");
         } else if (on && !accepted) {
+            /* 409: lo pedido no se puede en el estado actual (sin SD, camara
+             * que no responde...). ANTES se contestaba 200 con el motivo en el
+             * cuerpo, asi que la app ponia el interruptor en ON y parecia que
+             * no pasaba nada: el usuario lo vio el 28-sep-2026 ("me ha parecido
+             * que no hacia nada"). */
+            httpd_resp_set_status(req, "409 Conflict");
             const char *r = ausente_rechazo_razon();
             snprintf(msg, sizeof(msg), "Rechazado: %s", r ? r : "motivo desconocido");
         } else if (on) {
