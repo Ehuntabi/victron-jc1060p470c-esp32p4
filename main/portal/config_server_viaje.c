@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <dirent.h>
+#include <unistd.h>   /* rmdir: borrar la carpeta de un viaje */
 
 static const char *TAG = "viaje_srv";
 
@@ -764,6 +765,97 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
  * responde 409, ofrece guardarlo o apartarlo ahi mismo. La P4 vive en la parte
  * de atras y levantarse del asiento del conductor para pulsar un boton no es
  * una opcion. */
+/* Borra un arbol de ficheros/carpetas (profundidad acotada). Devuelve cuantos
+ * fallos hubo. La SD se borra con opendir/readdir + remove/rmdir porque un
+ * 'remove' no borra una carpeta con contenido. */
+static int borrar_arbol(const char *ruta, int nivel)
+{
+    if (nivel > 4) return 1;
+    DIR *d = opendir(ruta);
+    if (!d) return (remove(ruta) == 0) ? 0 : 1;        /* era un fichero */
+    int fallos = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.') continue;
+        char hijo[RUTA_MAX + 192];
+        int n = snprintf(hijo, sizeof(hijo), "%s/%s", ruta, e->d_name);
+        if (n < 0 || n >= (int)sizeof(hijo)) { fallos++; continue; }
+        fallos += borrar_arbol(hijo, nivel + 1);
+    }
+    closedir(d);
+    if (rmdir(ruta) != 0) fallos++;
+    return fallos;
+}
+
+/* op_borrar: borra un viaje entero de la tarjeta. Lo pide la app del movil
+ * (peticion del usuario, 28-sep-2026: "que los viajes tengan la posibilidad de
+ * borrarse desde la apk").
+ *
+ * Cuerpo: {"op":"borrar","carpeta":"2026-09-27_RIBADEO"}
+ *
+ * Cuidados:
+ *  - el nombre tiene que ser UNA sola componente (sin '/', sin '..', sin
+ *    caracteres raros): lo que llega por HTTP no puede salirse de /sdcard/viajes;
+ *  - el viaje EN CURSO no se borra (se esta escribiendo ahora): 409 y que se
+ *    cierre antes (op_fin);
+ *  - se toma el cerrojo del bus de la SD, que lo comparte con la camara. */
+static esp_err_t op_borrar(httpd_req_t *req, const cJSON *j, uint32_t id)
+{
+    const cJSON *jc = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
+    if (!cJSON_IsString(jc) || !jc->valuestring[0]) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "falta 'carpeta'");
+        return ESP_OK;
+    }
+    const char *nombre = jc->valuestring;
+    if (strlen(nombre) > 96 || strchr(nombre, '/') || strstr(nombre, "..")) {
+        ESP_LOGW(TAG, "borrar: nombre rechazado (%.40s)", nombre);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "nombre de carpeta no valido");
+        return ESP_OK;
+    }
+    char abierto[CARPETA_MAX];
+    if (viaje_abierto(abierto, sizeof(abierto))) {
+        const char *base = strrchr(abierto, '/');
+        base = base ? base + 1 : abierto;
+        if (!strcmp(base, nombre)) {
+            httpd_resp_set_status(req, "409 Conflict");
+            httpd_resp_sendstr(req, "ese viaje esta en curso: cierralo antes de borrarlo");
+            return ESP_OK;
+        }
+    }
+    char ruta[RUTA_MAX + 64];
+    int n = snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s", nombre);
+    if (n < 0 || n >= (int)sizeof(ruta)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "nombre demasiado largo");
+        return ESP_OK;
+    }
+    if (!camera_sd_bus_lock(3000)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_sendstr(req, "tarjeta ocupada, reintenta");
+        return ESP_OK;
+    }
+    struct stat st;
+    if (stat(ruta, &st) != 0) {
+        camera_sd_bus_unlock();
+        httpd_resp_set_status(req, "404 Not Found");
+        httpd_resp_sendstr(req, "ese viaje no esta en la tarjeta");
+        return ESP_OK;
+    }
+    const int fallos = borrar_arbol(ruta, 0);
+    camera_sd_bus_unlock();
+    if (fallos) {
+        ESP_LOGW(TAG, "borrar viaje '%s': %d fallo(s)", nombre, fallos);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "no se pudo borrar todo (tarjeta ocupada?)");
+        return ESP_OK;
+    }
+    ESP_LOGW(TAG, "viaje borrado desde la app: %s", nombre);
+    httpd_resp_sendstr(req, "viaje borrado");
+    return ESP_OK;
+}
+
 static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
     (void)j;
@@ -1392,6 +1484,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, j, id);
     else if (!strcmp(jop->valuestring, "registro")) ret = op_registro(req, j, id);
     else if (!strcmp(jop->valuestring, "descartar")) ret = op_descartar(req, j, id);
+    else if (!strcmp(jop->valuestring, "borrar"))    ret = op_borrar(req, j, id);
     else {
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "op? (inicio|fin|registro|descartar)");
