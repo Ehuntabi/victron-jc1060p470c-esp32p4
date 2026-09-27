@@ -26,6 +26,11 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * camera_init puede fallar sin que el resto del firmware se entere. */
 bool camera_ready(void);
 
+/* Reintenta el arranque de la camara si no llego a arrancar (sensor que no
+ * contesta al encender). Devuelve true si la camara esta util. Se llama desde
+ * donde se usa (snapshot, modo vigilancia); como mucho lo intenta cada 3 s. */
+bool camera_reintentar(void);
+
 /* Luminosidad ambiente media del ultimo frame (0-255, suavizada). Devuelve
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);

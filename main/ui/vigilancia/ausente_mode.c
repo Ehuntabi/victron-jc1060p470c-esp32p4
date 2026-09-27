@@ -151,7 +151,7 @@ bool ausente_request(bool on)
          * (camera_init fallo y main.c lo aisla en silencio) el modo ausente
          * prometeria una vigilancia que no existe. Rechazarlo con aviso
          * claro, igual que sin SD. */
-        if (!camera_ready()) {
+        if (!camera_ready() && !camera_reintentar()) {
             ESP_LOGW(TAG, "modo ausente RECHAZADO: la camara no responde "
                           "(camera_init fallo), no vigilaria nada");
             s_rechazo = "la camara no responde\n(fallo al arrancar): el modo "

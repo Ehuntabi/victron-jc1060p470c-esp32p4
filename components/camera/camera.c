@@ -473,6 +473,11 @@ static bool vig_make_thumbnail(const uint8_t *jpg, size_t len, uint8_t **out, si
  * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
 {
+    /* Si la camara no arranco al encender, se reintenta aqui (una vez cada 3 s):
+     * sin esto, un fallo de arranque dejaba el snapshot en 503 para toda la
+     * sesion aunque la camara estuviera perfectamente. */
+    camera_reintentar();
+
     /* Con la camara EN REPOSO (ni vigilancia ni auto-brillo) la ultima
      * miniatura puede ser de hace horas, y esto sirve fotos: hay que despertarla
      * y esperar a que publique una nueva. Sin esto, el portal enseñaria una foto
@@ -1334,8 +1339,18 @@ static void camera_stream_task(void *arg)
  * registra alli via ESP_CAM_SENSOR_DETECT_FN a 0x36; el auto-detect del SC2336
  * queda desactivado en sdkconfig. Streaming OK (~37fps) con mipi_clk=800Mbps. */
 
-esp_err_t camera_init(i2c_master_bus_handle_t i2c)
+/* Handle del bus I2C y cerrojo del reintento: se guardan aqui para poder
+ * reintentar el arranque de la camara mas tarde (ver camera_reintentar). */
+static i2c_master_bus_handle_t s_i2c_init = NULL;
+static SemaphoreHandle_t s_init_mtx = NULL;
+static int64_t s_ultimo_intento_ms = 0;
+#define CAM_REINTENTO_MIN_MS  3000   /* no machacar el bus si falla en bucle */
+
+/* Un intento de arranque. Separado de camera_init() para que los reintentos
+ * pasen por el mismo camino y por el mismo cerrojo. */
+static esp_err_t camera_init_intento(void)
 {
+    i2c_master_bus_handle_t i2c = s_i2c_init;
     if (i2c == NULL) {
         ESP_LOGE(TAG, "handle I2C NULL (llamar tras bsp_i2c_init)");
         return ESP_ERR_INVALID_ARG;
@@ -1397,6 +1412,48 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c)
     s_ready = true;
 
     return ESP_OK;
+}
+
+esp_err_t camera_init(i2c_master_bus_handle_t i2c)
+{
+    if (i2c) s_i2c_init = i2c;
+    if (s_ready) return ESP_OK;                       /* ya arrancada */
+    if (!s_init_mtx) s_init_mtx = xSemaphoreCreateMutex();
+    if (s_init_mtx && xSemaphoreTake(s_init_mtx, pdMS_TO_TICKS(4000)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;                       /* otro reintento en curso */
+    }
+    esp_err_t r = camera_init_intento();
+    if (s_init_mtx) xSemaphoreGive(s_init_mtx);
+    return r;
+}
+
+/* Reintenta el arranque de la camara si no llego a arrancar.
+ *
+ * POR QUE EXISTE: camera_init() se llama UNA vez (main.c) y, si falla -- lo
+ * normal es que el sensor no conteste en el primer intento tras el encendido,
+ * la OV02C10 de esta placa es marginal al arrancar --, s_ready se quedaba en
+ * false PARA SIEMPRE. Con la camara "no lista" pasan las tres cosas que vio el
+ * usuario el 28-sep-2026 CON LA SD PUESTA Y LA CAMARA BIEN: /snapshot contesta
+ * 503, el modo vigilancia se RECHAZA ("la camara no responde") y la galeria sale
+ * vacia. Un reintento lo recupera sin reiniciar la pantalla.
+ *
+ * Se llama desde donde se usa la camara (snapshot, modo vigilancia), no desde un
+ * bucle: solo cuesta cuando hace falta, y como mucho cada 3 s. */
+bool camera_reintentar(void)
+{
+    if (s_ready) return true;
+    if (!s_i2c_init) return false;                    /* nunca se llamo a init */
+    const int64_t ahora = esp_timer_get_time() / 1000;
+    if (s_ultimo_intento_ms && (ahora - s_ultimo_intento_ms) < CAM_REINTENTO_MIN_MS) {
+        return false;                                 /* hace nada que lo intente */
+    }
+    s_ultimo_intento_ms = ahora;
+    ESP_LOGW(TAG, "la camara no arranco; REINTENTO de init (sensor marginal al encender?)");
+    if (camera_init(s_i2c_init) == ESP_OK) {
+        ESP_LOGW(TAG, "camara RECUPERADA en el reintento");
+        return true;
+    }
+    return false;
 }
 
 bool camera_ready(void)
