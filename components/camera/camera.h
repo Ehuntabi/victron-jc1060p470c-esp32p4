@@ -97,6 +97,13 @@ int  camera_vig_list(uint32_t *ids, time_t *ts, size_t *lens, int max);
 /* Copia el JPEG de la captura 'id' a un buffer nuevo (caller hace free). false si rotada. */
 bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len);
 
+/* Estado de la sesion de vigilancia en curso, para poder contarlo por HTTP
+ * (/ausente) y para que la limpieza por espacio libre no borre lo que se esta
+ * grabando. */
+int  camera_vig_sesion_fotos(void);           /* fotos que lleva en la tarjeta (0 si no hay sesion) */
+bool camera_vig_rotando(void);                /* ya llego al tope y borra las mas antiguas */
+bool camera_vig_sesion_actual(char *out, size_t n);  /* "AAAAMMDD_HHMMSS", false si no hay */
+
 #ifdef __cplusplus
 }
 #endif

@@ -59,6 +59,27 @@ esp_err_t handle_snapshot(httpd_req_t *req) {
 #define VIG_SD_DIR_PATH "/sdcard/vigilancia"
 /* "AAAAMMDD_HHMMSS/AAAAMMDD_HHMMSS_nnn.jpg" (carpeta de sesion + fichero) = 39 con el NUL */
 #define VIG_NAME_LEN 48
+/* Carpetas de sesion que se ordenan para elegir las mas nuevas (ver vig_sd_list). */
+#define VIG_SES_MAX  96
+#define VIG_SES_LEN  24       /* "AAAAMMDD_HHMMSS" + NUL */
+
+/* Inserta `s` en `names` manteniendo el orden y quedandose con los `max` mas
+ * NUEVOS (el mas nuevo al final). Para nombres de carpeta de sesion. */
+static void vig_ses_insert(char names[][VIG_SES_LEN], int max, int *n, const char *s)
+{
+    if (*n == max) {
+        if (strcmp(s, names[0]) <= 0) return;   /* mas viejo que todos */
+        memmove(names[0], names[1], (size_t)(max - 1) * VIG_SES_LEN);
+        (*n)--;
+    }
+    int pos = *n;
+    while (pos > 0 && strcmp(names[pos - 1], s) > 0) {
+        memcpy(names[pos], names[pos - 1], VIG_SES_LEN);
+        pos--;
+    }
+    snprintf(names[pos], VIG_SES_LEN, "%s", s);
+    (*n)++;
+}
 
 /* Insercion ordenada en `names`, quedandose con las `max` MAS RECIENTES (el
  * mas nuevo al final). Compartida por vig_sd_list para cada .jpg encontrado,
@@ -82,35 +103,70 @@ static void vig_sd_list_insert(char names[][VIG_NAME_LEN], int max, int *n, int 
 }
 
 /* Nombres de las capturas de la tarjeta como "sesion/fichero.jpg", ascendente
- * (la mas nueva al final): VIG_SD_DIR_PATH tiene una subcarpeta por sesion
- * (AAAAMMDD_HHMMSS, o AAAAMMDD para lo migrado de antes de este cambio), y
- * dentro los .jpg. Ambos niveles usan nombres con fecha, asi que ordenar
- * "sesion/fichero" por texto ES ordenar por fecha. Devuelve cuantos hay en la
- * lista; *total_out son los que hay en toda la tarjeta, para poder decir
- * cuantos quedan fuera en vez de truncar en silencio. */
-static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
+ * (la mas nueva al final), quedandose con las `max` mas recientes. VIG_SD_DIR_PATH
+ * tiene una subcarpeta por sesion (AAAAMMDD_HHMMSS, o AAAAMMDD para lo migrado de
+ * antes de este cambio), y dentro los .jpg. Ambos niveles usan nombres con fecha,
+ * asi que ordenar "sesion/fichero" por texto ES ordenar por fecha.
+ *
+ * OJO al historial: antes esto recorria TODAS las carpetas de sesion y TODOS los
+ * ficheros (con cerrojo del bus SD en cada readdir) para despues tirar casi todo.
+ * Con 60 dias de historial son miles de operaciones por carga de galeria, y el
+ * bus es el mismo que necesita el GDMA de la camara: ralentizaba la vigilancia
+ * (auditoria del 27-sep-2026). Ahora se leen primero los NOMBRES de las carpetas
+ * (un unico readdir del nivel de arriba), se ordenan, y se abren solo las mas
+ * nuevas hasta juntar `max` ficheros.
+ *
+ * *hay_mas_out = 1 si quedaron fotos o sesiones mas antiguas sin mirar. Devuelve
+ * cuantas hay en la lista (nunca mas de `max`). */
+static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *hay_mas_out)
 {
-    if (total_out) *total_out = 0;
+    if (hay_mas_out) *hay_mas_out = 0;
+    if (max <= 0) return 0;
+
+    /* 1) Carpetas de sesion, las VIG_SES_MAX mas nuevas (el nombre lleva la fecha
+     *    delante). Se filtran por forma -- 8 digitos, o 15 con '_' en medio -- en
+     *    vez de por d_type: en FAT d_type puede venir como DT_UNKNOWN. */
+    static char ses[VIG_SES_MAX][VIG_SES_LEN];
+    int ns = 0, s_total = 0;
     if (!camera_sd_bus_lock(2000)) return 0;
     DIR *dtop = opendir(VIG_SD_DIR_PATH);
     camera_sd_bus_unlock();
     if (!dtop) return 0;
 
-    int n = 0, total = 0;
     for (;;) {
         if (!camera_sd_bus_lock(1000)) break;
-        struct dirent *dses = readdir(dtop);
+        struct dirent *d = readdir(dtop);
         camera_sd_bus_unlock();
-        if (!dses) break;
-        if (dses->d_name[0] == '.') continue;
+        if (!d) break;
+        const char *nm = d->d_name;
+        if (nm[0] == '.') continue;
+        const size_t l = strlen(nm);
+        if (l != 8 && !(l == 15 && nm[8] == '_')) continue;
+        bool digitos = true;
+        for (size_t i = 0; i < l && digitos; i++) {
+            if (i == 8) continue;
+            if (!isdigit((unsigned char)nm[i])) digitos = false;
+        }
+        if (!digitos) continue;
+        s_total++;
+        vig_ses_insert(ses, VIG_SES_MAX, &ns, nm);
+    }
+    {
+        bool got_lock_top = camera_sd_bus_lock_wait(5000);
+        if (!got_lock_top) ESP_LOGW(TAG, "closedir tope sin cerrojo SD tras 5s de espera");
+        closedir(dtop);
+        if (got_lock_top) camera_sd_bus_unlock();
+    }
+    if (s_total > ns && hay_mas_out) *hay_mas_out = 1;   /* sesiones mas viejas sin ordenar */
+
+    /* 2) De la mas nueva a la mas vieja, abriendo solo las que hagan falta. */
+    int n = 0, vistos = 0;
+    for (int i = ns - 1; i >= 0; i--) {
+        if (n >= max) { if (hay_mas_out) *hay_mas_out = 1; break; }
 
         char sesdir[64];
-        /* El nombre de la carpeta de sesion lo escribe el firmware (fecha +
-         * contador), pero si viniera uno larguisimo de la tarjeta el snprintf lo
-         * recortaria y abririamos OTRA ruta: mejor saltarselo. */
-        int n_ses = snprintf(sesdir, sizeof(sesdir), "%s/%s",
-                             VIG_SD_DIR_PATH, dses->d_name);
-        if (n_ses < 0 || n_ses >= (int)sizeof(sesdir)) continue;
+        const int nl = snprintf(sesdir, sizeof(sesdir), "%s/%s", VIG_SD_DIR_PATH, ses[i]);
+        if (nl < 0 || nl >= (int)sizeof(sesdir)) continue;
         if (!camera_sd_bus_lock(1000)) break;
         DIR *dsub = opendir(sesdir);
         camera_sd_bus_unlock();
@@ -121,24 +177,21 @@ static int vig_sd_list(char names[][VIG_NAME_LEN], int max, int *total_out)
             struct dirent *ent = readdir(dsub);
             camera_sd_bus_unlock();
             if (!ent) break;
-            const char *nm = ent->d_name;
-            const size_t l = strlen(nm);
-            if (l < 5 || strcmp(nm + l - 4, ".jpg") != 0) continue;
+            const char *fn = ent->d_name;
+            const size_t lf = strlen(fn);
+            if (lf < 5 || strcmp(fn + lf - 4, ".jpg") != 0) continue;
             char combined[VIG_NAME_LEN];
-            int cl = snprintf(combined, sizeof(combined), "%s/%s", dses->d_name, nm);
+            const int cl = snprintf(combined, sizeof(combined), "%s/%s", ses[i], fn);
             if (cl < 0 || (size_t)cl >= sizeof(combined)) continue;
-            vig_sd_list_insert(names, max, &n, &total, combined);
+            vig_sd_list_insert(names, max, &n, &vistos, combined);
         }
         bool got_lock = camera_sd_bus_lock_wait(5000);
         if (!got_lock) ESP_LOGW(TAG, "closedir sesion sin cerrojo SD tras 5s de espera");
         closedir(dsub);
         if (got_lock) camera_sd_bus_unlock();
+        /* Si la lista ya esta llena, dentro de esta misma sesion puede haber mas. */
+        if (n >= max && hay_mas_out) *hay_mas_out = 1;
     }
-    bool got_lock_top = camera_sd_bus_lock_wait(5000);
-    if (!got_lock_top) ESP_LOGW(TAG, "closedir tope sin cerrojo SD tras 5s de espera");
-    closedir(dtop);
-    if (got_lock_top) camera_sd_bus_unlock();
-    if (total_out) *total_out = total;
     return n;
 }
 
@@ -228,11 +281,14 @@ static bool vig_sd_name_safe(const char *s)
  * app del movil (su pantalla "Camara" lo pedia: "falta endpoint JSON con la
  * lista de capturas"). Misma auth que la pagina. Formato:
  *
- *   {"total":12,"hay_mas":3,"capturas":[
+ *   {"total":12,"hay_mas":0,"capturas":[
  *      {"id":"7","url":"/vigilancia/7","kb":84,"fecha":"2026-09-27 18:22:10"},
  *      {"id":"20260927_182210/20260927_182210_003.jpg",
  *       "url":"/vigilancia/20260927_182210/20260927_182210_003.jpg",
  *       "kb":72,"fecha":"2026-09-27 18:22:10"}]}
+ *
+ * `total` son las capturas que van en esta respuesta (16 en RAM + 24 de tarjeta
+ * como mucho) y `hay_mas` es 1 si en la tarjeta quedan mas antiguas sin listar.
  *
  * `id` numerico = captura aun en RAM (sin volcar a la tarjeta); `id` con barra =
  * fichero de la SD. La `url` vale para las dos: /vigilancia/<x> sabe distinguir.
@@ -244,13 +300,16 @@ esp_err_t handle_vigilancia_json(httpd_req_t *req)
     uint32_t ids[VIG_MAX]; time_t ts[VIG_MAX]; size_t lens[VIG_MAX];
     int n = camera_vig_list(ids, ts, lens, VIG_MAX);
     static char sd_names[VIG_SD_MAX][VIG_NAME_LEN];
-    int sd_total = 0;
-    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_total);
+    int sd_hay_mas = 0;
+    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_hay_mas);
 
     httpd_resp_set_type(req, "application/json");
     char line[320];
+    /* total = las que van en esta respuesta; hay_mas = 1 si quedan mas antiguas en
+     * la tarjeta (ya no se cuentan todas: eso era recorrer el historial entero en
+     * cada peticion, ver vig_sd_list). */
     snprintf(line, sizeof(line), "{\"total\":%d,\"hay_mas\":%d,\"capturas\":[",
-             n + sd_n, (sd_total > sd_n) ? (sd_total - sd_n) : 0);
+             n + sd_n, sd_hay_mas);
     httpd_resp_sendstr_chunk(req, line);
 
     bool primero = true;
@@ -330,8 +389,8 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
     uint32_t ids[VIG_MAX]; time_t ts[VIG_MAX]; size_t lens[VIG_MAX];
     int n = camera_vig_list(ids, ts, lens, VIG_MAX);
     static char sd_names[VIG_SD_MAX][VIG_NAME_LEN];
-    int sd_total = 0;
-    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_total);
+    int sd_hay_mas = 0;
+    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_hay_mas);
 
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr_chunk(req,
@@ -391,11 +450,11 @@ esp_err_t handle_vigilancia(httpd_req_t *req) {
                      fn_esc, fn_esc + 4, fn_esc + 6, fn_esc + 9, fn_esc + 11, fn_esc + 13, nm_esc, nm_esc);
             httpd_resp_sendstr_chunk(req, line);
         }
-        char foot[240];
+        char foot[280];
         snprintf(foot, sizeof(foot),
-                 "<p class=t>%d en la tarjeta (se muestran las %d mas recientes)"
+                 "<p class=t>Se muestran las %d capturas mas recientes de la tarjeta%s"
                  " &middot; %d pendientes de volcar en RAM.</p>",
-                 sd_total, sd_n, n);
+                 sd_n, sd_hay_mas ? " (hay mas antiguas)" : "", n);
         httpd_resp_sendstr_chunk(req, foot);
     }
     httpd_resp_sendstr_chunk(req, "</body></html>");

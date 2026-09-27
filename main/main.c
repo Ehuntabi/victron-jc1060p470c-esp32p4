@@ -710,6 +710,11 @@ static void init_telemetry(void)
      * en 60 dias, que fue la retencion que se decidio el 24-ago-2026. */
     log_cleanup_init(120);                 /* datos: viajes de hasta 4 meses */
     log_cleanup_set_vigilancia_days(60);   /* camaras: como estaba */
+    /* Si la placa se reinicio estando en modo ausente (corte de corriente,
+     * OTA, lo que sea), el modo queda apagado y la furgo sin vigilancia: se
+     * lee de NVS para poder avisar (aviso que publica /ausente y enseña la
+     * app). Aqui, una vez, al arrancar. */
+    ausente_boot_check();
     /* El aviso de "se van a borrar N ficheros" NO se hace aqui: el recorrido de
      * directorios de log_cleanup es de lo mas hambriento de pila de ESP-IDF y
      * main_task tiene ~3,5 KB. Puesto aqui, la placa se caia con

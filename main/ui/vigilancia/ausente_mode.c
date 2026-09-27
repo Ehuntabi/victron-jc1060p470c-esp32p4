@@ -4,6 +4,7 @@
 #include <lvgl.h>
 #include "camera.h"
 #include "datalogger.h"
+#include "nvs.h"
 
 /* Definido en main.c: re-aplica el brillo segun la arbitracion actual
  * (night_mode_timer_cb). Lo llamamos al entrar/salir para efecto inmediato. */
@@ -29,6 +30,44 @@ static lv_obj_t   *s_countdown_overlay = NULL;
 static lv_obj_t   *s_countdown_label   = NULL;
 static lv_obj_t   *s_guard_overlay     = NULL;  /* negro pantalla completa en modo activo */
 static int         s_secs              = 0;
+
+/* Por donde vino la orden que esta en cuenta atras: el cartel no puede decir
+ * "apaga el interruptor" a quien la activo desde la app (hallazgo 1.I6). */
+static bool s_via_http = false;
+
+/* Aviso de "se reinicio con la vigilancia puesta" (ver ausente_boot_check). */
+static const char *s_aviso_reinicio = NULL;
+const char *ausente_aviso_reinicio(void) { return s_aviso_reinicio; }
+
+/* ── NVS: "estaba armado" ───────────────────────────────────────────────────
+ * El modo vive en RAM: un reinicio (o un corte de corriente) lo apaga y la furgo
+ * se queda sin vigilancia. Se guarda un byte para poder avisar en el arranque
+ * siguiente, que es lo unico que se puede hacer desde aqui. */
+#define NVS_NS_VIG   "vig"
+#define NVS_CLAVE_ARM "armado"
+
+static void nvs_armado_set(uint8_t v)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS_VIG, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_set_u8(h, NVS_CLAVE_ARM, v) == ESP_OK) nvs_commit(h);
+    nvs_close(h);
+}
+
+void ausente_boot_check(void)
+{
+    nvs_handle_t h;
+    uint8_t armado = 0;
+    if (nvs_open(NVS_NS_VIG, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_get_u8(h, NVS_CLAVE_ARM, &armado) == ESP_OK && armado) {
+        s_aviso_reinicio = "el P4 se reinicio con la vigilancia puesta: "
+                           "ahora mismo NO esta vigilando";
+        ESP_LOGW(TAG, "%s", s_aviso_reinicio);
+    }
+    nvs_set_u8(h, NVS_CLAVE_ARM, 0);   /* el aviso es de una sola vez */
+    nvs_commit(h);
+    nvs_close(h);
+}
 
 /* Gesto de salida: 4 toques en CUALQUIERA de las 4 esquinas, en <3 s (el
  * porque de aceptar las cuatro esta en corner_tap_cb, mas abajo). El cartel de
@@ -102,6 +141,7 @@ static void destroy_guard(void)
 static void activate(void)
 {
     s_state = AUS_ACTIVE;
+    nvs_armado_set(1);                    /* para poder avisar si se reinicia estando armado */
     settings_ausente_sync_switch(true);   /* si se armo por HTTP, el switch de Ajustes debe quedar ON */
     clear_countdown();
     create_guard();
@@ -112,6 +152,15 @@ static void activate(void)
      * video H.264 por evento (ver TODO en camera_stream_task). */
 }
 
+/* El cartel de la cuenta atras, segun por donde venga la orden. */
+static void countdown_texto(void)
+{
+    if (!s_countdown_label) return;
+    lv_label_set_text_fmt(s_countdown_label, "Modo ausente en %d s\n%s", s_secs,
+                          s_via_http ? "(se cancela desde la app o el navegador)"
+                                     : "(apaga el interruptor para cancelar)");
+}
+
 static void countdown_cb(lv_timer_t *t)
 {
     (void)t;
@@ -120,13 +169,16 @@ static void countdown_cb(lv_timer_t *t)
         activate();
         return;
     }
-    if (s_countdown_label) {
-        lv_label_set_text_fmt(s_countdown_label,
-                              "Modo ausente en %d s\n(apaga el switch para cancelar)", s_secs);
-    }
+    countdown_texto();
 }
 
 bool ausente_request(bool on)
+{
+    /* Camino normal: el interruptor de Ajustes. */
+    return ausente_request_ex(on, false);
+}
+
+bool ausente_request_ex(bool on, bool via_http)
 {
     if (on) {
         if (s_state != AUS_OFF) return true;  /* ya pendiente o activo */
@@ -162,6 +214,10 @@ bool ausente_request(bool on)
         s_rechazo = NULL;
         s_state = AUS_PENDING;
         s_secs  = 10;
+        s_via_http = via_http;
+        /* Si el aviso de reinicio era lo que estaba en pantalla, ya no aplica:
+         * se acaba de armar otra vez. */
+        s_aviso_reinicio = NULL;
 
         /* Overlay semitransparente NO clickable: muestra la cuenta atras pero
          * deja pasar los toques al switch de abajo (para poder cancelar). */
@@ -176,8 +232,7 @@ bool ausente_request(bool on)
         lv_obj_set_style_text_color(s_countdown_label, lv_color_white(), 0);
         lv_obj_set_style_text_font(s_countdown_label, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_align(s_countdown_label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text_fmt(s_countdown_label,
-                              "Modo ausente en %d s\n(apaga el switch para cancelar)", s_secs);
+        countdown_texto();
         lv_obj_center(s_countdown_label);
 
         s_countdown_timer = lv_timer_create(countdown_cb, 1000, NULL);
@@ -193,6 +248,7 @@ bool ausente_request(bool on)
             ESP_LOGI(TAG, "cuenta atras cancelada");
         } else if (s_state == AUS_ACTIVE) {
             s_state = AUS_OFF;
+            nvs_armado_set(0);       /* ya no esta armado: no hay nada que avisar al arrancar */
             destroy_guard();
             brightness_apply_now();  /* restaura el brillo normal */
             camera_set_surveillance(false);   /* parar vigilancia */

@@ -4,8 +4,9 @@
  * franja nocturna y screensaver). El toque normal no la despierta. Se sale con
  * 4 toques en CUALQUIERA de las 4 esquinas (ver ausente_mode.c).
  *
- * Activacion: switch en Settings -> "Sonido y avisos". Al activar hay una cuenta
- * atras de 10 s (cancelable apagando el switch) antes de entrar.
+ * Activacion: switch en Ajustes -> "Autocaravana", o desde la app / el navegador
+ * (GET /ausente?on). Al activar hay una cuenta atras de 10 s (cancelable apagando
+ * el switch) antes de entrar.
  *
  * NOTA(vigilancia): la deteccion de movimiento + captura de foto/video se
  * enganchan en otro ciclo (cuando ausente_is_active() == true).
@@ -28,6 +29,11 @@ extern "C" {
  * modo (si activo); siempre devuelve true. */
 bool ausente_request(bool on);
 
+/* Igual, diciendo por donde viene la orden: el cartel de la cuenta atras no
+ * puede decir "apaga el interruptor" a quien la activo desde la app, donde ese
+ * interruptor no esta a la vista (hallazgo 1.I6 de la auditoria del 15-sep). */
+bool ausente_request_ex(bool on, bool via_http);
+
 /* Motivo del ultimo rechazo de ausente_request(true), o NULL si el ultimo
  * intento fue aceptado. Distingue "sin SD" de "camara no responde" para que
  * cada llamador (dialog del switch, handler /ausente) lo explique bien. */
@@ -35,6 +41,16 @@ const char *ausente_rechazo_razon(void);
 
 /* true cuando el modo esta plenamente activo (pantalla apagada). */
 bool ausente_is_active(void);
+
+/* Aviso de una sola vez: "el P4 se reinicio con la vigilancia puesta", o NULL si
+ * no paso. Se rellena en ausente_boot_check() (arranque) y lo publica el portal
+ * en /ausente para que la app lo pueda decir: tras un reinicio el modo queda
+ * apagado y la furgo sin vigilancia, y hasta ahora nadie se enteraba. */
+const char *ausente_aviso_reinicio(void);
+
+/* Lee de NVS si la vigilancia quedo puesta antes de este arranque (corte de
+ * corriente o reinicio) y prepara el aviso. Se llama UNA vez, al arrancar. */
+void ausente_boot_check(void);
 
 #ifdef __cplusplus
 }

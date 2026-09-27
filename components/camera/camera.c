@@ -721,7 +721,12 @@ bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
 #define MOT_CELL_DIFF     10     /* diff por celda (0-255) que cuenta como cambio */
 #define MOT_CELL_COUNT    30     /* nº de celdas cambiadas para declarar movimiento */
 #define MOT_COOLDOWN_MS   4000   /* min entre fotos */
-#define MOT_MAX_PHOTOS    300    /* tope por SESION de vigilancia (anti-runaway) */
+/* Tope de fotos por SESION de vigilancia. Ya NO corta la captura: al llegar
+ * aqui se borra la mas antigua de la sesion para poder seguir grabando, asi una
+ * ausencia larga conserva siempre lo ultimo, que es lo que sirve (lo pidio el
+ * usuario el 27-sep-2026, despues de ver que a las 300 fotos dejaba de grabar en
+ * silencio). La rotacion la lleva el drenador: ver vig_sesion_apunta(). */
+#define VIG_SESION_MAX    300
 
 /* Rafaga de calibracion: el control automatico de exposicion del ISP ajusta UN
  * paso por fotograma, y aqui vamos a 1 fotograma cada 1,5-2 s (throttle para no
@@ -786,6 +791,74 @@ TaskHandle_t camera_stream_task_handle(void)
 #define VIG_SD_DIR       "/sdcard/vigilancia"
 #define VIG_SD_THUMB_DIR "/sdcard/vigilancia_thumbs"   /* mismo esquema sesion/fichero.jpg */
 #define VIG_SD_CHUNK (8 * 1024)   /* trozo pequeno: se SUELTA el bus entre trozos */
+
+/* ── Rotacion de la sesion (ver VIG_SESION_MAX) ─────────────────────────────
+ * Cola con los nombres de los ficheros YA escritos en la sesion actual, para
+ * poder borrar el mas antiguo cuando la sesion llega al tope. Solo el nombre
+ * (AAAAMMDD_HHMMSS_NNN.jpg), que con la carpeta de sesion da la ruta. En PSRAM:
+ * 300 x 24 B = 7 KB que no le hacen falta a la RAM interna.
+ * La toca el drenador (unico escritor) y la reinicia camera_set_surveillance()
+ * al empezar sesion, las dos bajo s_vig_mtx. */
+#define VIG_NOMBRE_LEN 24
+static char (*s_vig_cola)[VIG_NOMBRE_LEN] = NULL;
+static int  s_vig_cola_n   = 0;      /* cuantos nombres hay en la cola */
+static int  s_vig_cola_ini = 0;      /* posicion del mas antiguo */
+static bool s_vig_rotando  = false;  /* ya se empezo a borrar (para loguear una vez) */
+
+/* Borra una foto de la sesion: el JPEG y su miniatura, cada uno con el cerrojo
+ * del bus tomado solo para el unlink. */
+static void vig_borra_foto(time_t session, const char *nombre)
+{
+    struct tm tmv;
+    localtime_r(&session, &tmv);
+
+    char ruta[160];
+    strftime(ruta, sizeof(ruta), VIG_SD_DIR "/%Y%m%d_%H%M%S", &tmv);
+    size_t l = strlen(ruta);
+    snprintf(ruta + l, sizeof(ruta) - l, "/%s", nombre);
+    if (camera_sd_bus_lock(2000)) { unlink(ruta); camera_sd_bus_unlock(); }
+
+    strftime(ruta, sizeof(ruta), VIG_SD_THUMB_DIR "/%Y%m%d_%H%M%S", &tmv);
+    l = strlen(ruta);
+    snprintf(ruta + l, sizeof(ruta) - l, "/%s", nombre);
+    if (camera_sd_bus_lock(2000)) { unlink(ruta); camera_sd_bus_unlock(); }
+
+    /* Una linea la primera vez (que es la noticia); despues a DEBUG, que esto
+     * pasa en cada foto nueva a partir de la 300. */
+    if (!s_vig_rotando)
+        ESP_LOGI(TAG, "vigilancia: la sesion llego a %d fotos; desde ahora borro la "
+                      "mas antigua de cada vez (me quedo con lo ultimo)",
+                 VIG_SESION_MAX);
+    else
+        ESP_LOGD(TAG, "vigilancia: borrada la mas antigua de la sesion (%s)", nombre);
+}
+
+/* Apunta una foto recien guardada. Si la sesion ya esta llena, antes de
+ * apuntarla borra la mas antigua: la sesion nunca pasa de VIG_SESION_MAX
+ * ficheros y lo que se conserva es siempre lo ultimo. */
+static void vig_sesion_apunta(time_t session, const char *nombre)
+{
+    if (!s_vig_cola) {
+        s_vig_cola = heap_caps_malloc((size_t)VIG_NOMBRE_LEN * VIG_SESION_MAX,
+                                      MALLOC_CAP_SPIRAM);
+        if (!s_vig_cola) {
+            ESP_LOGW(TAG, "vig: sin PSRAM para la cola de la sesion: no roto "
+                          "(la sesion pasara de %d fotos)", VIG_SESION_MAX);
+            return;
+        }
+    }
+    if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    if (s_vig_cola_n == VIG_SESION_MAX) {
+        vig_borra_foto(session, s_vig_cola[s_vig_cola_ini]);
+        s_vig_cola_ini = (s_vig_cola_ini + 1) % VIG_SESION_MAX;
+        s_vig_cola_n--;
+        s_vig_rotando = true;
+    }
+    const int pos = (s_vig_cola_ini + s_vig_cola_n) % VIG_SESION_MAX;
+    snprintf(s_vig_cola[pos], VIG_NOMBRE_LEN, "%s", nombre);
+    s_vig_cola_n++;
+    if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
+}
 
 static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
                                const uint8_t *jpg, size_t len)
@@ -893,6 +966,14 @@ static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
         } else {
             ESP_LOGW(TAG, "vig: no se pudo generar miniatura para %s", path);
         }
+    }
+
+    /* Rotacion de la sesion: apuntar la foto (y, si la sesion ya esta llena,
+     * borrar la mas antigua). Al final y solo si esta en la tarjeta, para que la
+     * cola tenga unicamente ficheros que existen. */
+    if (ok) {
+        const char *base = strrchr(path, '/');
+        vig_sesion_apunta(session, base ? base + 1 : path);
     }
     return ok;
 }
@@ -1014,17 +1095,63 @@ void camera_set_surveillance(bool on)
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
     s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
     if (on) {
-        s_photo_count = 0;  /* nueva sesion: el tope MOT_MAX_PHOTOS es POR sesion,
-                             * no acumulado de por vida (si no, dejaba de capturar) */
+        s_photo_count = 0;  /* capturas de esta sesion (contador, ya sin tope) */
         /* Bajo s_vig_mtx: camera_vig_store lee s_vig_session_start bajo el
          * mismo mutex (captura concurrente en otra tarea). volatile no basta
          * para un time_t de 64 bits en una CPU de 32 bits -> sin el mutex la
          * escritura/lectura podria quedar partida a medias. */
         if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
         s_vig_session_start = time(NULL);   /* nombra la carpeta de esta sesion */
+        /* Sesion nueva: la cola de rotacion empieza vacia (si no, borraria
+         * ficheros de la sesion anterior). */
+        s_vig_cola_n = 0;
+        s_vig_cola_ini = 0;
+        s_vig_rotando = false;
+        if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
+    } else {
+        /* Al salir, la sesion ya no existe: la cola se vacia para que el estado
+         * que se publica (camera_vig_sesion_fotos) no siga contando. */
+        if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+        s_vig_cola_n = 0;
+        s_vig_cola_ini = 0;
+        s_vig_rotando = false;
         if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
     }
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
+}
+
+/* Fotos que lleva la sesion actual en la tarjeta (0 si no hay sesion). */
+int camera_vig_sesion_fotos(void)
+{
+    if (!s_surveillance || !s_vig_mtx) return 0;
+    xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    const int n = s_vig_cola_n;
+    xSemaphoreGive(s_vig_mtx);
+    return n;
+}
+
+/* true si la sesion ya llego al tope y esta borrando las mas antiguas. */
+bool camera_vig_rotando(void)
+{
+    return s_surveillance && s_vig_rotando;
+}
+
+/* Nombre de la carpeta de la sesion en curso ("AAAAMMDD_HHMMSS"), o false si no
+ * hay vigilancia puesta. Lo usa la limpieza por espacio libre para no borrar la
+ * sesion que se esta grabando (log_cleanup.c). */
+bool camera_vig_sesion_actual(char *out, size_t n)
+{
+    if (!s_surveillance || !out || n == 0) return false;
+    if (!s_vig_mtx) return false;
+    /* Bajo el mutex: s_vig_session_start es un time_t de 64 bits en una CPU de 32
+     * y leerlo a medias daria una fecha inventada. */
+    xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    const time_t s = s_vig_session_start;
+    xSemaphoreGive(s_vig_mtx);
+    if (s <= 0) return false;
+    struct tm tmv;
+    localtime_r(&s, &tmv);
+    return strftime(out, n, "%Y%m%d_%H%M%S", &tmv) != 0;
 }
 
 /* Activa el stream (STREAMON). Solo se llama una vez por arranque de la tarea
@@ -1264,9 +1391,10 @@ static void camera_stream_task(void *arg)
                              changed, MOT_CELL_COUNT, maxd, MOT_CELL_DIFF,
                              sumv / (MOT_GW * MOT_GH));
                     int64_t now = esp_timer_get_time();
+                    /* Sin tope que corte: la sesion rota sola (borra la mas
+                     * antigua) cuando llega a VIG_SESION_MAX, en el drenador. */
                     if (changed >= MOT_CELL_COUNT &&
-                        (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000 &&
-                        s_photo_count < MOT_MAX_PHOTOS) {
+                        (now - last_photo_us) > (int64_t)MOT_COOLDOWN_MS * 1000) {
                         last_photo_us = now;
                         /* Codificar el JPEG por HW (PSRAM) y guardarlo en el anillo en
                          * RAM. Se sirve por HTTP (/vigilancia) y el drenador

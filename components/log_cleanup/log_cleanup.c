@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>        /* rmdir: borrar la carpeta de una sesion de vigilancia */
+#include "ff.h"            /* f_getfree: espacio que queda en la tarjeta (no hay statvfs en IDF) */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -30,6 +31,27 @@ static const char *DIRS[] = { "/sdcard/frigo", "/sdcard/bateria", "/sdcard/ne185
 /* Retencion propia de las sesiones de vigilancia (0 = la misma que los datos).
    Vive aqui arriba porque log_cleanup_run_now() la consulta. */
 static int s_max_days_vig = 0;
+
+/* ── Espacio libre ──────────────────────────────────────────────────────────
+ * La retencion por dias no basta: una temporada de salidas largas puede llenar la
+ * tarjeta antes de que venza el plazo, y con la tarjeta llena dejan de guardarse
+ * TANTO la vigilancia COMO los datos (bateria, frigo, viaje), con el unico aviso
+ * en el log serie. Si al hacer el barrido diario queda menos de VIG_LIBRE_MIN_MB,
+ * se borran las sesiones de vigilancia mas antiguas (solo esas: ni viajes ni
+ * datos) hasta recuperar VIG_LIBRE_OBJETIVO_MB. */
+#define VIG_LIBRE_MIN_MB       300
+#define VIG_LIBRE_OBJETIVO_MB  600
+
+/* Nombre de la sesion que se esta grabando ahora mismo, para no borrarla (cadena
+ * vacia si no hay vigilancia puesta). */
+static void sesion_en_curso(char *out, size_t n)
+{
+    out[0] = '\0';
+    char s[24];
+    if (camera_vig_sesion_actual(s, sizeof(s))) {
+        snprintf(out, n, "%s", s);
+    }
+}
 
 /* Parsea YYYY-MM-DD.csv y devuelve epoch a las 00:00 de ese dia, o 0 si no parsea */
 static time_t parse_csv_date(const char *fname)
@@ -146,6 +168,47 @@ static time_t parse_sesion_date(const char *nombre)
     return mktime(&tm);
 }
 
+/* Borra una sesion (o carpeta de dia) y todo lo que tiene dentro. Una carpeta no
+ * se borra con contenido: primero los ficheros.
+ *
+ * El cerrojo del bus SD se toma y se suelta en cada paso (abrir, leer el nombre,
+ * borrar): una sesion puede tener 300 ficheros y tener el bus tomado todo el
+ * rato asfixiaria la ventana del GDMA de la camara -> INT WDT. False si al final
+ * la carpeta sigue ahi. El nombre tiene que venir ya validado por
+ * parse_sesion_date(). */
+static bool borra_sesion(const char *dir, const char *nombre)
+{
+    char sesion[128];
+    snprintf(sesion, sizeof(sesion), "%s/%s", dir, nombre);
+
+    if (!camera_sd_bus_lock(2000)) return false;
+    DIR *sd = opendir(sesion);
+    camera_sd_bus_unlock();
+    if (sd) {
+        for (;;) {
+            char nom[128] = "";
+            if (!camera_sd_bus_lock(1000)) break;
+            struct dirent *f = readdir(sd);
+            if (f && f->d_name[0] != '.') snprintf(nom, sizeof(nom), "%s", f->d_name);
+            camera_sd_bus_unlock();
+            if (!f) break;
+            if (nom[0] == '\0') continue;
+
+            char ruta[256];
+            snprintf(ruta, sizeof(ruta), "%s/%s", sesion, nom);
+            if (camera_sd_bus_lock(2000)) { remove(ruta); camera_sd_bus_unlock(); }
+            vTaskDelay(pdMS_TO_TICKS(2));   /* ceder a la camara entre ficheros */
+        }
+        if (camera_sd_bus_lock_wait(5000)) { closedir(sd); camera_sd_bus_unlock(); }
+        else { closedir(sd); ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s (%s)", sesion); }
+    }
+
+    if (!camera_sd_bus_lock(2000)) return false;
+    const bool ok = (rmdir(sesion) == 0);
+    camera_sd_bus_unlock();
+    return ok;
+}
+
 static int borrar_sesiones_dir(const char *dir, int max_days)
 {
     time_t now = time(NULL);
@@ -160,40 +223,92 @@ static int borrar_sesiones_dir(const char *dir, int max_days)
     DIR *dp = opendir(dir);
     if (!dp) { camera_sd_bus_unlock(); return 0; }
 
-    int borradas = 0;
+    /* Se recogen primero los nombres (bajo el cerrojo) y se borran despues, uno a
+     * uno: borrar mientras se recorre el directorio con el cerrojo tomado dejaba
+     * el bus SD retenido durante todo el barrido. */
+    char victimas[32][24];
+    int nv = 0;
     struct dirent *ent;
-    while ((ent = readdir(dp)) != NULL) {
+    while ((ent = readdir(dp)) != NULL && nv < 32) {
         time_t fecha = parse_sesion_date(ent->d_name);
         if (fecha == 0 || fecha >= cutoff) continue;
-
-        char sesion[128];
-        /* OJO: aqui ponia VIG_DIR en vez de 'dir', asi que al limpiar las
-         * MINIATURAS (VIG_THUMBS_DIR) borraba dentro del arbol de fotos buenas y
-         * las miniaturas no se borraban nunca (auditoria del 23-sep-2026). */
-        snprintf(sesion, sizeof(sesion), "%s/%s", dir, ent->d_name);
-
-        /* Una carpeta no se borra con contenido: primero los .jpg. */
-        DIR *sd = opendir(sesion);
-        if (sd) {
-            struct dirent *f;
-            while ((f = readdir(sd)) != NULL) {
-                if (f->d_name[0] == '.') continue;
-                char ruta[256];
-                snprintf(ruta, sizeof(ruta), "%s/%s", sesion, f->d_name);
-                remove(ruta);
-            }
-            closedir(sd);
-        }
-        if (rmdir(sesion) == 0) {
-            borradas++;
-            ESP_LOGI(TAG, "vigilancia: borrada la sesion %s (mas de %d dias)",
-                     ent->d_name, effective_max);
-        } else {
-            ESP_LOGW(TAG, "vigilancia: no he podido borrar %s", sesion);
-        }
+        snprintf(victimas[nv], sizeof(victimas[nv]), "%s", ent->d_name);
+        nv++;
     }
     closedir(dp);
     camera_sd_bus_unlock();
+
+    int borradas = 0;
+    for (int i = 0; i < nv; i++) {
+        if (borra_sesion(dir, victimas[i])) {
+            borradas++;
+            ESP_LOGI(TAG, "vigilancia: borrada la sesion %s (mas de %d dias)",
+                     victimas[i], effective_max);
+        } else {
+            ESP_LOGW(TAG, "vigilancia: no he podido borrar %s/%s", dir, victimas[i]);
+        }
+    }
+    return borradas;
+}
+
+/* Espacio libre en la tarjeta, en MB (0 si no se puede saber). Con FatFs y el
+ * cerrojo del bus, igual que hace Ajustes para enseñar el hueco: f_getfree
+ * recorre la FAT (bloqueante) y el bus es el mismo que necesita la camara. */
+static unsigned libre_mb(void)
+{
+    if (!camera_sd_bus_lock(2000)) return 0;   /* ocupada: mejor no borrar a ciegas */
+    FATFS *fs = NULL;
+    DWORD libre_cl = 0;
+    unsigned mb = 0;
+    if (f_getfree("0:", &libre_cl, &fs) == FR_OK && fs) {
+        const uint64_t bytes = (uint64_t)libre_cl * fs->csize * 512ULL;
+        mb = (unsigned)(bytes / (1024ULL * 1024ULL));
+        if (mb == 0 && bytes > 0) mb = 1;      /* poco pero hay: no confundir con "no se sabe" */
+    }
+    camera_sd_bus_unlock();
+    return mb;
+}
+
+/* Si queda poco espacio, borra sesiones de vigilancia por orden de antiguedad
+ * (solo esas: ni viajes ni datos) hasta recuperar VIG_LIBRE_OBJETIVO_MB, sin
+ * tocar nunca la sesion que se esta grabando. Ver el comentario de arriba. */
+static int vig_libera_espacio(void)
+{
+    unsigned libre = libre_mb();
+    if (libre == 0 || libre >= VIG_LIBRE_MIN_MB) return 0;
+
+    ESP_LOGW(TAG, "quedan %u MB libres en la tarjeta: borro sesiones de vigilancia "
+                  "antiguas (objetivo %d MB)", libre, VIG_LIBRE_OBJETIVO_MB);
+    char en_curso[24];
+    sesion_en_curso(en_curso, sizeof(en_curso));
+
+    int borradas = 0;
+    while (libre < VIG_LIBRE_OBJETIVO_MB) {
+        char vieja[24] = "";
+        if (!camera_sd_bus_lock(2000)) break;
+        DIR *dp = opendir(VIG_DIR);
+        if (dp) {
+            struct dirent *e;
+            while ((e = readdir(dp)) != NULL) {
+                if (parse_sesion_date(e->d_name) == 0) continue;
+                if (en_curso[0] && strcmp(e->d_name, en_curso) == 0) continue;
+                if (vieja[0] == '\0' || strcmp(e->d_name, vieja) < 0)
+                    snprintf(vieja, sizeof(vieja), "%s", e->d_name);
+            }
+            closedir(dp);
+        }
+        camera_sd_bus_unlock();
+        if (vieja[0] == '\0') break;          /* no queda nada que borrar */
+
+        borra_sesion(VIG_DIR, vieja);
+        borra_sesion(VIG_THUMBS_DIR, vieja);  /* la miniatura de esa sesion, si la hay */
+        borradas++;
+        const unsigned antes = libre;
+        libre = libre_mb();
+        if (libre <= antes) break;            /* no sube: no insistir en bucle */
+    }
+    ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia; quedan %u MB libres",
+             borradas, libre_mb());
     return borradas;
 }
 
@@ -209,6 +324,10 @@ int log_cleanup_run_now(int max_days_keep)
     int dias_vig = s_max_days_vig > 0 ? s_max_days_vig : max_days_keep;
     total += borrar_sesiones_dir(VIG_DIR, dias_vig);
     total += borrar_sesiones_dir(VIG_THUMBS_DIR, dias_vig);
+    /* Y, ademas de la retencion por dias, el espacio: si la tarjeta esta llena no
+     * se guarda nada (ni vigilancia ni datos). Va despues, para que la antiguedad
+     * mande y esto solo actue cuando de verdad aprieta. */
+    vig_libera_espacio();
     if (total > 0) ESP_LOGI(TAG, "Borrados %d ficheros antiguos", total);
     return total;
 }

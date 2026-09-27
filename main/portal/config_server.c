@@ -98,6 +98,22 @@ static esp_err_t handle_ota_post(httpd_req_t *req) {
 }
 
 
+/* Copia un texto listo para meter entre comillas en JSON: los saltos de linea se
+ * vuelven espacios y se escapan la comilla y la barra invertida. Los motivos
+ * llevan tildes y parentesis, que en JSON no molestan; las comillas si. */
+static void json_texto(const char *in, char *out, size_t out_len)
+{
+    size_t j = 0;
+    if (!out_len) return;
+    for (size_t i = 0; in && in[i] && j + 2 < out_len; i++) {
+        const char c = in[i];
+        if (c == '\n' || c == '\r') { out[j++] = ' '; continue; }
+        if (c == '"' || c == '\\') out[j++] = '\\';
+        out[j++] = c;
+    }
+    out[j] = '\0';
+}
+
 /* Salida de EMERGENCIA del modo ausente por HTTP (GET /ausente?off): por si el
  * tactil no responde y no se puede hacer el gesto de los 4 toques -> evita quedar
  * con la pantalla negra hasta un corte fisico. Toma lvgl_port_lock porque
@@ -107,8 +123,16 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
     char q[24] = {0};
     httpd_req_get_url_query_str(req, q, sizeof(q));
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
-    bool on  = !strncmp(q, "on",  2) && (q[2] == '\0' || q[2] == '=');
-    bool off = !strncmp(q, "off", 3) && (q[3] == '\0' || q[3] == '=');
+    /* Estricto a proposito: "?on=0" NO arma el modo. Antes bastaba con que
+     * empezara por "on", asi que ?on=0 encendia la vigilancia (resto del
+     * hallazgo 2.H4 de la auditoria del 15-sep-2026). */
+    const bool on  = (strcmp(q, "on")  == 0) || (strcmp(q, "on=1")  == 0);
+    const bool off = (strcmp(q, "off") == 0) || (strcmp(q, "off=1") == 0);
+    if (q[0] && !on && !off) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "uso: /ausente, /ausente?on, /ausente?off");
+        return ESP_OK;
+    }
     /* GET /ausente sin argumentos = CONSULTA del estado, en JSON. Lo pide la
      * pantalla "Camara" de la app para saber si la vigilancia esta puesta: hasta
      * ahora el firmware no lo decia por HTTP y la app lo suponia. */
@@ -118,26 +142,38 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
          * decir "apagado" y el usuario no sabe POR QUE no se puede poner (sin
          * SD, camara que no responde...). */
         const char *r = ausente_rechazo_razon();
-        char js[320];
-        if (r && *r) {
-            char limpio[220];
-            size_t j = 0;
-            for (size_t i = 0; r[i] && j < sizeof(limpio) - 1; i++)
-                limpio[j++] = (r[i] == '\n') ? ' ' : r[i];
-            limpio[j] = '\0';
-            snprintf(js, sizeof(js), "{\"vigilancia\":%s,\"motivo\":\"%s\"}",
-                     ausente_is_active() ? "true" : "false", limpio);
-        } else {
-            snprintf(js, sizeof(js), "{\"vigilancia\":%s,\"motivo\":\"\"}",
-                     ausente_is_active() ? "true" : "false");
+        const bool  activo = ausente_is_active();
+        /* Y si esta armado, la salud AHORA MISMO: ese motivo solo habla del
+         * ultimo intento de armar, asi que si la SD se suelta o la camara se
+         * muere despues, el estado seguia diciendo "vigilando" mientras no se
+         * guardaba nada (auditoria del 27-sep-2026). */
+        const char *salud = "";
+        if (activo) {
+            if (!datalogger_sd_montada())
+                salud = "la tarjeta SD ya no esta: no se estan guardando las fotos";
+            else if (!camera_ready())
+                salud = "la camara no responde: no se esta grabando nada";
         }
+        const char *aviso = ausente_aviso_reinicio();
+        char mot[220], sal[120], avi[120];
+        json_texto(r ? r : "", mot, sizeof(mot));
+        json_texto(salud, sal, sizeof(sal));
+        json_texto(aviso ? aviso : "", avi, sizeof(avi));
+        char js[560];
+        snprintf(js, sizeof(js),
+                 "{\"vigilancia\":%s,\"motivo\":\"%s\",\"salud\":\"%s\","
+                 "\"aviso\":\"%s\",\"fotos\":%d,\"rotando\":%s}",
+                 activo ? "true" : "false", mot, sal, avi,
+                 camera_vig_sesion_fotos(), camera_vig_rotando() ? "true" : "false");
         httpd_resp_sendstr(req, js);
         return ESP_OK;
     }
     if (on || off) {
         bool done = false, accepted = false;
         if (bsp_display_lock(300)) {
-            accepted = ausente_request(on);   /* on: cuenta atras+vigilancia; off: cancela/sale */
+            /* via_http=true: el cartel de la cuenta atras no puede decir "apaga
+             * el interruptor" a quien lo activo desde la app (hallazgo 1.I6). */
+            accepted = ausente_request_ex(on, true);
             bsp_display_unlock();
             done = true;
         }
