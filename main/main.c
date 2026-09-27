@@ -307,10 +307,45 @@ static void frigo_update_cb(const frigo_state_t *state)
      * reinicia el contador a cero y la alarma no llega a sonar nunca. */
     const float FREEZER_NOISE_MARGIN_C = 0.5f;
 
+    /* ── Gracia de arranque del viaje ─────────────────────────────────────
+     * El frigo empieza a TEMPERATURA AMBIENTE y tarda un buen rato en bajar, y
+     * en ese rato se cumple solo el criterio de la alarma (esta "subiendo" desde
+     * el primer valor, que arranca el pico en -200, y esta por encima del
+     * umbral). Resultado: aviso FALSO en cada salida, hasta que el compresor
+     * consigue enfriar. Peticion del usuario (28-sep-2026): no alarmar hasta que
+     * el viaje lleve al menos 2 horas.
+     *
+     * Las 2 h se cuentan desde el inicio del viaje (trip_computer, que es quien
+     * lo pone a cero al declararlo en la cabina o a mano con "Poner a cero") y,
+     * si no hay viaje en curso o el reloj no esta puesto, desde que arranco la
+     * pantalla. Durante la gracia tambien se reinicia la racha, para que al
+     * acabarse empiece a contar de cero con la temperatura de ese momento. */
+    #define FREEZER_GRACIA_VIAJE_S  (2 * 3600)
+    trip_computer_t trip;
+    trip_computer_get(&trip);
+    const time_t ahora_s = time(NULL);
+    const bool reloj_ok = (ahora_s > 1600000000);      /* > sep-2020 */
+    int64_t desde_s;
+    if (trip.reset_epoch > 0 && reloj_ok) {
+        desde_s = (int64_t)ahora_s - (int64_t)trip.reset_epoch;
+    } else {
+        desde_s = (int64_t)(esp_timer_get_time() / 1000000);   /* desde el arranque */
+    }
+    const bool en_gracia = (desde_s < FREEZER_GRACIA_VIAJE_S);
+
     float T = state->T_Congelador;
     int64_t now_ms = esp_timer_get_time() / 1000;
 
-    if (T > -120.0f) {  /* sensor conectado */
+    if (en_gracia) {
+        /* Sin evaluar la alarma, y con la racha a cero para que al salir de la
+         * gracia se empiece de nuevo (si no, arrastraria los minutos de antes). */
+        s_rising_since = 0;
+        s_rise_peak = -200.0f;
+        if (s_alarm_active) {
+            s_alarm_active = false;
+            ui_set_freezer_alarm(s_ui, false);
+        }
+    } else if (T > -120.0f) {  /* sensor conectado */
         if (s_rising_since != 0 && T < s_rise_peak - FREEZER_NOISE_MARGIN_C) {
             /* bajada real (no ruido/meseta): cortar la racha */
             s_rising_since = 0;
