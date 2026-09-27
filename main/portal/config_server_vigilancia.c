@@ -224,6 +224,81 @@ static bool vig_sd_name_safe(const char *s)
     return true;
 }
 
+/* GET /vigilancia.json -> la misma lista que la pagina, pero en JSON, para la
+ * app del movil (su pantalla "Camara" lo pedia: "falta endpoint JSON con la
+ * lista de capturas"). Misma auth que la pagina. Formato:
+ *
+ *   {"total":12,"hay_mas":3,"capturas":[
+ *      {"id":"7","url":"/vigilancia/7","kb":84,"fecha":"2026-09-27 18:22:10"},
+ *      {"id":"20260927_182210/20260927_182210_003.jpg",
+ *       "url":"/vigilancia/20260927_182210/20260927_182210_003.jpg",
+ *       "kb":72,"fecha":"2026-09-27 18:22:10"}]}
+ *
+ * `id` numerico = captura aun en RAM (sin volcar a la tarjeta); `id` con barra =
+ * fichero de la SD. La `url` vale para las dos: /vigilancia/<x> sabe distinguir.
+ * No hace falta escapar nada: los nombres los escribe el firmware y
+ * vig_sd_name_safe() solo admite digitos, '_', '.', minusculas y una barra. */
+esp_err_t handle_vigilancia_json(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+    uint32_t ids[VIG_MAX]; time_t ts[VIG_MAX]; size_t lens[VIG_MAX];
+    int n = camera_vig_list(ids, ts, lens, VIG_MAX);
+    static char sd_names[VIG_SD_MAX][VIG_NAME_LEN];
+    int sd_total = 0;
+    const int sd_n = vig_sd_list(sd_names, VIG_SD_MAX, &sd_total);
+
+    httpd_resp_set_type(req, "application/json");
+    char line[320];
+    snprintf(line, sizeof(line), "{\"total\":%d,\"hay_mas\":%d,\"capturas\":[",
+             n + sd_n, (sd_total > sd_n) ? (sd_total - sd_n) : 0);
+    httpd_resp_sendstr_chunk(req, line);
+
+    bool primero = true;
+    for (int i = 0; i < n; i++) {                     /* RAM: lo mas reciente */
+        struct tm tmv; localtime_r(&ts[i], &tmv);
+        char when[32] = "";
+        if (tmv.tm_year >= 120) strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tmv);
+        snprintf(line, sizeof(line),
+                 "%s{\"id\":\"%u\",\"url\":\"/vigilancia/%u\",\"kb\":%u,\"fecha\":\"%s\"}",
+                 primero ? "" : ",", (unsigned)ids[i], (unsigned)ids[i],
+                 (unsigned)(lens[i] / 1024), when);
+        httpd_resp_sendstr_chunk(req, line);
+        primero = false;
+    }
+    for (int i = sd_n - 1; i >= 0; i--) {              /* SD: del mas nuevo al mas viejo */
+        const char *nm = sd_names[i];
+        const char *slash = strrchr(nm, '/');
+        const char *fn = slash ? slash + 1 : nm;
+        char when[32] = "";
+        if (strlen(fn) >= 15) {                        /* AAAAMMDD_HHMMSS... */
+            struct tm tmv = {0};
+            char f[5] = {0}, h[3] = {0}, m[3] = {0}, sg[3] = {0};
+            memcpy(f, fn, 4); memcpy(h, fn + 8, 2); memcpy(m, fn + 10, 2);
+            memcpy(sg, fn + 12, 2);
+            tmv.tm_year = atoi(f) - 1900; tmv.tm_mon = atoi(fn + 4) - 1;
+            tmv.tm_mday = atoi(fn + 6); tmv.tm_hour = atoi(h);
+            tmv.tm_min = atoi(m); tmv.tm_sec = atoi(sg);
+            strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", &tmv);
+        }
+        long kb = 0;
+        char path[160];
+        snprintf(path, sizeof(path), "%s/%s", VIG_SD_DIR_PATH, nm);
+        struct stat st;
+        if (camera_sd_bus_lock(500)) {
+            if (stat(path, &st) == 0) kb = (long)(st.st_size / 1024);
+            camera_sd_bus_unlock();
+        }
+        snprintf(line, sizeof(line),
+                 "%s{\"id\":\"%s\",\"url\":\"/vigilancia/%s\",\"kb\":%ld,\"fecha\":\"%s\"}",
+                 primero ? "" : ",", nm, nm, kb, when);
+        httpd_resp_sendstr_chunk(req, line);
+        primero = false;
+    }
+    httpd_resp_sendstr_chunk(req, "]}");
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
 esp_err_t handle_vigilancia(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     const char *uri = req->uri;

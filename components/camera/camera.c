@@ -483,13 +483,18 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
     if (!s_surveillance && !s_luma_wanted) {
         uint32_t seq0 = s_thumb_seq;
         s_frame_pedido = true;
-        /* Hasta 4 s: el ciclo son 2 s de reposo mas la captura y su calentamiento. */
-        for (int i = 0; i < 80 && s_thumb_seq == seq0; i++) {
+        /* Hasta 7 s: el ciclo son 2 s de reposo mas la captura y su calentamiento,
+         * y en frio (primera peticion tras un rato parada) tarda mas. Con 4 s la
+         * app se comia 503 con la camara perfectamente viva (visto el
+         * 28-sep-2026 en la pantalla "Camara" de la app). */
+        for (int i = 0; i < 140 && s_thumb_seq == seq0; i++) {
             vTaskDelay(pdMS_TO_TICKS(50));
         }
         if (s_thumb_seq == seq0) {
-            ESP_LOGW(TAG, "la camara no ha dado un fotograma nuevo a tiempo; "
-                          "NO sirvo una foto vieja");
+            ESP_LOGW(TAG, "la camara no ha dado un fotograma nuevo a tiempo (7 s); "
+                          "NO sirvo una foto vieja [tarea=%s seq=%u]",
+                     camera_stream_task_handle() ? "viva" : "PARADA",
+                     (unsigned)s_thumb_seq);
             s_frame_pedido = false;
             return false;
         }

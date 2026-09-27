@@ -109,6 +109,16 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
     bool on  = !strncmp(q, "on",  2) && (q[2] == '\0' || q[2] == '=');
     bool off = !strncmp(q, "off", 3) && (q[3] == '\0' || q[3] == '=');
+    /* GET /ausente sin argumentos = CONSULTA del estado, en JSON. Lo pide la
+     * pantalla "Camara" de la app para saber si la vigilancia esta puesta: hasta
+     * ahora el firmware no lo decia por HTTP y la app lo suponia. */
+    if (!on && !off) {
+        httpd_resp_set_type(req, "application/json");
+        char js[64];
+        snprintf(js, sizeof(js), "{\"vigilancia\":%s}", ausente_is_active() ? "true" : "false");
+        httpd_resp_sendstr(req, js);
+        return ESP_OK;
+    }
     if (on || off) {
         bool done = false, accepted = false;
         if (bsp_display_lock(300)) {
@@ -909,6 +919,10 @@ esp_err_t config_server_start(void) {
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig);
     httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vigf);
+    /* La lista en JSON para la app (mismo puerto pesado que la pagina). OJO: no
+     * choca con el comodin de vigilancia, que exige la barra detras. */
+    httpd_uri_t uri_vig_json = { .uri = "/vigilancia.json", .method = HTTP_GET, .handler = handle_vigilancia_json };
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig_json);
     httpd_uri_t uri_vig_thumb = { .uri = "/vigilancia_thumb/*", .method = HTTP_GET, .handler = handle_vigilancia_thumb };
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig_thumb);
     httpd_uri_t uri_ausente = { .uri = "/ausente", .method = HTTP_GET, .handler = handle_ausente };

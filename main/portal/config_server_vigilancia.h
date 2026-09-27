@@ -7,4 +7,6 @@
 
 esp_err_t handle_snapshot(httpd_req_t *req);
 esp_err_t handle_vigilancia(httpd_req_t *req);
+/* GET /vigilancia.json -> la lista de capturas en JSON (para la app). */
+esp_err_t handle_vigilancia_json(httpd_req_t *req);
 esp_err_t handle_vigilancia_thumb(httpd_req_t *req);
