@@ -902,10 +902,18 @@ static void bh_chart_touch_cb(lv_event_t *e)
             s_bh_win_a = 0.0f; s_bh_win_b = 1.0f;
             bh_apply_window();
         }
-    } else if (code == LV_EVENT_SHORT_CLICKED) {
+    } else if (code == LV_EVENT_CLICKED) {
+        /* CLICKED y NO SHORT_CLICKED: en LVGL, SHORT_CLICKED solo llega si el
+         * dedo se levanta ANTES del tiempo de pulsacion larga (~400 ms). Un
+         * doble toque tranquilo producia LONG_PRESSED (que resetea el zoom) y
+         * ningun SHORT_CLICKED, asi que no hacia nada -- el usuario lo vio el
+         * 28-sep-2026: "los dos toques para aumentar no funciona siempre". Con
+         * CLICKED llega siempre, tambien tras una pulsacion larga. */
         if (s_bh_dragging) return;
         int64_t now = esp_timer_get_time();
-        if (now - s_bh_last_click_us < 350000) {   /* doble-toque = zoom in */
+        if (now - s_bh_last_click_us < 600000) {   /* doble-toque = zoom in (350 ms era
+                                              * demasiado justo: un doble toque
+                                              * normal tarda 400-500 ms) */
             s_bh_last_click_us = 0;
             float win_w = s_bh_win_b - s_bh_win_a;
             lv_area_t ca; lv_obj_get_content_coords(s_bh_chart, &ca);

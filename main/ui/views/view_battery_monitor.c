@@ -13,7 +13,11 @@
 static void battery_view_root_click_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_SHORT_CLICKED) return;
+    /* CLICKED y no SHORT_CLICKED: en LVGL, SHORT_CLICKED solo llega si el dedo
+     * se levanta ANTES del tiempo de pulsacion larga (~400 ms), asi que un toque
+     * tranquilo no abria el historico. Mismo arreglo que el doble toque de las
+     * pantallas de historico (28-sep-2026). */
+    if (code != LV_EVENT_CLICKED) return;
     ui_state_t *ui = (ui_state_t *)lv_event_get_user_data(e);
     if (ui) ui_show_battery_history_screen(ui);
 }
@@ -166,7 +170,7 @@ static void register_tap(ui_battery_view_t *view, lv_obj_t *obj, ui_state_t *ui)
     if (!obj) return;
     lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(obj, battery_view_root_click_cb,
-                        LV_EVENT_SHORT_CLICKED, ui);
+                        LV_EVENT_CLICKED, ui);
 }
 
 static ui_battery_view_t *battery_view_from_base(ui_device_view_t *base)
