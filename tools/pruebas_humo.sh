@@ -97,6 +97,42 @@ fi
 cod=$(pide GET "$BASE/snapshot")
 comprueba "GET /snapshot" "$cod" 200 503
 
+# 4b) COLOR DE LA CAMARA: el snapshot se mide y se compara con los valores
+#     calibrados. Nacio el 28-sep-2026, cuando el usuario vio la imagen verdosa:
+#     R/G y B/G bajos (0,6/0,5) son la firma de "el ISP sin aplicar el balance de
+#     blancos" (la IPA no corriendo), no un ajuste fino perdido. Necesita Pillow;
+#     si no esta, se salta sin fallar.
+cod=$(pide GET "$BASE/snapshot")
+if [ "$cod" = 200 ]; then
+    cp /tmp/humo_cuerpo /tmp/humo_snapshot.jpg
+    if python3 -c "import PIL" 2>/dev/null; then
+        python3 - <<'PYCOLOR'
+from PIL import Image
+import numpy as np
+src = "/tmp/humo_snapshot.jpg"
+try:
+    im = Image.open(src).convert("RGB"); a = np.asarray(im).astype(np.float32)
+    r, g, b = a[:, :, 0].mean(), a[:, :, 1].mean(), a[:, :, 2].mean()
+    rg, bg = r / max(g, 1e-6), b / max(g, 1e-6)
+    print(f"  [dato] color del snapshot: R/G={rg:.2f}  B/G={bg:.2f}  (R={r:.0f} G={g:.0f} B={b:.0f})")
+    print("         referencia: neutro 1,02/1,02 | con luz 0,98/0,85 | penumbra 1,64/0,81")
+    if rg < 0.80 and bg < 0.70:
+        print("  [MAL]  IMAGEN VERDOSA: el ISP no esta aplicando el balance de blancos.")
+        print("         Mira en el log del sistema: 'failed to get configuration to")
+        print("         initialize ISP controller' o 'esp_video_init OK'. Si no sale")
+        print("         ninguno de los dos, revisa el flex CSI (hardware).")
+    else:
+        print("  [ok]   color dentro de lo normal")
+except Exception as e:
+    print("  [dato] no pude medir el JPEG:", e)
+PYCOLOR
+    else
+        echo "  [dato] sin Pillow: no mido el color (pip install pillow si lo quieres)"
+    fi
+else
+    comprueba "GET /snapshot para medir color" "$cod" 200
+fi
+
 # 5) Borrado de viajes: EL caso que estaba roto.
 #    Carpeta que no existe -> 404. Si sale 400 "faltan op o id", el firmware
 #    volvio a exigir 'id' a la operacion 'borrar': la app no podra borrar.
