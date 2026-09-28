@@ -30,6 +30,22 @@ jobs:
         run: bash test/auditar.sh
 
 
+  # El contrato con la app del movil, comprobado SIN placa: se compilan
+  # main/portal/contrato_app.c y test/test_contrato_app.c con el gcc de la maquina
+  # y se ejecutan sus pruebas (es codigo de produccion: los handlers de /ausente y
+  # /api/viaje llaman a esas funciones), mas un repaso de endpoints, puertos y
+  # campos. Existe porque el borrado de viajes estuvo roto desde la v3.29 y no se
+  # supo hasta probarlo con el movil (28-sep-2026): compilar los dos lados no
+  # prueba el contrato entre ellos.
+  contrato_app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout victron
+        uses: actions/checkout@v4
+
+      - name: Contrato con la app (endpoints, puertos y campos)
+        run: bash test/contrato_app.sh
+
   # mini_proto.h se mantiene sincronizado A MANO entre este repo y 35cabina
   # (protocolo UDP compartido, ver la cabecera del fichero). Sin esto, editar
   # solo una copia no falla hasta que los dos aparatos se rechazan los

@@ -11,6 +11,7 @@
 #include "config_server_vigilancia.h"
 #include "config_server_viaje.h"
 #include "config_server_auth.h"
+#include "contrato_app.h"   /* /ausente: los campos que lee la app, probados en el CI */
 #include "config_storage.h"
 #include "victron_ble.h"
 #include "data/dashboard_state.h"
@@ -98,22 +99,6 @@ static esp_err_t handle_ota_post(httpd_req_t *req) {
 }
 
 
-/* Copia un texto listo para meter entre comillas en JSON: los saltos de linea se
- * vuelven espacios y se escapan la comilla y la barra invertida. Los motivos
- * llevan tildes y parentesis, que en JSON no molestan; las comillas si. */
-static void json_texto(const char *in, char *out, size_t out_len)
-{
-    size_t j = 0;
-    if (!out_len) return;
-    for (size_t i = 0; in && in[i] && j + 2 < out_len; i++) {
-        const char c = in[i];
-        if (c == '\n' || c == '\r') { out[j++] = ' '; continue; }
-        if (c == '"' || c == '\\') out[j++] = '\\';
-        out[j++] = c;
-    }
-    out[j] = '\0';
-}
-
 /* Salida de EMERGENCIA del modo ausente por HTTP (GET /ausente?off): por si el
  * tactil no responde y no se puede hacer el gesto de los 4 toques -> evita quedar
  * con la pantalla negra hasta un corte fisico. Toma lvgl_port_lock porque
@@ -155,16 +140,11 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
                 salud = "la camara no responde: no se esta grabando nada";
         }
         const char *aviso = ausente_aviso_reinicio();
-        char mot[220], sal[120], avi[120];
-        json_texto(r ? r : "", mot, sizeof(mot));
-        json_texto(salud, sal, sizeof(sal));
-        json_texto(aviso ? aviso : "", avi, sizeof(avi));
+        /* El JSON lo construye contrato_app.c, que se prueba sin placa en el CI
+         * (job contrato_app): los campos que lee la app estan comprobados ahi. */
         char js[640];   /* margen: el peor caso son ~540 */
-        snprintf(js, sizeof(js),
-                 "{\"vigilancia\":%s,\"motivo\":\"%s\",\"salud\":\"%s\","
-                 "\"aviso\":\"%s\",\"fotos\":%d,\"rotando\":%s}",
-                 activo ? "true" : "false", mot, sal, avi,
-                 camera_vig_sesion_fotos(), camera_vig_rotando() ? "true" : "false");
+        ausente_json(js, sizeof(js), activo, r ? r : "", salud, aviso ? aviso : "",
+                     camera_vig_sesion_fotos(), camera_vig_rotando());
         httpd_resp_sendstr(req, js);
         return ESP_OK;
     }

@@ -25,6 +25,7 @@
  */
 #include "config_server_internal.h"
 #include "config_server_auth.h"
+#include "contrato_app.h"    /* viaje_campos_que_faltan: probado en el CI sin placa */
 #include "camera.h"          /* camera_sd_bus_lock: serializar con el GDMA */
 #include "cJSON.h"
 #include "data/dashboard_state.h"
@@ -1448,31 +1449,21 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
     const cJSON *jop = cJSON_GetObjectItem(j, "op");
     const cJSON *jid = cJSON_GetObjectItem(j, "id");
-    if (!cJSON_IsString(jop)) {
+    const cJSON *jc  = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
+    /* Que campos pide cada operacion lo decide contrato_app.c, que se prueba sin
+     * placa en el CI (job contrato_app). Aqui nacio el fallo del 27-sep-2026:
+     * esta guarda exigia "id" a TODAS las ops, y "borrar" (la app) lleva
+     * "carpeta" y no lleva id -> 400 "faltan op o id" y el borrado no funcionaba.
+     * "borrar" necesita "carpeta"; las del satelite (inicio/fin/registro/
+     * descartar), "id" numerico. */
+    const char *falta = viaje_campos_que_faltan(
+        cJSON_IsString(jop) ? jop->valuestring : "",
+        cJSON_IsString(jc) && jc->valuestring[0],
+        cJSON_IsNumber(jid));
+    if (falta) {
         cJSON_Delete(j);
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "falta op");
-        return ESP_OK;
-    }
-    /* Cada operacion pide lo suyo: las del satelite (inicio/fin/registro/
-     * descartar) llevan "id" numerico, y "borrar" -- la que pide la app del
-     * movil -- lleva "carpeta" y NO lleva id. Exigir las dos cosas a la vez a
-     * todas las ops dejo el borrado de viajes sin funcionar desde que nacio
-     * (v3.29): la app mandaba {"op":"borrar","carpeta":"..."} y se llevaba un
-     * 400 "faltan op o id". Lo cazo el usuario con el movil el 27-sep-2026. */
-    const bool es_borrar = !strcmp(jop->valuestring, "borrar");
-    if (es_borrar) {
-        const cJSON *jc = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
-        if (!cJSON_IsString(jc) || !jc->valuestring[0]) {
-            cJSON_Delete(j);
-            httpd_resp_set_status(req, "400 Bad Request");
-            httpd_resp_sendstr(req, "falta 'carpeta'");
-            return ESP_OK;
-        }
-    } else if (!cJSON_IsNumber(jid)) {
-        cJSON_Delete(j);
-        httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "faltan op o id");
+        httpd_resp_sendstr(req, falta);
         return ESP_OK;
     }
     uint32_t id = cJSON_IsNumber(jid) ? (uint32_t)jid->valuedouble : 0;
