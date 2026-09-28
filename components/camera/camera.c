@@ -806,8 +806,11 @@ static int  s_vig_cola_ini = 0;      /* posicion del mas antiguo */
 static bool s_vig_rotando  = false;  /* ya se empezo a borrar (para loguear una vez) */
 
 /* Borra una foto de la sesion: el JPEG y su miniatura, cada uno con el cerrojo
- * del bus tomado solo para el unlink. */
-static void vig_borra_foto(time_t session, const char *nombre)
+ * del bus tomado solo para el unlink. NO se llama con s_vig_mtx tomado: el bus SD
+ * se puede esperar hasta 2 s por fichero y el mutex lo necesitan la tarea de
+ * camara (camera_vig_store) y las peticiones de galeria. `primera` es para
+ * loguear la noticia una sola vez (el primer borrado de la sesion). */
+static void vig_borra_foto(time_t session, const char *nombre, bool primera)
 {
     struct tm tmv;
     localtime_r(&session, &tmv);
@@ -823,9 +826,7 @@ static void vig_borra_foto(time_t session, const char *nombre)
     snprintf(ruta + l, sizeof(ruta) - l, "/%s", nombre);
     if (camera_sd_bus_lock(2000)) { unlink(ruta); camera_sd_bus_unlock(); }
 
-    /* Una linea la primera vez (que es la noticia); despues a DEBUG, que esto
-     * pasa en cada foto nueva a partir de la 300. */
-    if (!s_vig_rotando)
+    if (primera)
         ESP_LOGI(TAG, "vigilancia: la sesion llego a %d fotos; desde ahora borro la "
                       "mas antigua de cada vez (me quedo con lo ultimo)",
                  VIG_SESION_MAX);
@@ -833,9 +834,9 @@ static void vig_borra_foto(time_t session, const char *nombre)
         ESP_LOGD(TAG, "vigilancia: borrada la mas antigua de la sesion (%s)", nombre);
 }
 
-/* Apunta una foto recien guardada. Si la sesion ya esta llena, antes de
- * apuntarla borra la mas antigua: la sesion nunca pasa de VIG_SESION_MAX
- * ficheros y lo que se conserva es siempre lo ultimo. */
+/* Apunta una foto recien guardada. Si la sesion ya esta llena, saca de la cola la
+ * mas antigua: la sesion nunca pasa de VIG_SESION_MAX ficheros y lo que se
+ * conserva es siempre lo ultimo. */
 static void vig_sesion_apunta(time_t session, const char *nombre)
 {
     if (!s_vig_cola) {
@@ -847,17 +848,26 @@ static void vig_sesion_apunta(time_t session, const char *nombre)
             return;
         }
     }
+
+    /* El libro de la cola, rapido y bajo el mutex. El borrado del fichero se hace
+     * DESPUES y sin el mutex: ver vig_borra_foto(). */
+    char viejo[VIG_NOMBRE_LEN] = "";
+    bool hay_viejo = false, primera = false;
     if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
     if (s_vig_cola_n == VIG_SESION_MAX) {
-        vig_borra_foto(session, s_vig_cola[s_vig_cola_ini]);
+        snprintf(viejo, sizeof(viejo), "%s", s_vig_cola[s_vig_cola_ini]);
+        hay_viejo = true;
+        primera = !s_vig_rotando;
         s_vig_cola_ini = (s_vig_cola_ini + 1) % VIG_SESION_MAX;
         s_vig_cola_n--;
-        s_vig_rotando = true;
     }
     const int pos = (s_vig_cola_ini + s_vig_cola_n) % VIG_SESION_MAX;
     snprintf(s_vig_cola[pos], VIG_NOMBRE_LEN, "%s", nombre);
     s_vig_cola_n++;
+    if (hay_viejo) s_vig_rotando = true;
     if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
+
+    if (hay_viejo) vig_borra_foto(session, viejo, primera);
 }
 
 static bool vig_write_jpeg_sd(uint32_t id, time_t ts, time_t session,
@@ -1094,29 +1104,21 @@ void camera_set_surveillance(bool on)
     s_surveillance = on;
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
     s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
-    if (on) {
-        s_photo_count = 0;  /* capturas de esta sesion (contador, ya sin tope) */
-        /* Bajo s_vig_mtx: camera_vig_store lee s_vig_session_start bajo el
-         * mismo mutex (captura concurrente en otra tarea). volatile no basta
-         * para un time_t de 64 bits en una CPU de 32 bits -> sin el mutex la
-         * escritura/lectura podria quedar partida a medias. */
-        if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
-        s_vig_session_start = time(NULL);   /* nombra la carpeta de esta sesion */
-        /* Sesion nueva: la cola de rotacion empieza vacia (si no, borraria
-         * ficheros de la sesion anterior). */
-        s_vig_cola_n = 0;
-        s_vig_cola_ini = 0;
-        s_vig_rotando = false;
-        if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
-    } else {
-        /* Al salir, la sesion ya no existe: la cola se vacia para que el estado
-         * que se publica (camera_vig_sesion_fotos) no siga contando. */
-        if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
-        s_vig_cola_n = 0;
-        s_vig_cola_ini = 0;
-        s_vig_rotando = false;
-        if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
-    }
+    if (on) s_photo_count = 0;      /* capturas de esta sesion (contador, ya sin tope) */
+
+    /* Bajo s_vig_mtx: camera_vig_store lee s_vig_session_start bajo el mismo mutex
+     * (la captura corre en otra tarea). volatile no basta para un time_t de 64 bits
+     * en una CPU de 32 bits -> sin el mutex la lectura podria quedar partida.
+     * La cola de rotacion se vacia siempre: al empezar sesion (si no, borraria
+     * ficheros de la anterior) y al salir (para que camera_vig_sesion_fotos, que es
+     * lo que se publica en /ausente, no siga contando una sesion que ya no existe). */
+    if (s_vig_mtx) xSemaphoreTake(s_vig_mtx, portMAX_DELAY);
+    if (on) s_vig_session_start = time(NULL);   /* nombra la carpeta de esta sesion */
+    s_vig_cola_n = 0;
+    s_vig_cola_ini = 0;
+    s_vig_rotando = false;
+    if (s_vig_mtx) xSemaphoreGive(s_vig_mtx);
+
     ESP_LOGI(TAG, "vigilancia %s", on ? "ON (movimiento->foto)" : "OFF");
 }
 
