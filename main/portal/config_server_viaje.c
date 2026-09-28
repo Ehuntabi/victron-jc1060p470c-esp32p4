@@ -14,7 +14,8 @@
  *
  * Auth ESTRICTA: esto escribe en la tarjeta.
  *
- * Operaciones: inicio | fin | registro | descartar.
+ * Operaciones: inicio | fin | registro | descartar | borrar. Las cuatro primeras
+ * llevan "id" numerico (el contador del satelite); "borrar" lleva "carpeta".
  *
  * "descartar" (23-ago-2026) APARTA el viaje abierto en vez de cerrarlo: su
  * carpeta pasa a DESCARTADO_<nombre> y deja de contar. Existe porque la 3.5"
@@ -1447,13 +1448,34 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
 
     const cJSON *jop = cJSON_GetObjectItem(j, "op");
     const cJSON *jid = cJSON_GetObjectItem(j, "id");
-    if (!cJSON_IsString(jop) || !cJSON_IsNumber(jid)) {
+    if (!cJSON_IsString(jop)) {
+        cJSON_Delete(j);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "falta op");
+        return ESP_OK;
+    }
+    /* Cada operacion pide lo suyo: las del satelite (inicio/fin/registro/
+     * descartar) llevan "id" numerico, y "borrar" -- la que pide la app del
+     * movil -- lleva "carpeta" y NO lleva id. Exigir las dos cosas a la vez a
+     * todas las ops dejo el borrado de viajes sin funcionar desde que nacio
+     * (v3.29): la app mandaba {"op":"borrar","carpeta":"..."} y se llevaba un
+     * 400 "faltan op o id". Lo cazo el usuario con el movil el 27-sep-2026. */
+    const bool es_borrar = !strcmp(jop->valuestring, "borrar");
+    if (es_borrar) {
+        const cJSON *jc = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
+        if (!cJSON_IsString(jc) || !jc->valuestring[0]) {
+            cJSON_Delete(j);
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_sendstr(req, "falta 'carpeta'");
+            return ESP_OK;
+        }
+    } else if (!cJSON_IsNumber(jid)) {
         cJSON_Delete(j);
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "faltan op o id");
         return ESP_OK;
     }
-    uint32_t id = (uint32_t)jid->valuedouble;
+    uint32_t id = cJSON_IsNumber(jid) ? (uint32_t)jid->valuedouble : 0;
 
     /* IDEMPOTENCIA. Con reintentos lo mismo puede llegar dos veces (se entrego
      * pero se perdio la respuesta). Se responde OK igualmente para que el
@@ -1487,7 +1509,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     else if (!strcmp(jop->valuestring, "borrar"))    ret = op_borrar(req, j, id);
     else {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "op? (inicio|fin|registro|descartar)");
+        httpd_resp_sendstr(req, "op? (inicio|fin|registro|descartar|borrar)");
         ret = ESP_OK;
     }
 
