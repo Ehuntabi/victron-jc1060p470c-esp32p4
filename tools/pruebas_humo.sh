@@ -111,9 +111,12 @@ fi
 cod=$(pide POST "$BASE/api/viaje" '{"op":"borrar"}')
 comprueba "POST /api/viaje borrar sin carpeta" "$cod" 400
 
-# 7) Control (una luz, idempotente: manda lo mismo que la app)
-cod=$(pide POST "$BASE/control" 'dev=luz_int&mode=')
-comprueba "POST /control dev=luz_int" "$cod" 200
+# 7) Control: se prueba con un dev que NO existe (400). A proposito NO se usa
+#    dev=luz_int: eso ENCIENDE/APAGA la luz interior de verdad, y una prueba de
+#    humo no debe tocar nada de la furgo (lo vi releyendo el script: ponia
+#    "no borra nada" pero accionaba un interruptor).
+cod=$(pide POST "$BASE/control" 'dev=__no_existe__')
+comprueba "POST /control dev desconocido (400, no acciona nada)" "$cod" 400
 
 echo
 if [ "$fallos" -eq 0 ]; then

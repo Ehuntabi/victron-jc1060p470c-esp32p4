@@ -310,8 +310,12 @@ static int vig_libera_espacio(void)
         if (libre < 0) break;                 /* ya no se puede medir: parar */
         if (libre <= antes) break;            /* no sube: no insistir en bucle */
     }
-    ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia; quedan %d MB libres",
-             borradas, libre_mb());
+    if (libre >= 0)
+        ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia; quedan %d MB libres",
+                 borradas, libre);
+    else
+        ESP_LOGW(TAG, "espacio: borradas %d sesion(es) de vigilancia (el hueco ya no se "
+                      "pudo medir)", borradas);
     return borradas;
 }
 
