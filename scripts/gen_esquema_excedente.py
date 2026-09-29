@@ -141,44 +141,23 @@ nodo(1240, YS, C_TINTA, 5.4)
 caja(1240, YS - 60, AX1 - 40, YS + 60, "FRIGO", "entrada D+/S+", borde=(210, 150, 90))
 texto(AX0 + 50, YS + 72, "El diodo impide que el P4 meta corriente en la salida del NE185, y que la D+ del alternador entre al piloto.", 14.5, C_TINTA)
 
-# ═════════════════════════════ 2. POTENCIA ══════════════════════════════════
-BX0, BY0, BX1, BY1 = 60, 705, 1740, 1195
-marco(BX0, BY0, BX1, BY1, "2 · POTENCIA  (12 V · 8-11 A)", C_SERV,
-      "Los 8-11 A de la resistencia. De serie vienen del vehículo; con sol hay que pasarlos a la batería de servicios.")
+# ═════════════════════════════ 2. POTENCIA ═════════════════════════════════
+# Ya esta montada en la furgo: aqui solo se deja dicho QUE tiene que cumplir, sin
+# dibujar trabajo que no hay que hacer.
+BX0, BY0, BX1, BY1 = 60, 705, 1740, 1060
+marco(BX0, BY0, BX1, BY1, "2 · POTENCIA  (12 V · 8-11 A)   —   ya montada", C_SERV,
+      "No hay nada que hacer aquí: el frigo ya recibe sus 12 V. Solo tiene que cumplir esto.")
 
-YP1, YP2 = 885, 1005      # NC (arriba) y NO (abajo)
-caja(BX0 + 50, YP1 - 62, BX0 + 470, YP1 + 62, "NE185 · JP4-2", "12 V del frigo · F2 20 A · batería del VEHÍCULO", borde=(120, 140, 160), sub_px=13)
-cable([(BX0 + 470, YP1), (760, YP1)], C_VEH, 3.4)
-
-cable([(BX0 + 50, YP2), (760, YP2)], C_SERV, 3.4)
-nodo(BX0 + 50, YP2, C_SERV)
-fusible(BX0 + 210, YP2, C_SERV, "20 A")
-texto(BX0 + 50, YP2 + 40, " +12 V batería de SERVICIOS", 14.5, C_SERV, True, "lm")
-
-RX0, RX1, RY0, RY1 = 760, 1130, 795, 1095
-caja(RX0, RY0, RX1, RY1, "RELÉ DE CONMUTACIÓN", "12 V · 20 A", borde=(120, 140, 160))
-cable([(RX0, YP1), (RX0 + 40, YP1)], C_VEH, 3.0)
-cable([(RX0, YP2), (RX0 + 40, YP2)], C_SERV, 3.0)
-nodo(RX0 + 40, YP1, C_VEH, 4.4)
-nodo(RX0 + 40, YP2, C_SERV, 4.4)
-cable([(RX0 + 60, YP1 + 8), (RX0 + 150, YP1 + 26)], C_TINTA, 3.4)      # brazo en reposo
-cable([(RX0 + 150, YP1 + 26), (RX1, YP1 + 26)], C_TINTA, 2.8)
-nodo(RX1, YP1 + 26, C_TINTA, 4.6)
-cable([(RX1, YP1 + 26), (RX1 + 60, YP1 + 26), (RX1 + 60, YP1 + 40)], C_SERV, 0)   # (sin uso)
-texto(RX0 + 36, YP1 - 22, "NC", 13.5, C_VEH, True, "mm")
-texto(RX0 + 36, YP2 + 22, "NO", 13.5, C_SERV, True, "mm")
-texto(RX0 + 46, YP1 + 26, "COM", 13.5, C_SUAVE, True, "lm")
-texto((RX0 + RX1) / 2, RY1 - 30, "bobina: la manda el P4", 14, C_MANDO, True, "mm")
-texto((RX0 + RX1) / 2, RY1 - 10, "(la misma señal del S+)", 13, C_MANDO, False, "mm")
-
-cable([(RX1, YP1 + 26), (1420, YP1 + 26)], C_SERV, 4.0)
-flecha(1416, YP1 + 26, "derecha", C_SERV, 10)
-caja(1420, YP1 - 34, BX1 - 40, YP1 + 86, "FRIGO", "resistencia 12 V · 8-11 A", borde=(210, 150, 90))
-
-d.rounded_rectangle([esc(BX0 + 50), esc(BY1 - 84), esc(BX1 - 40), esc(BY1 - 24)],
-                    radius=esc(10), fill=C_AVISO, outline=C_AVISO_B, width=esc(2))
-texto((BX0 + BX1) / 2, BY1 - 54, "Las dos baterías NUNCA a la vez: la conmutación es de reposo/trabajo (NC = vehículo, NO = servicios).",
-      15, C_TINTA, True, "mm")
+caja(BX0 + 50, BY0 + 120, BX0 + 620, BY0 + 300,
+     "Con el motor", "los 12 V vienen del vehículo, como de serie (JP4-2 · F2 20 A)",
+     borde=(120, 140, 160), sub_px=13.5)
+caja(BX0 + 660, BY0 + 120, BX0 + 1230, BY0 + 300,
+     "Con sol", "tienen que venir de la batería de servicios (ya conmutado)",
+     borde=(198, 40, 40), sub_px=13.5)
+texto(BX0 + 50, BY0 + 322, "Comprobación en un minuto: sin contacto y sin sol, mira de qué batería salen los 12 V del cable gordo del frigo.",
+      14.5, C_TINTA)
+texto(BX0 + 50, BY0 + 344, "Si salen de la de arranque, la señal S+ no puede activarse sin conmutar antes: el frigo tiraría 8-11 A de ella.",
+      14.5, C_TINTA)
 
 # ═════════════════════════════ Pie ══════════════════════════════════════════
 FX0, FY0, FX1, FY1 = 60, 1235, 880, 1460
