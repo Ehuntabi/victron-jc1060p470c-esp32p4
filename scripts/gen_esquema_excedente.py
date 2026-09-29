@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """Genera docs/esquema_excedente_solar.png (y .pdf): como se conecta el mando del
-P4 al frigo por excedente solar en la furgo (NE185-11S, frigo AES sin salida AES
-en el regulador solar).
+P4 al frigo por excedente solar en la furgo (NE185-11S, frigo AES).
 
 Uso:
     python3 scripts/gen_esquema_excedente.py
 
-Dos circuitos distintos, y ahi esta la clave:
+Son DOS circuitos distintos y se dibujan por separado, que es como se leen:
 
-- SEÑAL: la entrada D+/S+ del frigo recibe dos cosas. Del NE185 (J4, salida D+ de
-  0,5 A) cuando el motor esta en marcha, y del P4 (contacto del rele piloto ->
-  fusible -> diodo) cuando sobra sol. El diodo impide que el P4 meta corriente en
-  la salida del NE185, y que la D+ del alternador entre al piloto.
-- POTENCIA (8-11 A de la resistencia): de serie sale del NE185 (JP4-2, F2 20 A,
-  bateria del VEHICULO). Con sol hay que CONMUTAR a la bateria de servicios, nunca
-  ponerlas en paralelo: uniria los dos bancos saltandose el DC-DC.
+  1. SEÑAL (D+/S+): la entrada del frigo recibe la D+ del NE185 (J4, 0,5 A) con el
+     motor, y la S+ del P4 (contacto del rele piloto -> fusible -> diodo) cuando
+     sobra sol. El diodo impide que el P4 meta corriente en la salida del NE185.
+  2. POTENCIA (8-11 A): de serie sale del NE185 (JP4-2, F2 20 A, bateria del
+     VEHICULO). Con sol hay que CONMUTAR a la bateria de servicios con un rele de
+     reposo/trabajo. Nunca en paralelo: uniria los dos bancos saltandose el DC-DC.
 
-Los datos de terminales son del manual de la unidad (documentacion/ne185_manuales/
-NE185-11S.pdf, pagina 17) y del manual del frigo (Dometic RMx8xxx, apartado 4.9.4).
+Datos: manual de la unidad (documentacion/ne185_manuales/NE185-11S.pdf, pag. 17) y
+manual del frigo (Dometic RMx8xxx, apartado 4.9.4).
 
 Se dibuja a 3x y se reduce con LANCZOS: PIL no suaviza las lineas.
 """
@@ -25,18 +23,19 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
 SS = 3
-W, H = 1780, 1220
+W, H = 1800, 1490
 
 C_FONDO = (255, 255, 255)
 C_TINTA = (26, 32, 44)
-C_SUAVE = (108, 122, 137)
+C_SUAVE = (110, 124, 139)
 C_SERV  = (198, 40, 40)        # +12 V bateria de servicios
-C_VEH   = (140, 82, 40)        # +12 V bateria del vehiculo
+C_VEH   = (146, 88, 42)        # +12 V bateria del vehiculo
 C_SENAL = (21, 101, 192)       # D+ / S+ (senal)
 C_MANDO = (239, 108, 0)        # mando del P4 (GPIO1)
 C_MASA  = (38, 38, 38)
-C_CAJA  = (247, 249, 252)
+C_CAJA  = (248, 250, 253)
 C_BORDE = (176, 190, 205)
+C_MARCO = (226, 232, 240)
 C_AVISO = (255, 248, 225)
 C_AVISO_B = (230, 190, 80)
 
@@ -55,204 +54,161 @@ def esc(v):
     return int(round(v * SS))
 
 
-def texto(x, y, s, px=15, color=C_TINTA, negrita=False, anchor="la"):
+def texto(x, y, s, px=16, color=C_TINTA, negrita=False, anchor="la"):
     d.text((esc(x), esc(y)), s, font=f(px, negrita), fill=color, anchor=anchor)
 
 
-def caja(x0, y0, x1, y1, titulo=None, sub=None, borde=C_BORDE, relleno=C_CAJA,
-         grosor=2.2, titulo_px=16, sub_px=12.5):
-    d.rounded_rectangle([esc(x0), esc(y0), esc(x1), esc(y1)], radius=esc(10),
+def marco(x0, y0, x1, y1, titulo, color_titulo=C_TINTA, sub=None):
+    d.rounded_rectangle([esc(x0), esc(y0), esc(x1), esc(y1)], radius=esc(16),
+                        outline=C_MARCO, width=esc(3), fill=(252, 253, 255))
+    texto(x0 + 28, y0 + 22, titulo, 21, color_titulo, True)
+    if sub:
+        texto(x0 + 28, y0 + 52, sub, 15, C_SUAVE)
+
+
+def caja(x0, y0, x1, y1, titulo, sub=None, borde=C_BORDE, grosor=2.4, titulo_px=17,
+         sub_px=14, relleno=C_CAJA):
+    d.rounded_rectangle([esc(x0), esc(y0), esc(x1), esc(y1)], radius=esc(12),
                         fill=relleno, outline=borde, width=esc(grosor))
     cy = (y0 + y1) / 2
     if sub:
-        cy -= 11
-    if titulo:
-        texto((x0 + x1) / 2, cy, titulo, titulo_px, C_TINTA, True, "mm")
+        cy -= 12
+    texto((x0 + x1) / 2, cy, titulo, titulo_px, C_TINTA, True, "mm")
     if sub:
-        texto((x0 + x1) / 2, cy + 20, sub, sub_px, C_SUAVE, False, "mm")
+        texto((x0 + x1) / 2, cy + 22, sub, sub_px, C_SUAVE, False, "mm")
 
 
-def cable(puntos, color, grosor=2.6):
+def cable(puntos, color, grosor=3.0):
     d.line([(esc(x), esc(y)) for x, y in puntos], fill=color, width=esc(grosor),
            joint="curve")
 
 
-def nodo(x, y, color=C_TINTA, r=4.4):
+def nodo(x, y, color=C_TINTA, r=5.0):
     d.ellipse([esc(x - r), esc(y - r), esc(x + r), esc(y + r)], fill=color)
 
 
-def flecha(x, y, direccion="derecha", color=C_TINTA, tam=8):
+def flecha(x, y, direccion="derecha", color=C_TINTA, tam=9):
     if direccion == "derecha":
         pts = [(x, y), (x - tam, y - tam * 0.6), (x - tam, y + tam * 0.6)]
-    elif direccion == "abajo":
-        pts = [(x, y), (x - tam * 0.6, y - tam), (x + tam * 0.6, y - tam)]
-    elif direccion == "arriba":
-        pts = [(x, y), (x - tam * 0.6, y + tam), (x + tam * 0.6, y + tam)]
     else:
         pts = [(x, y), (x + tam, y - tam * 0.6), (x + tam, y + tam * 0.6)]
     d.polygon([(esc(a), esc(b)) for a, b in pts], fill=color)
 
 
-def diodo(x, y, color=C_TINTA):
-    t, a = 12, 10
+def diodo(x, y, color=C_TINTA, etiqueta=None):
+    t, a = 14, 12
     d.polygon([(esc(x - t), esc(y - a)), (esc(x - t), esc(y + a)), (esc(x + t), esc(y))],
               fill=color)
-    d.line([(esc(x + t), esc(y - a)), (esc(x + t), esc(y + a))], fill=color, width=esc(3.6))
+    d.line([(esc(x + t), esc(y - a)), (esc(x + t), esc(y + a))], fill=color, width=esc(4))
+    if etiqueta:
+        texto(x, y + 30, etiqueta, 13.5, C_SUAVE, False, "mm")
 
 
-def fusible(x, y, etiqueta=None, vertical=False):
-    if vertical:
-        d.rounded_rectangle([esc(x - 8), esc(y - 15), esc(x + 8), esc(y + 15)], radius=esc(4),
-                            outline=C_TINTA, width=esc(2.2), fill=C_FONDO)
-        cable([(x, y - 15), (x, y + 15)], C_TINTA, 2.2)
-        if etiqueta:
-            texto(x + 20, y, etiqueta, 12.5, C_TINTA, True, "lm")
-    else:
-        d.rounded_rectangle([esc(x - 16), esc(y - 8), esc(x + 16), esc(y + 8)], radius=esc(4),
-                            outline=C_TINTA, width=esc(2.2), fill=C_FONDO)
-        cable([(x - 16, y), (x + 16, y)], C_TINTA, 2.2)
-        if etiqueta:
-            texto(x, y - 22, etiqueta, 12.5, C_TINTA, True, "mm")
+def fusible(x, y, color=C_TINTA, etiqueta=None):
+    d.rounded_rectangle([esc(x - 20), esc(y - 11), esc(x + 20), esc(y + 11)], radius=esc(5),
+                        outline=color, width=esc(2.6), fill=C_FONDO)
+    cable([(x - 20, y), (x + 20, y)], color, 2.6)
+    if etiqueta:
+        texto(x, y - 26, etiqueta, 13.5, color, True, "mm")
 
 
-def masa(x, y):
-    cable([(x, y), (x, y + 12)], C_MASA, 2.4)
-    for i, ancho in enumerate((14, 8, 4)):
-        d.line([(esc(x - ancho), esc(y + 12 + i * 6)), (esc(x + ancho), esc(y + 12 + i * 6))],
-               fill=C_MASA, width=esc(2.4))
+# ── Titulo ───────────────────────────────────────────────────────────────────
+texto(60, 40, "Excedente solar  →  frigo", 30, C_TINTA, True)
+texto(60, 82, "NE185-11S · frigo AES · dos circuitos: la señal que le dice al frigo «hay 12 V» y la potencia que los entrega.", 16, C_SUAVE)
 
+# ═════════════════════════════ 1. SEÑAL ═════════════════════════════════════
+AX0, AY0, AX1, AY1 = 60, 120, 1740, 665
+marco(AX0, AY0, AX1, AY1, "1 · SEÑAL  (D+ / S+)", C_SENAL,
+      "Son señales: basta cable de ~1 mm². La entrada del frigo admite D+ (motor) o S+ (sol).")
 
-# ── Titulo y leyenda ─────────────────────────────────────────────────────────
-texto(60, 38, "Excedente solar  →  frigo   (NE185-11S, frigo AES)", 28, C_TINTA, True)
-texto(60, 78, "Dos circuitos: la SEÑAL (entrada D+/S+ del frigo) y la POTENCIA (8-11 A de la resistencia).", 15, C_SUAVE)
-texto(60, 100, "Con sol, el P4 da la señal S+ y conmuta la potencia a la batería de servicios. Nunca las dos baterías a la vez.", 15, C_SUAVE)
+YS = 350          # linea de señal
+caja(AX0 + 50, YS - 60, AX0 + 330, YS + 60, "NE185 · J4", "salida D+  (0,5 A)", borde=(120, 140, 160))
+cable([(AX0 + 330, YS), (1240, YS)], C_SENAL, 3.4)
+texto(AX0 + 360, YS - 26, "con el motor en marcha", 14.5, C_SENAL, True, "lm")
 
-lx, ly = 1330, 40
-for i, (col, txt) in enumerate([(C_SENAL, "D+ / S+  (señal)"), (C_MANDO, "mando del P4"),
-                                (C_SERV, "+12 V batería servicios"), (C_VEH, "+12 V batería vehículo"),
-                                (C_MASA, "masa")]):
-    cable([(lx, ly + i * 22), (lx + 26, ly + i * 22)], col, 3.2)
-    texto(lx + 34, ly + i * 22, txt, 12.5, C_SUAVE, False, "lm")
+caja(AX0 + 50, YS + 130, AX0 + 250, YS + 240, "P4", "GPIO1 · JP1 pin 7", borde=(210, 150, 90))
+cable([(AX0 + 250, YS + 185), (AX0 + 310, YS + 185)], C_MANDO, 3.0)
+flecha(AX0 + 306, YS + 185, "derecha", C_MANDO)
+caja(AX0 + 310, YS + 130, AX0 + 570, YS + 240, "RELÉ PILOTO", "contacto NA", borde=(210, 150, 90))
+cable([(AX0 + 570, YS + 185), (700, YS + 185)], C_MANDO, 3.0)
+fusible(740, YS + 185, C_MANDO, "5 A")
+cable([(780, YS + 185), (830, YS + 185)], C_MANDO, 3.0)
+diodo(860, YS + 185, C_TINTA, "diodo: el anillo mira al frigo")
+cable([(890, YS + 185), (1240, YS + 185), (1240, YS)], C_MANDO, 3.0)
+texto(AX0 + 50, 616, "cuando sobra sol (modo del P4)", 14.5, C_MANDO, True, "la")
+nodo(1240, YS, C_TINTA, 5.4)
 
-Y_SENAL = 374
-Y_POT = 560
-Y_GAS = 700
+caja(1240, YS - 60, AX1 - 40, YS + 60, "FRIGO", "entrada D+/S+", borde=(210, 150, 90))
+texto(AX0 + 50, YS + 72, "El diodo impide que el P4 meta corriente en la salida del NE185, y que la D+ del alternador entre al piloto.", 14.5, C_TINTA)
 
-# ── NE185: de donde sale todo ────────────────────────────────────────────────
-NX0, NY0, NX1, NY1 = 60, 300, 320, 800
-caja(NX0, NY0, NX1, NY1, "NE185", "centralita (11S)", borde=(120, 140, 160), grosor=2.6)
-texto(NX0 + 18, Y_SENAL, "J4", 13, C_SENAL, True)
-texto(NX0 + 52, Y_SENAL, "salida D+ (0,5 A)", 12, C_SUAVE, False, "lm")
-texto(NX0 + 18, Y_POT + 22, "JP4-2", 13, C_VEH, True)
-texto(NX0 + 70, Y_POT + 22, "12 V del frigo (F2 20 A)", 12, C_SUAVE, False, "lm")
-texto(NX0 + 18, Y_GAS, "JP4-3", 13, C_SUAVE, True)
-texto(NX0 + 70, Y_GAS, "encendido de gas (F7)", 12, C_SUAVE, False, "lm")
-texto(NX0 + 18, NY1 - 58, "JP13 = ENTRADA de D+", 12.5, C_TINTA, True)
-texto(NX0 + 18, NY1 - 40, "no se toca", 12, C_SUAVE)
+# ═════════════════════════════ 2. POTENCIA ══════════════════════════════════
+BX0, BY0, BX1, BY1 = 60, 705, 1740, 1195
+marco(BX0, BY0, BX1, BY1, "2 · POTENCIA  (12 V · 8-11 A)", C_SERV,
+      "Los 8-11 A de la resistencia. De serie vienen del vehículo; con sol hay que pasarlos a la batería de servicios.")
 
-# ── SEÑAL: P4 -> piloto -> fusible -> diodo -> nodo ──────────────────────────
-caja(370, 300, 520, 400, "P4", "GPIO1 · JP1 pin 7", borde=(210, 150, 90))
-texto(445, 424, "3,3 V", 12, C_MANDO, True, "mm")
+YP1, YP2 = 885, 1005      # NC (arriba) y NO (abajo)
+caja(BX0 + 50, YP1 - 62, BX0 + 470, YP1 + 62, "NE185 · JP4-2", "12 V del frigo · F2 20 A · batería del VEHÍCULO", borde=(120, 140, 160), sub_px=13)
+cable([(BX0 + 470, YP1), (760, YP1)], C_VEH, 3.4)
 
-PX0, PY0, PX1, PY1 = 600, 296, 800, 430
-caja(PX0, PY0, PX1, PY1, "RELÉ PILOTO", "contacto NA", grosor=2.4)
-cable([(520, 350), (560, 350), (560, 396), (PX0, 396)], C_MANDO, 2.8)
-flecha(PX0 - 4, 396, "derecha", C_MANDO)
-cable([(630, 396), (658, 396)], C_TINTA, 2.4)
-nodo(658, 396, C_TINTA, 3.4)
-cable([(680, 382), (752, 382)], C_TINTA, 2.6)
-nodo(752, 382, C_TINTA, 3.4)
-cable([(752, 382), (860, 382), (860, Y_SENAL - 15)], C_MANDO, 2.8)
-fusible(860, Y_SENAL, "5 A", vertical=True)
-cable([(860, Y_SENAL + 15), (860, 462)], C_MANDO, 2.8)
-cable([(860, 462), (940, 462)], C_MANDO, 2.8)
-diodo(956, 462, C_TINTA)
-cable([(968, 462), (1060, 462), (1060, Y_SENAL)], C_MANDO, 2.8)
-cable([(1060, Y_SENAL), (1180, Y_SENAL)], C_SENAL, 2.8)
-nodo(1180, Y_SENAL, C_TINTA)
-texto(956, 494, "diodo (anillo hacia el frigo)", 12, C_SUAVE, False, "mm")
+cable([(BX0 + 50, YP2), (760, YP2)], C_SERV, 3.4)
+nodo(BX0 + 50, YP2, C_SERV)
+fusible(BX0 + 210, YP2, C_SERV, "20 A")
+texto(BX0 + 50, YP2 + 40, " +12 V batería de SERVICIOS", 14.5, C_SERV, True, "lm")
 
-# el J4 del NE185 entra en ese mismo nodo
-cable([(NX1, Y_SENAL), (1180, Y_SENAL)], C_SENAL, 2.8)
-texto(NX1 + 16, Y_SENAL + 20, "señal del NE185 (motor) por J4", 12.5, C_SENAL, True, "lm")
+RX0, RX1, RY0, RY1 = 760, 1130, 795, 1095
+caja(RX0, RY0, RX1, RY1, "RELÉ DE CONMUTACIÓN", "12 V · 20 A", borde=(120, 140, 160))
+cable([(RX0, YP1), (RX0 + 40, YP1)], C_VEH, 3.0)
+cable([(RX0, YP2), (RX0 + 40, YP2)], C_SERV, 3.0)
+nodo(RX0 + 40, YP1, C_VEH, 4.4)
+nodo(RX0 + 40, YP2, C_SERV, 4.4)
+cable([(RX0 + 60, YP1 + 8), (RX0 + 150, YP1 + 26)], C_TINTA, 3.4)      # brazo en reposo
+cable([(RX0 + 150, YP1 + 26), (RX1, YP1 + 26)], C_TINTA, 2.8)
+nodo(RX1, YP1 + 26, C_TINTA, 4.6)
+cable([(RX1, YP1 + 26), (RX1 + 60, YP1 + 26), (RX1 + 60, YP1 + 40)], C_SERV, 0)   # (sin uso)
+texto(RX0 + 36, YP1 - 22, "NC", 13.5, C_VEH, True, "mm")
+texto(RX0 + 36, YP2 + 22, "NO", 13.5, C_SERV, True, "mm")
+texto(RX0 + 46, YP1 + 26, "COM", 13.5, C_SUAVE, True, "lm")
+texto((RX0 + RX1) / 2, RY1 - 30, "bobina: la manda el P4", 14, C_MANDO, True, "mm")
+texto((RX0 + RX1) / 2, RY1 - 10, "(la misma señal del S+)", 13, C_MANDO, False, "mm")
 
-# ── POTENCIA: conmutacion ────────────────────────────────────────────────────
-RX0, RY0, RX1, RY1 = 700, 500, 1010, 664
-caja(RX0, RY0, RX1, RY1, "RELÉ DE CONMUTACIÓN", "12 V · 20 A · reposo/trabajo",
-     borde=(120, 140, 160), grosor=2.4, sub_px=12)
-cable([(RX0, 592), (RX0 + 30, 592)], C_VEH, 2.6)
-cable([(RX0, 640), (RX0 + 30, 640)], C_SERV, 2.6)
-nodo(RX0 + 30, 592, C_VEH, 3.4)
-nodo(RX0 + 30, 640, C_SERV, 3.4)
-cable([(RX0 + 48, 600), (RX0 + 100, 614)], C_TINTA, 3.0)
-cable([(RX0 + 100, 614), (RX1, 614)], C_TINTA, 2.6)
-nodo(RX1, 614, C_TINTA, 3.6)
-texto(RX0 + 26, 574, "NC", 11.5, C_SUAVE, True, "lm")
-texto(RX0 + 26, 664, "NO", 11.5, C_SUAVE, True, "lm")
-texto((RX0 + RX1) / 2, RY1 - 26, "bobina: la manda el P4 (misma señal que el S+)", 11.5, C_MANDO, True, "mm")
+cable([(RX1, YP1 + 26), (1420, YP1 + 26)], C_SERV, 4.0)
+flecha(1416, YP1 + 26, "derecha", C_SERV, 10)
+caja(1420, YP1 - 34, BX1 - 40, YP1 + 86, "FRIGO", "resistencia 12 V · 8-11 A", borde=(210, 150, 90))
 
-# NE185 JP4-2 -> NC (reposo)
-cable([(NX1, Y_POT + 22), (500, Y_POT + 22), (500, 592), (RX0, 592)], C_VEH, 2.8)
-texto(510, Y_POT - 6, "12 V del vehículo (de serie)", 12.5, C_VEH, True, "lm")
+d.rounded_rectangle([esc(BX0 + 50), esc(BY1 - 84), esc(BX1 - 40), esc(BY1 - 24)],
+                    radius=esc(10), fill=C_AVISO, outline=C_AVISO_B, width=esc(2))
+texto((BX0 + BX1) / 2, BY1 - 54, "Las dos baterías NUNCA a la vez: la conmutación es de reposo/trabajo (NC = vehículo, NO = servicios).",
+      15, C_TINTA, True, "mm")
 
-# +12 V servicios -> NO (trabajo)
-nodo(560, 736, C_SERV)
-texto(560, 722, "+12 V batería de servicios", 12.5, C_SERV, True, "lm")
-cable([(560, 736), (560, 640), (RX0, 640)], C_SERV, 3.0)
-fusible(560, 690, "20 A", vertical=True)
-
-# mando de la bobina desde el contacto del piloto
-cable([(690, 396), (690, 470), (648, 470), (648, 520), (RX0, 520)], C_MANDO, 2.0)
-
-# COM -> frigo
-cable([(RX1, 614), (1180, 614)], C_SERV, 3.6)
-flecha(1177, 614, "derecha", C_SERV, 9)
-
-# ── FRIGO ────────────────────────────────────────────────────────────────────
-FX0, FX1 = 1190, 1600
-caja(FX0, 300, FX1, 424, "FRIGO", "AES · electrónica propia", borde=(210, 150, 90))
-caja(FX0, 540, FX1, 700, "FRIGO", "resistencia 12 V · 8-11 A", borde=(210, 150, 90))
-texto(1180, Y_SENAL - 18, "D+/S+", 12.5, C_SENAL, True, "rm")
-texto(1180, 640, "12 V", 12.5, C_SERV, True, "rm")
-cable([(NX1, Y_GAS), (1180, Y_GAS)], C_SUAVE, 2.0)
-texto(1180, Y_GAS + 16, "gas (F7) — no tocar", 12, C_SUAVE, False, "mm")
-cable([(1180, 424), (1180, Y_SENAL)], C_SENAL, 2.2)
-
-cable([(1395, 700), (1395, 748)], C_MASA, 2.4)
-masa(1395, 748)
-texto(1415, 762, "masa chasis", 12, C_SUAVE, False, "lm")
-
-# ── Paneles ──────────────────────────────────────────────────────────────────
-PX0b, PY0b, PX1b, PY1b = 60, 840, 840, 1170
-d.rounded_rectangle([esc(PX0b), esc(PY0b), esc(PX1b), esc(PY1b)], radius=esc(12),
+# ═════════════════════════════ Pie ══════════════════════════════════════════
+FX0, FY0, FX1, FY1 = 60, 1235, 880, 1460
+d.rounded_rectangle([esc(FX0), esc(FY0), esc(FX1), esc(FY1)], radius=esc(14),
                     fill=C_AVISO, outline=C_AVISO_B, width=esc(2))
-texto(PX0b + 24, PY0b + 20, "Cómo se comporta", 16, C_TINTA, True)
+texto(FX0 + 26, FY0 + 22, "Qué pasa en cada caso", 17, C_TINTA, True)
 filas = [
-    ("Motor en marcha", "el NE185 manda su D+ (J4) y sus 12 V de serie (JP4-2)", C_VEH),
-    ("Parado, con sol y SoC suficiente", "el P4 da S+ y conmuta la potencia a servicios", C_SERV),
-    ("Parado, sin sol", "ni señal ni 12 V: el frigo se queda en gas", C_SUAVE),
-    ("Aparece 230 V en modo solar", "el P4 suelta: vuelve la D+ del NE185", C_TINTA),
+    ("Con el motor", "el NE185 da su D+ (J4) y sus 12 V de serie (JP4-2)", C_VEH),
+    ("Con sol (modo del P4)", "el P4 da S+ y conmuta la potencia a servicios", C_SERV),
+    ("Aparcado y sin sol", "ni señal ni 12 V: el frigo se queda en gas", C_SUAVE),
+    ("Aparece 230 V con sol", "el P4 suelta y vuelve todo a lo del NE185", C_TINTA),
 ]
 for i, (a, b, col) in enumerate(filas):
-    y = PY0b + 62 + i * 40
-    d.ellipse([esc(PX0b + 26), esc(y - 5), esc(PX0b + 36), esc(y + 5)], fill=col)
-    texto(PX0b + 50, y, a, 13, C_TINTA, True, "lm")
-    texto(PX0b + 330, y, b, 12.5, C_SUAVE, False, "lm")
+    y = FY0 + 66 + i * 40
+    d.ellipse([esc(FX0 + 28), esc(y - 5), esc(FX0 + 38), esc(y + 5)], fill=col)
+    texto(FX0 + 52, y, a, 14.5, C_TINTA, True, "lm")
+    texto(FX0 + 300, y, b, 13.5, C_SUAVE, False, "lm")
 
-AX0, AY0, AX1, AY1 = 880, 840, 1720, 1170
-d.rounded_rectangle([esc(AX0), esc(AY0), esc(AX1), esc(AY1)], radius=esc(12),
-                    outline=C_BORDE, width=esc(2), fill=C_CAJA)
-texto(AX0 + 24, AY0 + 20, "Recuerda", 16, C_TINTA, True)
+GX0, GY0, GX1, GY1 = 920, 1235, 1740, 1460
+d.rounded_rectangle([esc(GX0), esc(GY0), esc(GX1), esc(GY1)], radius=esc(14),
+                    outline=C_BORDE, width=esc(2.4), fill=C_CAJA)
+texto(GX0 + 26, GY0 + 22, "Recuerda", 17, C_TINTA, True)
 avisos = [
-    "• Las dos baterías NUNCA en paralelo: la conmutación es de reposo/trabajo.",
-    "• La señal lleva un diodo: el P4 no puede meter corriente en la salida del NE185.",
-    "• D+ y S+ son señales: cable de ~1 mm². La potencia, cable de 20 A.",
-    "• Fusible de 20 A para la potencia, cerca de la batería de servicios.",
-    "• El encendido de gas (JP4-3, F7) no se toca, o el frigo no arranca a gas.",
-    "• Vale si el frigo está en la salida POR RELÉ (JP4-2). Comprueba en cuál está.",
+    "• El frigo tiene que estar en la salida POR RELÉ (JP4-2).",
+    "• El encendido de gas (JP4-3, F7) no se toca.",
+    "• JP13 (entrada de D+ del NE185) no se toca: acopla baterías y apaga la luz exterior.",
+    "• Fusible de 20 A cerca de la batería de servicios.",
 ]
 for i, a in enumerate(avisos):
-    texto(AX0 + 24, AY0 + 58 + i * 30, a, 12.5, C_TINTA)
+    texto(GX0 + 26, GY0 + 66 + i * 30, a, 13.5, C_TINTA)
 
 img = img.resize((W, H), Image.LANCZOS)
 salida = Path(__file__).resolve().parent.parent / "docs" / "esquema_excedente_solar.png"
