@@ -6,6 +6,11 @@
 > meses sin funcionar). Verificado en banco: 73 tramas con tanque vs ~5
 > degradadas filtradas; datos en pantalla (Overview) confirmados por el usuario.
 
+> **Manuales del fabricante**: en `documentacion/ne185_manuales/` hay cuatro
+> (NE185-15FV, KIT NE185-G, NE160/NE185-FV y la hoja oficial NE136/NE185), con un
+> `LEEME.md` que resume lo que dicen de la D+ y de las salidas al frigo. No
+> documentan el protocolo RS-485: eso es lo de aquí abajo.
+
 Esta es, probablemente, la primera ingeniería inversa pública completa del
 protocolo del NordElettronica **NE187 ↔ NE185** (no hay documentación oficial).
 
