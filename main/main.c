@@ -67,14 +67,20 @@ static const char *TAG = "VICTRON_LVGL_APP";
  * y habra que buscarla (o volver a poner el reinicio). */
 static void heap_log_cb(void *arg)
 {
+    /* La DMA es la que se agota primero (Wi-Fi fuerte + tarjeta SD a la vez) y la
+     * que provoco el panic del SPI en v3.5: por eso va con su minimo y con el
+     * bloque mas grande que queda, que es lo que dice si cabe una transferencia. */
     ESP_LOGI(TAG,
         "uptime %llus | heap libre %" PRIu32 " min %" PRIu32
-        " | interno libre %u min %u | PSRAM libre %u",
+        " | interno %u min %u | DMA %u min %u bloque %u | PSRAM %u",
         esp_timer_get_time() / 1000000ULL,
         esp_get_free_heap_size(),
         esp_get_minimum_free_heap_size(),
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_DMA),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA),
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
     );
 }

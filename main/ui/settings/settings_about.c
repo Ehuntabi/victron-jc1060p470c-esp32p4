@@ -79,14 +79,17 @@ static void about_refresh_dynamic(ui_state_t *ui)
     if (ui->lbl_about_heap) {
         size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         size_t min_int  = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+        size_t free_dma = heap_caps_get_free_size(MALLOC_CAP_DMA);
         size_t free_spi = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
         /* El minimo es lo que de verdad importa: el libre de ahora mismo puede
          * estar alto porque no haya nada abierto, y lo que se busca es el peor
-         * momento desde que arranco (camara + galeria + portal a la vez). */
+         * momento desde que arranco (camara + galeria + portal a la vez).
+         * La DMA es la que necesitan la tarjeta SD y la camara para mover datos:
+         * cuando se agota es cuando falla la lectura de la tarjeta (v3.5). */
         lv_label_set_text_fmt(ui->lbl_about_heap,
-            "RAM libre: int %u KB (min %u KB)  |  PSRAM %u KB",
+            "RAM int %u KB (min %u)  |  DMA %u KB  |  PSRAM %u KB",
             (unsigned)(free_int / 1024), (unsigned)(min_int / 1024),
-            (unsigned)(free_spi / 1024));
+            (unsigned)(free_dma / 1024), (unsigned)(free_spi / 1024));
     }
     /* La IP NO se pinta aqui: vive en Ajustes -> Wi-Fi, en la tarjeta del punto
      * de acceso, que es donde se busca (decision del 22-sep-2026, commit e1a7ec5).
