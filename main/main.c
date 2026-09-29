@@ -68,11 +68,14 @@ static const char *TAG = "VICTRON_LVGL_APP";
 static void heap_log_cb(void *arg)
 {
     ESP_LOGI(TAG,
-        "uptime %llus | heap libre %" PRIu32 " min %" PRIu32 " | PSRAM libre %u",
+        "uptime %llus | heap libre %" PRIu32 " min %" PRIu32
+        " | interno libre %u min %u | PSRAM libre %u",
         esp_timer_get_time() / 1000000ULL,
         esp_get_free_heap_size(),
         esp_get_minimum_free_heap_size(),
-        heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
     );
 }
 
