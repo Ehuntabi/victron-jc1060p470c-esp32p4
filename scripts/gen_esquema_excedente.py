@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
 SS = 3
-W, H = 1680, 1080
+W, H = 1680, 1200
 
 C_FONDO = (255, 255, 255)
 C_TINTA = (26, 32, 44)
@@ -96,6 +96,8 @@ def flecha(x, y, direccion="derecha", color=C_TINTA, tam=8):
         pts = [(x, y), (x - tam, y - tam * 0.6), (x - tam, y + tam * 0.6)]
     elif direccion == "abajo":
         pts = [(x, y), (x - tam * 0.6, y - tam), (x + tam * 0.6, y - tam)]
+    elif direccion == "arriba":
+        pts = [(x, y), (x - tam * 0.6, y + tam), (x + tam * 0.6, y + tam)]
     else:
         pts = [(x, y), (x + tam, y - tam * 0.6), (x + tam, y + tam * 0.6)]
     d.polygon([(esc(a), esc(b)) for a, b in pts], fill=color)
@@ -186,10 +188,14 @@ cable([(720, 430), (900, 430)], C_MANDO, 2.8)
 texto(704, 468, "anillo → bobina", 12.5, C_TINTA, True, "mm")
 
 # ── D+ (entra por abajo, al mismo nodo) ──────────────────────────────────────
-cable([(760, 620), (760, 430)], C_DP, 3.0)
+cable([(760, 700), (760, 430)], C_DP, 3.0)
 nodo(760, 430, C_TINTA)
-texto(760, 646, "D+ del vehículo  (azul, 1–1,5 mm²)", 13.5, C_DP, True, "mm")
-texto(760, 668, "solo con el motor en marcha y cargando", 12.5, C_SUAVE, False, "mm")
+nodo(760, 700, C_DP)                                  # de aqui sale la rama al frigo
+cable([(760, 700), (1400, 700), (1400, 500)], C_DP, 3.0)
+flecha(1400, 502, "arriba", C_DP, 9)
+texto(736, 660, "D+ del vehículo  (azul, 1–1,5 mm²)", 13.5, C_DP, True, "rm")
+texto(736, 682, "solo con el motor en marcha y cargando", 12.5, C_SUAVE, False, "rm")
+texto(1080, 726, "y la MISMA D+ entra en el frigo: es lo que le hace cambiar de energía", 13, C_DP, True, "mm")
 
 # ── Bobina del rele tocho ────────────────────────────────────────────────────
 BX0, BY0, BX1, BY1 = 900, 380, 1040, 480
@@ -225,8 +231,11 @@ texto(1150, 374, "enlace mecánico", 11.5, C_SUAVE, False, "mm")
 
 cable([(1330, 424), (1330, 430), (1470, 430)], C_12V, 4.0)
 flecha(1467, 430, "derecha", C_12V, 9)
-texto(1400, 458, "12 V al frigo · 8–11 A", 13, C_12V, True, "mm")
-caja(1470, 380, 1650, 480, "FRIGO", "resistencia 12 V", borde=(210, 150, 90))
+texto(1480, 348, "12 V al frigo · 8–11 A", 13, C_12V, True, "mm")
+caja(1470, 380, 1650, 500, "FRIGO", "automático (AES) · resistencia 12 V", borde=(210, 150, 90))
+nodo(1400, 500, C_DP, 3.8)
+texto(1414, 468, "D+", 12.5, C_DP, True, "rm")
+texto(1414, 492, "12 V", 12.5, C_12V, True, "rm")
 cable([(1500, 480), (1500, 536)], C_MASA, 2.4)
 masa(1500, 536)
 texto(1522, 548, "masa chasis", 12.5, C_SUAVE, False, "lm")
@@ -235,7 +244,7 @@ texto(1560, 600, "El relé tocho es el de siempre:", 12.5, C_SUAVE, False, "mm")
 texto(1560, 620, "el P4 no alimenta el frigo", 12.5, C_SUAVE, False, "mm")
 
 # ── Panel: quien cierra el rele ──────────────────────────────────────────────
-RX0, RY0, RX1, RY1 = 60, 700, 800, 1010
+RX0, RY0, RX1, RY1 = 60, 820, 800, 1130
 d.rounded_rectangle([esc(RX0), esc(RY0), esc(RX1), esc(RY1)], radius=esc(12),
                     fill=C_AVISO, outline=C_AVISO_B, width=esc(2))
 texto(RX0 + 24, RY0 + 20, "Qué cierra el relé en cada caso", 16, C_TINTA, True)
@@ -252,7 +261,7 @@ for i, (a, b, col) in enumerate(filas):
     texto(RX0 + 320, y, b, 13, C_SUAVE, False, "lm")
 
 # ── Panel: recuerda ──────────────────────────────────────────────────────────
-AX0, AY0, AX1, AY1 = 840, 700, 1650, 1010
+AX0, AY0, AX1, AY1 = 840, 820, 1650, 1130
 d.rounded_rectangle([esc(AX0), esc(AY0), esc(AX1), esc(AY1)], radius=esc(12),
                     outline=C_BORDE, width=esc(2), fill=C_CAJA)
 texto(AX0 + 24, AY0 + 20, "Recuerda", 16, C_TINTA, True)
@@ -263,6 +272,8 @@ avisos = [
     "• Si el relé tocho no trae rueda libre, ponla tú (1N4148 en paralelo).",
     "• La D+ es una señal de mando: no la uses como fuente de corriente.",
     "• Con el motor en marcha, el diodo impide que la D+ retroalimente el piloto.",
+    "• Un frigo automático (AES) NO cambia a 12 V por tener 12 V: cambia al ver la D+.",
+    "• Por eso la D+ va a los dos sitios: a la bobina del relé y a la entrada D+ del frigo.",
 ]
 for i, a in enumerate(avisos):
     texto(AX0 + 24, AY0 + 56 + i * 30, a, 13, C_TINTA)

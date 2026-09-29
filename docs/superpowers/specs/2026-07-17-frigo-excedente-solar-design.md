@@ -166,6 +166,16 @@ inyección impide que esos 13V retroalimenten la línea D+ del vehículo (backfe
 Al arranque el GPIO se configura en **nivel bajo (relé OFF)** antes de cualquier
 lógica.
 
+**La D+ tiene que llegar también al FRIGO, no solo a la bobina.** El frigo es
+automático (AES): no cambia a 12 V porque haya 12 V en la resistencia, cambia
+porque **ve la D+**. Si el P4 cerrara el relé sin dar la D+, el frigo seguiría a
+gas con la resistencia alimentada y sin enfriar. Así que el nodo que alimenta la
+bobina alimenta **también la entrada D+ del frigo** (es el mismo nodo donde ya
+está la D+ del vehículo: las dos fuentes, la del vehículo directa y la del P4 a
+través de su diodo). Si el frigo fuera de los que detectan la D+ por umbral alto,
+la rama del P4 puede ir con un diodo Schottky en vez de uno de silicio, para
+perder 0,3 V en lugar de 0,7 V.
+
 ## Estados de fallo / arranque
 
 - **Boot:** GPIO1 = 0 (OFF) siempre. `sol_en` se carga de NVS (default OFF).
