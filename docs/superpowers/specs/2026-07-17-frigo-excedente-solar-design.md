@@ -157,6 +157,9 @@ histéresis.
 
 ## Hardware
 
+Esquema dibujado (se regenera con `scripts/gen_esquema_excedente.py`):
+`docs/esquema_excedente_solar.png` / `.pdf`.
+
 `GPIO1` (JP1, salida digital) → base/entrada del **relé piloto** → sus contactos
 inyectan **13V a la bobina del relé tocho**. Un **diodo** en el punto de
 inyección impide que esos 13V retroalimenten la línea D+ del vehículo (backfeed).
