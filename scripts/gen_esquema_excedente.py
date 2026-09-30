@@ -144,7 +144,7 @@ texto(AX0 + 50, 616, "cuando sobra sol (modo del P4)", 14.5, C_MANDO, True, "la"
 nodo(1240, YS, C_TINTA, 5.4)
 
 caja(1240, YS - 60, AX1 - 40, YS + 60, "FRIGO", "entrada D+/S+", borde=(210, 150, 90))
-texto(AX0 + 50, YS + 72, "Empalme en el terminal D+/S+ del frigo, el final del cable: asi la señal no llega a la antena, ni a las valvulas, ni al acoplador.", 14.5, C_MANDO, True)
+texto(AX0 + 50, YS + 72, "Empalme en el propio borne J4 (o en el cable, da igual): de esta salida solo cuelga el frigo. El acoplador de baterias va por JP13, y eso no se toca.", 14.5, C_MANDO, True)
 texto(AX0 + 50, YS + 94, "El diodo impide que el P4 meta corriente en la salida del NE185, y que la D+ del alternador entre al piloto.", 14.5, C_TINTA)
 texto(AX0 + 50, AY1 - 24, "Es la unica entrada que hace que el AES cambie a 12 V (manual del frigo 4.9.4 y fig. 43): con 12 V en la resistencia, pero sin señal, el frigo no cambia.", 14.5, C_TINTA)
 

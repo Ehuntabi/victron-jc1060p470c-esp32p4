@@ -33,16 +33,27 @@ De ahí el orden obligatorio: **primero la radio, después la P4**.
 # 1. Copia la imagen nueva de la radio a la RAIZ de la tarjeta SD de la placa
 cp ~/joint/firmware_radio/network_adapter_2.12.13.bin /media/<tu-lector>/network_adapter.bin
 
-# 2. Compila y graba el transportador (la placa por USB)
+# 2a. SIN tarjeta SD (lo normal si no tienes lector a mano): el script deja la
+#     imagen de la radio en la particion ota_1, que es un hueco de 4 MB que no se
+#     usa mientras la placa arranca del ota_0. El modulo la lee de ahi, comprueba
+#     su crc y graba el C6. No hay que tocar la tarjeta.
 cd ~/joint/victron/tools/c6_updater
+./aplicar.sh flash-sin-sd
+
+# 2b. O con la SD (el camino de siempre): copia la imagen a la raiz de la SD y
+#     usa 'flash'.
 ./aplicar.sh flash
 
-# 3. Enciende la placa con la SD dentro. A los 30 s graba el C6 sola (~1 minuto).
+# 3. Reinicia (o enciende) la placa. A los 30 s graba el C6 sola (~1 minuto).
 #    También se puede lanzar a mano: Ajustes -> Wi-Fi -> "Actualizar radio C6".
 #    En el log se ve el avance: 10% ... 100%, y luego el reinicio de los dos.
 
 # 4. Graba ahora el firmware nuevo de la P4 (el de publicación), por USB o por
-#    la web del portal.
+#    la web del portal. OJO: si grabas por USB desde el arbol de trabajo
+#    (~/joint/.scratch/victron), usa el .bin de la Release
+#    (~/joint-releases/joint-spl-145-control-vX.Y-app.bin): el arbol de trabajo es
+#    una copia sin .git y el suyo salia con la version "v?" (arreglado el
+#    30-sep-2026 con version.txt, pero el de la Release es el que está probado).
 
 # 5. Comprueba en el log del arranque:
 #       Radio C6: firmware 2.12.13

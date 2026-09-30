@@ -42,10 +42,13 @@ IDF_EXPORT="${IDF_EXPORT:-$HOME/.espressif/esp-idf-5.5/export.sh}"
 
 QUE="${1:-build}"
 case "$QUE" in
-    build|flash) ;;
-    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
-    *) echo "ERROR: usa 'build' o 'flash'"; exit 1 ;;
+    build|flash|flash-sin-sd) ;;
+    -h|--help) sed -n '2,48p' "$0"; exit 0 ;;
+    *) echo "ERROR: usa 'build', 'flash' o 'flash-sin-sd'"; exit 1 ;;
 esac
+
+# Imagen de la radio que se graba (la buena esta en ~/joint/firmware_radio/).
+IMAGEN="${IMAGEN:-$HOME/joint/firmware_radio/network_adapter_2.12.13.bin}"
 
 paso() { printf '\n\033[1m── %s\033[0m\n' "$*"; }
 ok()   { printf '   [ok] %s\n' "$*"; }
@@ -143,7 +146,7 @@ paso "3. Compilar"
 source "$IDF_EXPORT" >/dev/null 2>&1
 (cd "$ARBOL" && idf.py build 2>&1 | tail -5)
 
-if [ "$QUE" = "flash" ]; then
+if [ "$QUE" = "flash" ] || [ "$QUE" = "flash-sin-sd" ]; then
     paso "4. Grabar por USB"
     if [ -z "$PUERTO" ]; then
         PUERTO=$(ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | head -1 || true)
@@ -151,13 +154,28 @@ if [ "$QUE" = "flash" ]; then
     [ -n "$PUERTO" ] || { mal "no hay puerto serie: enchufa la placa"; exit 1; }
     ok "puerto $PUERTO"
     (cd "$ARBOL" && idf.py -p "$PUERTO" flash 2>&1 | tail -4)
+
+    if [ "$QUE" = "flash-sin-sd" ]; then
+        paso "5. Imagen de la radio en la particion ota_1 (sin tarjeta SD)"
+        [ -f "$IMAGEN" ] || { mal "no encuentro la imagen $IMAGEN"; exit 1; }
+        python3 "$(dirname "$0")/preparar_ota1.py" "$IMAGEN" /tmp/radio_ota1.bin
+        OFFSET=$(awk -F, '$1 ~ /^ota_1/ {gsub(/ /, "", $4); print $4}' "$ARBOL/partitions.csv")
+        [ -n "$OFFSET" ] || { mal "no encuentro la particion ota_1"; exit 1; }
+        ok "ota_1 en $OFFSET"
+        (cd "$ARBOL" && esptool.py --chip esp32p4 -p "$PUERTO" -b 460800 \
+            write_flash "$OFFSET" /tmp/radio_ota1.bin 2>&1 | tail -3)
+        ok "imagen en ota_1: la placa ya no necesita la tarjeta SD"
+    fi
+
     cat <<'FIN'
 
 ── AHORA, EN LA PLACA ────────────────────────────────────────────────────────
-  1. Copia network_adapter.bin a la RAIZ de la tarjeta SD y vuelve a meterla.
-     (La imagen buena esta en ~/esp_hosted_21213/slave/build_c6/network_adapter.bin)
-  2. Reinicia la placa. A los 30 s graba el C6 sola; tambien puedes pulsar
-     Ajustes -> Wi-Fi -> "Actualizar radio C6". Tarda ~1 minuto.
+  Con 'flash-sin-sd' la imagen YA esta en la particion ota_1: no hay que tocar la
+  tarjeta, solo reiniciar la placa. A los 30 s graba el C6 sola (o pulsa
+  Ajustes -> Wi-Fi -> "Actualizar radio C6"). Tarda ~1 minuto.
+
+  Con 'flash' (el camino de siempre) copia network_adapter.bin a la RAIZ de la
+  tarjeta SD y vuelve a meterla antes de reiniciar.
   3. Cuando termine, graba el firmware nuevo de la P4 (el de publicacion).
   4. En el log del arranque tiene que salir:  Radio C6: firmware 2.12.13
      Si sale "no dice su version", el C6 sigue viejo: repite el paso 1-2.

@@ -30,6 +30,8 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_partition.h"
+#include "esp_rom_crc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -52,9 +54,43 @@ extern int rpc_ota_end(void);
 #define CHUNK         1400           /* el mismo trozo que usa esp_hosted */
 #define ESPERA_SD_MS  60000          /* cuanto esperar a que monte la SD */
 
+/* ── Camino sin tarjeta SD ────────────────────────────────────────────────────
+ * La imagen tambien se puede dejar en la particion de aplicacion INACTIVA
+ * (ota_1), que en esta placa son 4 MB y no se usa mientras la placa arranca del
+ * ota_0. Delante van 16 bytes de cabecera (magic, tamano y crc32) para no
+ * grabar por error cualquier cosa que hubiera ahi: si no cuadra, no se toca el
+ * C6. Se prepara y se graba con `aplicar.sh flash-sin-sd`. */
+#define RADIO_MAGIC   "RADIO1"
+#define RADIO_CAB     16
+
+typedef struct __attribute__((packed)) {
+    char     magic[8];
+    uint32_t tam;
+    uint32_t crc;
+} radio_cab_t;
+
 static volatile bool s_en_curso = false;
 
 bool slave_ota_en_curso(void) { return s_en_curso; }
+
+/* Lee y valida la cabecera de la particion. Devuelve el tamano de la imagen o 0
+ * si ahi no hay nada que se pueda grabar. */
+static size_t particion_radio_tam(void)
+{
+    const esp_partition_t *p = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    if (!p) return 0;
+
+    radio_cab_t cab;
+    if (esp_partition_read(p, 0, &cab, sizeof cab) != ESP_OK) return 0;
+    if (memcmp(cab.magic, RADIO_MAGIC, sizeof cab.magic) != 0) return 0;
+    if (cab.tam < TAM_MINIMO || cab.tam > TAM_MAXIMO) return 0;
+    if (cab.tam + RADIO_CAB > p->size) return 0;
+    return (size_t)cab.tam;
+}
+
+static bool slave_ota_hay_particion(void) { return particion_radio_tam() > 0; }
+
 
 bool slave_ota_hay_fichero(void)
 {
@@ -121,34 +157,85 @@ static uint8_t *leer_imagen(size_t *tam)
     return buf;
 }
 
+/* La misma imagen, pero leida de la particion ota_1 (sin SD de por medio). */
+static uint8_t *leer_imagen_particion(size_t *tam)
+{
+    const esp_partition_t *p = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    size_t n = particion_radio_tam();
+    if (!p || n == 0) return NULL;
+
+    radio_cab_t cab;
+    esp_partition_read(p, 0, &cab, sizeof cab);
+
+    uint8_t *buf = heap_caps_malloc(n, MALLOC_CAP_SPIRAM);
+    if (!buf) {
+        ESP_LOGE(TAG, "sin memoria en PSRAM para %u bytes", (unsigned)n);
+        return NULL;
+    }
+    if (esp_partition_read(p, RADIO_CAB, buf, n) != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo leer la imagen de la particion ota_1");
+        free(buf);
+        return NULL;
+    }
+    uint32_t crc = esp_rom_crc32_le(0, buf, (uint32_t)n);
+    if (crc != cab.crc) {
+        ESP_LOGE(TAG, "el crc de la imagen en ota_1 no cuadra (0x%08x != 0x%08x): "
+                      "no grabo nada", (unsigned)crc, (unsigned)cab.crc);
+        free(buf);
+        return NULL;
+    }
+    ESP_LOGW(TAG, "imagen leida de la particion ota_1: %u bytes, crc 0x%08x",
+             (unsigned)n, (unsigned)crc);
+    *tam = n;
+    return buf;
+}
+
 static void slave_ota_task(void *arg)
 {
     (void)arg;
 
-    /* Esperar a que la SD este montada (el datalogger la monta al arrancar). */
-    int esperado = 0;
-    while (!datalogger_sd_montada() && esperado < ESPERA_SD_MS) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        esperado += 500;
-    }
-    if (!datalogger_sd_montada()) {
-        ESP_LOGE(TAG, "la SD no ha montado en %d s: no hay de donde leer la imagen",
-                 ESPERA_SD_MS / 1000);
-        s_en_curso = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
     size_t total = 0;
-    uint8_t *imagen = leer_imagen(&total);
+    uint8_t *imagen = NULL;
+    const char *origen = "SD";
+
+    if (slave_ota_hay_particion()) {
+        /* Camino sin tarjeta: la imagen viene en la particion ota_1 y no hay
+         * que esperar a que monte la SD. */
+        imagen = leer_imagen_particion(&total);
+    }
+
+    if (imagen) {
+        origen = "ota_1";
+    }
+
     if (!imagen) {
-        ESP_LOGE(TAG, "==== NO empiezo: no tengo la imagen en %s ====", RUTA_IMAGEN);
+        /* Esperar a que la SD este montada (el datalogger la monta al arrancar). */
+        int esperado = 0;
+        while (!datalogger_sd_montada() && esperado < ESPERA_SD_MS) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esperado += 500;
+        }
+        if (!datalogger_sd_montada()) {
+            ESP_LOGE(TAG, "ni imagen en la particion ota_1 ni SD montada: "
+                          "no hay de donde leer");
+            s_en_curso = false;
+            vTaskDelete(NULL);
+            return;
+        }
+        imagen = leer_imagen(&total);
+    }
+
+    if (!imagen) {
+        ESP_LOGE(TAG, "==== NO empiezo: no tengo la imagen (ni en %s ni en la "
+                      "particion ota_1) ====", RUTA_IMAGEN);
         s_en_curso = false;
         vTaskDelete(NULL);
         return;
     }
 
-    ESP_LOGW(TAG, "==== Grabando el firmware del C6: %u bytes ====", (unsigned)total);
+    ESP_LOGW(TAG, "==== Grabando el firmware del C6: %u bytes (desde %s) ====",
+             (unsigned)total, origen);
 
     if (rpc_ota_begin() != 0) {
         ESP_LOGE(TAG, "el C6 no acepta empezar la actualizacion. Se deja como estaba.");
@@ -222,13 +309,14 @@ static void slave_ota_diferido_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
-    if (!slave_ota_hay_fichero()) {
-        ESP_LOGW(TAG, "no hay imagen en %s: no grabo nada. Copiala a la SD y "
-                      "reinicia, o pulsa el boton de Ajustes -> Wi-Fi.", RUTA_IMAGEN);
+    if (!slave_ota_hay_fichero() && !slave_ota_hay_particion()) {
+        ESP_LOGW(TAG, "no hay imagen ni en %s ni en la particion ota_1: no grabo "
+                      "nada. Copiala a la SD, o graba la particion con "
+                      "'aplicar.sh flash-sin-sd', y reinicia.", RUTA_IMAGEN);
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(TAG, "imagen encontrada en la SD: empiezo sola (pasados %d s)", segundos);
+    ESP_LOGW(TAG, "imagen encontrada: empiezo sola (pasados %d s)", segundos);
     slave_ota_start();
     vTaskDelete(NULL);
 }
