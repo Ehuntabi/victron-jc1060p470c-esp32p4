@@ -234,6 +234,17 @@ static void procesar(char *linea)
          * el modulo da hora aproximada desde su reloj interno antes de tener
          * fix, y ponerla seria empeorar la que ya tiene el RTC. */
         if (c[2] && *c[2] == 'A') poner_en_hora(c[1], c[9]);
+        /* Campo 7 = velocidad sobre el suelo, en NUDOS. Se pasa a km/h y se
+         * guarda con su sello de tiempo: la cabina la enseña, y alli tiene que
+         * caducar igual que el resto (si la trama deja de llegar, 0). */
+        if (c[7] && *c[7]) {
+            float nudos = strtof(c[7], NULL);
+            if (nudos >= 0.0f && nudos < 200.0f) {
+                xSemaphoreTake(s_mtx, portMAX_DELAY);
+                s_d.velocidad_kmh = nudos * 1.852f;
+                xSemaphoreGive(s_mtx);
+            }
+        }
     }
 }
 

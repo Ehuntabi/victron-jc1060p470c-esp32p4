@@ -34,7 +34,7 @@
 extern "C" {
 #endif
 
-#define MINI_PROTO_VERSION   5
+#define MINI_PROTO_VERSION   6
 #define MINI_PROTO_UDP_PORT  4242
 #define MINI_NO_DATA_I16     INT16_MIN   /* -32768 = sin sensor / sin dato */
 #define MINI_NO_DATA_I32     INT32_MIN
@@ -139,7 +139,14 @@ struct __attribute__((packed)) mini_msg {
      * sitio donde ocurrieron, habrá que subir el protocolo OTRA VEZ y regrabar
      * las dos pantallas. */
     uint8_t  gps_estado;          /* 0=sin datos, 1=buscando, 2=posición fijada */
-    uint8_t  _pad3;               /* relleno heredado: mantiene los offsets */
+    /* Velocidad GPS en km/h x10 (MINI_NO_DATA_I16 si no hay fix). La enseña la
+     * pantalla de la cabina entre el icono del GPS y el titulo de BATERIA.
+     * Va en el relleno que ya existia (_pad3 + un byte de _pad4), para que el
+     * CRC32 siga en el byte 36 y la struct siga midiendo 40 bytes: asi no se
+     * mueve nada de lo que ya viajaba salvo `alarmas`, que pasa al 35.
+     * Anyadido el 30-sep-2026: MINI_PROTO_VERSION sube a 6 y hay que grabar las
+     * DOS placas a la vez (la cabina rechaza las versiones que no conoce). */
+    int16_t  gps_vel_kmh_x10;
 
     /* Alarmas ACTIVAS (MINI_ALARM_*, ver arriba). Va AQUI, en el hueco de
      * relleno que ya existia antes del CRC (el byte 34, que hasta la v4 nadie
@@ -151,9 +158,7 @@ struct __attribute__((packed)) mini_msg {
      * (agua a 0, grises lleno...) y el pitido del congelador no lo veia nadie
      * desde alli: la P4 es la unica que sabe si una alarma esta activa de
      * verdad, porque es la unica que tiene los umbrales y las temporizaciones. */
-    uint8_t  alarmas;
-
-    uint8_t  _pad4[1];            /* el relleno que alinea el uint32 del CRC */
+    uint8_t  alarmas;             /* offset 35 desde el 30-sep-2026 (antes 34) */
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };
@@ -173,7 +178,7 @@ _Static_assert(offsetof(mini_msg_t, crc32) == 36,
                "el CRC32 ya no esta al final de la struct: build_msg() en "
                "udp_tx.c y la comprobacion en udp_rx.c asumen los bytes "
                "[0..crc32) como el area protegida");
-_Static_assert(offsetof(mini_msg_t, alarmas) == 34, "mini_proto: alarmas en offset 34");
+_Static_assert(offsetof(mini_msg_t, alarmas) == 35, "mini_proto: alarmas en offset 35");
 
 #ifdef __cplusplus
 }
