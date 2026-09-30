@@ -101,3 +101,23 @@ jobs:
             echo "CUERPO_MAX ($cuerpo_max) ya no cabe con margen en VIAJE_BODY_MAX ($body_max) -- subir VIAJE_BODY_MAX en victron"
             exit 1
           fi
+
+  # El contrato entre las DOS placas: la cabina manda JSON por HTTP y mensajes
+  # binarios por UDP, y nada de eso salta al compilar, porque son dos repos.
+  # El 30-sep-2026 se quedo un viaje sin enviar por esto. Ver test/protocolo_cabina.sh.
+  protocolo_cabina:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout victron
+        uses: actions/checkout@v4
+        with:
+          path: victron
+
+      - name: Checkout 35cabina
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/35cabina
+          path: 35cabina
+
+      - name: Comprobar que la cabina y la P4 hablan el mismo idioma
+        run: bash victron/test/protocolo_cabina.sh victron 35cabina

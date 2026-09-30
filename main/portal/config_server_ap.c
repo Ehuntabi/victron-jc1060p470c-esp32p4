@@ -584,7 +584,10 @@ esp_err_t wifi_ap_init(void)
     wifi_config_t ap_cfg = {
         .ap = {
             .ssid_len       = strlen(ssid),
-            .max_connection = 4,
+            /* 8 y no 4 (30-sep-2026): con el movil, la tablet, un portatil y la
+             * cabina ya se llenaba, y el que llegaba despues -- la cabina, que
+             * es la que tiene que estar -- se quedaba fuera sin decir por que. */
+            .max_connection = 8,
             /* Canal 1, no 6: en casa del usuario habia 7 redes vecinas con
              * senal fuerte en el 6, y el AP tardaba en aceptar clientes, se
              * caia a los 10-20 s o directamente no dejaba asociarse. El 1 y el
