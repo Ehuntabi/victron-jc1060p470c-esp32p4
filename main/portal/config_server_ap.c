@@ -146,9 +146,14 @@ typedef enum {
     CFG_JOB_START,        /* levantar el portal HTTP si no lo esta */
     CFG_JOB_STOP_HTTP,    /* auto-off: parar HTTP, dejar el AP vivo (el mini usa UDP) */
     CFG_JOB_WIFI_APPLY,   /* aplicar el on/off de Ajustes SIN reiniciar la placa */
+    CFG_JOB_DHCP_VIGILA,  /* mirar si el DHCP reparte y, si no, arreglarlo */
 } cfg_job_t;
 
 static QueueHandle_t s_job_q = NULL;
+
+/* Se define mas abajo; lo llama la cola de trabajos (aqui arriba porque el
+ * manejador de la cola lo usa antes de su definicion). */
+static void dhcp_vigila_job(void);
 
 /* Encola un trabajo. Nunca bloquea: si la cola esta llena es que ya hay una
  * transicion del mismo tipo pendiente, y perderla es inocuo. */
@@ -204,6 +209,10 @@ static void cfg_lifecycle_task(void *arg)
             /* El AP WiFi sigue activo: el mini continúa recibiendo UDP. */
             break;
         }
+
+        case CFG_JOB_DHCP_VIGILA:
+            dhcp_vigila_job();
+            break;
 
         case CFG_JOB_WIFI_APPLY: {
             /* Toggle de Ajustes en caliente. wifi_ap_init relee "enabled" de NVS y
@@ -269,6 +278,105 @@ static void ap_auto_off_cb(void *arg)
      * excedente solar: pasados 3 s sin refresco, frigo_solar_tick marca la
      * telemetria como no fresca y ABRE el rele del frigo. */
     cfg_job_post(CFG_JOB_STOP_HTTP);
+}
+
+/* ── Vigilante del DHCP del punto de acceso ──────────────────────────────────
+ * Medido el 30-sep y el 1-oct-2026: despues de un reinicio de la P4 (sobre todo
+ * si es por software, que no le corta la corriente a la radio C6) el AP acepta
+ * que los aparatos se asocien pero deja de repartir direcciones. Sintoma: la
+ * cabina se queda sin IP y sin datos hasta que alguien desenchufa la P4.
+ *
+ * Aqui se mira cada minuto: si hay alguien asociado y NO hay ninguna concesion
+ * viva, a los 3 minutos se reinicia el servidor DHCP del AP (parar y arrancar,
+ * que limpia su tabla sin tocar la radio ni la conexion de los clientes). Si con
+ * eso no basta, al cuarto intento se reinicia el AP entero.
+ *
+ * Se eligio mirar las CONCESIONES y no solo las asociaciones porque es lo que
+ * distingue "esta asociado y funciona" de "esta asociado y no le llega nada",
+ * que es justo el fallo que se quiere cazar. La API existe en la IDF que usa
+ * este proyecto (esp_netif_dhcps_get_clients_by_mac). */
+#define DHCP_VIGILA_MS      (60 * 1000)
+#define DHCP_SIN_CONCESION  3          /* minutos seguidos antes de tocar nada */
+#define DHCP_INTENTOS_MAX   4          /* despues, reinicio del AP entero */
+
+static esp_timer_handle_t s_dhcp_vigila_timer = NULL;
+static int s_dhcp_sin_concesion = 0;
+static int s_dhcp_intentos = 0;
+
+static int ap_concesiones_vivas(void)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (!netif) return -1;
+    esp_netif_pair_mac_ip_t pares[8];
+    esp_err_t err = esp_netif_dhcps_get_clients_by_mac(netif, 8, pares);
+    if (err != ESP_OK) return -1;
+    int n = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (pares[i].ip.addr != 0) n++;
+    }
+    return n;
+}
+
+static int ap_asociados(void)
+{
+    wifi_sta_list_t stas = { 0 };
+    if (esp_wifi_ap_get_sta_list(&stas) != ESP_OK) return -1;
+    return stas.num;
+}
+
+static void dhcp_vigila_cb(void *arg)
+{
+    (void)arg;
+    /* SOLO se encola el trabajo. Aqui no se puede hablar con la radio: esta es la
+     * tarea de esp_timer, y bloquearla para TODOS los temporizadores (ver el
+     * aviso de ap_auto_off_cb: el feed del excedente solar abre el rele del frigo
+     * si se queda sin refresco 3 s). */
+    cfg_job_post(CFG_JOB_DHCP_VIGILA);
+}
+
+/* Esto SI corre en la tarea de trabajos, donde bloquearse no rompe nada. */
+static void dhcp_vigila_job(void)
+{
+    int asoc = ap_asociados();
+    int conc = ap_concesiones_vivas();
+    if (asoc < 0 || conc < 0) return;          /* no se pudo mirar: no se actua */
+
+    if (asoc >= 1 && conc == 0) {
+        if (++s_dhcp_sin_concesion < DHCP_SIN_CONCESION) return;
+        s_dhcp_sin_concesion = 0;
+        s_dhcp_intentos++;
+        esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+        if (s_dhcp_intentos <= DHCP_INTENTOS_MAX) {
+            ESP_LOGW(TAG, "AP: %d asociados y NINGUNA concesion. Reinicio el DHCP "
+                          "(intento %d/%d)", asoc, s_dhcp_intentos, DHCP_INTENTOS_MAX);
+            if (netif) {
+                esp_netif_dhcps_stop(netif);
+                esp_netif_dhcps_start(netif);
+            }
+        } else {
+            /* El DHCP no se arregla solo: se reinicia el AP entero. Se hace una
+             * vez y se vuelve a empezar la cuenta. */
+            s_dhcp_intentos = 0;
+            ESP_LOGE(TAG, "AP: sigue sin repartir direcciones. Reinicio el punto "
+                          "de acceso entero");
+            cfg_job_post(CFG_JOB_WIFI_APPLY);
+        }
+    } else {
+        s_dhcp_sin_concesion = 0;   /* hay concesiones (o nadie asociado): todo bien */
+        if (conc > 0) s_dhcp_intentos = 0;
+    }
+}
+
+static void dhcp_vigila_ensure(void)
+{
+    if (s_dhcp_vigila_timer) return;
+    const esp_timer_create_args_t args = {
+        .callback = dhcp_vigila_cb,
+        .name     = "dhcp_vigila",
+    };
+    if (esp_timer_create(&args, &s_dhcp_vigila_timer) != ESP_OK) return;
+    esp_timer_start_periodic(s_dhcp_vigila_timer, (uint64_t)DHCP_VIGILA_MS * 1000);
+    ESP_LOGI(TAG, "Vigilante del DHCP armado (cada %d s)", DHCP_VIGILA_MS / 1000);
 }
 
 static void ap_off_timer_ensure(void)
@@ -698,6 +806,7 @@ esp_err_t wifi_ap_init(void)
      * que el mini reciba UDP). El handler STA_CONNECTED rearma el timer
      * y reactiva el HTTP si lo encuentra parado. */
     ap_off_timer_ensure();
+    dhcp_vigila_ensure();
     ap_off_timer_arm();
 
     ESP_LOGI(TAG, "Soft-AP started");
