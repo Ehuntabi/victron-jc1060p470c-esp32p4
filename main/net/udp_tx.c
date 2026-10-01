@@ -164,13 +164,6 @@ static void build_msg(mini_msg_t *out)
         gps_data_t g;
         gps_get(&g);
         out->gps_estado = !g.hay_datos ? 0 : (g.hay_fix ? 2 : 1);
-        /* Velocidad en km/h x10, que la cabina enseña arriba. Solo se manda si
-         * hay fix: sin el, el modulo da 0 y la pantalla diria "0 km/h" con el
-         * vehiculo andando. Con MINI_NO_DATA_I16 la cabina no la pinta. */
-        out->gps_vel_kmh_x10 = g.hay_fix
-            ? (int16_t)(g.velocidad_kmh * 10.0f + 0.5f)
-            : MINI_NO_DATA_I16;
-        if (out->gps_vel_kmh_x10 < 0) out->gps_vel_kmh_x10 = 0;
     }
 
     /* Alarmas activas (bitmask MINI_ALARM_*), de alarma_estado.c, que es la

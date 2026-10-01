@@ -27,11 +27,6 @@ typedef struct {
     float    altitud_m;
     uint32_t segundos_sin_dato;   /* 0 si acaba de llegar algo */
 
-    /* Velocidad sobre el suelo, de la trama RMC (campo 7, en nudos), pasada a
-     * km/h. Vale 0 cuando el modulo no da velocidad (parado o sin fix): la
-     * pantalla de la cabina la enseña solo si hay fix. 30-sep-2026. */
-    float    velocidad_kmh;
-
     /* Potencia de la señal, en dB-Hz (lo que el NMEA llama C/N0). Es EL numero
      * para saber si un sitio tapa: por debajo de 30 no se fija posicion, a 40
      * o mas se va sobrado. Sirve para medir cuanto cuesta meter el modulo en
