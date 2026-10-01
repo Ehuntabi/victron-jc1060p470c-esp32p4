@@ -40,6 +40,39 @@ extern "C" {
 #define MINI_NO_DATA_I32     INT32_MIN
 #define MINI_NO_DATA_U8      0xFF
 
+/* ── Latido de vuelta: la cabina le dice a la P4 como la ve (2-oct-2026) ────
+ *
+ * Por que existe: la telemetria va en un solo sentido (P4 -> cabina), asi que
+ * la P4 no tenia forma de saber si sus paquetes llegaban. Cuando el enlace se
+ * rompia a medias (la cabina asociada, el AP vivo, y ni un paquete pasando) la
+ * P4 se enteraba TARDE y a ciegas: miraba su tabla de concesiones DHCP y poco
+ * mas, y tardaba minutos en decidir que hacer. La cabina, mientras tanto, se
+ * ponia a desconectar y reconectar por su cuenta, que es justo lo que peor le
+ * venia al DHCP.
+ *
+ * Con este latido la P4 sabe en SEGUNDOS si el enlace funciona en los DOS
+ * sentidos, porque es la cabina (el unico testigo de la bajada) la que se lo
+ * cuenta, y ademas el latido en si demuestra que la subida funciona. Un solo
+ * dueño de la reparacion: la P4.
+ *
+ * Se manda por UNICAST a 192.168.4.1 (la P4) cada 2 s. Si se pierde alguno no
+ * pasa nada: lo que importa es que llegue uno cada pocos segundos. */
+#define MINI_LATIDO_UDP_PORT 4243
+#define MINI_LATIDO_MAGIC    0x4C        /* 'L' */
+
+struct __attribute__((packed)) mini_latido {
+    uint8_t  magic;              /* MINI_LATIDO_MAGIC */
+    uint8_t  version;            /* MINI_PROTO_VERSION */
+    int16_t  seg_sin_datos;      /* segundos sin recibir telemetria valida; -1 = nunca */
+    uint8_t  ip_fija;            /* 1 = la cabina se puso la IP a mano (DHCP mudo) */
+    uint8_t  _pad_lat[3];        /* relleno: alinea el CRC */
+    uint32_t crc32;              /* CRC32 sobre los bytes [0 .. crc32) */
+};
+typedef struct mini_latido mini_latido_t;
+
+_Static_assert(sizeof(mini_latido_t) == 12, "mini_latido_t: 12 bytes");
+_Static_assert(offsetof(mini_latido_t, crc32) == 8, "mini_latido_t: crc32 en 8");
+
 /* Bitmask de alarmas activas. Se usa en DOS sitios y con el MISMO significado
  * en los dos; de eso va este byte (14-sep-2026):
  *   - en la telemetria (mini_msg.alarmas), de la P4 hacia la 35cabina, para

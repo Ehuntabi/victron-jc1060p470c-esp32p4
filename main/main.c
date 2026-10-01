@@ -45,6 +45,7 @@
 #include "ne185/ne185.h"
 #include "ne185_vlog.h"
 #include "net/udp_tx.h"
+#include "net/udp_latido.h"
 #include "sim_overview.h"
 #include "splash.h"
 #include <time.h>
@@ -699,6 +700,10 @@ static void init_network(void)
 
     /* --- Publisher UDP hacia el mini (1 Hz broadcast 192.168.4.255:4242) --- */
     udp_tx_start();
+    /* --- Escucha del latido de la cabina (unicast 4243 cada 2 s) ---
+     * Es lo que le dice al vigilante del AP si el enlace va bien en los DOS
+     * sentidos; sin esto solo puede mirar su tabla de concesiones DHCP. */
+    udp_latido_start();
 
     /* Que quede en el log que firmware lleva la radio (util para soporte). */
     xTaskCreate(radio_version_task, "radio_ver", 3072, NULL, 3, NULL);

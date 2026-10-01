@@ -21,6 +21,8 @@
 #include "esp_private/wifi.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "net/udp_latido.h"   /* el latido de la cabina: ver el vigilante */
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -295,13 +297,50 @@ static void ap_auto_off_cb(void *arg)
  * distingue "esta asociado y funciona" de "esta asociado y no le llega nada",
  * que es justo el fallo que se quiere cazar. La API existe en la IDF que usa
  * este proyecto (esp_netif_dhcps_get_clients_by_mac). */
-#define DHCP_VIGILA_MS      (60 * 1000)
-#define DHCP_SIN_CONCESION  3          /* minutos seguidos antes de tocar nada */
-#define DHCP_INTENTOS_MAX   4          /* despues, reinicio del AP entero */
+#define DHCP_VIGILA_MS      (10 * 1000)   /* cada cuanto se mira (2-oct: 10 s) */
+#define DHCP_SIN_CONCESION  6          /* vueltas seguidas antes de tocar nada (60 s):
+                                        * el camino rapido (el latido de la cabina) es
+                                        * el que caza los fallos de verdad; este es el
+                                        * ultimo recurso, para cuando el mini no habla
+                                        * (firmware viejo, o se ha quedado callado). */
+#define DHCP_INTENTOS_MAX   1          /* reinicios del DHCP antes de subir de escalon */
+
+/* ESCALERA (2-oct-2026, despues de cazar el fallo en vivo en el banco):
+ *
+ *  0. REPARAR EL INVARIANTE: si hay clientes asociados y el netif del AP esta
+ *     caido, levantarlo (ver ap_asegura_netif_vivo). Es la causa raiz del fallo
+ *     "asociada y muda" y se arregla en 10 s, sin reiniciar nada.
+ *  1. Reiniciar el servidor DHCP (1 vez). Es barato y NO echa a nadie.
+ *  2. Reiniciar el AP entero (parar y arrancar el Wi-Fi, CFG_JOB_WIFI_APPLY).
+ *     Fue lo que curo el fallo gordo del 2-oct-2026 cuando lo probo el usuario a
+ *     mano desde Ajustes: la cabina volvio a los 2 s.
+ *  3. Reiniciar la placa entera, UNA vez por encendido (memoria RTC).
+ *
+ * El orden importa: primero lo que no molesta, y el reinicio de placa solo
+ * despues de que el del AP haya tenido su oportunidad. Con las cuentas de arriba
+ * (una vuelta cada 10 s y tres vueltas para actuar) la escalera queda: reparar
+ * netif a los 10 s, DHCP a los 30 s, AP a los 60 s y placa a los 90 s del fallo. */
+#define VIGILA_ESCALON_AP    2         /* vueltas de gracia tras reiniciar el AP */
+
+/* Cuantas veces se ha reiniciado la placa sola por este fallo en este encendido.
+ * Va en memoria RTC (RTC_NOINIT_ATTR: la P4 la conserva al reiniciarse por
+ * software, CONFIG_SOC_RTC_FAST_MEM_SUPPORTED=y) y se pierde al cortar la
+ * corriente, que es justo lo que se quiere: si el reinicio no arregla nada, no
+ * entramos en bucle; y si el usuario desenchufa la placa, se vuelve a empezar.
+ * El tope no es capricho: sin el, un fallo que no se arregla reiniciaria la
+ * placa cada cuarto de hora para siempre. Con 1 basta: si un reinicio entero no
+ * arregla el DHCP, un segundo tampoco lo va a arreglar, y el contador se pone a
+ * cero solo con que vuelva a haber concesiones (es decir, en cuanto se
+ * recupere), asi que el siguiente fallo tendra otra vez su intento. */
+RTC_NOINIT_ATTR static int s_reinicios_ap;
+#define REINICIOS_AP_MAX 1
 
 static esp_timer_handle_t s_dhcp_vigila_timer = NULL;
 static int s_dhcp_sin_concesion = 0;
 static int s_dhcp_intentos = 0;
+static int s_vueltas_tras_ap = 0;   /* vueltas desde el ultimo reinicio del AP */
+static bool s_ap_reiniciado = false; /* el AP ya se reinicio en este arranque */
+static int s_mini_mudo = 0;         /* vueltas seguidas con la cabina diciendo "no recibo" */
 
 static int ap_concesiones_vivas(void)
 {
@@ -334,6 +373,117 @@ static void dhcp_vigila_cb(void *arg)
     cfg_job_post(CFG_JOB_DHCP_VIGILA);
 }
 
+/* ── El invariante que faltaba (2-oct-2026) ────────────────────────────────
+ *
+ * CAUSA RAIZ del fallo "la cabina se asocia pero no le llega nada": el AP de la
+ * RADIO (el C6) esta levantado y acepta asociaciones, pero el netif del AP en la
+ * P4 se queda CAIDO. Con el netif caido no hay DHCP (los DISCOVER no llegan a
+ * lwIP) ni telemetria (los paquetes no salen), y la pantalla del mini se queda
+ * muda para siempre. Lo caza el vigilante: en su log salio "netif=DOWN dhcps=0"
+ * con la cabina asociada.
+ *
+ * Por que pasa: el C6 reemite los eventos del softap por RPC y a veces llegan
+ * duplicados y desordenados (ver el comentario de arriba). Si el ultimo evento
+ * que procesamos es un AP_STOP espurio, el handler para el netif y ya no hay
+ * quien lo vuelva a levantar: la radio sigue emitiendo por su cuenta.
+ *
+ * La solucion no es adivinar el orden de los eventos, es COMPROBAR el invariante
+ * y repararlo: si hay clientes asociados, el netif del AP tiene que estar
+ * arriba y su servidor DHCP arrancado. Se comprueba en cada vuelta del vigilante
+ * (cada 10 s) y, si no se cumple, se levanta a mano. */
+static bool ap_asegura_netif_vivo(void)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (!netif) return false;
+    if (esp_netif_is_netif_up(netif)) return false;
+
+    ESP_LOGE(TAG, "el AP de la radio esta vivo pero el netif de la P4 esta CAIDO: "
+                  "lo levanto (rxcb + netif + DHCP)");
+    /* Mismo orden que cfg_srv_ap_start_idempotent: MAC, rxcb y arranque. Sin el
+     * rxcb los paquetes llegan a la P4 y se tiran, que es justo el sintoma. */
+    uint8_t mac[6] = {0};
+    if (esp_wifi_get_mac(WIFI_IF_AP, mac) == ESP_OK) {
+        esp_netif_set_mac(netif, mac);
+    }
+    wifi_netif_driver_t driver = esp_netif_get_io_driver(netif);
+    esp_wifi_register_if_rxcb(driver, esp_netif_receive, netif);
+    esp_netif_action_start(netif, WIFI_EVENT, WIFI_EVENT_AP_START, NULL);
+    s_ap_started = true;              /* el testigo del handler, otra vez puesto */
+    esp_netif_dhcps_stop(netif);
+    esp_netif_dhcps_start(netif);
+    if (s_ap_evt) xEventGroupSetBits(s_ap_evt, AP_EVT_STARTED);
+    return true;
+}
+
+/* Sube un escalon de la escalera. `directo_al_ap` se usa cuando YA sabemos que
+ * el DHCP no tiene nada que ver (la cabina nos ha dicho que no le llega la
+ * telemetria), y entonces no se pierde el tiempo reiniciandolo. */
+static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc, int conc)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    const char *estado_netif = netif ? (esp_netif_is_netif_up(netif) ? "up" : "DOWN") : "?";
+    int dhcps = -1;
+    if (netif) {
+        esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+        if (esp_netif_dhcps_get_status(netif, &st) == ESP_OK) dhcps = (int)st;
+    }
+
+    if (!s_ap_reiniciado && !directo_al_ap && s_dhcp_intentos < DHCP_INTENTOS_MAX) {
+        s_dhcp_intentos++;
+        ESP_LOGW(TAG, "AP: %s. Reinicio el DHCP (intento %d/%d, netif=%s dhcps=%d, "
+                      "%d asociados, %d concesiones)",
+                 motivo, s_dhcp_intentos, DHCP_INTENTOS_MAX, estado_netif, dhcps,
+                 asoc, conc);
+        if (netif) {
+            esp_netif_dhcps_stop(netif);
+            esp_netif_dhcps_start(netif);
+        }
+        return;
+    }
+
+    if (!s_ap_reiniciado) {
+        /* Reiniciar el AP ENTERO (parar y arrancar el Wi-Fi). Fue lo que curo el
+         * fallo del 2-oct-2026, tanto a mano desde Ajustes como desde aqui. */
+        s_ap_reiniciado = true;
+        s_vueltas_tras_ap = 0;
+        s_dhcp_intentos = 0;
+        ESP_LOGE(TAG, "AP: %s. Reinicio el AP entero (netif=%s dhcps=%d, %d asociados, "
+                      "%d concesiones)", motivo, estado_netif, dhcps, asoc, conc);
+        cfg_job_post(CFG_JOB_WIFI_APPLY);
+        return;
+    }
+
+    /* El AP ya se reinicio en este intento. Una vuelta de gracia (la cabina
+     * tarda unos segundos en asociarse) y, si tampoco, la placa entera. */
+    if (++s_vueltas_tras_ap < VIGILA_ESCALON_AP) {
+        ESP_LOGW(TAG, "AP: %s, y ya reinicie el AP: le doy una vuelta mas antes de "
+                      "reiniciar la placa", motivo);
+        return;
+    }
+    if (s_reinicios_ap < 0 || s_reinicios_ap > 10) s_reinicios_ap = 0;  /* RTC sin inicializar */
+    if (s_reinicios_ap < REINICIOS_AP_MAX) {
+        s_reinicios_ap++;
+        ESP_LOGE(TAG, "AP: %s ni reiniciando el AP. Reinicio la placa entera "
+                      "(vez %d de %d)", motivo, s_reinicios_ap, REINICIOS_AP_MAX);
+        esp_restart();
+    } else {
+        ESP_LOGE(TAG, "AP: %s, ya me he reiniciado %d veces en este encendido y sigue "
+                      "igual. No insisto mas: hay que desenchufar la placa",
+                 motivo, s_reinicios_ap);
+    }
+}
+
+/* La escalera vuelve a cero cuando el enlace esta sano de verdad. */
+static void vigila_pon_a_cero(void)
+{
+    s_dhcp_sin_concesion = 0;
+    s_dhcp_intentos = 0;
+    s_vueltas_tras_ap = 0;
+    s_mini_mudo = 0;
+    s_ap_reiniciado = false;
+    s_reinicios_ap = 0;
+}
+
 /* Esto SI corre en la tarea de trabajos, donde bloquearse no rompe nada. */
 static void dhcp_vigila_job(void)
 {
@@ -341,30 +491,51 @@ static void dhcp_vigila_job(void)
     int conc = ap_concesiones_vivas();
     if (asoc < 0 || conc < 0) return;          /* no se pudo mirar: no se actua */
 
-    if (asoc >= 1 && conc == 0) {
-        if (++s_dhcp_sin_concesion < DHCP_SIN_CONCESION) return;
-        s_dhcp_sin_concesion = 0;
-        s_dhcp_intentos++;
-        esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-        if (s_dhcp_intentos <= DHCP_INTENTOS_MAX) {
-            ESP_LOGW(TAG, "AP: %d asociados y NINGUNA concesion. Reinicio el DHCP "
-                          "(intento %d/%d)", asoc, s_dhcp_intentos, DHCP_INTENTOS_MAX);
-            if (netif) {
-                esp_netif_dhcps_stop(netif);
-                esp_netif_dhcps_start(netif);
-            }
-        } else {
-            /* El DHCP no se arregla solo: se reinicia el AP entero. Se hace una
-             * vez y se vuelve a empezar la cuenta. */
-            s_dhcp_intentos = 0;
-            ESP_LOGE(TAG, "AP: sigue sin repartir direcciones. Reinicio el punto "
-                          "de acceso entero");
-            cfg_job_post(CFG_JOB_WIFI_APPLY);
-        }
-    } else {
-        s_dhcp_sin_concesion = 0;   /* hay concesiones (o nadie asociado): todo bien */
-        if (conc > 0) s_dhcp_intentos = 0;
+    /* 1) EL INVARIANTE. Si hay alguien asociado, el netif del AP tiene que estar
+     *    arriba. Cuando no lo esta (el fallo del 2-oct-2026) no hay DHCP ni
+     *    telemetria posibles, y no se arregla esperando: se levanta. */
+    if (asoc >= 1 && ap_asegura_netif_vivo()) {
+        return;                                /* reparado: 10 s de gracia */
     }
+
+    /* 2) LO QUE DICE LA CABINA. Su latido (ver net/udp_latido.c) es la unica
+     *    fuente de verdad de la BAJADA, y que llegue ya demuestra la SUBIDA. */
+    udp_latido_info_t lat;
+    udp_latido_estado(&lat);
+    bool latido_vivo = lat.hay_datos && lat.seg_desde_latido >= 0 && lat.seg_desde_latido < 15;
+    bool mini_mudo   = (asoc >= 1) && latido_vivo && lat.seg_sin_datos_mini >= 15;
+
+    if (mini_mudo) {
+        /* Camino RAPIDO: la cabina nos esta diciendo, con su latido llegando,
+         * que no le llega la telemetria. Eso es la bajada rota y lo que la cura
+         * es rehacer el AP; el DHCP no pinta nada aqui. Dos vueltas (20 s) para
+         * no disparar por un corte de un segundo. */
+        s_dhcp_sin_concesion = 0;
+        if (++s_mini_mudo < 2) {
+            ESP_LOGW(TAG, "AP: la cabina dice que lleva %d s sin datos (su latido llega "
+                          "hace %d s): vigilo una vuelta mas antes de tocar el AP",
+                     lat.seg_sin_datos_mini, lat.seg_desde_latido);
+            return;
+        }
+        s_mini_mudo = 0;
+        vigila_sube_escalon(true, "la cabina no recibe telemetria", asoc, conc);
+        return;
+    }
+    s_mini_mudo = 0;
+
+    /* 3) SANO: o hay concesiones, o la cabina dice que recibe. */
+    bool mini_recibe = latido_vivo && lat.seg_sin_datos_mini >= 0 && lat.seg_sin_datos_mini <= 5;
+    if (conc > 0 || mini_recibe || asoc == 0) {
+        vigila_pon_a_cero();
+        return;
+    }
+
+    /* 4) CAMINO LENTO: hay asociados, ninguna concesion y el mini no nos dice
+     *    nada (firmware viejo, o se ha quedado callado del todo). Se actua por
+     *    la tabla del DHCP, que es lo unico que queda. */
+    if (++s_dhcp_sin_concesion < DHCP_SIN_CONCESION) return;
+    s_dhcp_sin_concesion = 0;
+    vigila_sube_escalon(false, "hay asociados y ninguna concesion", asoc, conc);
 }
 
 static void dhcp_vigila_ensure(void)
