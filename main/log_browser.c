@@ -195,12 +195,41 @@ int log_browser_list_dates(const char *dir,
 }
 
 /* Extrae "HH:MM" de un timestamp con offset 11..15 ("YYYY-MM-DD HH:MM:..") */
+/* "AAAA-MM-DD HH:MM:SS" -> hh:mm, leyendo los digitos por posicion.
+ *
+ * Antes esto era un `sscanf(ts + 11, "%d:%d", ...)`: sscanf es la funcion mas
+ * cara de la libreria (cadena de formato, argumentos variables, signos, anchos)
+ * y se llama UNA VEZ POR LINEA -- 25.920 en un dia de bateria. El formato del
+ * timestamp lo escribe el propio proyecto (battery_history/datalogger:
+ * "%04d-%02d-%02d %02d:%02d:%02d"), asi que las posiciones son fijas: hora en
+ * 11-12, ':' en 13, minuto en 14-15. Se comprueban los digitos y el separador,
+ * o sea que un fichero raro sigue devolviendo false igual que antes. */
 static bool parse_hhmm(const char *ts, int *hh, int *mm)
 {
-    if (!ts || strlen(ts) < 16) return false;
-    if (sscanf(ts + 11, "%d:%d", hh, mm) != 2) return false;
-    if (*hh < 0 || *hh > 23 || *mm < 0 || *mm > 59) return false;
+    if (!ts) return false;
+    if (ts[11] < '0' || ts[11] > '9' || ts[12] < '0' || ts[12] > '9') return false;
+    if (ts[13] != ':') return false;
+    if (ts[14] < '0' || ts[14] > '9' || ts[15] < '0' || ts[15] > '9') return false;
+    const int h = (ts[11] - '0') * 10 + (ts[12] - '0');
+    const int m = (ts[14] - '0') * 10 + (ts[15] - '0');
+    if (h > 23 || m > 59) return false;
+    *hh = h;
+    *mm = m;
     return true;
+}
+
+/* Entero con signo, a mano. strtol es generico (signo, base, espacios,
+ * desbordamiento) y en el CSV de bateria se llama varias veces por linea; los
+ * valores son enteros limpios ("-2500", "1280", ""). */
+static inline int32_t parse_int(const char *s)
+{
+    if (!s || !*s) return 0;
+    bool neg = false;
+    if (*s == '-')      { neg = true; s++; }
+    else if (*s == '+') { s++; }
+    int32_t v = 0;
+    while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0');
+    return neg ? -v : v;
 }
 
 /* Tokeniza una linea CSV en hasta `max_fields` campos. Acepta campos vacios
@@ -311,20 +340,29 @@ int log_browser_load_battery(const char *path,
          * "ACCharger"): se compara contra la misma tabla para que no puedan
          * divergir. Una fuente desconocida (CSV de una version futura) se
          * ignora en vez de descartar la linea entera. */
+        /* La fuente, por su PRIMERA LETRA: los cuatro nombres que escribe
+         * battery_history empiezan distinto (BatteryMonitor, SolarCharger,
+         * OrionTR, ACCharger) y antes esto eran hasta 4 strcmp por linea. Se
+         * comprueba la letra y, solo si coincide, el nombre completo (asi un
+         * "BananaMonitor" de un CSV futuro no se cuela como BatteryMonitor). */
         int src = -1;
-        for (int s = 0; s < BH_SRC_COUNT; ++s) {
-            if (strcmp(fields[1], battery_history_source_name((bh_source_t)s)) == 0) {
-                src = s;
-                break;
-            }
+        switch (fields[1][0]) {
+            case 'B': src = BH_SRC_BATTERY_MONITOR; break;
+            case 'S': src = BH_SRC_SOLAR_CHARGER;   break;
+            case 'O': src = BH_SRC_ORION_XS;        break;
+            case 'A': src = BH_SRC_AC_CHARGER;      break;
+            default:  src = -1;                     break;
+        }
+        if (src >= 0 &&
+            strcmp(fields[1], battery_history_source_name((bh_source_t)src)) != 0) {
+            src = -1;
         }
         if (src < 0 || !out[src] || n_out[src] >= max) continue;
         battery_log_entry_t *e = &out[src][n_out[src]];
         if (!parse_hhmm(fields[0], &e->hh, &e->mm)) continue;
-        e->milli_amps = fields[2][0] ? (int32_t)strtol(fields[2], NULL, 10) : 0;
+        e->milli_amps = parse_int(fields[2]);
         /* Columna de tension (centivoltios) opcional: ausente en CSV antiguos */
-        e->centi_volts = (nf >= 6 && fields[5][0])
-            ? (int32_t)strtol(fields[5], NULL, 10) : 0;
+        e->centi_volts = (nf >= 6) ? parse_int(fields[5]) : 0;
         n_out[src]++;
         n++;
     }
