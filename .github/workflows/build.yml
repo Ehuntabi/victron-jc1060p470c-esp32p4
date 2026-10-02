@@ -13,12 +13,20 @@ jobs:
         with:
           fetch-depth: 0   # sin los tags, la version embebida sale "v?"
 
-      - name: esp-idf build
+      # El IDF v5.5.5 es ANTERIOR al arreglo oficial del memcpy con NULL
+      # (entra en 5.5.6). release.sh ya lo parchea en local, pero el CI compilaba
+      # con el IDF pristino: o sea, un firmware distinto del que se publica.
+      # Aqui se aplica el MISMO parche (el script es el mismo que usa el build
+      # local) antes de compilar, y si no aplica el CI se pone en rojo en vez de
+      # publicar algo distinto. Auditoria del 23-sep-2026, punto pendiente.
+      - name: esp-idf build (con los parches de patches/ aplicados)
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.5
           target: esp32p4
           path: '.'
+          command: |
+            bash scripts/aplicar_parche_idf.sh && idf.py build
 
       # Tests que no necesitan hardware y verificador de reglas (auditoria 21-sep-2026).
       # El verificador va DESPUES del build a proposito: comprueba las opciones
