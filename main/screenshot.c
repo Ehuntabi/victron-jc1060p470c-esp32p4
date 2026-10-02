@@ -187,6 +187,18 @@ static esp_err_t write_buf_to_sd(const char *path, const uint8_t *buf, size_t le
     if (!ok || wr != len) {
         ESP_LOGE(TAG, "Escritura incompleta en %s (%u/%u, close=%d)",
                  path, (unsigned)wr, (unsigned)len, cerr);
+        /* El fichero a medias SE BORRA. Medido el 2-oct-2026 (integracion de la
+         * SD en SDMMC): si la tarjeta falla a mitad, quedaba en /sdcard un JPEG
+         * truncado (8192 de 115559 bytes) que el carrusel y la galeria enseñan
+         * como si fuera una captura buena. Mas vale no tener nada que tener algo
+         * roto. Va con el cerrojo del bus, como todo lo que toca metadatos. */
+        if (camera_sd_bus_lock(2000)) {
+            unlink(path);
+            camera_sd_bus_unlock();
+            ESP_LOGW(TAG, "captura a medias borrada: %s", path);
+        } else {
+            ESP_LOGW(TAG, "no pude borrar la captura a medias %s (bus ocupado)", path);
+        }
         return ESP_FAIL;
     }
     ESP_LOGI(TAG, "Guardado: %s (%u bytes)", path, (unsigned)len);
