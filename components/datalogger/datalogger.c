@@ -5,8 +5,6 @@
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdmmc_host.h"
-#include "driver/sdspi_host.h"
-#include "driver/spi_common.h"
 #include "driver/gpio.h"
 #include "sdmmc_cmd.h"
 #include "esp_ldo_regulator.h"
@@ -26,16 +24,39 @@ static const char *TAG = "DATALOGGER";
 #define LOG_DIR     MOUNT_POINT "/frigo"
 #define FLUSH_INTERVAL_MS 60000  /* volcado cada 60s */
 
-/* --- SD en modo SPI (bus SPI3), NO SDMMC ---
- * Saca la SD del periferico SDMMC que comparte con el C6 (WiFi por SDIO en
- * slot 1) -> evita el timeout 0x107 por conflicto de bus con el WiFi.
- * Reutiliza los MISMOS pines fisicos del slot 0 (la tarjeta habla SPI sobre
- * ellos): CLK->SCK(43) CMD->MOSI(44) D0->MISO(39) D3->CS(42). */
-#define SD_SPI_HOST   SPI3_HOST
-#define SD_PIN_SCK    43   /* CLK */
-#define SD_PIN_MOSI   44   /* CMD */
-#define SD_PIN_MISO   39   /* D0  */
-#define SD_PIN_CS     42   /* D3  */
+/* --- SD por SDMMC: slot 0, bus de 4 bits, 40 MHz ---
+ *
+ * Historia: entre el 6-jul y hoy la tarjeta iba por SPI3 a 20 MHz porque el modo
+ * SDMMC daba timeouts 0x107 al montar. Medido por SPI: 0.13 MB/s de escritura,
+ * que hace inviable guardar video. Se vuelve a SDMMC con las dos cosas que
+ * entonces no estaban resueltas:
+ *
+ * 1) POR QUE 40 MHz Y NO 20 (SDMMC_FREQ_DEFAULT, lo que ponia el codigo viejo).
+ *    `sdmmc_host_set_card_clk()` programa el divisor de reloj GLOBAL del
+ *    periferico (`sdmmc_host_set_clk_div()`: no hay divisor por slot, lo
+ *    comparten los dos). El P4 tiene el enlace SDIO con el C6 (la radio) en el
+ *    OTRO slot, el 1, y esp_hosted lo tiene a 40 MHz
+ *    (CONFIG_ESP_HOSTED_SDIO_CLOCK_FREQ_KHZ=40000 -> divisor 4). Pidiendo 40 MHz
+ *    (SDMMC_FREQ_HIGHSPEED) el divisor de la tarjeta tambien es 4 y el reloj del
+ *    C6 NO se mueve al montar. Pidiendo 20 MHz el divisor pasa a 8 y el enlace
+ *    del C6 se queda a la mitad mientras la tarjeta este montada. O sea: 40 MHz
+ *    no es solo el doble de rapido, es la frecuencia que no pelea con la radio.
+ *    El unico momento en que el divisor baja es la identificacion de la tarjeta,
+ *    a 400 kHz (divisor 10, unos milisegundos). Por eso este montaje se hace en
+ *    init_sd_rtc_frigo(), ANTES de init_network(): cuando el C6 todavia no habla.
+ *
+ * 2) EL 0x107 DE JULIO ERA LA TARJETA COLGADA, NO EL C6. El corte de corriente
+ *    de verdad (`sd_power_cycle`, 300 ms) es del 25-jul; el paso a SPI fue del
+ *    6-jul. En la era SDMMC el codigo solo pedia el LDO si no lo tenia y NUNCA
+ *    apagaba la tarjeta, asi que un arranque en mal estado la dejaba colgada
+ *    para todos los siguientes (exactamente el sintoma que se veia). Eso ya esta
+ *    resuelto, y es independiente del transporte.
+ *
+ * Pines: los del IOMUX del slot 0 (CLK 43, CMD 44, D0 39, D1 40, D2 41, D3 42),
+ * los seis cableados al conector TF en el esquematico JC1060P470C (J1: DATA0..3,
+ * CLK, CMD; VDD desde ESP_LDO_VO4 = canal 4). Dejando los pines SIN definir el
+ * driver usa IOMUX; comprobado en el codigo de IDF 5.5.5 que asi no exige
+ * configurarlos a mano ni se queja del ancho. */
 
 static datalogger_entry_t s_buf[DATALOGGER_MAX_ENTRIES];
 static int                s_head  = 0;
@@ -137,6 +158,46 @@ static void sd_power_cycle(const char *motivo)
     vTaskDelay(pdMS_TO_TICKS(100));
 }
 
+/* El C6 (radio) en reset MIENTRAS se identifica la tarjeta.
+ *
+ * El P4 tiene UN solo controlador SDMMC y lo comparten la tarjeta (slot 0) y el
+ * enlace SDIO con el C6 (slot 1). Y el C6 puede seguir VIVO de la sesion
+ * anterior: un reinicio o un flasheo de la P4 no lo resetea (lo resetea
+ * esp_hosted al conectar con el, ~8 s despues de este montaje). Si en ese rato
+ * el C6 esta pidiendo atencion por SDIO, la identificacion de la tarjeta se
+ * pierde.
+ *
+ * MEDIDO el 2-oct-2026: arrancando justo despues de flashear, con el C6 en modo
+ * streaming de la sesion anterior, 3 intentos de 3 fallaron con ESP_ERR_TIMEOUT
+ * en ACMD41 (la tarjeta contesta CMD0/CMD8 y se queda muda). Con el C6 en reset
+ * durante la identificacion: monta a la primera, y 6 + 17 arranques seguidos OK.
+ *
+ * El camino exacto por el que el C6 molesta NO esta instrumentado: las
+ * transacciones si se serializan (`s_request_mutex`, sdmmc_transaction.c), pero
+ * el ISR es unico y sus eventos no llevan slot (sdmmc_host.c), y esp_hosted
+ * espera las interrupciones de IO por ese mismo ISR. Lo que esta medido es que
+ * con el C6 quieto el montaje sale siempre y con el C6 hablando fallaba.
+ *
+ * C6_CHIP_PU = GPIO54 (CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE), activo a nivel
+ * bajo: 0 = en reset. esp_hosted lo suelta el solo cuando conecta (hace su propio
+ * pulso de reset), asi que despues se deja como estaba. No se toca nada mas de
+ * la radio. */
+#define C6_CHIP_PU_GPIO 54
+
+static void c6_en_reset(bool en_reset)
+{
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << C6_CHIP_PU_GPIO,
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+    gpio_set_level(C6_CHIP_PU_GPIO, en_reset ? 0 : 1);
+    ESP_LOGW(TAG, "C6 %s durante la identificacion de la SD", en_reset ? "en reset" : "suelto");
+}
+
 static esp_err_t mount_sd(void)
 {
     /* SIEMPRE se arranca dando un corte de corriente a la tarjeta: si venimos de
@@ -151,50 +212,45 @@ static esp_err_t mount_sd(void)
         .max_files = 8,
         .allocation_unit_size = 16 * 1024,
     };
-    /* SD en SPI necesita pull-up en MISO y CS (el board no lleva fuertes; el
-     * modo SDMMC usaba INTERNAL_PULLUP). */
-    gpio_set_pull_mode(SD_PIN_MISO, GPIO_PULLUP_ONLY);
-    gpio_set_pull_mode(SD_PIN_CS,   GPIO_PULLUP_ONLY);
+    /* SD en SDMMC: los pull-ups internos del P4 hacen falta porque el board no
+     * lleva pull-ups externos fuertes en las lineas de datos. */
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot = SDMMC_HOST_SLOT_0;
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;   /* 40 MHz = mismo divisor que el C6 */
 
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num     = SD_PIN_MOSI,
-        .miso_io_num     = SD_PIN_MISO,
-        .sclk_io_num     = SD_PIN_SCK,
-        .quadwp_io_num   = -1,
-        .quadhd_io_num   = -1,
-        .max_transfer_sz = 8192,   /* >= trozo de camara (8KB) y menos transacciones SPI */
-    };
-    esp_err_t err = spi_bus_initialize(SD_SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {  /* INVALID_STATE = ya init */
-        ESP_LOGW(TAG, "spi_bus_initialize: %s", esp_err_to_name(err));
-        return err;
-    }
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SD_SPI_HOST;
-
-    sdspi_device_config_t dev_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
-    dev_cfg.gpio_cs = SD_PIN_CS;
-    dev_cfg.host_id = SD_SPI_HOST;
-
-    /* 3 intentos cortos (sin bloquear el boot > WDT). Ya no comparte bus con el
-     * C6 (WiFi); la contencion con la camara se mitiga con camera_sd_bus_lock. */
-    err = ESP_FAIL;
+    /* 3 intentos cortos (sin bloquear el boot > WDT). Los dos primeros con el bus
+     * completo de 4 bits; el tercero en 1 bit: si una de las lineas D1..D3 esta
+     * marginal, en 4 bits falla siempre y en 1 bit si funciona. El reloj es el
+     * mismo en los dos casos (40 MHz), asi que el C6 no se entera. Antes lento
+     * que sin tarjeta. */
+    esp_err_t err = ESP_FAIL;
+    /* El C6 se queda en reset hasta que la tarjeta este identificada (ver el
+     * comentario de c6_en_reset). Va AQUI, no antes del corte de corriente: el
+     * corte de 300 ms se lleva la sesion del C6 por delante igual, y asi el pin
+     * solo se toca lo justo. */
+    c6_en_reset(true);
     for (int i = 0; i < 3 && err != ESP_OK; i++) {
-        err = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &dev_cfg, &mount_config, &s_card);
+        slot_config.width = (i < 2) ? 4 : 1;
+        err = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &s_card);
         if (err != ESP_OK) {
-            ESP_LOGW(TAG, "SD(SPI) mount intento %d/3: %s", i + 1, esp_err_to_name(err));
+            ESP_LOGW(TAG, "SD mount intento %d/3 (%d bits, 40 MHz): %s",
+                     i + 1, slot_config.width, esp_err_to_name(err));
             /* Entre intentos, otro corte de corriente: si la tarjeta esta
              * colgada, esperar mas no sirve de nada; hay que apagarla. */
             if (i < 2) sd_power_cycle("reintento");
             else       vTaskDelay(pdMS_TO_TICKS(150));
         }
     }
+    c6_en_reset(false);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "SD mount failed: %s", esp_err_to_name(err));
         return err;
     }
-    ESP_LOGI(TAG, "SD montada OK");
+    ESP_LOGI(TAG, "SD montada OK (%d bits, %d kHz reales)", slot_config.width,
+             s_card ? s_card->max_freq_khz : host.max_freq_khz);
     sdmmc_card_print_info(stdout, s_card);
     /* Crear directorio frigo si no existe */
     struct stat st;
@@ -348,13 +404,18 @@ static void flush_pending_to_sd_impl(void)
     struct stat st;
 
     /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
-     * activo (contencion en el bus SPI3 de la SD -> INT WDT -> reinicio). Timeout corto para no
+     * activo (con la camara capturando, escribir en la SD a la vez daba INT WDT y
+     * reinicios). Timeout corto para no
      * acaparar el bus aunque ya no corre en la tarea esp_timer compartida
      * (tiene su propia tarea, ver flush_task) -- la camara y el resto de
      * escritores de SD siguen esperando el mismo cerrojo. Si no se consigue el
      * bus, omitir este flush; los datos quedan en el ring para el siguiente.
      * El stat() de need_header TAMBIEN toca la SD: tiene que ir DESPUES del
-     * cerrojo, si no la contencion en el bus SPI3 de la SD salta igual. */
+     * cerrojo, si no la contencion salta igual.
+     * TODO(2-oct-2026): aquello se midio con la SD en SPI; ahora la SD ha vuelto
+     * a SDMMC (4 bits, 40 MHz), asi que hay que volver a medir si el cerrojo
+     * sigue haciendo falta. Se queda puesto: no cuesta nada y sin medir no se
+     * quita. */
     if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
@@ -493,17 +554,18 @@ esp_err_t datalogger_init(void)
     s_pending_first = 0;
     s_pending_count = 0;
 
-    /* Intentar montar SD (3 intentos cortos). NOTA: reintentar agresivamente
-     * (incluido en segundo plano) hammerea el bus SPI3 de la SD y
-     * lo desestabiliza (reboots) -> no hacerlo. El montaje es intermitente; si
-     * falla este arranque, montara en el siguiente. */
+    /* Intentar montar SD (3 intentos cortos). El montaje se hace UNA vez por
+     * arranque, en init_sd_rtc_frigo(), antes de que arranque la radio (ver la
+     * explicacion del reloj compartido en la cabecera del fichero). */
     if (mount_sd() == ESP_OK) {
         s_sd_mounted = true;
         start_flush_timer();
     }
-    /* NO reintentar (ni diferido ni en background): machacar el bus SPI3 de la
-     * SD la desestabiliza. Si la SD no monta este arranque, montara en el
-     * siguiente. */
+    /* NO reintentar (ni diferido ni en background): volver a montar en caliente
+     * obliga a identificar la tarjeta otra vez a 400 kHz, y en ese momento el
+     * divisor global del SDMMC baja a 10 -> el enlace SDIO del C6 (la radio, que
+     * ya esta hablando) se queda a 16 MHz unos milisegundos por debajo de sus
+     * transacciones. Si la SD no monta este arranque, montara en el siguiente. */
 
     ESP_LOGI(TAG, "Datalogger iniciado (RAM %d entradas, SD %s)",
              DATALOGGER_MAX_ENTRIES, s_sd_mounted ? "OK" : "no disponible");

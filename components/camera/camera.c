@@ -612,11 +612,14 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
  * Buffer entre la captura (rapida) y la SD (lenta). Cada foto JPEG entra aqui,
  * se sirve por HTTP (/vigilancia) y el drenador (vig_sd_drain_task) la vuelca a
  * la SD "sin prisas" tomando camera_sd_bus_lock (escribe solo cuando el GDMA de
- * la camara esta parado; la SD ya esta en SPI3, fuera del bus SDMMC del C6). Al
+ * la camara esta parado). Al
  * guardar OK se libera el slot (sale de HTTP). Historicamente el volcado directo
  * a SD durante el streaming NO era viable (DMA camara+C6 sobre SDMMC compartido,
- * timeouts 0x107); ahora se sortea con SD-en-SPI3 + cerrojo de bus + volcado
- * diferido a baja prioridad. */
+ * timeouts 0x107; entonces la SD iba a 20 MHz, la mitad que el enlace del C6, y
+ * sin corte de corriente a la tarjeta). Hoy la SD vuelve a SDMMC en el slot 0 a
+ * 4 bits y 40 MHz -- el mismo divisor de reloj que el C6, ver la cabecera de
+ * components/datalogger/datalogger.c -- y se mantienen el cerrojo de bus y el
+ * volcado diferido, que es lo que funciona. */
 #define VIG_RING 8    /* 8 capturas basta para "quien entro"; ahorra ~0.5MB PSRAM */
 typedef struct { uint8_t *buf; size_t len; time_t ts; time_t session; uint32_t id; } vig_slot_t;
 static vig_slot_t       s_vig[VIG_RING];
