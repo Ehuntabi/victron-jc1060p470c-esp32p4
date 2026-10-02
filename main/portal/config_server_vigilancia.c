@@ -23,8 +23,8 @@
 static const char *TAG = "cfg_srv_vig";
 
 // GET /snapshot -> foto JPEG del ultimo frame de la camara. Requiere auth (expone la
-// camara). JPEG por HW (~80-150KB) en vez de BMP 1.58MB: ~10-20x menos latencia
-// sobre el AP y sin el malloc de 1.58MB por peticion (que rozaba el suelo de PSRAM).
+// camara). JPEG por HW (~80-150KB) en vez de BMP 1.84MB: ~10-20x menos latencia
+// sobre el AP y sin el malloc de 1.84MB por peticion (que rozaba el suelo de PSRAM).
 esp_err_t handle_snapshot(httpd_req_t *req) {
     REQUIRE_AUTH(req);
     uint8_t *jpg = NULL;

@@ -87,10 +87,6 @@ uint8_t alarma_estado_bits(void);
  * silenciar". */
 int alarma_silenciar_mask(uint8_t mask);
 
-/* Texto corto de la alarma, sin acentos (logs y, si hiciera falta, pantalla):
- * "agua", "grises", "bateria", "congelador". */
-const char *alarma_nombre(alarma_tipo_t t);
-
 #ifdef __cplusplus
 }
 #endif

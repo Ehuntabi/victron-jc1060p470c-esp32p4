@@ -49,7 +49,7 @@ bool splash_show(void)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(s_screen, 20, 0);
 
-    /* Logo (480x256) */
+    /* Logo (720x400) */
     lv_obj_t *img = lv_img_create(s_screen);
     lv_img_set_src(img, &splash_logo);
 

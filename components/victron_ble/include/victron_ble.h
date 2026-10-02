@@ -36,9 +36,6 @@ void victron_ble_init(void);
 // Register a callback to receive decoded Victron BLE data
 void victron_ble_register_callback(victron_data_cb_t cb);
 
-// Enable or disable verbose/debug logging
-void victron_ble_set_debug(bool enabled);
-
 // Reload device configuration from storage (call after updating device settings)
 void victron_ble_reload_device_config(void);
 

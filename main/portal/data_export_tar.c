@@ -218,9 +218,10 @@ static esp_err_t tar_send_dirs(httpd_req_t *req, const char *attach_name,
         return ESP_FAIL;
     }
 
-    /* Ceder CPU cada ~32 KB enviados: httpd (prio 5) es mas prioritario que
-     * LVGL (prio 4); sin esto, un .tar grande ahoga la UI y el watchdog SW la da
-     * por colgada (3/3) -> esp_restart. Ademas deja respirar a la pila WiFi
+    /* Ceder CPU cada ~32 KB enviados: httpd y LVGL van a la MISMA prioridad
+     * (task_priority=3 en config_server.c), asi que sin esto un .tar grande
+     * ahoga la UI y el watchdog SW la da por colgada (3/3) -> esp_restart.
+     * Ademas deja respirar a la pila WiFi
      * (evita el drop de conexion en descargas medianas). El contador es comun a
      * todas las carpetas: lo que asfixia es el total enviado, no cada carpeta. */
     size_t bytes_since_yield = 0;

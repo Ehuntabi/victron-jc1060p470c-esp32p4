@@ -25,7 +25,7 @@ static const char *TAG = "LOG_BROWSER";
  * su ventana de GDMA durante los segundos que dura el parseo.
  *
  * A ~100 us por linea, 512 lineas son ~50 ms; el coste total de los yields en
- * un dia entero es ~330 ms (33 trozos x 1 tick de 10 ms).
+ * un dia entero es ~680 ms (~68 trozos x 1 tick de 10 ms).
  *
  * El log del frigo no lleva troceado a proposito: son ~288 lineas por dia (una
  * cada 5 min), 60 veces menos, y nunca se acerco al limite. Si algun dia sube

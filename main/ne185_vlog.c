@@ -34,7 +34,7 @@
 #include "data/dashboard_state.h"
 #include "datalogger.h"      /* datalogger_sd_montada() */
 #include "camera.h"          /* camera_sd_bus_lock/unlock */
-#include "sd_safe.h"         /* stat/fopen/mkdir sueltos con el cerrojo incluido */
+#include "sd_safe.h"         /* sd_mkdir (con el cerrojo de la SD incluido) */
 
 #define TAG              "ne185_vlog"
 #define LOG_DIR          "/sdcard/ne185v"

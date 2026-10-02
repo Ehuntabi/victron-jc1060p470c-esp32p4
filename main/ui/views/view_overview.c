@@ -259,7 +259,7 @@ static void ov_card_make_tappable(lv_obj_t *obj, lv_obj_t *except)
     }
 }
 
-/* Pastilla de estado pequena (fuente 14 + poco relleno), pulsable. Se crea
+/* Pastilla de estado pequena (fuente 20 + poco relleno), pulsable. Se crea
  * como ultimo hijo de la card para que quede al fondo, bajo los valores. */
 static lv_obj_t *ov_make_state_pill(lv_obj_t *card)
 {
@@ -421,9 +421,9 @@ static void overview_camper_tick_cb(lv_timer_t *t)
     overview_render(ov);
 }
 
-/* Timer aparte a 50 ms solo para la animacion de rotacion del icono
+/* Timer aparte a 150 ms solo para la animacion de rotacion del icono
  * del ventilador. La velocidad de giro se escala con fan_percent:
- *   100 % → ~36 deg/s = una vuelta cada 10 segundos.
+ *   100 % → 180 deg/s = una vuelta cada 2 segundos.
  *     0 % → no se mueve. */
 static void overview_fan_rotate_cb(lv_timer_t *t)
 {
@@ -441,9 +441,9 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     if (!fs) return;
     uint8_t p = fs->fan_percent;
     if (p == 0) return;
-    /* delta_deci en decimas de grado por cada 50 ms. A 100 % giramos
-     * 90 deci/tick = 9 deg/tick = 180 deg/s = una vuelta cada 2 segundos.
-     * A 50 % seria 4.5 deg/tick = 90 deg/s = 4 segundos por vuelta. */
+    /* delta_deci en decimas de grado por tick (150 ms). A 100 % giramos
+     * 270 deci/tick = 27 deg/tick = 180 deg/s = una vuelta cada 2 segundos.
+     * A 50 % seria 13.5 deg/tick = 90 deg/s = 4 segundos por vuelta. */
     /* delta_deci en decimas de grado por tick (150 ms).
      * A 100 % -> 270 deci/tick = 27 deg/tick = 180 deg/s (mismo que antes). */
     int delta = (p * 270) / 100;
@@ -599,7 +599,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
                                       "Solar", UI_COLOR_GREEN, &ov->m_solar_w);
     lv_obj_set_width(ov->card_solar, lv_pct(100));
     /* Altura fija para garantizar tamaño igual al de bat / dcdc.
-     * flex_grow=0 + height pct(80) → cada card 80% del alto de la col. */
+     * flex_grow=1 + height pct(80) → cada card 80% del alto de la col. */
     lv_obj_set_flex_grow(ov->card_solar, 1);
     /* Subir el contenido 5 px sin alterar el tamano externo de la card:
      * reducimos el pad superior y aumentamos el inferior en la misma
@@ -676,7 +676,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_style_translate_y(ov->arc_soc, -25, 0);
     ov->m_ttg         = ui_metric_create_compact(bat_row, "Autonomía");
     /* Las dos metricas laterales con ancho base 0 + flex_grow=1: se reparten
-     * por igual el espacio a los lados del arc SoC (120 px fijo), asi su ancho
+     * por igual el espacio a los lados del arc SoC (150 px fijo), asi su ancho
      * NO depende del texto. Antes eran SIZE_CONTENT y, al cambiar el valor de
      * corriente, SPACE_AROUND recolocaba y el icono de bateria se desplazaba. */
     lv_obj_set_width(ov->m_bat_current, 0);
@@ -684,8 +684,8 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_set_width(ov->m_ttg, 0);
     lv_obj_set_flex_grow(ov->m_ttg, 1);
     /* Bajar fuentes para que las metricas no invadan el arc SoC en el ancho
-     * disponible (col_center ~320 px, arc 120 px ⇒ ~95 px por metrica).
-     * title 24→20, value 46→32, unit 24→20. Desplazar 10 px hacia abajo. */
+     * disponible (col_center ~320 px, arc 150 px fijo ⇒ menos sitio por metrica).
+     * title 24→20, value 46→24, unit 24→20. Desplazar 10 px hacia abajo. */
     {
         lv_obj_t *metrics[] = { ov->m_bat_current, ov->m_ttg };
         for (size_t i = 0; i < sizeof(metrics) / sizeof(metrics[0]); ++i) {

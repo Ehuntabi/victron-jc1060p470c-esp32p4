@@ -23,12 +23,6 @@ void ui_update_device_activity(ui_state_t *ui, const char *mac_address);
 void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_out, size_t status_size);
 
 /**
- * Mark a device as offline in the Victron Keys settings page.
- * @param mac_address MAC address of the device to mark as offline
- */
-void ui_mark_device_offline(const char *mac_address);
-
-/**
  * Refresh the Victron device configuration list in the settings page.
  * Call this after devices are added, removed, or configuration changes.
  */

@@ -254,7 +254,7 @@ void solar_daily_on_pv(int32_t watts)
     s_last_us = ahora;
     if (watts > s_hoy.pico_w) s_hoy.pico_w = watts;
 
-    /* Persistir el dia en curso cada 5 min (barato: 16 bytes en NVS). */
+    /* Persistir el dia en curso cada 5 min (barato: 20 bytes en NVS). */
     if (ahora - s_last_save_us > 300LL * 1000000LL) {
         s_last_save_us = ahora;
         guardar_hoy_nvs();

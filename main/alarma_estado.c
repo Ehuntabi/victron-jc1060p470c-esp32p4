@@ -390,9 +390,3 @@ int alarma_silenciar_mask(uint8_t mask)
                   "activas ahora 0x%02x", mask, n, alarma_estado_bits());
     return n;
 }
-
-const char *alarma_nombre(alarma_tipo_t t)
-{
-    if (t < 0 || t >= ALARMA_CUANTAS) return "?";
-    return s_nombre[t];
-}

@@ -183,12 +183,6 @@ void victron_ble_init(void)
     nimble_port_freertos_init(ble_host_task);
 }
 
-void victron_ble_set_debug(bool enabled)
-{
-    victron_debug_enabled = enabled;
-    ESP_LOGI(TAG, "Victron BLE debug set to %s", enabled ? "ENABLED" : "disabled");
-}
-
 void victron_ble_reload_device_config(void)
 {
     ESP_LOGI(TAG, "Reloading Victron device configuration");
@@ -422,9 +416,9 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
     }
 
     int encr_size = fields.mfg_data_len - offsetof(victronManufacturerData, victronEncryptedData);
-    /* CRITICO: el bound debe ser el tamano real del buffer input/output (21),
-     * no 25, porque luego memcpy(input, ..., encr_size) escribe en stack y
-     * un adv malformado con 32 <= mfg_data_len <= 35 desborda 1..4 bytes. */
+    /* CRITICO: el bound debe ser el tamano real del buffer input/output
+     * (VICTRON_ENCRYPTED_DATA_MAX_SIZE = 32), porque luego
+     * memcpy(input, ..., encr_size) escribe en stack. */
     if (encr_size <= 0 || encr_size > VICTRON_ENCRYPTED_DATA_MAX_SIZE) {
         ESP_LOGW(TAG, "Invalid encrypted data size: %d", encr_size);
         return 0;

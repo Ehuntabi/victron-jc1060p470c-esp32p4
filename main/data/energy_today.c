@@ -233,21 +233,3 @@ bool energy_today_is_fresh(void)
 {
     return s.last_sample != 0;
 }
-
-float energy_yesterday_pv_kwh(void)
-{
-    if (!s.mtx) return 0;
-    xSemaphoreTake(s.mtx, portMAX_DELAY);
-    float v = (float)s.yesterday_pv_wh / 1000.0f;
-    xSemaphoreGive(s.mtx);
-    return v;
-}
-
-float energy_yesterday_loads_kwh(void)
-{
-    if (!s.mtx) return 0;
-    xSemaphoreTake(s.mtx, portMAX_DELAY);
-    float v = (float)s.yesterday_loads_wh / 1000.0f;
-    xSemaphoreGive(s.mtx);
-    return v;
-}

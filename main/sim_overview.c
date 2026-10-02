@@ -42,9 +42,9 @@ static const char *TAG = "sim_overview";
 #include "ui.h"
 #include "victron_records.h"
 
-/* Periodo del ciclo completo de la simulacion: 60 segundos. Los distintos
- * indicadores tienen sub-ciclos (algunos mas rapidos, otros lentos) para
- * que la pantalla NO se vea estatica. */
+/* Frame FIJO de la simulacion: el reloj va congelado en t = 30000 (30 s), asi
+ * que los sub-ciclos de los distintos indicadores no avanzan y la pantalla NO
+ * cambia entre capturas. */
 #define SIM_TICK_MS     1000
 
 static uint32_t now_ms(void) {

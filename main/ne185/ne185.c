@@ -14,7 +14,7 @@
  *     consecutivos a 60ms para procesar el toggle. NE187 los envia mientras
  *     el usuario tiene el dedo en el boton (~4 frames = 240ms).
  *
- *  3. CADENCIA 100 ms (ver NE185_POLL_MS mas abajo). La UI ve cambios al instante.
+ *  3. CADENCIA 100 ms (ver POLL_PERIOD_MS mas abajo). La UI ve cambios al instante.
  *
  *  4. LOOP SINCRONO. cmd -> wait_tx_done -> read 20 bytes -> parse. Sin race.
  *
@@ -299,7 +299,7 @@ static void parse_frame(const uint8_t *b)
     s_data = tmp;
     xSemaphoreGive(s_mutex);
 
-    /* Log de cambios de estado (no de cada frame, evita spam a 60ms) */
+    /* Log de cambios de estado (no de cada frame, evita spam a 100ms) */
     bool state_change = (prev.light_in  != tmp.light_in)  ||
                         (prev.light_out != tmp.light_out) ||
                         (prev.pump      != tmp.pump)      ||
@@ -466,15 +466,15 @@ watcher_skip:;
         uart_write_bytes(NE185_UART_NUM, tx_cmd, tx_len);
         uart_wait_tx_done(NE185_UART_NUM, pdMS_TO_TICKS(20));
 
-        /* Leemos hasta 20 bytes con timeout largo. Dos modos posibles:
+        /* Leemos hasta RX_READ_LEN bytes con timeout largo. Dos modos posibles:
          *  - Caso A: auto-DE bloquea RX durante TX -> solo llegan 15 bytes
          *            de respuesta NE185 (sin echo del cmd).
          *  - Caso B: auto-DE imperfecto -> llegan 20 bytes (5 echo + 15 resp).
          * Manejamos ambos.
          *
-         * uart_read_bytes con timeout 200ms espera hasta FRAME_LEN(20) o
-         * timeout. Si llegan 15 bytes y se queda esperando 5 mas, agota
-         * el timeout y devuelve n=15. */
+         * uart_read_bytes con timeout READ_TIMEOUT_MS (150 ms) espera hasta
+         * RX_READ_LEN (40) o timeout. Si llegan 15 bytes y se queda esperando
+         * el resto, agota el timeout y devuelve n=15. */
         int n = uart_read_bytes(NE185_UART_NUM, buf, RX_READ_LEN,
                                 pdMS_TO_TICKS(READ_TIMEOUT_MS));
 

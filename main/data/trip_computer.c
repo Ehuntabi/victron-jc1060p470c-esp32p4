@@ -24,7 +24,7 @@ typedef struct {
     int32_t whs, ahs_m;   /* aporte solar: Wh y mAh */
     int64_t sol_secs;     /* tiempo con la placa cargando */
     int32_t km_m;         /* distancia recorrida, en METROS (10.000 km caben de sobra) */
-    uint8_t active;       /* 1 = viaje en curso (ver trip_computer_is_active) */
+    uint8_t active;       /* 1 = viaje en curso */
 } trip_snap_t;
 
 /* ── Odometro por GPS ──────────────────────────────────────────────
@@ -302,15 +302,6 @@ static void trip_set_active(bool on)
 }
 
 void trip_computer_end(void) { trip_set_active(false); }
-
-bool trip_computer_is_active(void)
-{
-    if (!s_mtx) return false;   /* ver el comentario en trip_computer_on_gps() */
-    xSemaphoreTake(s_mtx, portMAX_DELAY);
-    const bool a = s.active;
-    xSemaphoreGive(s_mtx);
-    return a;
-}
 
 void trip_computer_get(trip_computer_t *out)
 {

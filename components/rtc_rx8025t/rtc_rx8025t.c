@@ -105,7 +105,8 @@ bool rtc_check_vlf_now(void)
 {
     if (!s_ready) return false;
     /* Limpiar VLF (Voltage Low Flag) si está activo. Si lo está, la hora del
-     * RTC no es fiable. Indicamos ESP_OK pero el caller debe verificar año.
+     * RTC no es fiable. Devuelve true si el flag estaba activo; el caller debe
+     * verificar año.
      * (Antes esto solo corria dentro de rtc_init(), una vez al arrancar --
      * ver el comentario de rtc_check_vlf_now() en el header.) */
     uint8_t flag = 0;
@@ -118,8 +119,6 @@ bool rtc_check_vlf_now(void)
     s_battery_low = low;
     return low;
 }
-
-bool rtc_battery_low(void) { return s_battery_low; }
 
 esp_err_t rtc_get_time(struct tm *tm_out)
 {

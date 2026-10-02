@@ -30,23 +30,6 @@ typedef struct {
  * desde el boot. Idempotente: llamadas posteriores se ignoran. */
 void log_capture_init(void);
 
-/* Copia las ultimas N entradas (las mas recientes al final) filtradas.
- *   out          buffer destino (caller-allocated)
- *   max          tamano de out (entradas)
- *   level_mask   bitmask de niveles a incluir: bit 0=E, 1=W, 2=I, 3=D, 4=V.
- *                Usar 0 para "todos".
- *   tag_substr   substring case-insensitive a buscar en el tag. NULL/"" para "todos".
- * Returns: numero de entradas escritas en out (<= max). */
-size_t log_capture_get_lines(log_capture_entry_t *out, size_t max,
-                              uint8_t level_mask, const char *tag_substr);
-
-/* Ultimo numero de secuencia escrito. Para detectar si hay logs nuevos
- * sin tener que copiar todo el buffer. */
-uint32_t log_capture_last_seq(void);
-
-/* Vacia el buffer (resetea count, head, seq). */
-void log_capture_clear(void);
-
 /* Vuelca el buffer completo (no filtrado) a un archivo de texto.
  * Formato: "12345 [I] tag: msg\n" por linea.
  * path: ruta absoluta (ej. "/sdcard/logs/20260520/log_power_20260520_103045.txt"). */

@@ -646,7 +646,7 @@ static void bh_paint_hist_day(void)
  * ultima que ya venia del CSV, y actualiza n[]. Solo para HOY.
  *
  * Las dos mitades son necesarias: el CSV llega hasta el ultimo volcado (cada
- * 60 s) pero SOBREVIVE a los reinicios, y el anillo tiene el minuto en curso
+ * 600 s) pero SOBREVIVE a los reinicios, y el anillo tiene el minuto en curso
  * pero arranca vacio en cada arranque. Juntos dan el dia entero.
  *
  * Corre en bh_loader_task: sin cerrojo de LVGL y con la cache ya invalidada. */

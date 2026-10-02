@@ -273,7 +273,7 @@ static void sample_timer_cb(void *arg)
 }
 
 /* Persistencia NVS deshabilitada: el buffer es ~945 KB total y NVS no puede
- * con eso cada 15 min. Los datos sobreviven en SD vía bh_flush_to_sd_impl. */
+ * con eso cada 10 min. Los datos sobreviven en SD vía bh_flush_to_sd_impl. */
 
 
 static void bh_get_day_filename(time_t t, char *buf, size_t len)
@@ -614,31 +614,4 @@ size_t battery_history_get_series(bh_source_t src,
     if (out_oldest_ts) *out_oldest_ts = (oldest == INT32_MAX ? 0 : oldest);
     if (out_newest_ts) *out_newest_ts = (newest == INT32_MIN ? 0 : newest);
     return count;
-}
-
-void battery_history_get_totals(bh_source_t src,
-                                float *out_charge_ah,
-                                float *out_discharge_ah)
-{
-    if (out_charge_ah) *out_charge_ah = 0;
-    if (out_discharge_ah) *out_discharge_ah = 0;
-    if (src >= BH_SRC_COUNT || !s_bufs) return;
-    BH_LOCK();
-    bh_buffer_t *b = &s_bufs[src];
-    /* Trapezoidal integration: each step BH_SAMPLE_MS apart.
-     * Ah = sum(milli_amps * dt_h) / 1000  with dt_h = 10s/3600 = 0.0027778
-     * (el comentario decia "3min/60 = 0.05", de cuando se muestreaba cada 3 min;
-     * BH_SAMPLE_MS son 10 s desde el 24-ago-2026). */
-    const float dt_h = (BH_SAMPLE_MS / 1000.0f) / 3600.0f;
-    float charge_mah = 0, discharge_mah = 0;
-    size_t total = b->wrapped ? BH_POINTS : b->write_idx;
-    for (size_t i = 0; i < total; ++i) {
-        if (!b->points[i].valid) continue;
-        float ah = b->points[i].milli_amps * dt_h / 1000.0f * 1000.0f; /* kept in mAh */
-        if (b->points[i].milli_amps > 0) charge_mah += ah;
-        else discharge_mah += -ah;
-    }
-    BH_UNLOCK();
-    if (out_charge_ah) *out_charge_ah = charge_mah / 1000.0f;
-    if (out_discharge_ah) *out_discharge_ah = discharge_mah / 1000.0f;
 }

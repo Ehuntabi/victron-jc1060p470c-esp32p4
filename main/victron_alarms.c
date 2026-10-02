@@ -41,26 +41,3 @@ const char *victron_charger_error_string(uint8_t code)
         default:                        return "Error";
     }
 }
-
-const char *victron_vebus_error_string(uint8_t code)
-{
-    if (code == 0) return NULL;
-    switch (code) {
-        case 1:  return "Sincr fase";
-        case 2:  return "Otro inv";
-        case 3:  return "Sin otro inv";
-        case 4:  return "Sin AC";
-        case 5:  return "VAC alta";
-        case 6:  return "Fase corto";
-        case 7:  return "BMS L1<>L2";
-        case 10: return "Sincr fase";
-        case 14: return "Hardware";
-        case 16: return "Relay";
-        case 17: return "Sin master";
-        case 22: return "OS error";
-        case 24: return "Switch over";
-        case 25: return "Firmware";
-        case 26: return "Internal";
-        default: return "VE.Bus err";
-    }
-}

@@ -117,9 +117,8 @@ static void rtc_backup_timer_cb(void *arg)
      * de sobra) no se detectaba hasta el siguiente power-on, sin ningun
      * aviso previo para cambiarla. Independiente del "hora aun no valida"
      * de abajo: el chequeo de VLF no necesita que el sistema ya tenga hora
-     * buena. Solo deja rastro en el log (rtc_battery_low() queda expuesto
-     * por si algun dia se quiere una tarjeta de aviso en la UI, pero eso es
-     * un cambio de UI aparte que no venia pedido aqui). Detectado por el
+     * buena. Solo deja rastro en el log (una tarjeta de aviso en la UI
+     * seria un cambio de UI aparte que no venia pedido aqui). Detectado por el
      * usuario el 09-sep-2026. */
     if (rtc_is_ready() && rtc_check_vlf_now()) {
         ESP_LOGW(TAG, "RTC: pila CR1220 baja o recien caida -- la hora puede haberse perdido");

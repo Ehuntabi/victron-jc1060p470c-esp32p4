@@ -78,8 +78,8 @@ bool ui_overview_alarm_active(void);
  * para que la alarma sea visible. Llamado desde la deteccion de alarmas. */
 void ui_alarm_interrupt_screensaver(void);
 
-/* ui_mark_device_offline / ui_refresh_victron_device_list: ver
- * ui/device_tracker.h (incluido arriba). */
+/* La lista de dispositivos (y su refresco) vive en ui/device_tracker.h, que se
+ * incluye arriba. */
 
 /* Uso interno del modulo UI (ui.c y ui/capture_carousel.c): cambia la vista
  * activa segun el modo de seleccion manual o el tipo de dispositivo BLE

@@ -35,8 +35,6 @@ extern "C" {
 
 bool  sd_stat(const char *path, struct stat *st, uint32_t timeout_ms);
 int   sd_mkdir(const char *path, mode_t mode, uint32_t timeout_ms);
-int   sd_unlink(const char *path, uint32_t timeout_ms);
-int   sd_rename(const char *old_path, const char *new_path, uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }

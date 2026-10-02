@@ -43,7 +43,7 @@ lv_obj_t *ui_card_create(lv_obj_t *parent, lv_color_t border_color)
 
 /* El pulso de aviso anima la OPACIDAD DEL BORDE, no la de la sombra: animar la
  * sombra obliga a LVGL a redifuminarla en CADA fotograma de la animacion (y con
- * radio 14 eso es carisimo justo cuando mas se nota, en las alertas). El borde
+ * radio 8 eso es carisimo justo cuando mas se nota, en las alertas). El borde
  * se repinta sin desenfoque y el aviso se ve igual. */
 lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
                             const char *title, lv_color_t accent)
@@ -431,7 +431,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     const lv_coord_t volt_h   = 32;
     const lv_coord_t body_h   = height - term_h - volt_h - 4;
 
-    /* Paleta realista: subida para contrastar con el card (0x141821) */
+    /* Paleta realista: subida para contrastar con el card (0x1B2230) */
     const lv_color_t COL_CASING    = lv_color_hex(0x4a4a55); /* gris medio carcasa */
     const lv_color_t COL_CASING_HI = lv_color_hex(0x70707c); /* separadores celdas */
     const lv_color_t COL_BORDER    = lv_color_hex(0x2a2a30); /* borde oscuro casing */
@@ -735,8 +735,9 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         lv_obj_set_size(led, lv_pct(100), lv_pct(100));
         lv_obj_set_style_radius(led, 8, 0);
         lv_obj_set_style_bg_color(led, UI_COLOR_TEXT_DIM, 0);
-        /* Apagado (nivel 0) se queda en un rojo muy tenue; lleno, rojo vivo
-         * (lo sube ui_tank_set). Antes 20 %: ni se veia ni dejaba de verse. */
+        /* Apagado (nivel 0) se queda en un gris muy tenue (UI_COLOR_TEXT_DIM
+         * con OPA_10); lleno, rojo vivo (lo sube ui_tank_set). Antes 20 %:
+         * ni se veia ni dejaba de verse. */
         lv_obj_set_style_bg_opa(led, LV_OPA_10, 0);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);

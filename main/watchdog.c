@@ -67,7 +67,7 @@ static uint32_t s_arranque_epoch = 0;                         /* ultimo arranque
  * en battery_history.c, RUTA_SEG en portal/config_server_viaje.c). El
  * comentario ponia "30 s, 60 s y 600 s": eran los mismos numeros con la tarea
  * cambiada, corregido el 24-sep-2026. Un umbral unico de 10s habria disparado
- * un reset falso en CADA ciclo normal de esas tres. Cada umbral es ~2-2.5x su
+ * un reset falso en CADA ciclo normal de esas tres. Cada umbral es ~2-3x su
  * periodo: margen para que una escritura a SD lenta (tarjeta grande, bus
  * ocupado por la camara) no dispare un reset, sin tardar demasiado en pillar
  * un atasco real. Detectado por el usuario el 09-sep-2026. */
@@ -174,7 +174,7 @@ static void wd_reason_writer_task(void *arg)
 
 /* Task de un solo uso para poner el contador a cero. Se lanza aparte porque la
  * peticion llega desde un evento de LVGL y nvs_set_* escribe flash de verdad
- * (nvs_commit() es un no-op en IDF 5.4.4). Mismo patron que la del motivo. */
+ * (nvs_commit() es un no-op en IDF 5.5.5). Mismo patron que la del motivo. */
 static void wd_zero_count_writer_task(void *arg)
 {
     (void)arg;
@@ -422,7 +422,7 @@ void watchdog_anota_arranque(void)
 
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    /* nvs_commit() es un no-op en IDF 5.4.4: la escritura a flash la hace cada
+    /* nvs_commit() es un no-op en IDF 5.5.5: la escritura a flash la hace cada
      * nvs_set_*, asi que hay que mirar SU codigo de error, no el del commit. */
     wd_arranque_nvs_t par = { .epoch = hora_ok ? (uint32_t)ahora : 0, .motivo = motivo };
     esp_err_t e1 = nvs_set_blob(h, KEY_ARRANQUE, &par, sizeof(par));   /* los dos de golpe */

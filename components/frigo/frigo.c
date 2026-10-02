@@ -363,7 +363,7 @@ static void frigo_solar_tick(void)
 
     /* Acumulado de hoy. Se suma el intervalo anterior (por eso mira prev, el
      * estado con el que ha estado el rele durante ese rato, no el nuevo). El
-     * delta se acota a 10 s: si la tarea se atasca, no se inventan minutos. */
+     * delta se acota a 30 s: si la tarea se atasca, no se inventan minutos. */
     if (s_sol_last_ms != 0 && now > s_sol_last_ms) {
         uint32_t delta = now - s_sol_last_ms;
         /* Tope de 30 s: la vuelta del frigo puede tardar ~6 s (enumeracion del

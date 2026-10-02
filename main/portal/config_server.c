@@ -736,7 +736,8 @@ static esp_err_t handle_settime(httpd_req_t *req)
 
 /* GET /captura?n=<i> -> navega a la pantalla i, la captura con lv_snapshot y
  * devuelve el BMP como descarga. Sustituye al auto-tour de la SD (intermitente
- * por compartir bus con el C6). Sin auth: es el AP local y solo son capturas. */
+ * por compartir bus con el C6). SI pide auth (REQUIRE_AUTH, nivel abierto):
+ * ni el AP local ni que solo devuelva capturas lo dejan publico. */
 static esp_err_t handle_captura(httpd_req_t *req) {
     REQUIRE_AUTH(req);   /* navega la pantalla fisica (ui_tour_goto_screen): exige auth */
     int n = -1;

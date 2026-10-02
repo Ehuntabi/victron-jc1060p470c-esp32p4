@@ -43,9 +43,3 @@ esp_err_t rtc_set_time(const struct tm *tm_in);
  * @return true si VLF estaba activo en ESTA comprobacion (pila sospechosa).
  */
 bool rtc_check_vlf_now(void);
-
-/**
- * @brief true si la ULTIMA comprobacion de VLF (en rtc_init o en
- * rtc_check_vlf_now) lo encontro activo -- señal de pila CR1220 baja.
- */
-bool rtc_battery_low(void);

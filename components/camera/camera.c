@@ -468,7 +468,7 @@ static bool vig_make_thumbnail(const uint8_t *jpg, size_t len, uint8_t **out, si
     return ok;
 }
 
-/* Codifica el ultimo thumbnail (BGR 960x540) a JPEG (recorte 960x528, RGB888).
+/* Codifica el ultimo thumbnail (RGB888 960x540) a JPEG (recorte 960x528, RGB888).
  * THREAD-SAFE: serializa el encoder con mutex y devuelve una COPIA nueva en PSRAM
  * (el que llama hace free(*out)). false si no hay frame o falla. */
 bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
@@ -1182,9 +1182,10 @@ static void cam_task_cleanup(int fd, uint8_t **buf, uint32_t *len, int nbuf)
 }
 
 /* Tarea de captura A DEMANDA: en modo normal coge una rafaga corta de frames cada
- * ~2s (mide luminosidad para auto-brillo + refresca thumbnail) y PARA el stream para
- * dejar la SD libre. En modo vigilancia (ausente) si streamea seguido para detectar
- * movimiento, parando el stream solo para guardar cada foto a SD. */
+ * ~2s (mide luminosidad para auto-brillo + refresca thumbnail) y en modo vigilancia
+ * (ausente) consume frames seguido para detectar movimiento. El stream NO se para en
+ * ningun caso (no hay VIDIOC_STREAMOFF en este fichero): hay UN solo STREAMON y el
+ * ritmo se regula consumiendo despacio (DQBUF/QBUF + sleep). */
 static void camera_stream_task(void *arg)
 {
     int fd = open(CAM_DEV_PATH, O_RDONLY);
@@ -1247,7 +1248,7 @@ static void camera_stream_task(void *arg)
     }
     ESP_LOGI(TAG, "stream: modo A DEMANDA (no continuo) para no bloquear la SD");
 
-    /* Thumbnails RGB (BGR) para el snapshot HTTP (doble buffer en PSRAM). Si falla
+    /* Thumbnails RGB888 para el snapshot HTTP (doble buffer en PSRAM). Si falla
      * la reserva, seguimos solo con la luma. */
     s_thumb[0] = heap_caps_aligned_alloc(64, THUMB_SZ, MALLOC_CAP_SPIRAM);
     s_thumb[1] = heap_caps_aligned_alloc(64, THUMB_SZ, MALLOC_CAP_SPIRAM);
@@ -1464,10 +1465,10 @@ static void camera_stream_task(void *arg)
 }
 
 /* SENSOR DE ESTA BOARD: OmniVision OV02C10 (no SC2336). Detectado en SCCB 0x36,
- * chip ID 0x5602 (regs 0x300A/0x300B), RAW10 1928x1092, MIPI-CSI 2 lanes.
+ * chip ID 0x5602 (regs 0x300A/0x300B), RAW10 1920x1080, MIPI-CSI 2 lanes.
  * Driver propio en components/ov02c10/ (portado del kernel Linux). El detect se
  * registra alli via ESP_CAM_SENSOR_DETECT_FN a 0x36; el auto-detect del SC2336
- * queda desactivado en sdkconfig. Streaming OK (~37fps) con mipi_clk=800Mbps. */
+ * queda desactivado en sdkconfig. Streaming OK (~30fps) con mipi_clk=800Mbps. */
 
 /* Handle del bus I2C y cerrojo del reintento: se guardan aqui para poder
  * reintentar el arranque de la camara mas tarde (ver camera_reintentar). */

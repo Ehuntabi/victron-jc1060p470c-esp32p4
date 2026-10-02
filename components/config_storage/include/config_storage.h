@@ -18,7 +18,6 @@ esp_err_t save_brightness(uint8_t brightness);
 // AES key handling
 // Legacy single AES key handling (for compatibility)
 esp_err_t load_aes_key(uint8_t key_out[16]);
-esp_err_t save_aes_key(const uint8_t key_in[16]);
 
 // New multiple Victron device configuration
 #define VICTRON_MAX_DEVICES 8
@@ -51,11 +50,6 @@ esp_err_t save_screensaver_mode(uint8_t mode, uint8_t rotate_period_min);
 esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
                            char *pass_out, size_t *pass_len,
                            uint8_t *enabled_out);
-
-// Save AP settings; ssid and pass should be null‑terminated strings.
-esp_err_t save_wifi_config(const char *ssid,
-                           const char *pass,
-                           uint8_t enabled_out);
 
 // Victron BLE debug flag persistence (NVS namespace: "debug")
 esp_err_t load_victron_debug(bool *enabled_out);

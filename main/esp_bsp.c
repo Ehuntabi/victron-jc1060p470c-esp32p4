@@ -30,7 +30,7 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
-/* Copia LOCAL del layout privado de esp_lcd_dsi_bus_t (esp-idf 5.4.4,
+/* Copia LOCAL del layout privado de esp_lcd_dsi_bus_t (esp-idf 5.5.5,
  * components/esp_lcd/dsi/mipi_dsi_priv.h). La necesitamos para acceder al
  * mipi_dsi_hal_context_t y deshabilitar el cmd_ack del DBI IO — IDF activa
  * cmd_ack=true por defecto y el panel JD9165 no responde con BTA, lo que
@@ -45,7 +45,7 @@ typedef struct {
 /* Si el offset de .hal cambia entre versiones de IDF, el cast en
  * (bsp_priv_dsi_bus_t *)mipi_dsi_bus accedería a basura y rompería el
  * workaround del BTA silenciosamente. Estos asserts FALLAN EN COMPILACIÓN
- * si el layout no coincide con lo confirmado en IDF 5.4.4. Si fallan al
+ * si el layout no coincide con lo confirmado en IDF 5.5.5. Si fallan al
  * upgradear IDF: regenera la struct mirando esp_lcd/dsi/mipi_dsi_priv.h. */
 _Static_assert(offsetof(bsp_priv_dsi_bus_t, bus_id) == 0,
                "bsp_priv_dsi_bus_t: bus_id debe estar al offset 0");
@@ -163,15 +163,6 @@ esp_err_t bsp_i2c_init(void)
     return ESP_OK;
 }
 
-esp_err_t bsp_i2c_deinit(void)
-{
-    if (!s_i2c_init || !s_i2c_handle) return ESP_OK;
-    ESP_RETURN_ON_ERROR(i2c_del_master_bus(s_i2c_handle), TAG, "i2c_del");
-    s_i2c_handle = NULL;
-    s_i2c_init   = false;
-    return ESP_OK;
-}
-
 i2c_master_bus_handle_t bsp_i2c_get_handle(void) { return s_i2c_handle; }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -216,9 +207,6 @@ esp_err_t bsp_display_brightness_set(int pct)
                         TAG, "ledc_update_duty");
     return ESP_OK;
 }
-
-esp_err_t bsp_display_backlight_on(void)  { return bsp_display_brightness_set(100); }
-esp_err_t bsp_display_backlight_off(void) { return bsp_display_brightness_set(0);   }
 
 /* ════════════════════════════════════════════════════════════════════════════
  * LDO interno para el PHY MIPI-DSI (ESP32-P4 específico)
@@ -365,25 +353,6 @@ err:
     if (io)           esp_lcd_panel_io_del(io);
     if (mipi_dsi_bus) esp_lcd_del_dsi_bus(mipi_dsi_bus);
     return ret;
-}
-
-esp_err_t bsp_display_new(const bsp_display_config_t *config,
-                          esp_lcd_panel_handle_t     *ret_panel,
-                          esp_lcd_panel_io_handle_t  *ret_io)
-{
-    bsp_lcd_handles_t h = {0};
-    ESP_RETURN_ON_ERROR(bsp_display_new_with_handles(config, &h), TAG, "");
-    *ret_panel = h.panel;
-    *ret_io    = h.io;
-    return ESP_OK;
-}
-
-void bsp_display_delete(void)
-{
-    if (s_lcd_handles.panel)        { esp_lcd_panel_del(s_lcd_handles.panel);           s_lcd_handles.panel        = NULL; }
-    if (s_lcd_handles.io)           { esp_lcd_panel_io_del(s_lcd_handles.io);            s_lcd_handles.io           = NULL; }
-    if (s_lcd_handles.mipi_dsi_bus) { esp_lcd_del_dsi_bus(s_lcd_handles.mipi_dsi_bus);  s_lcd_handles.mipi_dsi_bus = NULL; }
-    if (s_dsi_ldo)                  { esp_ldo_release_channel(s_dsi_ldo);               s_dsi_ldo                  = NULL; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

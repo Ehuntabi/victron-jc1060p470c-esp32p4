@@ -348,13 +348,13 @@ static void flush_pending_to_sd_impl(void)
     struct stat st;
 
     /* Cerrojo de bus camara<->SD: NO escribir mientras el GDMA de la camara esta
-     * activo (contencion SDMMC -> INT WDT -> reinicio). Timeout corto para no
+     * activo (contencion en el bus SPI3 de la SD -> INT WDT -> reinicio). Timeout corto para no
      * acaparar el bus aunque ya no corre en la tarea esp_timer compartida
      * (tiene su propia tarea, ver flush_task) -- la camara y el resto de
      * escritores de SD siguen esperando el mismo cerrojo. Si no se consigue el
      * bus, omitir este flush; los datos quedan en el ring para el siguiente.
      * El stat() de need_header TAMBIEN toca la SD: tiene que ir DESPUES del
-     * cerrojo, si no la contencion SDMMC salta igual. */
+     * cerrojo, si no la contencion en el bus SPI3 de la SD salta igual. */
     if (!camera_sd_bus_lock(200)) {
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
@@ -494,16 +494,16 @@ esp_err_t datalogger_init(void)
     s_pending_count = 0;
 
     /* Intentar montar SD (3 intentos cortos). NOTA: reintentar agresivamente
-     * (incluido en segundo plano) hammerea el bus SDMMC compartido con el C6 y
+     * (incluido en segundo plano) hammerea el bus SPI3 de la SD y
      * lo desestabiliza (reboots) -> no hacerlo. El montaje es intermitente; si
      * falla este arranque, montara en el siguiente. */
     if (mount_sd() == ESP_OK) {
         s_sd_mounted = true;
         start_flush_timer();
     }
-    /* NO reintentar (ni diferido ni en background): cualquier acceso a la SD
-     * mientras el C6 usa el bus SDMMC compartido lo desestabiliza. Si la SD no
-     * monta este arranque, montara en el siguiente. */
+    /* NO reintentar (ni diferido ni en background): machacar el bus SPI3 de la
+     * SD la desestabiliza. Si la SD no monta este arranque, montara en el
+     * siguiente. */
 
     ESP_LOGI(TAG, "Datalogger iniciado (RAM %d entradas, SD %s)",
              DATALOGGER_MAX_ENTRIES, s_sd_mounted ? "OK" : "no disponible");

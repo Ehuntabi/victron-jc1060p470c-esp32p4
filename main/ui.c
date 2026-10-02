@@ -540,7 +540,7 @@ void ui_init(void) {
 
     // Styles
     lv_style_init(&ui->styles.small);
-    /* Use montserrat 22 for titles as requested */
+    /* Use Inter 28 (lv_font_montserrat_28_es) for titles as requested */
 lv_style_set_text_font(&ui->styles.small, &lv_font_montserrat_28_es);
     lv_style_set_text_color(&ui->styles.small, lv_color_white());
 

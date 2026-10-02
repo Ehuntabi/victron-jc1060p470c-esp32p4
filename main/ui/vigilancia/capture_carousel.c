@@ -111,8 +111,9 @@ static void capture_carousel_task(void *arg)
 
     /* Cada captura sostiene el lock de LVGL para fotografiar + codificar JPEG
      * + escribir a SD (screenshot_save_jpeg toma el lock el internamente);
-     * con 23 pantallas eso puede superar de sobra los 3 fallos seguidos de
-     * 200ms que el vigilante anti-cuelgue (watchdog.c) usa para decidir que
+     * con 23 pantallas eso puede superar de sobra los 10 s sin latido de la
+     * tarea LVGL que el vigilante anti-cuelgue (watchdog.c, heartbeat por tarea
+     * con WD_MONITOR_PERIOD_MS = 3000) usa para decidir que
      * la UI esta congelada -- y fuerza un reinicio a mitad del carrusel, que
      * no es un cuelgue real. Mismo mecanismo que ya usa el borrado de flash
      * de la OTA (ota_update.c). Detectado el 08-sep-2026 con el simulador

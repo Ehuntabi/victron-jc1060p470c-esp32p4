@@ -170,7 +170,7 @@ static void refresco_cb(lv_timer_t *t)
     char buf[GPS_CRUDO_N * 96];
     size_t u = 0;
     buf[0] = 0;
-    /* Solo las ULTIMAS tramas: la tarjeta mide 210 px y antes se le metian todas
+    /* Solo las ULTIMAS tramas: la tarjeta mide 134 px y antes se le metian todas
      * las del anillo (~40 lineas), que se salian de la tarjeta y estiraban la
      * pagina hasta y=1387 (medido con la sonda el 22-sep-2026). Cinco bastan para
      * ver si el modulo habla y son las que caben en el presupuesto de la pagina
@@ -248,10 +248,10 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* ── Posicion y hora, repartiendose el ancho ─────────────────── */
     lv_obj_t *fila = lv_obj_create(page);
     lv_obj_remove_style_all(fila);
-    /* 190 y no 150: con la linea del recorrido son CUATRO renglones de font 24
-     * con 8 de interlineado (140 px) mas el hueco del titulito. A 150 la ultima
-     * linea quedaba cortada por abajo -- y la tarjeta no hace scroll, asi que no
-     * se veia que faltaba nada. */
+    /* 226 y no 190: al pasar de CUATRO a CINCO renglones (la linea del
+     * recorrido) el bloque ya no cabia y la ultima linea quedaba cortada por
+     * abajo -- y la tarjeta no hace scroll, asi que no se veia que faltaba
+     * nada. */
     /* CINCO renglones de font 24 con 8 de interlineado: medido sobre la captura,
      * el bloque de datos va de +30 a +216 y con el relleno pide 226. La tarjeta no
      * hace scroll, asi que si no cabe se corta por abajo sin avisar. */

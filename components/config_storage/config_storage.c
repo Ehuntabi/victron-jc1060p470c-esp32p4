@@ -89,16 +89,6 @@ esp_err_t load_aes_key(uint8_t key_out[16]) {
     return err;
 }
 
-esp_err_t save_aes_key(const uint8_t key_in[16]) {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(AES_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_set_blob(h, AES_KEY, key_in, 16);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
-}
-
 esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
                            char *pass_out, size_t *pass_len,
                            uint8_t *enabled_out) {
@@ -136,21 +126,6 @@ esp_err_t load_wifi_config(char *ssid_out, size_t *ssid_len,
     nvs_commit(h);
     nvs_close(h);
     return ESP_OK;
-}
-
-esp_err_t save_wifi_config(const char *ssid,
-                           const char *pass,
-                           uint8_t enabled_out) {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-
-    err = nvs_set_str(h, "ssid", ssid);
-    if (err == ESP_OK) err = nvs_set_str(h, "password", pass);
-    if (err == ESP_OK) err = nvs_set_u8(h, "enabled", enabled_out);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
 }
 
 esp_err_t load_screensaver_settings(bool *enabled, uint8_t *brightness, uint16_t *timeout) {

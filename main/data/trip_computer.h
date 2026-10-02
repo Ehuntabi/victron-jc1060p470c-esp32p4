@@ -18,7 +18,7 @@ typedef struct {
     int64_t solar_seconds;    /* tiempo con la placa cargando (corriente > 0) */
     int64_t seconds_running;  /* tiempo "activo" (con sample en intervalo) */
     double  km;               /* distancia recorrida segun el GPS */
-    bool    active;           /* hay un viaje en curso (ver trip_computer_is_active) */
+    bool    active;           /* hay un viaje en curso */
 } trip_computer_t;
 
 /* Carga el estado persistido en NVS (o ceros si no hay). Llamar al boot. */
@@ -61,9 +61,6 @@ void trip_computer_reset(void);
  * trip_computer_reset: lo llama el fin de viaje, despues de escribir el
  * resumen (que es quien lee estos numeros). */
 void trip_computer_end(void);
-
-/* true si hay un viaje abierto en los contadores. */
-bool trip_computer_is_active(void);
 
 /* Copia el snapshot actual a out. Thread-safe (mutex interno). */
 void trip_computer_get(trip_computer_t *out);

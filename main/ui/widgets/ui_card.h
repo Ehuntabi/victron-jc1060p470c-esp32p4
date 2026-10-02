@@ -97,8 +97,8 @@ void ui_metric_set_label(lv_obj_t *metric, const char *label_text,
                          lv_color_t label_color);
 
 /* Cambia la fuente del valor de una métrica. Necesario porque la fuente
- * grande (montserrat_46) solo trae digitos: para textos con letras
- * (p.ej. "APAGADO") hay que pasar a una fuente con alfabeto. */
+ * grande (Inter 46, alias lv_font_montserrat_46) solo trae digitos: para
+ * textos con letras (p.ej. "APAGADO") hay que pasar a una fuente con alfabeto. */
 void ui_metric_set_value_font(lv_obj_t *metric, const lv_font_t *font);
 
 /* ── Pill de estado (badge redondeado) ──────────────────────────── */

@@ -19,19 +19,3 @@ int sd_mkdir(const char *path, mode_t mode, uint32_t timeout_ms)
     camera_sd_bus_unlock();
     return r;
 }
-
-int sd_unlink(const char *path, uint32_t timeout_ms)
-{
-    if (!camera_sd_bus_lock(timeout_ms)) { errno = EBUSY; return -1; }
-    int r = unlink(path);
-    camera_sd_bus_unlock();
-    return r;
-}
-
-int sd_rename(const char *old_path, const char *new_path, uint32_t timeout_ms)
-{
-    if (!camera_sd_bus_lock(timeout_ms)) { errno = EBUSY; return -1; }
-    int r = rename(old_path, new_path);
-    camera_sd_bus_unlock();
-    return r;
-}

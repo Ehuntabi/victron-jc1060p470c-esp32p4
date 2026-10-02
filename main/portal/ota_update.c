@@ -9,8 +9,8 @@
  * arrancar si ha llegado entero y valido. Si se corta la subida, se queda todo
  * como estaba: no se puede quedar a medias.
  *
- * Va en su propio fichero y no dentro de config_server.c, que ya tiene 2.300
- * lineas.
+ * Va en su propio fichero y no dentro de config_server.c, que ya tiene ~1.000
+ * lineas (1.009 con wc -l el 2-oct-2026).
  */
 #include "ota_update.h"
 #include <string.h>

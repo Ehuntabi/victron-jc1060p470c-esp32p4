@@ -135,7 +135,7 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
     };
     std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
 
-    /* Limpieza en cada fallo de aqui en adelante (09-sep-2026, auditoria de
+    /* Limpieza en los fallos de los pasos 3 a 6 (09-sep-2026, auditoria de
      * capa media): los "return ret/ESP_FAIL" de este bloque dejaban
      * s_tx_chan (y a partir del paso 3, tambien data_if/ctrl_if/codec_if)
      * sin liberar. audio_init() solo se llama una vez al arrancar, asi que
@@ -147,7 +147,9 @@ esp_err_t audio_init(i2c_master_bus_handle_t bus)
      * borrado publica en esp_codec_dev (revisado: solo existe
      * esp_codec_dev_delete() para el dispositivo YA ensamblado) -- se dejan
      * sin liberar a proposito en vez de adivinar una API interna; son
-     * structs de configuracion, no recursos de hardware como el canal I2S. */
+     * structs de configuracion, no recursos de hardware como el canal I2S.
+     * OJO: el fallo del paso 7 (esp_codec_dev_open) NO libera el I2S -- borra
+     * el codec y pone s_codec = NULL, pero s_tx_chan se queda vivo. */
     ret = i2s_channel_init_std_mode(s_tx_chan, &std_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "i2s_init_std: %s", esp_err_to_name(ret));

@@ -1208,7 +1208,7 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
  * puntos que aun no han bajado, como mucho los ultimos RUTA_BUFFER_N. Es la
  * misma apuesta que ya hace la telemetria, y perder cinco minutos de traza no
  * estropea el recorrido. */
-#define RUTA_BUFFER_N   10      /* 10 x 30 s = 5 min de traza en RAM (~320 bytes) */
+#define RUTA_BUFFER_N   10      /* 10 x 30 s = 5 min de traza en RAM (~560 bytes) */
 
 typedef struct {
     char   cuando[20];

@@ -186,27 +186,6 @@ void ui_prepare_detailed_device_status(const victron_data_t *data, char *status_
     }
 }
 
-void ui_mark_device_offline(const char *mac_address)
-{
-    if (mac_address == NULL) {
-        return;
-    }
-
-    ui_state_t *ui = ui_get_state();
-
-    // Update device status to offline
-    ui_settings_panel_update_victron_device_status(ui, mac_address, "", "", "Offline - Connection lost");
-
-    // Remove from activity tracking
-    for (int i = 0; i < UI_MAX_VICTRON_DEVICES; i++) {
-        if (strcmp(ui->last_active_devices[i], mac_address) == 0) {
-            ui->last_active_devices[i][0] = '\0';
-            ui->last_activity_time[i] = 0;
-            break;
-        }
-    }
-}
-
 void ui_refresh_victron_device_list(void)
 {
     ui_state_t *ui = ui_get_state();
