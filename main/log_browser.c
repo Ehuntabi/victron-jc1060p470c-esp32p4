@@ -7,7 +7,10 @@
 #include <ctype.h>
 #include <math.h>
 #include <errno.h>
+#include <unistd.h>    /* read/close: lectura por bloques, sin el peaje de stdio */
+#include <fcntl.h>     /* open */
 #include "esp_log.h"
+#include "esp_heap_caps.h"   /* buffer de lectura en PSRAM */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"   /* vTaskDelay: ceder CPU al trocear la lectura */
 #include "camera.h"   /* camera_sd_bus_lock: serializar SD con el GDMA de la camara */
@@ -31,6 +34,91 @@ static const char *TAG = "LOG_BROWSER";
  * cada 5 min), 60 veces menos, y nunca se acerco al limite. Si algun dia sube
  * su cadencia, hay que traerse este mismo patron. */
 #define BATT_CHUNK_LINES  512
+
+/* ── Lectura por bloques, con troceo de lineas en RAM ──────────────────────
+ *
+ * POR QUE NO fgets: fgets copia el texto caracter a caracter por la capa de
+ * stdio, y en un CSV de un dia de bateria (~26.000 lineas) eso domina el
+ * tiempo. Medido en el banco el 2-oct-2026 con el MISMO fichero (1,26 MB, solo
+ * lectura):
+ *      fgets linea a linea .......... 4,85 s  (0,25 MB/s)
+ *      read() 64 KB + troceo en RAM . 0,50 s  (2,43 MB/s)   -> 9,8x
+ * y con el mismo numero de lineas contadas en los dos casos.
+ *
+ * El disco no era el problema (con CONFIG_FATFS_VFS_FSTAT_BLKSIZE=16384 el
+ * buffer de stdio ya pide bloques de 16 KB): el peaje esta en pedir las lineas
+ * de una en una. Aqui se leen bloques de 64 KB y se parten buscando los '\n'.
+ * El buffer va en PSRAM (64 KB) y se reserva al abrir y se libera al cerrar. */
+#define LB_BLOQUE      (64 * 1024)
+#define LB_LINEA_MAX   160          /* igual que las lineas[] de antes */
+
+typedef struct {
+    int    fd;
+    char  *buf;        /* PSRAM: bloque + hueco para la linea a medias */
+    size_t pos;        /* donde empieza la siguiente linea sin consumir */
+    size_t fin_pos;    /* hasta donde hay datos en buf */
+    bool   fin;        /* el fichero se acabo */
+} lb_reader_t;
+
+static bool lb_abrir(lb_reader_t *r, const char *path)
+{
+    memset(r, 0, sizeof *r);
+    r->fd = open(path, O_RDONLY);
+    if (r->fd < 0) return false;
+    /* LB_LINEA_MAX de mas para poder mover una linea a medias al principio */
+    r->buf = heap_caps_malloc(LB_BLOQUE + LB_LINEA_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!r->buf) {
+        close(r->fd);
+        r->fd = -1;
+        return false;
+    }
+    return true;
+}
+
+static void lb_cerrar(lb_reader_t *r)
+{
+    if (r->fd >= 0) close(r->fd);
+    if (r->buf) free(r->buf);
+    r->fd = -1;
+    r->buf = NULL;
+}
+
+/* Siguiente linea, sin '\n' y terminada en NUL (o NULL si se acabo).
+ * Una linea mas larga que 'sz' se corta, igual que hacia fgets con lineas[160].
+ *
+ * OJO: se avanza un PUNTERO (pos) dentro del bloque; el buffer solo se compacta
+ * al reponer. La primera version movia el resto del bloque en CADA linea
+ * (memmove de 64 KB por linea = 1,6 GB en un dia de bateria) y tardaba 8,3 s en
+ * vez de 0,6: medido el 2-oct-2026. */
+static char *lb_linea(lb_reader_t *r, char *linea, size_t sz)
+{
+    for (;;) {
+        size_t disp = r->fin_pos - r->pos;
+        if (disp) {
+            char *nl = memchr(r->buf + r->pos, '\n', disp);
+            size_t len = nl ? (size_t)(nl - (r->buf + r->pos)) : disp;
+            if (nl || r->fin || disp >= LB_BLOQUE) {
+                size_t cp = len < sz - 1 ? len : sz - 1;
+                memcpy(linea, r->buf + r->pos, cp);
+                linea[cp] = 0;
+                if (cp && linea[cp - 1] == '\r') linea[cp - 1] = 0;
+                r->pos += nl ? len + 1 : len;
+                return linea;
+            }
+        } else if (r->fin) {
+            return NULL;
+        }
+        /* Reponer: compactar lo que quede al principio y leer otro bloque. */
+        if (r->pos) {
+            if (disp) memmove(r->buf, r->buf + r->pos, disp);
+            r->pos = 0;
+            r->fin_pos = disp;
+        }
+        ssize_t n = read(r->fd, r->buf + r->fin_pos, LB_BLOQUE - r->fin_pos);
+        if (n <= 0) r->fin = true;
+        else        r->fin_pos += (size_t)n;
+    }
+}
 
 int log_browser_list_dates(const char *dir,
                            char dates_out[][LOG_BROWSER_DATE_LEN],
@@ -146,17 +234,17 @@ int log_browser_load_frigo(const char *path,
     if (!path || !out || max <= 0) return 0;
     bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     if (!sdl) return 0;   /* bus ocupado por la camara: no tocar la SD */
-    FILE *f = fopen(path, "r");
-    if (!f) {
+    lb_reader_t r;
+    if (!lb_abrir(&r, path)) {
         camera_sd_bus_unlock();
-        ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
+        ESP_LOGW(TAG, "abrir %s: %s", path, strerror(errno));
         return 0;
     }
-    char line[160];
+    char line[LB_LINEA_MAX];
     /* Saltar cabecera */
-    if (!fgets(line, sizeof(line), f)) { fclose(f); if (sdl) camera_sd_bus_unlock(); return 0; }
+    if (!lb_linea(&r, line, sizeof(line))) { lb_cerrar(&r); if (sdl) camera_sd_bus_unlock(); return 0; }
     int n = 0;
-    while (fgets(line, sizeof(line), f) && n < max) {
+    while (n < max && lb_linea(&r, line, sizeof(line))) {
         char *fields[8] = {0};
         int nf = csv_split(line, fields, 8);
         if (nf < 5) continue;
@@ -172,7 +260,7 @@ int log_browser_load_frigo(const char *path,
         e->min_solar_hoy   = (nf >= 7 && fields[6][0]) ? atoi(fields[6]) : -1;
         n++;
     }
-    fclose(f);
+    lb_cerrar(&r);
     if (sdl) camera_sd_bus_unlock();
     return n;
 }
@@ -185,18 +273,18 @@ int log_browser_load_battery(const char *path,
     for (int s = 0; s < BH_SRC_COUNT; ++s) n_out[s] = 0;
     bool sdl = camera_sd_bus_lock(3000);   /* serializar SD con el GDMA de la camara */
     if (!sdl) return 0;   /* bus ocupado por la camara: no tocar la SD */
-    FILE *f = fopen(path, "r");
-    if (!f) {
+    lb_reader_t r;
+    if (!lb_abrir(&r, path)) {
         camera_sd_bus_unlock();
-        ESP_LOGW(TAG, "fopen %s: %s", path, strerror(errno));
+        ESP_LOGW(TAG, "abrir %s: %s", path, strerror(errno));
         return 0;
     }
-    char line[160];
-    if (!fgets(line, sizeof(line), f)) { fclose(f); camera_sd_bus_unlock(); return 0; }
+    char line[LB_LINEA_MAX];
+    if (!lb_linea(&r, line, sizeof(line))) { lb_cerrar(&r); camera_sd_bus_unlock(); return 0; }
     int n = 0;
     int since_yield = 0;
     bool have_lock = true;
-    while (fgets(line, sizeof(line), f)) {
+    while (lb_linea(&r, line, sizeof(line))) {
         if (++since_yield >= BATT_CHUNK_LINES) {
             since_yield = 0;
             /* Soltar el bus y ceder: la camara recupera su ventana de GDMA y
@@ -244,7 +332,7 @@ int log_browser_load_battery(const char *path,
      * Si tampoco se consigue, se cierra igual (dejar el FILE abierto seria
      * peor: fuga de descriptor y del buffer de stdio). */
     if (!have_lock) have_lock = camera_sd_bus_lock(3000);
-    fclose(f);
+    lb_cerrar(&r);
     if (have_lock) camera_sd_bus_unlock();
     return n;
 }

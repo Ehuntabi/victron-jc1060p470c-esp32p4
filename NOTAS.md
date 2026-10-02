@@ -1,41 +1,41 @@
-v4.02 — la SD lee 6,6x más rápido (el búfer de stdio pedía sector a sector)
+v4.3 — los históricos se leen por bloques (2,3x más rápido) y v4.02/v4.01/v4.00 quedan documentadas
 
 ## Qué cambia
 
-- **`CONFIG_FATFS_VFS_FSTAT_BLKSIZE=16384`**. newlib decide el tamaño del búfer
-  de `stdio` con el `st_blksize` que le da el VFS de FatFS. Con el valor por
-  defecto (0 → 128 B, y en la práctica 512) cada `fread`/`fgets` le pedía a FatFS
-  **un sector por vez**: una transacción SDMMC de 512 B cada una (~2,5 ms de
-  sobrecoste por transacción) → 0,30 MB/s. Con 16 KB (el tamaño de clúster de la
-  tarjeta, que es el máximo que cabe en una transacción) cada recarga del búfer
-  es UNA transacción de 16 KB.
-- Los `fclose` que no se miraban (**datalogger**, **battery_history**,
-  **ne185_vlog**) ahora se miran: con el búfer grande parte de la escritura
-  ocurre al cerrar, así que un fallo ahí era pérdida silenciosa de muestras.
+- **`main/log_browser.c`**: los dos lectores de históricos (`log_browser_load_frigo`
+  y `log_browser_load_battery`, que son los que usan las pantallas de frigo y
+  batería) ya no leen **línea a línea con `fgets`**: leen bloques de 64 KB con
+  `read()` y parten las líneas en memoria buscando los `\n`. El parseo de cada
+  línea es exactamente el mismo de antes.
+- El motivo, medido con el CSV real (1,26 MB, 25.921 líneas):
+  `fgets` copia el texto carácter a carácter por la capa de stdio y eso domina;
+  leer a bloques y trocear en RAM era **9,8x** más rápido solo en el recorrido
+  (0,25 → 2,43 MB/s, con el mismo número de líneas contadas).
 
-## Medido (banco, mismo fichero, solo lectura, CSV de batería de 1,26 MB)
+## Medido con el lector de verdad (el de la pantalla de batería)
 
-| | antes | ahora | mejora |
-|---|---|---|---|
-| `fread` en trozos de 16 KB | 0,301 MB/s | **2,000 MB/s** | **6,6x** |
-| `fgets` (pantallas de históricos) | 0,264 MB/s | **0,623 MB/s** | **2,4x** |
-| `read()` POSIX (control) | 2,623 MB/s | 4,770 MB/s | varía con la tarjeta |
+| | tiempo | notas |
+|---|---|---|
+| Recorrido `fgets` solo (sin parsear) | 2,97 s | lo que costaba el camino viejo de leer |
+| **Lector nuevo completo** (lee + parsea) | **1,51 s** | 25.920 entradas, BM/solar/orion 8.640 cada una |
+| Camino viejo completo (estimado) | ~3,5 s | recorrido + el mismo parseo |
 
-Abrir los históricos del frigo/batería/solar y el visor de logs se nota: un CSV
-de 1 MB pasa de ~3,5 s a ~0,5 s.
+O sea **~2,3x** en abrir un día de batería. Y ahora el cuello es el **parseo**
+(~1,3 s de los 1,5 s: `csv_split` + `strtol` + `strcmp` por línea), no la tarjeta:
+si algún día molesta, el siguiente paso es un parser más directo.
 
-## Cómo se encontró (por si hay que repetirlo)
+## Trampa que me comí (y queda escrita en el código)
 
-1. Contadores temporales en el `diskio` del IDF: leer 2 MB por `fread` hacía
-   **4098 lecturas de 1 sector** (512 B) mientras escribir agrupaba 16 sectores.
-2. La misma lectura con `read()` POSIX: **130 llamadas de 16 KB** y 5,8 MB/s
-   (9x). Con `setvbuf(_IONBF)` empeoraba (0,04 MB/s).
-3. El `st_blksize` del VFS (512) era el que fijaba el búfer de stdio. La ayuda
-   del propio Kconfig lo dice: *"Increasing this value improves fread() speed"*.
+La primera versión del lector por bloques tardaba **8,3 s** (peor que `fgets`):
+movía el resto del bloque con `memmove` **en cada línea** (64 KB × 25.920 =
+1,6 GB copiados). Se arregló avanzando un puntero de consumo dentro del bloque y
+compactando solo al reponer. Queda comentado en `lb_linea()` para que no se
+repita.
 
-## Pendiente
+## Nota sobre los números de versión
 
-- El recorrido línea a línea (`fgets`) sigue en 0,62 MB/s: si algún día molesta,
-  los lectores pueden pasar a `read()` y trocear en RAM (medido: 4,8 MB/s).
-- La tarjeta sin marca del banco sigue siendo el techo (y a veces falla el
-  montaje: el aviso rojo de la barra y el texto de Ajustes lo dicen).
+- Publicadas: **v4.00**, **v4.01**, **v4.02** y esta **v4.3**.
+- Los builds del árbol de scratch (los de las pruebas de banco) calculan su
+  versión como "último tag + 0,1", así que dicen **v4.1** (desde v4.00) o
+  **v4.3** (desde v4.02). Si en la pantalla aparece un `v4.1`, es un firmware de
+  pruebas, no un release.
