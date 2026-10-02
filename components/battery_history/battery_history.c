@@ -460,7 +460,11 @@ static bool bh_flush_to_sd_dated(time_t file_date)
             total_written++;
         }
     }
-    fclose(f);
+    /* fclose() se mira aparte: con el buffer de stdio de 16 KB
+     * (CONFIG_FATFS_VFS_FSTAT_BLKSIZE) parte de la escritura se hace al cerrar. */
+    if (fclose(f) != 0) {
+        io_error = true;
+    }
     camera_sd_bus_unlock();
 
     if (io_error) {

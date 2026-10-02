@@ -502,7 +502,14 @@ static void flush_pending_to_sd_impl(void)
         s_pending_count -= written;
     }
     xSemaphoreGive(s_mutex);
-    fclose(f);
+    /* El fclose TAMBIEN se mira: con el buffer de stdio de 16 KB
+     * (CONFIG_FATFS_VFS_FSTAT_BLKSIZE) buena parte de la escritura ocurre aqui,
+     * no en los fprintf. Antes el buffer era de 512 B y casi todo salia en el
+     * bucle, pero mirarlo cuesta cero y un fallo aqui es perdida silenciosa de
+     * muestras. 2-oct-2026. */
+    if (fclose(f) != 0) {
+        io_error = true;
+    }
     camera_sd_bus_unlock();
 
     if (io_error) {

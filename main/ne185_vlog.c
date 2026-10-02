@@ -172,7 +172,11 @@ static void flush_to_sd(void)
     }
     xSemaphoreGive(s_mutex);
 
-    fclose(f);
+    /* fclose() se mira aparte (con el buffer de stdio de 16 KB parte de la
+     * escritura se hace al cerrar). */
+    if (fclose(f) != 0) {
+        io_error = true;
+    }
     camera_sd_bus_unlock();
 
     if (io_error) {
