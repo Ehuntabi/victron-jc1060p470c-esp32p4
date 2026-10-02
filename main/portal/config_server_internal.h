@@ -59,9 +59,12 @@ void cfg_dns_stop(void);
  * entidades para que no rompan el HTML ni los atributos (XSS almacenado si el
  * nombre llegara a contener algo ejecutable). Antes era static en
  * config_server_viaje.c; se sube aqui para usarla tambien en la galeria de
- * vigilancia (config_server_vigilancia.c) sin duplicarla. out debe ser al
- * menos 4x mayor que in por si cada caracter se convierte en la entidad mas
- * larga (&amp;). */
+ * vigilancia (config_server_vigilancia.c) sin duplicarla. out debe ser al menos
+ * 6x mayor que in: la entidad mas larga es &quot; (6 caracteres), no &amp; (5)
+ * -- el comentario decia 4x y con eso un nombre con muchas comillas se cortaba.
+ * OJO: si no cabe, la funcion TRUNCA (el bucle para en o + 6 < out_len), no
+ * desborda: el texto sale cortado, que es feo pero no rompe el HTML. Auditoria
+ * del 23-sep-2026 (revisado el 2-oct-2026). */
 static inline void html_escape(const char *in, char *out, size_t out_len)
 {
     size_t o = 0;

@@ -54,7 +54,10 @@ esp_err_t handle_snapshot(httpd_req_t *req) {
  *
  * Ahora se listan las DOS: los ficheros de la tarjeta (el historial de verdad) y
  * lo que siga pendiente de volcar en el anillo. */
-#define VIG_MAX     16        /* capturas del anillo en RAM (pendientes de volcar) */
+/* Cuantas capturas le pedimos como mucho al anillo de la camara: aqui se
+ * dimensionan las listas de ids/fechas/tamanos que se le pasan. El anillo real
+ * tiene VIG_RING = 8 (components/camera/camera.c), asi que 16 sobra. */
+#define VIG_MAX     16
 #define VIG_SD_MAX  24        /* ficheros de la tarjeta que se muestran (los mas nuevos) */
 #define VIG_SD_DIR_PATH "/sdcard/vigilancia"
 /* "AAAAMMDD_HHMMSS/AAAAMMDD_HHMMSS_nnn.jpg" (carpeta de sesion + fichero) = 39 con el NUL */

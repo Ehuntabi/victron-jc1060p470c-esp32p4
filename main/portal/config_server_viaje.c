@@ -1598,7 +1598,10 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
             if (ent->d_name[0] == '.') continue;
             alguno = true;
             estado_viaje_t e = estado_de(ent->d_name);
-            char nombre_esc[256 * 6 / 4];   /* margen para el peor caso (&quot; x char) */
+            /* d_name puede tener hasta 255 caracteres y el peor escape
+             * ocupa 6 (&quot;): 256*6/4 = 384 se quedaba corto y el nombre
+             * salia a medias. Cabe de sobra en los 20 KB de pila del httpd. */
+            char nombre_esc[256 * 6];
             html_escape(ent->d_name, nombre_esc, sizeof(nombre_esc));
             if (e == V_LISTO) {
                 snprintf(linea, sizeof(linea),

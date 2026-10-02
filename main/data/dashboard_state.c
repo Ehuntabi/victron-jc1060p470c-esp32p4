@@ -200,17 +200,20 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
          * ultimo porcentaje indefinidamente y con toda la confianza. Misma
          * regla de 30 s que el resto (auditoria del 24-ago-2026). */
         uint32_t ahora_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        /* SoC "sin dato" (VICTRON_SOC_NA): el shunt habla pero no sabe el
-         * porcentaje (pasa hasta que sincroniza la bateria). El protocolo de la
-         * cabina y este JSON solo tienen UNA bandera para todo el bloque del
-         * shunt, asi que el bloque entero va como "sin datos" y el porcentaje
-         * sale -1: antes se publicaba un 102.3 % que significaba "bateria
-         * llena", y eso no es cosmetico -- con eso el rele de excedente solar
-         * daba 12 V al frigo creyendo la bateria al 102 %. Visto en el banco el
-         * 24-sep-2026. (Mejora posible para el protocolo v6: un NA por campo,
-         * para poder enseñar V e I aunque el SoC no se sepa.) */
-        const bool soc_ok = (s.soc_deci <= 1000);
-        bat_has = soc_ok && s.bat_has && ((uint32_t)(ahora_ms - s.bat_ms) < 30000u);
+        /* "has" significa "el shunt habla AHORA". El SoC puede faltar por su
+         * cuenta (VICTRON_SOC_NA: el shunt habla pero aun no sabe el porcentaje,
+         * pasa hasta que sincroniza la bateria) sin que eso invalide el voltaje
+         * ni la corriente: el NA va POR CAMPO (soc_pct sale null y V e I se
+         * publican igual). Antes esto era una sola bandera para todo el bloque,
+         * mandaba el SoC, y con el SoC NA la web y la app ponian "--" tambien en
+         * V y en I, que si estaban.
+         *
+         * Lo que NO se puede es publicar el 102.3 % tal cual: eso significa
+         * "bateria llena" y no es cosmetico -- con eso el rele de excedente
+         * solar daba 12 V al frigo creyendo la bateria al 102 %. Visto en el
+         * banco el 24-sep-2026. El NA por campo es la mejora que aquel
+         * comentario dejaba apuntada ("protocolo v6", auditoria del 23-sep). */
+        bat_has = s.bat_has && ((uint32_t)(ahora_ms - s.bat_ms) < 30000u);
         soc_deci = s.soc_deci;
         bat_v_centi = s.bat_v_centi;
         bat_i_milli = s.bat_i_milli;
@@ -235,11 +238,21 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
     trip_computer_t trip; trip_computer_get(&trip);
     int trip_hours = (int)(trip.seconds_running / 3600);
     int trip_min   = (int)((trip.seconds_running % 3600) / 60);
+    /* SoC para el JSON: el numero, o null si no hay SoC (shunt callado o SoC
+     * NA). null y no -1: la web hace fmt() y con null pinta "--", mientras que
+     * con -1 pintaba "-1.0", que parece un dato. */
+    char soc_json[16];
+    if (bat_has && (soc_deci <= 1000)) {
+        snprintf(soc_json, sizeof(soc_json), "%.1f", (float)soc_deci / 10.0f);
+    } else {
+        snprintf(soc_json, sizeof(soc_json), "null");
+    }
+
     int n = snprintf(buf, maxlen,
         "{"
           "\"battery\":{"
             "\"has\":%s,"
-            "\"soc_pct\":%.1f,"
+            "\"soc_pct\":%s,"
             "\"voltage_v\":%.2f,"
             "\"current_a\":%.3f,"
             "\"power_w\":%d,"
@@ -275,10 +288,10 @@ size_t dashboard_state_to_json(char *buf, size_t maxlen)
           "}"
         "}",
         bat_has   ? "true" : "false",
-        /* -1 = "sin dato" cuando el bloque va apagado (incluido el SoC NA):
-         * asi quien lea el JSON crudo no ve un 6553.5 % ni un 0 % que parezca
-         * bateria vacia. */
-        bat_has ? ((float)soc_deci / 10.0f) : -1.0f,
+        /* El SoC ya viene formateado arriba (numero o null): asi quien lea el
+         * JSON crudo no ve un 6553.5 % ni un 0 % que parezca bateria vacia, y
+         * V e I se publican aunque el SoC no se sepa. */
+        soc_json,
         (float)bat_v_centi / 100.0f,
         (float)bat_i_milli / 1000.0f,
         p_w,

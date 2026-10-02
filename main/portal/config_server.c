@@ -835,7 +835,7 @@ esp_err_t config_server_start(void) {
      * RECHAZA la 5a conexion en vez de reciclar la mas vieja -> la app da
      * "sin conexion" a rachas aunque el P4 este perfectamente vivo. */
     cfg.lru_purge_enable = true;
-    cfg.max_uri_handlers = 40;  /* 34 actuales (32 + solar.tar + viaje.tar) mas
+    cfg.max_uri_handlers = 40;  /* 20 actuales (contados el 2-oct-2026) mas
                                  * margen. Estaba a 32: uno de margen. Ojo:
                                  * pasarse del tope hace que el registro falle EN
                                  * SILENCIO (no se comprueba el retorno), y la
@@ -866,7 +866,12 @@ esp_err_t config_server_start(void) {
     cfg_heavy.recv_wait_timeout = 30;
     cfg_heavy.max_open_sockets = 4;
     cfg_heavy.lru_purge_enable = true;
-    cfg_heavy.max_uri_handlers = 20;  /* 17 con las graficas/CSV (antes 16, auditoria 15-sep 2.H10) */
+    /* 24 y NO 20: en este servidor hay exactamente 20 handlers registrados
+     * (contados el 2-oct-2026), asi que el margen era CERO y el siguiente que
+     * se anadiese habria fallado EN SILENCIO: el resultado de
+     * httpd_register_uri_handler no se comprueba en ningun sitio. Auditoria del
+     * 23-sep-2026. */
+    cfg_heavy.max_uri_handlers = 24;
     cfg_heavy.max_resp_headers = 16;
     esp_err_t herr_heavy = httpd_start(&server_heavy, &cfg_heavy);
     if (herr_heavy != ESP_OK) {
