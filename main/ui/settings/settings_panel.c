@@ -286,8 +286,45 @@ static void sd_trip_timer_cb(lv_timer_t *t)
      * esta visible, asi que no cuesta nada y evita otro timer. */
     bombona_label_refresh();
 
-    /* Tamano/espacio libre de la SD: solo cuando la etiqueta esta visible. */
+    /* --- Chivato de la SD -------------------------------------------------
+     * La etiqueta de espacio libre seguia diciendo "X/Y MB libres" aunque TODAS
+     * las escrituras fallasen (tarjeta llena, estropeada o mal contacto): el
+     * registro del frigo, los historicos y los logs se perdian en silencio. Y si
+     * la tarjeta no monto al arrancar, la sesion entera se queda sin registro sin
+     * que nadie lo diga: la SD no se puede remontar en caliente (tocar el reloj
+     * del controlador con la radio viva rompe el enlace del C6, ver la cabecera
+     * de components/datalogger/datalogger.c), asi que lo unico honesto es pedir
+     * un reinicio. Puesto el 2-oct-2026, a raiz de la verificacion de la SD. */
     if (ui && ui->lbl_about_sd && lv_obj_is_visible(ui->lbl_about_sd)) {
+        const datalogger_sd_estado_t est = datalogger_sd_estado();
+        if (est != DL_SD_OK) {
+            switch (est) {
+                case DL_SD_NO_MONTADA:
+                    lv_label_set_text(ui->lbl_about_sd,
+                        "SD: NO montada. Reinicia la pantalla para montarla "
+                        "(no se puede en caliente).");
+                    break;
+                case DL_SD_SOLTADA:
+                    lv_label_set_text(ui->lbl_about_sd,
+                        "SD: soltada a proposito (Ajustes). Reinicia la pantalla "
+                        "para volver a montarla.");
+                    break;
+                case DL_SD_FALLOS:
+                    lv_label_set_text_fmt(ui->lbl_about_sd,
+                        "SD: FALLOS al escribir (%d seguidos). Puede estar llena, "
+                        "estropeada o con mal contacto: NO se esta registrando.",
+                        datalogger_sd_fallos_seguidos());
+                    break;
+                default:
+                    break;
+            }
+            lv_obj_set_style_text_color(ui->lbl_about_sd,
+                                        lv_palette_main(LV_PALETTE_RED), 0);
+            return;   /* con la tarjeta fallando, no se toca la FAT */
+        }
+        /* Todo bien: quitar el color de aviso y enseñar el espacio libre. */
+        lv_obj_remove_local_style_prop(ui->lbl_about_sd, LV_STYLE_TEXT_COLOR, 0);
+
         /* f_getfree escanea la FAT (bloqueante): tomar el bus de la SD sin
          * esperar (timeout 0); si la camara lo tiene, saltar esta actualizacion
          * para no congelar el render. */

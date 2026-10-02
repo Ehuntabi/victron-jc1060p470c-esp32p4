@@ -113,6 +113,7 @@ typedef struct ui_state {
     lv_obj_t *lbl_volume;
     lv_obj_t *lbl_wifi;
     lv_obj_t *lbl_gps;         // Indicador GPS, al lado del de Wi-Fi
+    lv_obj_t *lbl_sd;          // Indicador SD: triangulo rojo si hay problema
     lv_obj_t *lbl_ne185_sniff;    /* Contador SNIFF NE185 (oculto si count=0) */
     lv_obj_t *bottom_bar;         // Indicador BLE
     lv_obj_t *btn_nav;            // Botón toggle Live↔Settings en bottom_bar

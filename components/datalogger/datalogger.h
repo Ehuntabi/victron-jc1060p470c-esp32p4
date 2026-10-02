@@ -52,6 +52,26 @@ esp_err_t datalogger_close_sd(void);
 /* true si la tarjeta sigue montada. */
 bool datalogger_sd_montada(void);
 
+/* --- Estado de la tarjeta, para AVISAR en pantalla ---------------------------
+ *
+ * Antes esto solo salia por el log serie: si la tarjeta no montaba al arrancar,
+ * o si empezaba a fallar al escribir, la sesion se quedaba sin registro (CSV del
+ * frigo, historicos, logs) y el usuario no se enteraba. Y como la SD NO se puede
+ * remontar en caliente (ver la cabecera de datalogger.c: tocar el reloj del
+ * controlador con la radio viva rompe el enlace del C6), lo unico que queda es
+ * decirlo claro y pedir un reinicio. */
+typedef enum {
+    DL_SD_OK = 0,       /* montada y escribiendo */
+    DL_SD_NO_MONTADA,   /* no monto al arrancar: hay que reiniciar para reintentar */
+    DL_SD_SOLTADA,      /* se solto a proposito (Ajustes -> Soltar tarjeta) */
+    DL_SD_FALLOS,       /* montada pero las escrituras fallan (llena o estropeada) */
+} datalogger_sd_estado_t;
+
+datalogger_sd_estado_t datalogger_sd_estado(void);
+
+/* Escrituras fallidas SEGUIDAS (0 si la ultima fue bien). */
+int datalogger_sd_fallos_seguidos(void);
+
 /* Latido de watchdog para flush_task (mismo patron que
  * frigo_set_heartbeat_cb): este componente no puede incluir main/watchdog.h
  * directamente, asi que quien registra el callback (main.c) es quien conoce

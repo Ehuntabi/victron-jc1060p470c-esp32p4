@@ -55,6 +55,7 @@ static void ble_indicator_timer_cb(lv_timer_t *t);
 static void lvgl_heartbeat_timer_cb(lv_timer_t *t);
 static void active_view_freshness_cb(lv_timer_t *t);
 static void gps_indicator_timer_cb(lv_timer_t *t);
+static void sd_indicator_timer_cb(lv_timer_t *t);
 
 /* Estado de 'wifi/enabled' cacheado en RAM para el icono de la barra. -1 = aun
  * sin leer. Ver el porque de la cache (y de por que hay que avisarla a mano) en
@@ -482,6 +483,23 @@ void ui_init(void) {
     lv_obj_set_style_text_align(ui->lbl_gps, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(ui->lbl_gps, lv_color_hex(0x666666), 0);
 
+    /* Icono SD — mismo tamano y forma que los de Wi-Fi/GPS. NO es pulsable: es un
+     * indicador. Cambia a TRIANGULO ROJO cuando la tarjeta no esta montada o
+     * lleva fallos de escritura seguidos, para que se vea de un vistazo sin
+     * entrar en Ajustes (el detalle y el "reinicia la pantalla" estan en Ajustes
+     * -> Tarjeta SD). Puesto el 2-oct-2026: la SD no se puede remontar en
+     * caliente, asi que si no monto al arrancar hay que enterarse. */
+    ui->lbl_sd = lv_label_create(ui->bottom_bar);
+    lv_obj_set_style_text_font(ui->lbl_sd, &lv_font_montserrat_24_es, 0);
+    lv_obj_set_style_bg_opa(ui->lbl_sd, LV_OPA_50, 0);
+    lv_obj_set_style_bg_color(ui->lbl_sd, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_pad_all(ui->lbl_sd, 4, 0);
+    lv_obj_set_style_radius(ui->lbl_sd, 4, 0);
+    lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
+    lv_obj_set_size(ui->lbl_sd, 44, 38);
+    lv_obj_set_style_text_align(ui->lbl_sd, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x666666), 0);
+
     /* Color inicial segun NVS */
     {
         nvs_handle_t h;
@@ -599,6 +617,7 @@ lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
     lv_timer_create(lvgl_heartbeat_timer_cb, 1000, NULL);
     lv_timer_create(active_view_freshness_cb, 2000, ui);
     lv_timer_create(gps_indicator_timer_cb, 1000, ui);
+    lv_timer_create(sd_indicator_timer_cb, 1000, ui);
     s_idle_to_live_timer = lv_timer_create(idle_to_live_timer_cb,
                                            IDLE_TO_LIVE_TIMEOUT_MS, ui);
     clock_timer_cb(NULL);
@@ -1384,6 +1403,32 @@ static void active_view_freshness_cb(lv_timer_t *t)
  * GPS puede tardar minutos en fijar. Con solo dos estados, esos minutos y un
  * cable suelto se verian igual, y se acabaria desmontando el salpicadero para
  * nada. */
+/* Indicador de SD de la barra inferior: icono normal si todo va bien, triangulo
+ * ROJO si la tarjeta no esta montada o acumula fallos de escritura. */
+static void sd_indicator_timer_cb(lv_timer_t *t)
+{
+    ui_state_t *ui = (ui_state_t *)t->user_data;
+    if (!ui || !ui->lbl_sd) return;
+
+    /* Colores con la MISMA convencion que el indicador de GPS de al lado (gris =
+     * sin datos, naranja = a medias, VERDE = bien): el gris se lee como "algo no
+     * va", asi que con la tarjeta bien el icono va en verde. El 4CD964 es el mismo
+     * verde del GPS con fix. */
+    const datalogger_sd_estado_t est = datalogger_sd_estado();
+    if (est == DL_SD_NO_MONTADA || est == DL_SD_FALLOS) {
+        lv_label_set_text(ui->lbl_sd, LV_SYMBOL_WARNING);
+        lv_obj_set_style_text_color(ui->lbl_sd, lv_palette_main(LV_PALETTE_RED), 0);
+    } else if (est == DL_SD_SOLTADA) {
+        /* La soltaste tu (Ajustes -> Soltar tarjeta): apagada a proposito, ni
+         * fallo ni "todo bien". Gris neutro. */
+        lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
+        lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x666666), 0);
+    } else {
+        lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
+        lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x4CD964), 0);
+    }
+}
+
 static void gps_indicator_timer_cb(lv_timer_t *t)
 {
     ui_state_t *ui = (ui_state_t *)t->user_data;

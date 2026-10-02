@@ -71,6 +71,12 @@ static int                s_pending_count = 0;
 static sdmmc_card_t *s_card = NULL;
 static esp_ldo_channel_handle_t s_sd_ldo = NULL;
 static bool          s_sd_mounted = false;
+/* Chivato de la SD (ver datalogger_sd_estado): si monto al arrancar (para
+ * distinguir "no monto" de "la soltaron a proposito") y cuantas
+ * escrituras fallidas lleva SEGUIDAS. */
+static bool          s_montada_al_arranque = false;
+static int           s_fallos_seguidos = 0;
+#define DL_SD_FALLOS_UMBRAL 3   /* 3 seguidas: no es un parpadeo */
 static esp_timer_handle_t s_flush_timer = NULL;
 /* Serializa los flushes (timer + main + shutdown) para que dos fprintf
  * concurrentes al mismo CSV no interleaven bytes. */
@@ -309,6 +315,22 @@ esp_err_t datalogger_close_sd(void)
     return err;
 }
 
+datalogger_sd_estado_t datalogger_sd_estado(void)
+{
+    if (!s_sd_mounted) {
+        /* Si monto al arrancar y ahora no esta, es que la soltaron a proposito
+         * (Ajustes -> Tarjeta SD -> Soltar tarjeta): eso no es un fallo. */
+        return s_montada_al_arranque ? DL_SD_SOLTADA : DL_SD_NO_MONTADA;
+    }
+    if (s_fallos_seguidos >= DL_SD_FALLOS_UMBRAL) return DL_SD_FALLOS;
+    return DL_SD_OK;
+}
+
+int datalogger_sd_fallos_seguidos(void)
+{
+    return s_fallos_seguidos;
+}
+
 bool datalogger_sd_montada(void)
 {
     return s_card != NULL;
@@ -425,6 +447,12 @@ static void flush_pending_to_sd_impl(void)
     FILE *f = fopen(path, "a");
     if (!f) {
         ESP_LOGW(TAG, "fopen %s failed", path);
+        s_fallos_seguidos++;
+        if (s_fallos_seguidos == DL_SD_FALLOS_UMBRAL) {
+            ESP_LOGE(TAG, "SD: %d fallos de escritura seguidos (tarjeta llena, "
+                          "estropeada o mal contacto) -> la UI avisa en Ajustes",
+                     s_fallos_seguidos);
+        }
         camera_sd_bus_unlock();
         if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
         return;
@@ -480,8 +508,18 @@ static void flush_pending_to_sd_impl(void)
     if (io_error) {
         ESP_LOGW(TAG, "I/O error en %s tras %d/%d entradas; reintento proximo flush",
                  path, written, snapshot_count);
+        s_fallos_seguidos++;
+        if (s_fallos_seguidos == DL_SD_FALLOS_UMBRAL) {
+            ESP_LOGE(TAG, "SD: %d fallos de escritura seguidos (tarjeta llena, "
+                          "estropeada o mal contacto) -> la UI avisa en Ajustes",
+                     s_fallos_seguidos);
+        }
     } else if (written > 0) {
         ESP_LOGI(TAG, "Volcadas %d entradas a %s", written, path);
+        if (s_fallos_seguidos >= DL_SD_FALLOS_UMBRAL) {
+            ESP_LOGW(TAG, "SD: escritura recuperada tras %d fallos", s_fallos_seguidos);
+        }
+        s_fallos_seguidos = 0;
     }
     if (s_flush_mutex) xSemaphoreGive(s_flush_mutex);
 }
@@ -559,6 +597,7 @@ esp_err_t datalogger_init(void)
      * explicacion del reloj compartido en la cabecera del fichero). */
     if (mount_sd() == ESP_OK) {
         s_sd_mounted = true;
+        s_montada_al_arranque = true;
         start_flush_timer();
     }
     /* NO reintentar (ni diferido ni en background): volver a montar en caliente
