@@ -139,6 +139,18 @@ grep -q "slot_config.width = (i < 2) ? 4 : 1" "$DL" \
 grep -q "c6_en_reset(true)" "$DL" && grep -q "c6_en_reset(false)" "$DL" \
     && ok "C6 en reset mientras se identifica la SD, y suelto despues" \
     || mal "falta el C6 en reset (o soltarlo) durante la identificacion de la SD"
+# El reintento tiene que cortar la corriente MAS que el arranque: medido el
+# 2-oct-2026, con la tarjeta en mal estado fallaron los 3 intentos (send_scr
+# 0x107) y cada reintento volvia a cortar 300 ms. Repetir el mismo corte no
+# aporta nada; 1500 ms dan tiempo al reset del controlador de la tarjeta.
+a=$(grep -oE '#define SD_CORTE_ARRANQUE_MS +[0-9]+' "$DL" | grep -oE '[0-9]+')
+b=$(grep -oE '#define SD_CORTE_REINTENTO_MS +[0-9]+' "$DL" | grep -oE '[0-9]+')
+if [ -n "$a" ] && [ -n "$b" ]; then
+    [ "$b" -gt "$a" ] && ok "el reintento corta la corriente mas que el arranque ($b > $a ms)" \
+        || mal "el reintento corta lo mismo o menos que el arranque ($b <= $a ms)"
+else
+    mal "no encuentro SD_CORTE_ARRANQUE_MS/SD_CORTE_REINTENTO_MS en datalogger.c"
+fi
 
 echo "=== 7. Lectura de la SD: bufer de stdio y lectores de historicos ==="
 # Medido el 2-oct-2026: con CONFIG_FATFS_VFS_FSTAT_BLKSIZE=0 (512 B en la

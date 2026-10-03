@@ -1,34 +1,36 @@
-v4.5 — el tick del sistema a 1000 Hz: la SD lee 4x más rápido (y esp_hosted deja de avisar)
+v4.6 — el reintento de montaje de la SD corta la corriente 1,5 s (no 300 ms)
 
 ## Qué cambia
 
-`CONFIG_FREERTOS_HZ`: de 100 a 1000 (un tick cada 1 ms en vez de cada 10 ms).
+En `components/datalogger/datalogger.c`, el corte de corriente a la tarjeta pasa a
+tener dos tiempos:
 
-## Por qué (medido, no supuesto)
+- **Arranque (primer intento): 300 ms**, como siempre. El camino normal no cambia.
+- **Reintento: 1500 ms** (`SD_CORTE_REINTENTO_MS`).
 
-esp_hosted avisa en **cada arranque**: *"CONFIG_FREERTOS_HZ is 100, ESP-Hosted
-recommended 1000, to avoid bus level jitters"*. Se midió el efecto en el banco,
-misma tarjeta y con la radio ya levantada:
+## Por qué
 
-| | 100 Hz | 1000 Hz |
-|---|---|---|
-| lectura por FATFS, 8 KB | 0,345 MB/s | **1,354 MB/s** |
-| lectura por FATFS, 64 KB | 0,330 MB/s | **1,333 MB/s** |
-| lectura por FATFS, 256 KB | 0,361 MB/s | **1,224 MB/s** |
-| escritura por FATFS | 0,49 - 0,53 MB/s | 0,52 - 0,55 MB/s |
-| lectura cruda (64 KB) | 1,3 - 3,9 MB/s | 4,2 MB/s |
+Medido el 2-oct-2026: un arranque con la tarjeta en mal estado falló **los 3
+intentos** al leer el SCR (`sdmmc_init_sd_scr: send_scr (1) returned 0x107`), y
+cada reintento volvía a cortar solo 300 ms. Si con 300 ms la tarjeta no suelta,
+repetir 300 ms no aporta nada: hay que dar tiempo a que el rail de 3V3 (100 µF del
+conector más lo que lleva la propia tarjeta) baje de verdad y a que el controlador
+interno haga su reset. 1500 ms son ~5 constantes de tiempo de ese rail, y solo se
+pagan cuando el primer intento ya ha fallado.
 
-El motivo es la granularidad: cada espera de una transacción SDMMC se mide en
-ticks, así que con 10 ms por tick una operación podía esperar hasta 10 ms de más.
-La escritura apenas cambia porque agrupa bloques grandes.
+## Verificado
 
-## Comprobado antes de aplicarlo
+- **Camino normal intacto**: arranque con la tarjeta bien → monta al primer
+  intento, mismo tiempo que antes (corte de 300 ms).
+- **Reintento, forzando el fallo del primer intento** en el árbol de pruebas:
+  el intento 1 falla en t=3547 ms, el corte largo dura **1501 ms** (3547 → 5048) y
+  el intento 2 monta a 4 bits y 40 MHz en t=5516 ms. El mecanismo hace lo que dice.
+- Regla nueva en `test/auditar.sh` (sección 6): el reintento tiene que cortar más
+  que el arranque, para que nadie lo "simplifique" de vuelta.
 
-- **Perfil de errores del arranque idéntico** al de 100 Hz: los mismos tres avisos
-  de banco (sonda 1-wire sin conectar, SELFTEST del NE185 y el `swap_xy` del
-  panel), ni uno nuevo.
-- **Cero esperas en ticks literales** en el código propio (todo con
-  `pdMS_TO_TICKS`), o sea que ninguna espera cambia de significado al mover el
-  tick. Sin esto, el cambio sería peligroso.
-- Regla nueva en `test/auditar.sh` (2c): el tick tiene que ser ≥ 1000, con este
-  motivo escrito al lado.
+## Lo que NO se puede afirmar
+
+El fallo de campo (tarjeta que no suelta con 300 ms) **no se puede reproducir a
+voluntad**, así que la mejora está razonada y el mecanismo verificado, pero no
+medida contra ese fallo concreto. Lo que sí está medido es que el camino normal no
+cambia y que el reintento ejecuta el corte largo.

@@ -133,7 +133,20 @@ static bool mismo_dia(const char *a, const char *b)
  *
  * Soltar el canal lo apaga de verdad, asi que con soltar - esperar - volver a
  * pedir se consigue el mismo efecto que desenchufar, pero por software. */
-static void sd_power_cycle(const char *motivo)
+/* Cuanto dura el corte de corriente a la tarjeta.
+ *
+ * En el ARRANQUE 300 ms bastan (asi lleva desde julio). En un REINTENTO se corta
+ * mucho mas: medido el 2-oct-2026, un arranque con la tarjeta en mal estado fallo
+ * los 3 intentos al leer el SCR (send_scr 0x107) y cada reintento volvia a cortar
+ * solo 300 ms. Si con 300 ms no suelta, repetir 300 ms no aporta nada: hay que dar
+ * tiempo a que el rail de 3V3 (100 uF del conector mas lo que lleva la propia
+ * tarjeta) baje de verdad y a que el controlador interno haga su reset. 1500 ms es
+ * ~5 constantes de tiempo de ese rail y solo se paga cuando el primer intento ya
+ * ha fallado (el camino normal no cambia). */
+#define SD_CORTE_ARRANQUE_MS  300
+#define SD_CORTE_REINTENTO_MS 1500
+
+static void sd_power_cycle_ms(const char *motivo, uint32_t apagado_ms)
 {
     if (s_sd_ldo) {
         esp_ldo_release_channel(s_sd_ldo);
@@ -147,9 +160,9 @@ static void sd_power_cycle(const char *motivo)
             esp_ldo_release_channel(h);
         }
     }
-    /* 300 ms para que el condensador del rail se descargue de verdad: con menos
-     * la tarjeta no llega a perder su estado y no sirve de nada. */
-    vTaskDelay(pdMS_TO_TICKS(300));
+    /* Para que el condensador del rail se descargue de verdad: con menos la
+     * tarjeta no llega a perder su estado y no sirve de nada. */
+    vTaskDelay(pdMS_TO_TICKS(apagado_ms));
 
     esp_ldo_channel_config_t ldo_cfg = { .chan_id = 4, .voltage_mv = 3300 };
     esp_err_t ldo_err = esp_ldo_acquire_channel(&ldo_cfg, &s_sd_ldo);
@@ -204,6 +217,11 @@ static void c6_en_reset(bool en_reset)
     ESP_LOGW(TAG, "C6 %s durante la identificacion de la SD", en_reset ? "en reset" : "suelto");
 }
 
+static void sd_power_cycle(const char *motivo)
+{
+    sd_power_cycle_ms(motivo, SD_CORTE_ARRANQUE_MS);
+}
+
 static esp_err_t mount_sd(void)
 {
     /* SIEMPRE se arranca dando un corte de corriente a la tarjeta: si venimos de
@@ -246,7 +264,7 @@ static esp_err_t mount_sd(void)
                      i + 1, slot_config.width, esp_err_to_name(err));
             /* Entre intentos, otro corte de corriente: si la tarjeta esta
              * colgada, esperar mas no sirve de nada; hay que apagarla. */
-            if (i < 2) sd_power_cycle("reintento");
+            if (i < 2) sd_power_cycle_ms("reintento", SD_CORTE_REINTENTO_MS);
             else       vTaskDelay(pdMS_TO_TICKS(150));
         }
     }
