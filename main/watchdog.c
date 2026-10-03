@@ -288,6 +288,43 @@ static void wd_monitor_task(void *arg)
         bool in_grace = (now_us - start_us) < GRACE_US;
         if (in_grace) continue;
 
+        /* Aviso UNA sola vez, al acabar la ventana de gracia: entradas que NO han
+         * latido nunca. El monitor las ignora a proposito (s_last_beat == 0), asi
+         * que si su tarea no llego a arrancar (xTaskCreate fallo) o se murio antes
+         * del primer latido, ese cuelgue no se detectaba de ninguna forma: ni
+         * reset ni aviso. No se resetea por ello -- la ventana de gracia depende
+         * de cada tarea (bh_flush late cada 600 s, udp_tx cada 1 s) y un reset ahi
+         * seria injustificado -- pero queda escrito en el log, que es lo que
+         * faltaba. Auditoria 3-oct-2026 (ver la nota de NOTAS.md). */
+        /* Aviso (una vez por entrada) de las que NO han latido nunca. El monitor
+         * las ignora a proposito (s_last_beat == 0), asi que si su tarea no llego
+         * a arrancar (xTaskCreate fallo) o se murio antes del primer latido, ese
+         * cuelgue no se detectaba de ninguna forma: ni reset ni aviso.
+         *
+         * El plazo es DOS VECES EL DE ESA ENTRADA, no un plazo global: la primera
+         * version avisaba nada mas pasar la ventana de gracia (30 s) y saltaba con
+         * tareas perfectamente sanas que aun no habian llegado a su primer latido
+         * (datalogger 60 s, viaje 30 s, bh_flush 600 s) -- medido el 03-oct-2026.
+         * Con 2x su propio plazo (mismo margen que usa la tabla) no hay falso
+         * positivo, y una entrada que de verdad no arranca queda avisada en cuanto
+         * pasa su 2x. No se resetea: un reset ahi seria injustificado. */
+        static uint32_t avisadas = 0;   /* mascara de bits: una por entrada */
+        for (int i = 0; i < WD_TASK_COUNT; i++) {
+            if (avisadas & (1u << i)) continue;
+            if (WD_TASK_TIMEOUT_US_TABLE[i] <= 0) continue;
+            if ((now_us - start_us) < 2 * WD_TASK_TIMEOUT_US_TABLE[i]) continue;
+            portENTER_CRITICAL(&s_beat_mux);
+            const int64_t beat = s_last_beat[i];
+            portEXIT_CRITICAL(&s_beat_mux);
+            if (beat == 0) {
+                avisadas |= (1u << i);
+                ESP_LOGW(TAG, "la tarea vigilada '%s' NO ha latido nunca pasados %lld s: "
+                              "esa entrada no se esta vigilando",
+                         WD_TASK_NAMES[i] ? WD_TASK_NAMES[i] : "?",
+                         (long long)(2 * WD_TASK_TIMEOUT_US_TABLE[i] / 1000000));
+            }
+        }
+
         /* Vigilancia por heartbeat, LVGL incluido (WD_TASK_LVGL, ver ui.c):
          * antes LVGL tenia su propio mecanismo aparte (trylock de 200ms
          * cada 3s, con falso positivo posible si estaba en medio de un

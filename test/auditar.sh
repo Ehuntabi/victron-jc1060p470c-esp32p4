@@ -129,6 +129,13 @@ grep -q "watchdog_heartbeat(WD_TASK_UDP_LATIDO)" main/net/udp_latido.c \
 grep -q "WD_TASK_NAMES" main/watchdog.c \
     && ok "el reset controlado dice el nombre de la tarea" \
     || mal "el reset dice el numero de tarea en vez del nombre"
+# El monitor ignora a proposito las entradas con s_last_beat == 0 (nunca latio).
+# Sin el aviso, una tarea que no llega a arrancar no se vigila NI se dice: hueco
+# silencioso cerrado el 3-oct-2026. El plazo tiene que ser 2x el de ESA entrada
+# (con un plazo global saltaba con tareas sanas que aun no habian latido: visto).
+grep -q "NO ha latido nunca" main/watchdog.c && grep -q "2 \* WD_TASK_TIMEOUT_US_TABLE" main/watchdog.c \
+    && ok "avisa de las entradas que nunca han latido (2x su propio plazo)" \
+    || mal "falta el aviso de las entradas que nunca laten (hueco silencioso del watchdog)"
 
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
 malas=$(grep -rnE '\b(strcpy|strcat|sprintf)\s*\(' main components --include="*.c" 2>/dev/null \
