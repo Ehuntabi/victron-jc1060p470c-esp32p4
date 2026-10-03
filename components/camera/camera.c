@@ -807,6 +807,24 @@ bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
 #define CAM_WARMUP_MS      25    /* ~30 fps durante la rafaga */
 static volatile int s_warmup = CAM_WARMUP_FRAMES;   /* tambien al arrancar */
 
+/* Precalentamiento al ARMAR la vigilancia. En vigilancia la camara va a 1
+ * fotograma cada CAM_SURV_IDLE_MS (1,5 s) y el AE/AWB del ISP dan un paso por
+ * fotograma: las fotos salian casi negras (medido el 03-oct-2026 en el mismo
+ * salon: luma media 48-82 en las fotos de vigilancia frente a ~150 pidiendo
+ * /snapshot). Antes de empezar a vigilar se le dan VIG_PRECAL_FRAMES fotogramas a
+ * ritmo CONSTANTE y mas rapido (VIG_PRECAL_MS) para que la exposicion y el
+ * balance se asienten; el usuario que arma la vigilancia se esta yendo, ese
+ * minuto no le cuesta nada.
+ *
+ * OJO: NO se toca CAM_SURV_IDLE_MS. El detector de movimiento esta calibrado a
+ * 1,5 s (una persona da diffs de 13-26 por celda sobre un ruido de ~5); a 0,5 s
+ * esos diffs caerian a ~4-9 y se confundirian con el ruido. Durante el
+ * precalentamiento NO se evalua movimiento y al terminar se descarta el
+ * fotograma anterior (s_mot_reset), asi que la calibracion sigue intacta. */
+#define VIG_PRECAL_FRAMES 100
+#define VIG_PRECAL_MS     400
+static volatile int s_vig_precal = 0;
+
 static volatile bool s_mot_reset    = false;
 static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (la tarea lo usa) */
 
@@ -1173,6 +1191,8 @@ void camera_set_surveillance(bool on)
 {
     s_surveillance = on;
     s_mot_reset = true;   /* descartar el frame anterior para no disparar al entrar */
+    /* Al armar: asentar exposicion y balance antes de empezar a vigilar de verdad. */
+    s_vig_precal = on ? VIG_PRECAL_FRAMES : 0;
     s_warmup = CAM_WARMUP_FRAMES;   /* recalibrar la exposicion para la escena nueva */
     if (on) s_photo_count = 0;      /* capturas de esta sesion (contador, ya sin tope) */
 
@@ -1460,7 +1480,11 @@ static void camera_stream_task(void *arg)
             }
 
             /* Vigilancia (modo ausente): deteccion de movimiento + foto a SD. */
-            if (surv) {
+            if (surv && s_vig_precal > 0) {
+                /* Precalentando (ver VIG_PRECAL_FRAMES): no se evalua movimiento
+                 * todavia, solo se deja correr la camara para que el AE/AWB se
+                 * asienten antes de la primera foto. */
+            } else if (surv) {
                 uint32_t stride = b.bytesused / SRC_H;
                 uint8_t grid[MOT_GW * MOT_GH];
                 for (int gy = 0; gy < MOT_GH; gy++) {
@@ -1554,7 +1578,17 @@ static void camera_stream_task(void *arg)
          * (2 s por fotograma) eso eran 8-10 s de espera -- al borde del timeout
          * de la app. A ritmo rapido son unas decimas. */
         if (s_frame_pedido && s_warmup <= 0) s_warmup = CAM_WARMUP_FRAMES;
-        if (s_warmup > 0) {
+        if (s_vig_precal > 0) {
+            /* Ritmo constante y mas rapido durante el precalentamiento de la
+             * vigilancia. Constante a proposito: el reparto exposicion/ganancia del
+             * ISP va por contadores de fotograma y con saltos irregulares se
+             * descoloca (visto el 03-oct-2026: imagenes de puro ruido). */
+            if (--s_vig_precal == 0) {
+                s_mot_reset = true;   /* el primer frame tras precalentar, de referencia */
+                ESP_LOGI(TAG, "vigilancia: precalentamiento terminado, empiezo a vigilar");
+            }
+            vTaskDelay(pdMS_TO_TICKS(VIG_PRECAL_MS));
+        } else if (s_warmup > 0) {
             s_warmup--;
             vTaskDelay(pdMS_TO_TICKS(CAM_WARMUP_MS));
         } else {
