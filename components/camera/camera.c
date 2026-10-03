@@ -90,7 +90,27 @@ static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
  * la foto del portal se genera a partir de la ultima miniatura, no captura por
  * su cuenta, asi que con la camara en reposo habria que despertarla y aguardar
  * -- si no, se serviria una foto vieja como si fuera de ahora. */
+/* ── Cuando se considera ASENTADA la imagen y cuanto se le da a una foto ─────
+ * (ver firma_miniatura() y camera_snapshot_jpeg()) */
+#define FIRMA_PASO 24     /* muestreo de la firma: 1 pixel de cada 24 en cada eje */
+#define FIRMA_EPS  8      /* diferencia maxima por canal (0-255) para "igual" */
+#define FIRMA_SEGUIDAS 3  /* fotogramas seguidos que deben parecerse */
+/* Cuanto se le concede a una foto pedida con la camara en reposo: se sale en
+ * cuanto la imagen esta asentada (FOTO_ASENTADA_MIN fotogramas nuevos y
+ * FIRMA_SEGUIDAS parecidos) y, si no lo esta, se sirve igualmente lo ultimo al
+ * agotar FOTO_ESPERA_ITER. Medido el 03-oct-2026: con 90 fotogramas (unos 9 s)
+ * el color NO mejoraba y la app se comia el timeout; con esto la foto tarda
+ * 0,5-3 s. */
+#define FOTO_ASENTADA_MIN 8    /* fotogramas nuevos antes de creerse "asentada" */
+#define FOTO_ESPERA_ITER 60    /* tope de espera: 60 x 50 ms = 3 s */
 static volatile uint32_t s_thumb_seq = 0;
+/* Firma de color de la ultima miniatura publicada + si la imagen esta ASENTADA
+ * (dos miniaturas seguidas con firma casi igual = el AE/AWB del ISP ya no se
+ * mueven). Sin esto la foto se tomaba a mitad de la convergencia y con la misma
+ * configuracion salia a veces bien y a veces roja (medido el 03-oct-2026). */
+static uint8_t s_firma[3];
+static bool    s_firma_hay = false;
+static volatile bool s_thumb_estable = false;
 /* Alguien ha pedido una foto y la camara esta en reposo: un fotograma y a
  * dormir otra vez. */
 static volatile bool s_frame_pedido = false;
@@ -235,6 +255,36 @@ static bool downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
             dst[i] = lut[dst[i]];
         }
     }
+    return true;
+}
+
+/* Firma de color de una miniatura RGB888: medias R,G,B de una rejilla muestreada
+ * (1 pixel de cada FIRMA_PASO en cada eje). Comparando la firma de dos miniaturas
+ * seguidas se sabe si la imagen ya esta ASENTADA: el AE y el AWB del ISP
+ * convergen durante la rafaga de despertar (y el estirado de niveles de arriba se
+ * aplica o no segun lo apagada que este la escena), asi que la foto se tomaba a
+ * medias. Medido el 03-oct-2026: misma configuracion y misma escena -> una foto
+ * buena y otra roja segun donde pillara la convergencia. */
+/* OJO: no basta con DOS fotogramas parecidos. Al despertar, los primeros salen
+ * casi iguales (el AE/AWB aun no han empezado a moverse) y aceptar eso servia la
+ * foto a medias: medido el 03-oct-2026, el 1er y 2o disparo tras arrancar salian
+ * lavados/magenta y a partir del 4o ya coincidian entre si. Por eso se exigen
+ * FIRMA_SEGUIDAS y ademas un minimo de fotogramas desde que se pide la foto. */
+static int s_firma_seguidas = 0;
+static bool firma_miniatura(const uint8_t *t, uint8_t out[3])
+{
+    if (!t) return false;
+    uint32_t sr = 0, sg = 0, sb = 0, n = 0;
+    for (int y = 0; y < THUMB_H; y += FIRMA_PASO) {
+        const uint8_t *fila = t + (uint32_t)y * THUMB_W * 3;
+        for (int x = 0; x < THUMB_W; x += FIRMA_PASO) {
+            sr += fila[x * 3]; sg += fila[x * 3 + 1]; sb += fila[x * 3 + 2]; n++;
+        }
+    }
+    if (!n) return false;
+    out[0] = (uint8_t)(sr / n);
+    out[1] = (uint8_t)(sg / n);
+    out[2] = (uint8_t)(sb / n);
     return true;
 }
 
@@ -491,8 +541,19 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         /* Hasta 7 s: el ciclo son 2 s de reposo mas la captura y su calentamiento,
          * y en frio (primera peticion tras un rato parada) tarda mas. Con 4 s la
          * app se comia 503 con la camara perfectamente viva (visto el
-         * 28-sep-2026 en la pantalla "Camara" de la app). */
-        for (int i = 0; i < 140 && s_thumb_seq == seq0; i++) {
+         * 28-sep-2026 en la pantalla "Camara" de la app).
+         *
+         * Ademas de un fotograma NUEVO se espera -con un margen CORTO- a que la
+         * imagen este ASENTADA (FIRMA_SEGUIDAS fotogramas parecidos, ver
+         * firma_miniatura): el AE y el AWB del ISP siguen moviendose durante la
+         * rafaga de despertar y la foto se tomaba a medias -- con la MISMA
+         * configuracion salia una foto bien y otra roja segun donde pillara
+         * (medido el 03-oct-2026 comparando capturas seguidas de la misma
+         * escena). El margen es corto a proposito: darle 90 fotogramas (unos 9 s)
+         * no arreglaba el color y si se comia el timeout de la app. */
+        for (int i = 0; i < FOTO_ESPERA_ITER; i++) {
+            const uint32_t nuevos = s_thumb_seq - seq0;
+            if (nuevos >= FOTO_ASENTADA_MIN && s_thumb_estable) break;
             vTaskDelay(pdMS_TO_TICKS(50));
         }
         if (s_thumb_seq == seq0) {
@@ -503,6 +564,12 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
             s_frame_pedido = false;
             return false;
         }
+        if (!s_thumb_estable) {
+            /* Sin asentar no se rechaza la foto (mejor una foto regular que un
+             * 503 en la app): se sirve la ultima y queda dicho en el log. */
+            ESP_LOGW(TAG, "foto servida con AE/AWB sin asentar tras 7 s");
+        }
+        s_frame_pedido = false;   /* ya tenemos imagen: la camara puede dormir */
     }
 
     if (s_jpeg_mutex) xSemaphoreTake(s_jpeg_mutex, portMAX_DELAY);
@@ -1363,9 +1430,32 @@ static void camera_stream_task(void *arg)
             if (s_thumb[0] && s_thumb[1]) {
                 int back = (s_thumb_act == 0) ? 1 : 0;
                 if (downscale_rgb(buf[b.index], b.bytesused, s_thumb[back])) {
+                    /* Firma de color: si se parece a la del fotograma anterior, la
+                     * imagen esta asentada (AE/AWB y estirado ya no se mueven) y
+                     * camera_snapshot_jpeg() puede servir la foto sin pillarla a
+                     * medias. Ver firma_miniatura(). */
+                    uint8_t f[3];
+                    if (firma_miniatura(s_thumb[back], f)) {
+                        const bool igual = s_firma_hay &&
+                            abs((int)f[0] - (int)s_firma[0]) <= FIRMA_EPS &&
+                            abs((int)f[1] - (int)s_firma[1]) <= FIRMA_EPS &&
+                            abs((int)f[2] - (int)s_firma[2]) <= FIRMA_EPS;
+                        s_firma_seguidas = igual ? (s_firma_seguidas + 1) : 0;
+                        s_thumb_estable = (s_firma_seguidas >= FIRMA_SEGUIDAS);
+                        s_firma[0] = f[0];
+                        s_firma[1] = f[1];
+                        s_firma[2] = f[2];
+                        s_firma_hay = true;
+                    } else {
+                        s_firma_seguidas = 0;
+                        s_thumb_estable = false;
+                    }
                     s_thumb_act = back;   /* publicar */
                     s_thumb_seq++;
-                    s_frame_pedido = false;   /* si alguien lo pidio, ya lo tiene */
+                    /* s_frame_pedido NO se limpia aqui: lo limpia quien pidio la
+                     * foto cuando ya tiene una imagen ASENTADA. Si se limpiara al
+                     * primer fotograma, la camara se dormiria antes de que el
+                     * AE/AWB acabaran de converger y la foto saldria a medias. */
                 }
             }
 
@@ -1456,7 +1546,14 @@ static void camera_stream_task(void *arg)
 
         /* Resto del THROTTLE con el bus libre. Normal ~2s; vigilancia ~1.5s.
          * Durante la rafaga de calibracion vamos a ritmo normal para que el
-         * control automatico del ISP se asiente. */
+         * control automatico del ISP se asiente.
+         *
+         * Si alguien esta esperando una FOTO (s_frame_pedido) se mantiene el
+         * ritmo rapido hasta que la tenga: quien la pide necesita varios
+         * fotogramas seguidos para dar la imagen por asentada, y al ritmo lento
+         * (2 s por fotograma) eso eran 8-10 s de espera -- al borde del timeout
+         * de la app. A ritmo rapido son unas decimas. */
+        if (s_frame_pedido && s_warmup <= 0) s_warmup = CAM_WARMUP_FRAMES;
         if (s_warmup > 0) {
             s_warmup--;
             vTaskDelay(pdMS_TO_TICKS(CAM_WARMUP_MS));

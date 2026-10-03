@@ -12,12 +12,12 @@
                     "min": 60
                 },
                 "rg": {
-                    "max": 0.8,
-                    "min": 0.35
+                    "max": 1.6,
+                    "min": 0.2
                 },
                 "bg": {
-                    "max": 0.9,
-                    "min": 0.4
+                    "max": 1.6,
+                    "min": 0.2
                 }
             },
             "green_luma_env": "dummy_awb_luma",
@@ -40,9 +40,9 @@
             "f_n0": 0.32,
             "f_m0": 0.42,
             "luma_adjust": {
-                "target_low": 45,
-                "target_high": 70,
-                "target": 55,
+                "target_low": 85,
+                "target_high": 115,
+                "target": 100,
                 "low_threshold": 14,
                 "low_regions": 5,
                 "high_threshold": 239,
