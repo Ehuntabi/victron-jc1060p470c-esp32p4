@@ -261,7 +261,13 @@ void dns_server_task(void *pvParameters)
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcv_to, sizeof(rcv_to));
 
         while (handle->started) {
-            ESP_LOGI(TAG, "Waiting for data");
+            /* ESP_LOGD y no ESP_LOGI: esto se ejecuta en CADA vuelta del bucle y
+             * el recv tiene 2 s de plazo, o sea una linea cada 2 s para siempre.
+             * Medido en el banco el 03-oct-2026: 1,3 lineas/s de log en regimen,
+             * de las que ~43.000 al dia (el 40%) eran esta; todo eso acaba en el
+             * fichero de log de la SD y en la consola, y la consola atascada ya
+             * tumbo una vez a udp_tx por contrapresion (ver watchdog). */
+            ESP_LOGD(TAG, "Waiting for data");
             struct sockaddr_in6 source_addr; // Large enough for both IPv4 or IPv6
             socklen_t socklen = sizeof(source_addr);
             int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
