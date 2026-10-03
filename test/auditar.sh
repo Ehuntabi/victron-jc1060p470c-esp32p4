@@ -280,5 +280,38 @@ if git show HEAD:dependencies.lock >/dev/null 2>&1; then
     fi
 fi
 
+echo "=== 11. La camara: los ajustes que costaron medirlos (3-oct-2026) ==="
+# Cada regla de aqui viene de un fallo MEDIDO con fotos reales del equipo, no de
+# una preferencia. Si alguien los revierte sin medir, esto lo dice.
+CAMJSON=components/ov02c10/cfg/ov02c10_default.json
+# 1) Objetivo de brillo del AE: en 55 (el valor que traia) la cara salia muy
+#    oscura (luma del parche de la cara 76 -> 137 al subirlo a 100). Por encima de
+#    110 vuelve a quemar el canal rojo, porque el AWB lo levanta.
+TARGET=$(python3 -c "import json;print(json.load(open('$CAMJSON'))['OV02C10']['agc']['luma_adjust']['target'])" 2>/dev/null)
+if [ -n "$TARGET" ] && [ "$TARGET" -ge 70 ] && [ "$TARGET" -le 110 ]; then
+    ok "objetivo de brillo del AE en rango util ($TARGET, entre 70 y 110)"
+else
+    mal "objetivo de brillo del AE fuera de rango ($TARGET): con 55 la cara sale oscura y por encima de 110 se satura el rojo"
+fi
+# 2) Ventana de puntos blancos del AWB. Con 0,35-0,8 (la que traia) los pixeles
+#    calidos quedaban FUERA y con luz de lampara el AWB sobregiraba: el 85% de los
+#    pixeles salian saturados en rojo y el techo blanco se grababa (248,17,164).
+read -r RGMIN RGMAX BGMIN BGMAX <<EOF
+$(python3 -c "
+import json;a=json.load(open('$CAMJSON'))['OV02C10']['awb']['range']
+print(a['rg']['min'], a['rg']['max'], a['bg']['min'], a['bg']['max'])" 2>/dev/null)
+EOF
+if python3 -c "import sys;sys.exit(0 if float('$RGMIN')<=0.3 and float('$RGMAX')>=1.0 and float('$BGMIN')<=0.3 and float('$BGMAX')>=1.0 else 1)" 2>/dev/null; then
+    ok "ventana del AWB abierta a los pixeles calidos (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX)"
+else
+    mal "ventana del AWB estrecha (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX): con luz calida sobregira a rojo"
+fi
+# 3) La foto pedida con la camara en reposo tiene que esperar a que la imagen este
+#    asentada: sin eso se servia a mitad de convergencia del AE/AWB y con la MISMA
+#    configuracion salia una foto buena y otra roja.
+grep -q "firma_miniatura" components/camera/camera.c && grep -q "FOTO_ESPERA_ITER" components/camera/camera.c \
+    && ok "la foto espera a que la imagen este asentada" \
+    || mal "la foto se sirve sin esperar a que el AE/AWB asienten (salia buena o roja al azar)"
+
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

@@ -128,6 +128,21 @@ fi
 # No se toca nada de otros proyectos (35cabina) ni la app Flutter.
 # Destino alternativo para pruebas: JOINT_RELEASES_DIR.
 RELDIR="${JOINT_RELEASES_DIR:-$HOME/joint-releases}"
+# ── SOLO un arbol EXACTAMENTE en un tag y limpio escribe en ~/joint-releases ──
+# Paso el 3-oct-2026: un build de taller (con cambios sin commitear) calculo
+# "v4.11", copio su .bin a ~/joint-releases y BORRO el v4.10 publicado, que era
+# el que estaba en la Release de GitHub y el que se lleva a la autocaravana.
+# Desde entonces: los builds de taller van a $RELDIR/taller/ y NO borran nada.
+# Publicar en ~/joint-releases es cosa de release.sh (o de un tag exacto).
+ES_TAG=0
+if command -v git >/dev/null 2>&1 && git -C "$SRC_DIR" describe --tags --exact-match >/dev/null 2>&1; then
+    sucio="$(git -C "$SRC_DIR" status --porcelain 2>/dev/null | grep -v 'dependencies.lock' || true)"
+    [ -z "$sucio" ] && ES_TAG=1
+fi
+if [ "$ES_TAG" = "0" ]; then
+    RELDIR="$RELDIR/taller"
+    echo "[bin] arbol sin tag o con cambios: copia de TALLER (no es un release)" >&2
+fi
 RELBIN="$RELDIR/$(basename "$BIN" .bin | tr '_' '-')-${V_ARBOL}-app.bin"
 if mkdir -p "$RELDIR" 2>/dev/null && cp "$BIN" "$RELBIN" 2>/dev/null; then
     echo "[bin] $RELBIN"
