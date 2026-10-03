@@ -91,6 +91,26 @@ static const int64_t WD_TASK_TIMEOUT_US_TABLE[WD_TASK_COUNT] = {
      * timer late cada 1s, de sobra de margen. Cambiado por decision del
      * usuario el 09-sep-2026. */
     [WD_TASK_LVGL]        = WD_TASK_TIMEOUT_US,
+    /* udp_tx manda cada 1 s y udp_latido tiene timeout de 2 s en el recvfrom:
+     * margenes de 5x y 4x, de sobra para no dar falsos positivos (el monitor
+     * mira cada 3 s). */
+    [WD_TASK_UDP_TX]      = 5LL    * 1000000LL,
+    [WD_TASK_UDP_LATIDO]  = 8LL    * 1000000LL,
+};
+
+/* Nombre de cada tarea vigilada, para el log del reset controlado: antes decia
+ * "Tarea 7 sin latido" y en el campo eso no dice nada (3-oct-2026). */
+static const char *WD_TASK_NAMES[WD_TASK_COUNT] = {
+    [WD_TASK_NE185]       = "ne185",
+    [WD_TASK_FRIGO]       = "frigo",
+    [WD_TASK_DL_FLUSH]    = "datalogger (volcado)",
+    [WD_TASK_BH_FLUSH]    = "battery_history (volcado)",
+    [WD_TASK_VIAJE_TICK]  = "viaje (tick)",
+    [WD_TASK_NE185_VLOG]  = "ne185 (vlog)",
+    [WD_TASK_LOG_CLEANUP] = "log_cleanup",
+    [WD_TASK_LVGL]        = "LVGL",
+    [WD_TASK_UDP_TX]      = "udp_tx (telemetria)",
+    [WD_TASK_UDP_LATIDO]  = "udp_latido (latido cabina)",
 };
 
 static volatile int64_t s_last_beat[WD_TASK_COUNT];   /* 0 = nunca latio */
@@ -284,7 +304,9 @@ static void wd_monitor_task(void *arg)
                  * el ultimo bloque de muestras antes que no reiniciar. */
                 wd_force_reset(1);   /* motivo 1 = LVGL congelada (ver KEY_FORCED arriba) */
             } else {
-                ESP_LOGE(TAG, "Tarea %d sin latido — reset controlado", stalled);
+                ESP_LOGE(TAG, "Tarea '%s' sin latido — reset controlado",
+                         (stalled >= 0 && stalled < WD_TASK_COUNT && WD_TASK_NAMES[stalled])
+                             ? WD_TASK_NAMES[stalled] : "?");
                 wd_force_reset(2);   /* motivo 2 = tarea muda */
             }
         }

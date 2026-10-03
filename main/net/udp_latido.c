@@ -22,6 +22,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_crc.h"
+#include "watchdog.h"   /* watchdog_heartbeat: la tarea late (ver watchdog.c) */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
@@ -56,6 +57,7 @@ static void latido_task(void *arg)
         sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0) {
             ESP_LOGE(TAG, "socket() fallo: errno=%d (reintento en 5s)", errno);
+            watchdog_heartbeat(WD_TASK_UDP_LATIDO);
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
@@ -68,6 +70,7 @@ static void latido_task(void *arg)
                      MINI_LATIDO_UDP_PORT, errno);
             close(sock);
             sock = -1;
+            watchdog_heartbeat(WD_TASK_UDP_LATIDO);
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
@@ -85,6 +88,11 @@ static void latido_task(void *arg)
     for (;;) {
         socklen_t slen = sizeof(src);
         int n = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&src, &slen);
+        /* Late en CADA vuelta (llega latido o salta el timeout de 2 s): lo que
+         * vigila el watchdog es que la tarea siga viva, no que la cabina hable.
+         * Si esta tarea se colgara, la P4 creeria que la cabina se ha muerto y
+         * reiniciaria su AP en cascada (ver el comentario en watchdog.h). */
+        watchdog_heartbeat(WD_TASK_UDP_LATIDO);
         if (n < 0) continue;                    /* timeout o error: no hay nada que hacer */
         if (n != (int)sizeof(mini_latido_t)) {
             ESP_LOGW(TAG, "latido de tamano raro: %d (esperado %u)",

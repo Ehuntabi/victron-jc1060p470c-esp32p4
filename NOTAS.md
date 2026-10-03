@@ -1,36 +1,37 @@
-v4.6 — el reintento de montaje de la SD corta la corriente 1,5 s (no 300 ms)
+v4.7 — el watchdog vigila también el enlace con la cabina (y dice qué tarea se colgó)
 
 ## Qué cambia
 
-En `components/datalogger/datalogger.c`, el corte de corriente a la tarjeta pasa a
-tener dos tiempos:
-
-- **Arranque (primer intento): 300 ms**, como siempre. El camino normal no cambia.
-- **Reintento: 1500 ms** (`SD_CORTE_REINTENTO_MS`).
-
-## Por qué
-
-Medido el 2-oct-2026: un arranque con la tarjeta en mal estado falló **los 3
-intentos** al leer el SCR (`sdmmc_init_sd_scr: send_scr (1) returned 0x107`), y
-cada reintento volvía a cortar solo 300 ms. Si con 300 ms la tarjeta no suelta,
-repetir 300 ms no aporta nada: hay que dar tiempo a que el rail de 3V3 (100 µF del
-conector más lo que lleva la propia tarjeta) baje de verdad y a que el controlador
-interno haga su reset. 1500 ms son ~5 constantes de tiempo de ese rail, y solo se
-pagan cuando el primer intento ya ha fallado.
+- **Dos tareas más en el watchdog**, las del enlace con la cabina:
+  - `udp_tx` (telemetría P4 → cabina): si se cuelga, la cabina deja de recibir
+    datos **en silencio**.
+  - `udp_latido` (latido cabina → P4): si se cuelga, **la P4 cree que la cabina se
+    ha muerto** — su latido deja de llegar — y empieza a reiniciar su propio AP en
+    cascada. Un cuelgue se convertía en un problema de radio.
+- **El reset controlado dice el nombre de la tarea**: antes
+  `Tarea 7 sin latido — reset controlado`, ahora
+  `Tarea 'udp_tx (telemetria)' sin latido — reset controlado`.
+- Las dos laten en su bucle (y también mientras reintentan el socket, para que un
+  AP raro no provoque un reset en bucle: el watchdog vigila que la tarea esté
+  viva, no que el socket esté listo).
 
 ## Verificado
 
-- **Camino normal intacto**: arranque con la tarjeta bien → monta al primer
-  intento, mismo tiempo que antes (corte de 300 ms).
-- **Reintento, forzando el fallo del primer intento** en el árbol de pruebas:
-  el intento 1 falla en t=3547 ms, el corte largo dura **1501 ms** (3547 → 5048) y
-  el intento 2 monta a 4 bits y 40 MHz en t=5516 ms. El mecanismo hace lo que dice.
-- Regla nueva en `test/auditar.sh` (sección 6): el reintento tiene que cortar más
-  que el arranque, para que nadie lo "simplifique" de vuelta.
+- **Sin falsos positivos** en 75 s de arranque, y con la cabina **ausente** (el
+  caso peligroso: `udp_latido` late por su timeout de 2 s, no por los paquetes que
+  recibe; si latiera con los paquetes, una cabina apagada provocaría un reset).
+- **Caza de verdad**: quitando el latido de `udp_tx` salvo en las 3 primeras
+  vueltas, a los ~35 s salió
+  `Tarea 'udp_tx (telemetria)' sin latido — reset controlado`, la placa se
+  reinició de forma controlada y el arranque siguiente lo explicó
+  (`Reset FORZADO por watchdog SW: tarea sin latido`).
+- Regla nueva en `test/auditar.sh` (2e) para que no se caigan de la tabla.
 
-## Lo que NO se puede afirmar
+## Hueco conocido (no tocado a propósito)
 
-El fallo de campo (tarjeta que no suelta con 300 ms) **no se puede reproducir a
-voluntad**, así que la mejora está razonada y el mecanismo verificado, pero no
-medida contra ese fallo concreto. Lo que sí está medido es que el camino normal no
-cambia y que el reintento ejecuta el corte largo.
+Una tarea que **nunca** llega a latir no se vigila: el monitor ignora las entradas
+con `s_last_beat == 0`, así que si `xTaskCreate` fallara (o la tarea muriera antes
+del primer latido) su cuelgue no se detectaría — solo queda el error del arranque
+en el log. Detectar eso pide una ventana de gracia por tarea (no vale una global:
+`bh_flush` late cada 600 s y `udp_tx` cada 1 s) y un error ahí significa un reset
+injustificado, así que **se deja como está** y queda apuntado.

@@ -14,6 +14,7 @@
 #include "../data/dashboard_state.h"
 #include "../alarma_estado.h"   /* alarma_estado_bits(): que alarmas estan activas */
 #include "frigo.h"
+#include "watchdog.h"   /* watchdog_heartbeat: la tarea late (ver watchdog.c) */
 #include "../ne185/ne185.h"
 #include "../ui.h"
 #include "esp_log.h"
@@ -197,6 +198,10 @@ static void tx_task(void *arg)
         sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0) {
             ESP_LOGE(TAG, "socket() fallo: errno=%d (reintento en 5s)", errno);
+            /* Late TAMBIEN aqui: la tarea esta viva, solo no tiene socket. El
+             * watchdog vigila que la tarea no se cuelgue, no que el socket este
+             * listo (si no, un AP raro provocaria un reset en bucle). */
+            watchdog_heartbeat(WD_TASK_UDP_TX);
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
@@ -205,6 +210,7 @@ static void tx_task(void *arg)
             ESP_LOGE(TAG, "SO_BROADCAST fallo: errno=%d (reintento en 5s)", errno);
             close(sock);
             sock = -1;
+            watchdog_heartbeat(WD_TASK_UDP_TX);
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
@@ -245,6 +251,7 @@ static void tx_task(void *arg)
             last_log_ok = s_sent_ok;
         }
 
+        watchdog_heartbeat(WD_TASK_UDP_TX);   /* late: la tarea esta viva */
         vTaskDelayUntil(&next, pdMS_TO_TICKS(1000));
     }
 }

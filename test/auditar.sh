@@ -112,6 +112,24 @@ grep -qE "^ota_0," partitions.csv && grep -qE "^ota_1," partitions.csv \
 grep -qE "^otadata," partitions.csv && ok "particion otadata presente" \
     || mal "sin otadata el bootloader no sabe que hueco arrancar"
 
+echo "=== 2e. El watchdog vigila las tareas del enlace con la cabina ==="
+# Anadidas el 3-oct-2026, y cada una por un motivo distinto:
+#   - udp_latido: si se cuelga, la P4 cree que la cabina se ha muerto (deja de
+#     llegar su latido) y empieza a reiniciar su propio AP en cascada.
+#   - udp_tx: si se cuelga, la cabina deja de recibir telemetria en silencio.
+# Ademas el log del reset tiene que decir el NOMBRE de la tarea, no su numero:
+# en el campo "Tarea 7 sin latido" no sirve de nada.
+grep -q "WD_TASK_UDP_TX" main/watchdog.h && grep -q "WD_TASK_UDP_LATIDO" main/watchdog.h \
+    && ok "las dos tareas del enlace estan en la tabla del watchdog" \
+    || mal "falta alguna tarea del enlace en el watchdog (ver watchdog.h)"
+grep -q "watchdog_heartbeat(WD_TASK_UDP_TX)" main/net/udp_tx.c \
+    && ok "udp_tx late" || mal "udp_tx NO late: su cuelgue no lo veria nadie"
+grep -q "watchdog_heartbeat(WD_TASK_UDP_LATIDO)" main/net/udp_latido.c \
+    && ok "udp_latido late" || mal "udp_latido NO late: su cuelgue pareceria un problema de radio"
+grep -q "WD_TASK_NAMES" main/watchdog.c \
+    && ok "el reset controlado dice el nombre de la tarea" \
+    || mal "el reset dice el numero de tarea en vez del nombre"
+
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
 malas=$(grep -rnE '\b(strcpy|strcat|sprintf)\s*\(' main components --include="*.c" 2>/dev/null \
     | grep -v managed_components | grep -v espressif__ \

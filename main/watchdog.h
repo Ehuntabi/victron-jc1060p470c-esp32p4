@@ -77,6 +77,14 @@ typedef enum {
     WD_TASK_NE185_VLOG,   /* ne185_vlog.c: vlog_flush_task */
     WD_TASK_LOG_CLEANUP,  /* log_cleanup.c: cleanup_task */
     WD_TASK_LVGL,          /* ui.c: lv_timer periodico -- ver wd_monitor_task */
+    /* Las dos tareas del enlace con la cabina (3-oct-2026). Estaban fuera de la
+     * lista y son las que mas duele que se cuelguen en silencio:
+     *   - udp_tx: si se para, la cabina deja de recibir telemetria.
+     *   - udp_latido: si se para, la P4 cree que la cabina se ha muerto (su
+     *     latido deja de llegar) y empieza a reiniciar su propio AP en cascada,
+     *     o sea que un cuelgue se convierte en un problema de radio. */
+    WD_TASK_UDP_TX,
+    WD_TASK_UDP_LATIDO,
     WD_TASK_COUNT
 } wd_task_t;
 
