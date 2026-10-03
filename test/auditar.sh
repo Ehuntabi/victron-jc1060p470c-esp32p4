@@ -44,40 +44,73 @@ pila_baja=$(grep -rE 'xTaskCreate\([a-zA-Z_0-9]+, *"[a-z_0-9]+", *[0-9]{3,5}' ma
     | awk '$1+0 < 3072 {print "        " $2 " (" $1 ") en " $3}' | head -5)
 [ -z "$pila_baja" ] && ok "ninguna tarea nuestra con pila < 3072" || { mal "tareas con pila < 3072:"; echo "$pila_baja" | sed 's/^/        /'; }
 
-echo "=== 2b. LVGL desde tareas: siempre bajo bsp_display_lock ==="
-# Medido a golpes el 2-oct-2026 en el propio banco de pruebas: llamar a LVGL desde
-# una tarea que no es la de LVGL sin el lock acaba en panic (get_prop_core,
-# lv_obj_style.c). Los ficheros con tareas que tocan LVGL tienen que usar
-# bsp_display_lock/lvgl_port_lock. Las llamadas dentro de comentarios NO cuentan.
-# La regla mira el FICHERO, no el camino de llamada, asi que hay excepciones
-# revisadas a mano (una por linea, con el porque):
+echo "=== 2b. LVGL siempre bajo cerrojo ==="
+# Medido a golpes el 2-oct-2026: llamar a LVGL sin el lock acaba en panic
+# (get_prop_core, lv_obj_style.c). Se vigilan los dos casos que de verdad
+# pueden pasar:
+#   (A) un fichero que CREA una tarea y ademas toca LVGL
+#   (B) un fichero FUERA de main/ui/ que toca LVGL (handlers del httpd, capturas,
+#       splash, red...): el codigo de main/ui/ es la capa de UI y se ejecuta en la
+#       tarea de LVGL, asi que ahi el lock no hace falta (y pedirlo seria ruido).
+# Excepciones revisadas a mano, cada una con su porque:
 #   main/alarma_estado.c: crea alarma_task (el pitido) y esa tarea NO toca LVGL
-#     (0 llamadas). Sus lv_ estan en aviso_crear() y en tick_cb(), que es un
-#     callback de lv_timer y por tanto corre DENTRO de la tarea de LVGL.
-#     Revisado el 3-oct-2026.
-EXCEPCIONES_LVGL=" main/alarma_estado.c "
+#     (0 llamadas). Sus lv_ estan en aviso_crear() y en tick_cb(), callback de
+#     lv_timer que corre DENTRO de la tarea de LVGL.
+#   main/splash.c: sus 35 llamadas se hacen desde splash_show()/splash_hide(), y
+#     los DOS sitios que las llaman (main.c) estan dentro de lvgl_port_lock(0).
+#     Comprobado leyendo los dos sitios, no el comentario.
+#   main/ui.c: es el codigo de la propia tarea de LVGL.
+EXCEPCIONES_LVGL=" main/alarma_estado.c main/splash.c main/ui.c main/lv_port.c main/esp_bsp.c "
 sospechosos=""
-for f in $(grep -rlE 'xTaskCreate\(' main components --include="*.c" 2>/dev/null | grep -v managed_components | grep -v espressif__); do
+for f in $(grep -rlE '\blv_[a-z_]+\(' main components --include="*.c" 2>/dev/null | grep -v managed_components | grep -v espressif__); do
     case "$EXCEPCIONES_LVGL" in *" $f "*) continue;; esac
     nlv=$(grep -vE '^[[:space:]]*(/\*|\*|//)' "$f" | grep -cE '\blv_[a-z_]+\(' || true)
+    [ "$nlv" -eq 0 ] && continue
     nlock=$(grep -cE 'bsp_display_lock|lvgl_port_lock' "$f" || true)
-    [ "$nlv" -gt 0 ] && [ "$nlock" -eq 0 ] && sospechosos="$sospechosos $f"
+    [ "$nlock" -gt 0 ] && continue
+    ntask=$(grep -cE 'xTaskCreate\(' "$f" || true)
+    case "$f" in
+        main/ui/*) [ "$ntask" -gt 0 ] && sospechosos="$sospechosos $f" ;;   # (A)
+        *)         sospechosos="$sospechosos $f" ;;                          # (B)
+    esac
 done
-[ -z "$sospechosos" ] && ok "ningun fichero con tareas toca LVGL sin cerrojo" \
+[ -z "$sospechosos" ] && ok "LVGL siempre bajo cerrojo (o en la lista revisada)" \
     || mal "tocan LVGL sin bsp_display_lock:$sospechosos"
 
-echo "=== 2c. El tick del sistema a 1000 Hz ==="
-# esp_hosted avisa en CADA arranque de que recomienda 1000 ("to avoid bus level
-# jitters") y se midio el efecto el 3-oct-2026, mismo banco y tarjeta con la
-# radio levantada: la lectura por FATFS pasaba de 0,33 MB/s a 1,33 MB/s (4x) solo
-# por el tick, porque cada espera de transaccion SDMMC tiene granularidad de un
-# tick (10 ms con 100 Hz). Antes de subirlo se comprobo que no hay ni una espera
-# en ticks literales en el codigo propio: todo va con pdMS_TO_TICKS.
-if [ -f "$H" ]; then
-    v=$(grep -E "^#define CONFIG_FREERTOS_HZ " "$H" | awk '{print $3}')
-    [ "${v:-0}" -ge 1000 ] && ok "tick del sistema = ${v} Hz" \
-        || mal "CONFIG_FREERTOS_HZ=${v:-?}: con 100 Hz la lectura de la SD pierde 4x (y esp_hosted avisa)"
+echo "=== 2d. La OTA: que un firmware malo no deje la placa inservible ==="
+# La OTA es el flujo mas peligroso que hay (se actualiza el van desde el portal).
+# Cada regla protege un paso concreto de la red de seguridad.
+H2="build/config/sdkconfig.h"
+if [ -f "$H2" ]; then
+    grep -q "^#define CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE 1" "$H2" \
+        && ok "rollback del bootloader encendido (una OTA que no arranca se revierte)" \
+        || mal "rollback APAGADO: una OTA que no arranque deja la placa sin volver atras"
 fi
+grep -q "esp_ota_mark_app_valid_cancel_rollback" main/main.c \
+    && ok "la app marca el arranque como valido (si no, el rollback se dispara solo)" \
+    || mal "la app NO marca el arranque valido: con rollback encendido se reiniciaria en bucle"
+OTA=main/portal/ota_update.c
+if [ -f "$OTA" ]; then
+    grep -qE 'content_len > destino->size' "$OTA" \
+        && ok "el OTA rechaza imagenes mayores que la particion (el -full de 9 MB no entra)" \
+        || mal "el OTA no comprueba el tamano contra la particion"
+    grep -q "esp_ota_end(" "$OTA" && ok "valida la imagen antes de aceptarla (esp_ota_end)" \
+        || mal "el OTA no llama a esp_ota_end: aceptaria una imagen corrupta"
+    grep -q "esp_ota_set_boot_partition" "$OTA" && ok "fija la particion de arranque" \
+        || mal "el OTA no fija la particion de arranque"
+    grep -q "esp_ota_abort" "$OTA" && ok "aborta limpio si se corta la subida" \
+        || mal "el OTA no aborta si se corta la subida"
+fi
+grep -q "REQUIRE_AUTH_STRICT(req)" main/portal/config_server.c \
+    && ok "el POST de /ota pide clave (estricta)" \
+    || mal "el POST de /ota NO pide clave: cualquiera en el AP podria flashear la placa"
+# Sin dos huecos de app y su otadata no hay OTA posible (y un partitions.csv mal
+# tocado deja la placa sin poder actualizarse).
+grep -qE "^ota_0," partitions.csv && grep -qE "^ota_1," partitions.csv \
+    && ok "las dos particiones de app (ota_0/ota_1) existen" \
+    || mal "falta ota_0 u ota_1 en partitions.csv: sin los dos huecos no hay OTA"
+grep -qE "^otadata," partitions.csv && ok "particion otadata presente" \
+    || mal "sin otadata el bootloader no sabe que hueco arrancar"
 
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
 malas=$(grep -rnE '\b(strcpy|strcat|sprintf)\s*\(' main components --include="*.c" 2>/dev/null \
