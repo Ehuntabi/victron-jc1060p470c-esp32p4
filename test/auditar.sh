@@ -57,10 +57,16 @@ import re, sys
 lineas = open(sys.argv[1], encoding="utf8", errors="replace").read().splitlines()
 malas = 0
 for i, l in enumerate(lineas):
-    m = re.search(r"(\w+)\s*=\s*(?:\([^)]*\)\s*)?(malloc|calloc|heap_caps_malloc|strdup)\s*\(", l)
+    # El lvalue entero, no solo la ultima palabra: `s->x = malloc(...)` se
+    # comprueba con `if (!s->x)`, y buscar solo "x" no lo veia (7 falsos
+    # positivos el 3-oct-2026, todos ellos con la comprobacion a la vista).
+    m = re.search(r"([\w\->\.\[\]]+)\s*=\s*(?:\([^)]*\)\s*)?(malloc|calloc|heap_caps_malloc|strdup)\s*\(", l)
     if not m: continue
-    var, ctx = m.group(1), " ".join(lineas[i:i+8])
-    if not re.search(rf"(!\s*{re.escape(var)}\b|{re.escape(var)}\s*[!=]=\s*NULL|if\s*\(\s*{re.escape(var)}\s*\)|ESP_RETURN_ON|ESP_GOTO_ON|assert|goto )", ctx):
+    var, ctx = m.group(1).strip(), " ".join(lineas[i:i+10])
+    esc = re.escape(var)
+    # Sin \b final si acaba en ']': ahi el limite de palabra nunca casa.
+    fin = "" if var.endswith("]") else r"\b"
+    if not re.search(rf"(!\s*{esc}{fin}|{esc}\s*[!=]=\s*NULL|if\s*\(\s*{esc}\s*\)|ESP_RETURN_ON|ESP_GOTO_ON|assert|goto )", ctx):
         malas += 1
 print(malas)
 PY
@@ -73,6 +79,97 @@ echo "=== 5. El portal pide clave en todos los handlers ==="
 h=$(grep -rhc "esp_err_t handle_" main/portal/*.c 2>/dev/null | awk '{s+=$1} END {print s+0}')
 a=$(grep -rhc "REQUIRE_AUTH" main/portal/*.c 2>/dev/null | awk '{s+=$1} END {print s+0}')
 [ "$a" -ge "$h" ] && ok "handlers $h · con clave $a" || mal "handlers $h pero solo $a piden clave"
+
+echo "=== 6. La SD: transporte, reloj y el C6 mientras se identifica ==="
+# Cada regla existe por algo medido el 2-oct-2026:
+#   - con la SD en SPI a 20 MHz la lectura cruda era 14x mas lenta y la escritura
+#     se quedaba en 0,13 MB/s (inviable para fotos/video)
+#   - con el C6 VIVO de la sesion anterior (un reinicio de la P4 no lo resetea) el
+#     montaje fallaba 3 de 3 intentos con ESP_ERR_TIMEOUT en ACMD41; con el C6 en
+#     reset durante la identificacion monta a la primera (6/6 y 23 arranques)
+DL=components/datalogger/datalogger.c
+grep -qE 'host\.slot[[:space:]]*=[[:space:]]*SDMMC_HOST_SLOT_0' "$DL" \
+    && ok "la SD va por SDMMC en el slot 0" || mal "la SD no usa SDMMC_HOST_SLOT_0"
+grep -qE 'max_freq_khz[[:space:]]*=[[:space:]]*SDMMC_FREQ_HIGHSPEED' "$DL" \
+    && ok "la SD pide 40 MHz (el mismo divisor que el enlace del C6)" \
+    || mal "la SD no pide SDMMC_FREQ_HIGHSPEED: a 20 MHz el reloj del C6 se queda a la mitad"
+grep -q "slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP" "$DL" \
+    && ok "pull-ups internos en las lineas de la SD" || mal "sin SDMMC_SLOT_FLAG_INTERNAL_PULLUP"
+grep -q "slot_config.width = (i < 2) ? 4 : 1" "$DL" \
+    && ok "bus de 4 bits (con 1 bit de reserva en el 3er intento)" || mal "no monta a 4 bits"
+grep -q "c6_en_reset(true)" "$DL" && grep -q "c6_en_reset(false)" "$DL" \
+    && ok "C6 en reset mientras se identifica la SD, y suelto despues" \
+    || mal "falta el C6 en reset (o soltarlo) durante la identificacion de la SD"
+
+echo "=== 7. Lectura de la SD: bufer de stdio y lectores de historicos ==="
+# Medido el 2-oct-2026: con CONFIG_FATFS_VFS_FSTAT_BLKSIZE=0 (512 B en la
+# practica) cada fread/fgets pedia UN SECTOR por transaccion y la lectura por
+# fichero se quedaba en 0,30 MB/s. Con 16 KB sube a 2,0 MB/s (fread) y abre un dia
+# de bateria en ~1 s. Y los historicos se leen por bloques (no fgets) porque el
+# recorrido linea a linea costaba 5x mas.
+if [ -f "$H" ]; then
+    v=$(grep -E "^#define CONFIG_FATFS_VFS_FSTAT_BLKSIZE " "$H" | awk '{print $3}')
+    [ "${v:-0}" -ge 8192 ] && ok "bufer de stdio de la SD = ${v} B (>=8192)" \
+        || mal "CONFIG_FATFS_VFS_FSTAT_BLKSIZE=${v:-?}: la lectura de ficheros vuelve a ir sector a sector"
+fi
+LB=main/log_browser.c
+grep -qE 'lb_linea\(' "$LB" && grep -qE 'lb_abrir\(' "$LB" \
+    && ok "los historicos se leen por bloques (lb_abrir/lb_linea)" \
+    || mal "log_browser.c no lee por bloques"
+grep -vE '^[[:space:]]*(/\*|\*|//)' "$LB" | grep -qE '\b(fgets|sscanf)[[:space:]]*\(' \
+    && mal "log_browser.c ha vuelto a fgets/sscanf por linea (5x mas lento)" \
+    || ok "sin fgets ni sscanf en el camino de lectura"
+for f in components/datalogger/datalogger.c components/battery_history/battery_history.c main/ne185_vlog.c; do
+    grep -qE 'fclose\(.*\)[[:space:]]*!=[[:space:]]*0' "$f" \
+        && ok "comprueba el fclose: $(basename $f)" \
+        || mal "no comprueba el fclose (perdida silenciosa de muestras): $f"
+done
+grep -q "unlink(path)" main/screenshot.c \
+    && ok "la captura a medias se borra si falla la escritura" \
+    || mal "screenshot.c deja JPEG truncados en la tarjeta"
+
+echo "=== 8. La auditoria no puede estar mirando un BUILD VIEJO ==="
+# Si el build es anterior al ultimo commit de codigo, todo lo de arriba habla de
+# un firmware que ya no existe. Paso el 2-oct-2026: se auditaba build/ con horas
+# de retraso respecto al codigo.
+if [ -f "$H" ]; then
+    ultimo=$(git log -1 --format=%ct -- sdkconfig main components 2>/dev/null || echo 0)
+    mtime=$(stat -c %Y "$H" 2>/dev/null || echo 0)
+    if [ "$ultimo" -gt 0 ] && [ "$mtime" -lt "$ultimo" ]; then
+        mal "el build es MAS VIEJO que el ultimo commit de codigo: recompila (scripts/build_p4.sh o release.sh) antes de auditar"
+    else
+        ok "el build es posterior al ultimo commit de codigo"
+    fi
+fi
+
+echo "=== 9. mini_proto.h igual en los dos repos (si esta al lado) ==="
+# El 2-oct-2026 el CI de la cabina fallo porque se publico la cabina 70 s antes
+# que el cambio del P4: el protocolo se sincroniza A MANO.
+if [ -f ../35cabina/main/net/mini_proto.h ]; then
+    diff -q main/net/mini_proto.h ../35cabina/main/net/mini_proto.h >/dev/null 2>&1 \
+        && ok "mini_proto.h identico en victron y 35cabina" \
+        || mal "mini_proto.h DISTINTO entre los dos repos (sincronizar a mano)"
+else
+    echo "  (sin el repo de la cabina al lado: se omite)"
+fi
+
+echo "=== 10. dependencies.lock sin rutas de esta maquina ==="
+# Un build local reescribe dependencies.lock con la ruta ABSOLUTA del espejo
+# (~/.scratch/victron) y con eso el CI de GitHub falla: la entrada de esp_hosted
+# tiene que quedar RELATIVA (components/espressif__esp_hosted). Leccion del
+# CLAUDE.md del proyecto; los scripts de build ya lo revierten, esto lo vigila.
+# Lo que rompe el CI es que se COMMITEE con ruta absoluta. El fichero de trabajo
+# la lleva despues de cada build local (lo reescribe idf.py), y eso es normal:
+# los scripts de build lo revierten antes de commitear.
+if git show HEAD:dependencies.lock >/dev/null 2>&1; then
+    if git show HEAD:dependencies.lock | grep -qE "$HOME|/home/"; then
+        mal "el dependencies.lock COMMITEADO lleva una ruta absoluta: el CI de GitHub fallara (usa rutas relativas)"
+    else
+        ok "el dependencies.lock commiteado solo tiene rutas relativas"
+        grep -qE "$HOME|/home/" dependencies.lock 2>/dev/null \
+            && echo "  (el de trabajo si lleva churn del ultimo build: git checkout -- dependencies.lock antes de commitear)"
+    fi
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi
