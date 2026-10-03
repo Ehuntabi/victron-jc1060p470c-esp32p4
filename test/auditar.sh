@@ -44,6 +44,41 @@ pila_baja=$(grep -rE 'xTaskCreate\([a-zA-Z_0-9]+, *"[a-z_0-9]+", *[0-9]{3,5}' ma
     | awk '$1+0 < 3072 {print "        " $2 " (" $1 ") en " $3}' | head -5)
 [ -z "$pila_baja" ] && ok "ninguna tarea nuestra con pila < 3072" || { mal "tareas con pila < 3072:"; echo "$pila_baja" | sed 's/^/        /'; }
 
+echo "=== 2b. LVGL desde tareas: siempre bajo bsp_display_lock ==="
+# Medido a golpes el 2-oct-2026 en el propio banco de pruebas: llamar a LVGL desde
+# una tarea que no es la de LVGL sin el lock acaba en panic (get_prop_core,
+# lv_obj_style.c). Los ficheros con tareas que tocan LVGL tienen que usar
+# bsp_display_lock/lvgl_port_lock. Las llamadas dentro de comentarios NO cuentan.
+# La regla mira el FICHERO, no el camino de llamada, asi que hay excepciones
+# revisadas a mano (una por linea, con el porque):
+#   main/alarma_estado.c: crea alarma_task (el pitido) y esa tarea NO toca LVGL
+#     (0 llamadas). Sus lv_ estan en aviso_crear() y en tick_cb(), que es un
+#     callback de lv_timer y por tanto corre DENTRO de la tarea de LVGL.
+#     Revisado el 3-oct-2026.
+EXCEPCIONES_LVGL=" main/alarma_estado.c "
+sospechosos=""
+for f in $(grep -rlE 'xTaskCreate\(' main components --include="*.c" 2>/dev/null | grep -v managed_components | grep -v espressif__); do
+    case "$EXCEPCIONES_LVGL" in *" $f "*) continue;; esac
+    nlv=$(grep -vE '^[[:space:]]*(/\*|\*|//)' "$f" | grep -cE '\blv_[a-z_]+\(' || true)
+    nlock=$(grep -cE 'bsp_display_lock|lvgl_port_lock' "$f" || true)
+    [ "$nlv" -gt 0 ] && [ "$nlock" -eq 0 ] && sospechosos="$sospechosos $f"
+done
+[ -z "$sospechosos" ] && ok "ningun fichero con tareas toca LVGL sin cerrojo" \
+    || mal "tocan LVGL sin bsp_display_lock:$sospechosos"
+
+echo "=== 2c. El tick del sistema a 1000 Hz ==="
+# esp_hosted avisa en CADA arranque de que recomienda 1000 ("to avoid bus level
+# jitters") y se midio el efecto el 3-oct-2026, mismo banco y tarjeta con la
+# radio levantada: la lectura por FATFS pasaba de 0,33 MB/s a 1,33 MB/s (4x) solo
+# por el tick, porque cada espera de transaccion SDMMC tiene granularidad de un
+# tick (10 ms con 100 Hz). Antes de subirlo se comprobo que no hay ni una espera
+# en ticks literales en el codigo propio: todo va con pdMS_TO_TICKS.
+if [ -f "$H" ]; then
+    v=$(grep -E "^#define CONFIG_FREERTOS_HZ " "$H" | awk '{print $3}')
+    [ "${v:-0}" -ge 1000 ] && ok "tick del sistema = ${v} Hz" \
+        || mal "CONFIG_FREERTOS_HZ=${v:-?}: con 100 Hz la lectura de la SD pierde 4x (y esp_hosted avisa)"
+fi
+
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
 malas=$(grep -rnE '\b(strcpy|strcat|sprintf)\s*\(' main components --include="*.c" 2>/dev/null \
     | grep -v managed_components | grep -v espressif__ \

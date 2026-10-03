@@ -1,32 +1,34 @@
-v4.4 — el parseo de los históricos a mano: 2,78x más rápido y con los mismos números
+v4.5 — el tick del sistema a 1000 Hz: la SD lee 4x más rápido (y esp_hosted deja de avisar)
 
 ## Qué cambia
 
-`main/log_browser.c` (los lectores de las pantallas de frigo y batería):
+`CONFIG_FREERTOS_HZ`: de 100 a 1000 (un tick cada 1 ms en vez de cada 10 ms).
 
-- **`parse_hhmm` ya no usa `sscanf`**: el timestamp lo escribe el propio proyecto
-  con formato fijo (`"%04d-%02d-%02d %02d:%02d:%02d"`), así que la hora y el
-  minuto se leen por posición (11-12 y 14-15, comprobando los dígitos y el `:`).
-  `sscanf` es la función más cara de la librería y se llamaba **una vez por
-  línea**.
-- **Enteros a mano** (`parse_int`) en vez de `strtol` (genérico: signo, base,
-  espacios, desbordamiento).
-- **La fuente, por su primera letra** (`B`atteryMonitor, `S`olarCharger,
-  `O`rionTR, `A`CCharger) en vez de hasta 4 `strcmp` por línea, con el `strcmp`
-  completo detrás como comprobación (un "BananaMonitor" de un CSV futuro no se
-  cuela como BatteryMonitor).
+## Por qué (medido, no supuesto)
 
-## Verificado: mismos números y más rápido
+esp_hosted avisa en **cada arranque**: *"CONFIG_FREERTOS_HZ is 100, ESP-Hosted
+recommended 1000, to avoid bus level jitters"*. Se midió el efecto en el banco,
+misma tarjeta y con la radio ya levantada:
 
-Mismo CSV de batería (1,26 MB, 25.920 muestras), en el mismo arranque:
-
-| | tiempo | velocidad |
+| | 100 Hz | 1000 Hz |
 |---|---|---|
-| camino viejo (`fgets` + `sscanf` + `strtol` + `strcmp`) | 2,86 s | 0,420 MB/s |
-| **lector nuevo** (bloques + parseo a mano) | **1,03 s** | **1,170 MB/s** (**2,78x**) |
+| lectura por FATFS, 8 KB | 0,345 MB/s | **1,354 MB/s** |
+| lectura por FATFS, 64 KB | 0,330 MB/s | **1,333 MB/s** |
+| lectura por FATFS, 256 KB | 0,361 MB/s | **1,224 MB/s** |
+| escritura por FATFS | 0,49 - 0,53 MB/s | 0,52 - 0,55 MB/s |
+| lectura cruda (64 KB) | 1,3 - 3,9 MB/s | 4,2 MB/s |
 
-Y la comparación **entrada por entrada** (hora, minuto, amperios y voltios de las
-25.920 muestras): **idéntica**.
+El motivo es la granularidad: cada espera de una transacción SDMMC se mide en
+ticks, así que con 10 ms por tick una operación podía esperar hasta 10 ms de más.
+La escritura apenas cambia porque agrupa bloques grandes.
 
-Con esto, abrir un día de batería pasa de ~3 s (v4.02) a ~1 s, y ya no queda
-cuello claro: leer el fichero y trocear las líneas es ~0,5 s y el parseo ~0,5 s.
+## Comprobado antes de aplicarlo
+
+- **Perfil de errores del arranque idéntico** al de 100 Hz: los mismos tres avisos
+  de banco (sonda 1-wire sin conectar, SELFTEST del NE185 y el `swap_xy` del
+  panel), ni uno nuevo.
+- **Cero esperas en ticks literales** en el código propio (todo con
+  `pdMS_TO_TICKS`), o sea que ninguna espera cambia de significado al mover el
+  tick. Sin esto, el cambio sería peligroso.
+- Regla nueva en `test/auditar.sh` (2c): el tick tiene que ser ≥ 1000, con este
+  motivo escrito al lado.
