@@ -34,10 +34,14 @@ echo "=== 2. Pilas de tarea (ninguna por debajo de 4096) ==="
 # OJO con -h: sin la ruta no se pueden excluir los componentes de Espressif, y su
 # ejemplo de esp_hosted trae una tarea de 1024 que no es nuestra (fallo detectado
 # el 21-sep-2026 al ver que el verificador se quejaba de codigo ajeno).
+# OJO con el parseo: la version anterior imprimia el NOMBRE de la tarea y lo
+# comparaba con 3072, y en awk una cadena vale 0 -> "0 < 3072" -> nunca cazaba
+# nada (fallo silencioso detectado el 3-oct-2026 metiendo una tarea de 1024 a
+# proposito). Ahora se extrae el numero con sed y se compara el numero.
 pila_baja=$(grep -rE 'xTaskCreate\([a-zA-Z_0-9]+, *"[a-z_0-9]+", *[0-9]{3,5}' main components --include="*.c" 2>/dev/null \
     | grep -v managed_components | grep -v espressif__ \
-    | awk -F: '{ruta=$1; resto=$0; sub(/^[^:]*:/, "", resto); split(resto, a, "\""); print a[2], ruta}' \
-    | awk '$1<3072 {print $1" "$2}' | head -5)
+    | sed -E 's/^([^:]+):.*"([a-z_0-9]+)", *([0-9]+).*/\3 \2 \1/' \
+    | awk '$1+0 < 3072 {print "        " $2 " (" $1 ") en " $3}' | head -5)
 [ -z "$pila_baja" ] && ok "ninguna tarea nuestra con pila < 3072" || { mal "tareas con pila < 3072:"; echo "$pila_baja" | sed 's/^/        /'; }
 
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
