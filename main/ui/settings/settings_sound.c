@@ -176,7 +176,7 @@ lv_obj_t *create_ausente_card(lv_obj_t *cont)
     s_ausente_sw = aus_sw;   /* para sincronizarlo al salir por gesto (U1) */
 
     lv_obj_t *aus_title = lv_label_create(card_aus);
-    lv_obj_set_style_text_font(aus_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(aus_title, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(aus_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(aus_title, LV_SYMBOL_EYE_OPEN "  Modo ausente");
     ui_card_wrap_title_with(card_aus, aus_title, UI_COLOR_CYAN, aus_sw);
@@ -243,7 +243,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
 
     lv_obj_t *card1_title = lv_label_create(title_row);
     /* El LV_SYMBOL_VOLUME_MAX lo dibuja el fallback a Montserrat. */
-    lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card1_title, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 

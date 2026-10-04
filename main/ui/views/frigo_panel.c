@@ -485,10 +485,10 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     lv_obj_set_height(dd, 44);
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_20_es, 0);
     /* La flecha (LV_PART_INDICATOR) es LV_SYMBOL_DOWN. OJO: el nombre
-     * lv_font_montserrat_20 ya NO es la Montserrat de LVGL -- fonts_es.h lo
+     * UI_FONT_TEXT ya NO es la Montserrat de LVGL -- fonts_es.h lo
      * aliasa a Inter, que lleva Montserrat de fallback justo para estos glifos
      * (el comentario decia "Montserrat built-in"). */
-    lv_obj_set_style_text_font(dd, &lv_font_montserrat_20, LV_PART_INDICATOR);
+    lv_obj_set_style_text_font(dd, UI_FONT_TEXT, LV_PART_INDICATOR);
     lv_obj_t *dd_list = lv_dropdown_get_list(dd);
     if (dd_list) {
         lv_obj_set_style_text_font(dd_list, &lv_font_montserrat_20_es, 0);
@@ -537,7 +537,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* Titulo. El nombre sin _es ya es Inter desde la v3.8; el LV_SYMBOL_LIST lo
      * dibuja el fallback a Montserrat que llevan las fuentes de texto. */
     lv_obj_t *lbl_sec1 = lv_label_create(card_sensors);
-    lv_obj_set_style_text_font(lbl_sec1, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_sec1, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(lbl_sec1, UI_COLOR_CYAN, 0);
     lv_label_set_text(lbl_sec1, LV_SYMBOL_LIST "  Sensores DS18B20");
     ui_card_wrap_title(card_sensors, lbl_sec1, UI_COLOR_CYAN);
@@ -593,14 +593,14 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* Fila ventilador */
     lv_obj_t *lbl_fan_sec = lv_label_create(card_fan);
     /* El LV_SYMBOL_REFRESH lo dibuja el fallback a Montserrat. */
-    lv_obj_set_style_text_font(lbl_fan_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_fan_sec, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(lbl_fan_sec, UI_COLOR_GREEN, 0);
     lv_label_set_text(lbl_fan_sec, LV_SYMBOL_REFRESH "  Ventilador");
     /* Valor real del PWM del ventilador (%). Vira gris->naranja->rojo igual que
      * el aro-gauge de la vista principal, para que ambas representaciones del
      * ventilador sean coherentes. */
     s_lbl_fan = lv_label_create(card_fan);
-    lv_obj_set_style_text_font(s_lbl_fan, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(s_lbl_fan, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(s_lbl_fan, UI_COLOR_TEXT_SOFT, 0);
     /* Ancho FIJO: el espaciador que centra el titulo se mide con este ancho, y si
      * cambiara al pasar de "9 %" a "100 %" el titulo bailaria. */
@@ -683,7 +683,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_mm = lv_label_create(s_btn_tmin_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_mm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mm, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_mm);
     lv_obj_add_event_cb(s_btn_tmin_m, btn_tmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -700,7 +700,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmin_p, UI_COLOR_CYAN, 0);
     lv_obj_t *lbl_mp = lv_label_create(s_btn_tmin_p);
     lv_label_set_text(lbl_mp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_mp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_mp, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_mp);
     lv_obj_add_event_cb(s_btn_tmin_p, btn_tmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -733,7 +733,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_xm = lv_label_create(s_btn_tmax_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_xm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_xm, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_xm);
     lv_obj_add_event_cb(s_btn_tmax_m, btn_tmax_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -750,7 +750,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
     lv_obj_t *lbl_xp = lv_label_create(s_btn_tmax_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_xp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_xp, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_xp);
     lv_obj_add_event_cb(s_btn_tmax_p, btn_tmax_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -783,7 +783,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_fanmin_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_fmm = lv_label_create(s_btn_fanmin_m);
     lv_label_set_text(lbl_fmm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_fmm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_fmm, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_fmm);
     lv_obj_add_event_cb(s_btn_fanmin_m, btn_fanmin_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -800,7 +800,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(s_btn_fanmin_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_fmp = lv_label_create(s_btn_fanmin_p);
     lv_label_set_text(lbl_fmp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_fmp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_fmp, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_fmp);
     lv_obj_add_event_cb(s_btn_fanmin_p, btn_fanmin_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -826,7 +826,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_solar_sec = lv_label_create(card_solar);
-    lv_obj_set_style_text_font(lbl_solar_sec, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_solar_sec, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
     /* Con el icono delante, como el resto de tarjetas (22-sep-2026): era la
      * unica de la pestana sin el. */
@@ -863,7 +863,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_solon_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_som = lv_label_create(btn_solon_m);
     lv_label_set_text(lbl_som, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_som, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_som, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_som);
     lv_obj_add_event_cb(btn_solon_m, btn_solon_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -880,7 +880,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_solon_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_sop = lv_label_create(btn_solon_p);
     lv_label_set_text(lbl_sop, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_sop, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_sop, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_sop);
     lv_obj_add_event_cb(btn_solon_p, btn_solon_plus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -899,7 +899,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_soloff_m, lv_color_hex(0x444444), 0);
     lv_obj_t *lbl_sfm = lv_label_create(btn_soloff_m);
     lv_label_set_text(lbl_sfm, LV_SYMBOL_MINUS);
-    lv_obj_set_style_text_font(lbl_sfm, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_sfm, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_sfm);
     lv_obj_add_event_cb(btn_soloff_m, btn_soloff_minus_cb, LV_EVENT_CLICKED, NULL);
 
@@ -916,7 +916,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(btn_soloff_p, UI_COLOR_GREEN, 0);
     lv_obj_t *lbl_sfp = lv_label_create(btn_soloff_p);
     lv_label_set_text(lbl_sfp, LV_SYMBOL_PLUS);
-    lv_obj_set_style_text_font(lbl_sfp, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(lbl_sfp, UI_FONT_VALUE, 0);
     lv_obj_center(lbl_sfp);
     lv_obj_add_event_cb(btn_soloff_p, btn_soloff_plus_cb, LV_EVENT_CLICKED, NULL);
 

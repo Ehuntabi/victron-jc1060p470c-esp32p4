@@ -384,5 +384,29 @@ else
     mal "el AE esta en modo '$AEMODE': con las luces altas prioritarias la cara a contraluz se queda en sombra (medido: Y=46 frente a 93)"
 fi
 
+echo "=== 12. Guia de estilo de la UI (docs/GUIA_ESTILO.md) ==="
+# Decidida el 4-oct-2026 midiendo las 24 pantallas con /captura?n=<i>.
+# 1) UNA familia (Inter) y cinco papeles: en el codigo de UI no puede aparecer
+#    el nombre de una fuente del SDK. Ojo: fonts_es.h aliasa los nombres planos
+#    a Inter, asi que un uso suelto NO se ve como fallo en pantalla -- hasta que
+#    alguien lo ponga en un fichero que no incluya esa cabecera. Por eso la regla
+#    es sobre el CODIGO: se escribe el papel (UI_FONT_*), no el fichero.
+FONTSDK=$(grep -rhoE "lv_font_montserrat_[0-9]+([^_0-9]|$)" main/ui main/ui.c --include=*.c --include=*.h 2>/dev/null | wc -l)
+if [ "$FONTSDK" -eq 0 ]; then
+    ok "la UI usa los papeles de la guia (UI_FONT_*), no fuentes del SDK"
+else
+    mal "$FONTSDK usos de fuente del SDK en la UI: escribe el papel (UI_FONT_DISPLAY/TITLE/VALUE/TEXT/SMALL)"
+fi
+# 2) Paleta cerrada. La migracion va por pasos, asi que de momento es un TOPE que
+#    solo puede bajar (4-oct-2026: 203 literales en 18 ficheros). Cuando llegue a
+#    0, este trinquete se cambia por "== 0".
+COLORLIT=$(grep -rhoE "lv_color_hex\(0x" main/ui main/ui.c --include=*.c --include=*.h 2>/dev/null | wc -l)
+LIMITE_LIT=203
+if [ "$COLORLIT" -le "$LIMITE_LIT" ]; then
+    ok "literales de color en la UI: $COLORLIT (tope $LIMITE_LIT, solo puede bajar)"
+else
+    mal "literales de color en la UI: $COLORLIT > $LIMITE_LIT: usa los tokens de ui_style.h (la paleta es cerrada)"
+fi
+
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

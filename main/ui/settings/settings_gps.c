@@ -221,12 +221,12 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_align(s_punto, LV_ALIGN_TOP_LEFT, 0, 8);
 
     s_estado = lv_label_create(est);
-    lv_obj_set_style_text_font(s_estado, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(s_estado, UI_FONT_TITLE, 0);
     lv_label_set_text(s_estado, "--");
     lv_obj_align(s_estado, LV_ALIGN_TOP_LEFT, 30, 0);
 
     s_nota = lv_label_create(est);
-    lv_obj_set_style_text_font(s_nota, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_nota, UI_FONT_SMALL, 0);
     lv_obj_set_style_text_color(s_nota, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(s_nota, "");
     lv_obj_align(s_nota, LV_ALIGN_TOP_LEFT, 30, 42);
@@ -234,12 +234,12 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Los satelites, a la derecha y en grande: junto al color del estado, es lo
      * que resume la situacion sin leer nada. */
     s_sats = lv_label_create(est);
-    lv_obj_set_style_text_font(s_sats, &lv_font_montserrat_46, 0);
+    lv_obj_set_style_text_font(s_sats, UI_FONT_DISPLAY, 0);
     lv_label_set_text(s_sats, "--");
     lv_obj_align(s_sats, LV_ALIGN_TOP_RIGHT, 0, -2);
 
     s_sats_lbl = lv_label_create(est);
-    lv_obj_set_style_text_font(s_sats_lbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_sats_lbl, UI_FONT_SMALL, 0);
     lv_obj_set_style_text_color(s_sats_lbl, UI_COLOR_TEXT_SOFT, 0);
     lv_obj_set_style_text_letter_space(s_sats_lbl, 2, 0);
     lv_label_set_text(s_sats_lbl, "SATÉLITES");
@@ -263,7 +263,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *cpos = tarjeta(fila, "POSICIÓN", lv_pct(100), COL_AZUL);
     lv_obj_set_flex_grow(cpos, 3);
     s_pos = lv_label_create(cpos);
-    lv_obj_set_style_text_font(s_pos, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(s_pos, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(s_pos, lv_color_hex(COL_AZUL), 0);
     lv_obj_set_style_text_line_space(s_pos, 8, 0);
     lv_label_set_text(s_pos, "--");
@@ -272,7 +272,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *chora = tarjeta(fila, "HORA DEL GPS", lv_pct(100), COL_MORADO);
     lv_obj_set_flex_grow(chora, 2);
     s_hora = lv_label_create(chora);
-    lv_obj_set_style_text_font(s_hora, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(s_hora, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(s_hora, lv_color_hex(COL_TEXTO), 0);
     lv_obj_set_style_text_line_space(s_hora, 8, 0);
     lv_label_set_text(s_hora, "--");
@@ -286,7 +286,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Letra 14 y no menos: es la mas pequena que hay compilada, y una trama
      * NMEA entera tiene que caber en una linea para poder leerla. No hay
      * tipografia de ancho fijo en el firmware, asi que no quedaran alineadas. */
-    lv_obj_set_style_text_font(s_crudo, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(s_crudo, UI_FONT_SMALL, 0);
     lv_obj_set_style_text_color(s_crudo, lv_color_hex(COL_APAGADO), 0);
     lv_label_set_text(s_crudo, "(nada todavía)");
     lv_obj_set_width(s_crudo, lv_pct(100));

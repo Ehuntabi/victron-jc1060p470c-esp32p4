@@ -3,39 +3,13 @@
 
 #include <stdint.h>
 #include <lvgl.h>
+/* Los tokens (colores, tipografia, medidas) viven en ui_style.h: la guia de
+ * estilo en un solo sitio. Ver docs/GUIA_ESTILO.md. */
+#include "ui_style.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* ── Paleta semántica (estilo Venus OS) ─────────────────────────── */
-#define UI_COLOR_BG           lv_color_hex(0x0A0D13)  /* fondo de pagina (22-sep-2026: antes
-                                                        * 0x06080C, se confundia con la tarjeta) */
-#define UI_COLOR_CARD         lv_color_hex(0x1B2230)  /* card, mas clara que el fondo (antes
-                                                        * 0x141821: se veian casi iguales) */
-#define UI_COLOR_CARD_BORDER  lv_color_hex(0x39424F)
-#define UI_COLOR_TEXT         lv_color_hex(0xFFFFFF)
-#define UI_COLOR_TEXT_DIM     lv_color_hex(0x8A93A6)  /* SOLO para "no hay dato":
-                                                        * el "--" de un metrico vacio y
-                                                        * los estados apagados */
-#define UI_COLOR_TEXT_SOFT    lv_color_hex(0xE4E9F0)  /* texto descriptivo (rotulos,
-                                                        * subtitulos, pistas): casi
-                                                        * blanco y legible en el panel
-                                                        * (23-sep-2026; antes iban en
-                                                        * TEXT_DIM y no se leian) */
-#define UI_COLOR_CYAN         lv_color_hex(0x4FC3F7)
-#define UI_COLOR_GREEN        lv_color_hex(0x00C851)
-#define UI_COLOR_ORANGE       lv_color_hex(0xFF9800)
-#define UI_COLOR_RED          lv_color_hex(0xFF4444)
-#define UI_COLOR_RED_DARK     lv_color_hex(0xCC3333)
-#define UI_COLOR_YELLOW       lv_color_hex(0xFFD54F)
-#define UI_COLOR_BLUE         lv_color_hex(0x4FC3F7)
-#define UI_COLOR_VIOLET       lv_color_hex(0xB388FF)  /* card camper (zona habitable) */
-#define UI_COLOR_ICE          lv_color_hex(0x64B5F6)  /* card frigo (congelador, frio) */
-
-#define UI_RADIUS_CARD        16
-#define UI_PAD_CARD           20
-#define UI_GAP_CARD           16
 
 /* ── Card contenedor con borde de color por rol ─────────────────── */
 /* Devuelve un objeto LVGL configurado como card vertical (flex column,
@@ -97,7 +71,7 @@ void ui_metric_set_label(lv_obj_t *metric, const char *label_text,
                          lv_color_t label_color);
 
 /* Cambia la fuente del valor de una métrica. Necesario porque la fuente
- * grande (Inter 46, alias lv_font_montserrat_46) solo trae digitos: para
+ * grande (UI_FONT_DISPLAY, Inter 46) solo trae digitos: para
  * textos con letras (p.ej. "APAGADO") hay que pasar a una fuente con alfabeto. */
 void ui_metric_set_value_font(lv_obj_t *metric, const lv_font_t *font);
 

@@ -563,15 +563,15 @@ lv_style_set_text_font(&ui->styles.small, &lv_font_montserrat_28_es);
     lv_style_set_text_color(&ui->styles.small, lv_color_white());
 
     lv_style_init(&ui->styles.medium);
-    lv_style_set_text_font(&ui->styles.medium, &lv_font_montserrat_36);
+    lv_style_set_text_font(&ui->styles.medium, UI_FONT_TITLE);
     lv_style_set_text_color(&ui->styles.medium, lv_color_white());
 
     lv_style_init(&ui->styles.big);
-    lv_style_set_text_font(&ui->styles.big, &lv_font_montserrat_46);
+    lv_style_set_text_font(&ui->styles.big, UI_FONT_DISPLAY);
     lv_style_set_text_color(&ui->styles.big, lv_color_white());
 
     lv_style_init(&ui->styles.value);
-lv_style_set_text_font(&ui->styles.value, &lv_font_montserrat_32);
+lv_style_set_text_font(&ui->styles.value, UI_FONT_VALUE);
     lv_style_set_text_color(&ui->styles.value, lv_color_white());
 
     // Create default battery view instead of "No live data" label

@@ -986,7 +986,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_pad_gap(temp_row, 4, 0);
 
         ov->lbl_freezer_temp = lv_label_create(temp_row);
-        lv_obj_set_style_text_font(ov->lbl_freezer_temp, &lv_font_montserrat_46, 0);
+        lv_obj_set_style_text_font(ov->lbl_freezer_temp, UI_FONT_DISPLAY, 0);
         lv_obj_set_style_text_color(ov->lbl_freezer_temp, UI_COLOR_TEXT, 0);
         lv_label_set_text(ov->lbl_freezer_temp, " --");
 

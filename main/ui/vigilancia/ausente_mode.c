@@ -1,4 +1,5 @@
 #include "fonts/fonts_es.h"
+#include "ui/widgets/ui_style.h"   /* papeles de fuente y paleta (guia de estilo) */
 #include "ausente_mode.h"
 #include "esp_log.h"
 #include <lvgl.h>
@@ -230,7 +231,7 @@ bool ausente_request_ex(bool on, bool via_http)
 
         s_countdown_label = lv_label_create(s_countdown_overlay);
         lv_obj_set_style_text_color(s_countdown_label, lv_color_white(), 0);
-        lv_obj_set_style_text_font(s_countdown_label, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_font(s_countdown_label, UI_FONT_VALUE, 0);
         lv_obj_set_style_text_align(s_countdown_label, LV_TEXT_ALIGN_CENTER, 0);
         countdown_texto();
         lv_obj_center(s_countdown_label);

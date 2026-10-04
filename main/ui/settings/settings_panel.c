@@ -1394,14 +1394,14 @@ static void settings_card_decor(lv_obj_t *cont, const char *title,
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(accent), 0);
 
-    /* Icono grande coloreado con el acento. El nombre lv_font_montserrat_28 esta
+    /* Icono grande coloreado con el acento. El nombre UI_FONT_TITLE esta
      * aliasado a Inter en fonts_es.h, y los LV_SYMBOL_* (LIST en About, SAVE en
      * Logs, WIFI, GPS, EYE_OPEN, VOLUME_MAX...) salen por su fallback a
      * Montserrat. El comentario viejo hablaba de la Montserrat de LVGL, que ya
      * no se usa. */
     lv_obj_t *ico = lv_label_create(cont);
     lv_label_set_text(ico, icon);
-    lv_obj_set_style_text_font(ico, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(ico, UI_FONT_TITLE, 0);
     lv_obj_set_style_text_color(ico, lv_color_hex(accent), 0);
     lv_obj_set_style_pad_left(ico, 12, 0);
 

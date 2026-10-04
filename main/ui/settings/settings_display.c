@@ -429,7 +429,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_pad_column(title_row, 28, 0);
 
     lv_obj_t *card2_title = lv_label_create(title_row);
-    lv_obj_set_style_text_font(card2_title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(card2_title, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 

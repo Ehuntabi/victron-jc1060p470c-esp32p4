@@ -76,12 +76,12 @@ lv_obj_t *ui_card_set_title(lv_obj_t *card, const char *icon_utf8,
 
     if (icon_utf8 && icon_utf8[0]) {
         lv_obj_t *icon = lv_label_create(left);
-        /* Icono = LV_SYMBOL_*. El nombre lv_font_montserrat_28 esta aliasado a
-         * Inter en fonts_es.h: los simbolos salen por su fallback a Montserrat.
+        /* Icono = LV_SYMBOL_*. El papel UI_FONT_TITLE apunta a Inter, que lleva
+         * Montserrat de fallback: los simbolos salen por su fallback a Montserrat.
          * (El comentario viejo, "Montserrat built-in", describia la fuente de
          * antes del cambio a Inter; sin ese fallback salia un rectangulo, el
          * "tofu", en Inverter/DC-DC.) */
-        lv_obj_set_style_text_font(icon, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(icon, UI_FONT_TITLE, 0);
         lv_obj_set_style_text_color(icon, accent, 0);
         lv_label_set_text(icon, icon_utf8);
     }
@@ -256,7 +256,7 @@ lv_obj_t *ui_metric_create_compact(lv_obj_t *parent, const char *label_text)
     if (row) {
         lv_obj_t *value = lv_obj_get_child(row, 0);
         lv_obj_t *unit  = lv_obj_get_child(row, 1);
-        if (value) lv_obj_set_style_text_font(value, &lv_font_montserrat_46, 0);
+        if (value) lv_obj_set_style_text_font(value, UI_FONT_DISPLAY, 0);
         if (unit)  lv_obj_set_style_text_font(unit,  &lv_font_montserrat_24_es, 0);
     }
     return box;
@@ -548,7 +548,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
 
     /* SOC% sobre el cuerpo — ULTIMO hijo de body (mas al frente) */
     lv_obj_t *soc_lbl = lv_label_create(body);
-    lv_obj_set_style_text_font(soc_lbl, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(soc_lbl, UI_FONT_TITLE, 0);   /* el alias 32 iba a Inter 28 */
     lv_obj_set_style_text_color(soc_lbl, UI_COLOR_TEXT, 0);
     lv_obj_set_style_text_color(soc_lbl, lv_color_hex(0xffffff), 0);
     lv_label_set_text(soc_lbl, "--");
