@@ -84,9 +84,12 @@ Reglas:
    El rosa `E91E63` era el acento de los **diálogos de aviso** ("¿Borrar
    carpeta?", "Atención"): pasa a `UI_COLOR_ORANGE` (aviso) y así queda la regla.
 3. **Acento por sección como máximo**: una pantalla puede tener un color de
-   sección; el resto son de **estado** (bien/atención/mal). En Ajustes todavía
-   conviven varios acentos a la vez (cada entrada del menú tiene el suyo): es lo
-   siguiente que hay que reducir.
+   sección; el resto son de **estado** (bien/atención/mal).
+   **Excepción documentada (4-oct-2026)**: el **menú de Ajustes** mantiene un
+   color por entrada (azul, naranja, rosa, morado, amarillo, verde). Se preguntó
+   al usuario y no pidió cambiarlo, y ahí el color **ayuda a reconocer** cada
+   entrada de un vistazo. No es un olvido: es la única excepción a esta regla, y
+   queda escrita para que no se "arregle" sin querer.
 
 ## 3. Medidas — rejilla de 4 px
 
@@ -173,9 +176,8 @@ más abajo. La auditoría lo comprueba (regla 3 de la sección 12).
    de Ajustes unificado a `UI_PAD_PAGE` (las cinco páginas de tarjeta empiezan ya
    exactamente en y=84; la banda superior entre familias **no** se iguala, y está
    razonado arriba). Verificado con las 24 capturas.
-   Queda pendiente, y necesita decisión de diseño: el **acento por sección** (hoy
-   cada entrada del menú de Ajustes lleva el suyo: azul, naranja, rosa, morado,
-   amarillo, verde).
+   Con esto la guía queda **aplicada entera**; la única excepción (el color por
+   entrada en el menú de Ajustes) está documentada arriba, en las reglas de color.
 
 Lo que **no** entra: cambiar la distribución de las pantallas ni la información
 que muestran; esto es coherencia, no rediseño.
