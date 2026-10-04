@@ -1,3 +1,34 @@
+v4.16 — la recuperación de la cámara deja de reiniciar la placa (se rearma el ISP en caliente)
+
+## Qué cambia
+
+- Tras recuperar el sensor por I2C, el ISP se rearma **EN CALIENTE** con
+  `esp_video_isp_pipeline_set_ipa_config()` sobre la configuración del sensor
+  (`esp_ipa_pipeline_get_config("OV02C10")`). Esa API **crea un pipeline IPA nuevo
+  y lo intercambia con el vivo**, así que el AWB/AE arrancan de cero y se
+  reaplican los parámetros iniciales al ISP: exactamente lo que hacía el
+  reinicio, pero en el sitio.
+- El **reinicio queda de respaldo**: si el rearme falla, o si la imagen sigue
+  roja tras recuperar (detector de color, ventana de 10 min), se reinicia la
+  placa como hasta ahora, con el tope de 2 por enchufe.
+
+## Verificado (con la placa, 4-oct-2026)
+
+- Forzando la corrupción a propósito, cadena completa en el log, **sin reinicio**:
+  `imagen corrupta (grano 99)` → `recuperando el sensor (pauso captura...)` →
+  `sensor reseteado y reconfigurado` → `IPA rearmado EN CALIENTE (0), sin
+  reiniciar la placa` (11 ms después) → `imagen normal otra vez (grano 0)`.
+- Medido con el **techo blanco** como referencia (que es lo que delata el
+  magenta): antes de la corrupción R/G 0,97; después de recuperar **1,03-1,04**,
+  estable durante los 2,5 min de sondeo. Cero reinicios (`MOTIVO ULTIMO REINICIO`
+  siguió siendo el del cable USB, no `ESP_RST_SW`).
+- Frente al reinicio: **~85 s sin AP y sin vigilancia → 11 ms**. La vigilancia no
+  se corta y no hay que rearmarla.
+- Reglas nuevas en `test/auditar.sh`, **probadas al revés** (borrando la llamada y
+  el tope, la auditoría falla). Ojo al detalle: la primera versión de la regla
+  buscaba el nombre de la función y pasaba con la llamada borrada (el nombre
+  aparecía en un comentario); ahora busca la llamada con su argumento.
+
 v4.15 — la cámara de noche: se va el magenta y la cara sale de la sombra
 
 ## Qué cambia

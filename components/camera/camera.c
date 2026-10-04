@@ -12,8 +12,9 @@
 #include <sys/mman.h>
 #include "linux/videodev2.h"
 #include "esp_timer.h"
-#include "esp_system.h"        /* esp_restart: unica forma de rearmar el ISP del P4 */
-#include "esp_attr.h"          /* RTC_NOINIT_ATTR: contador de reinicios por imagen roja */
+#include "esp_system.h"        /* esp_restart: ultimo recurso si el rearme del IPA falla */
+#include "esp_attr.h"          /* RTC_NOINIT_ATTR: contador de reinicios de recuperacion */
+#include "esp_video_isp_pipeline.h"  /* rearme del IPA (AWB/AE) EN CALIENTE, sin reiniciar */
 #include "esp_heap_caps.h"
 #include "driver/i2c_master.h"
 /* Declarada a mano y NO con include+REQUIRES: anadir el componente a las
@@ -152,14 +153,23 @@ static int  s_cam_recuperaciones = 0;  /* recuperaciones del sensor ya intentada
  * fotograma suelto. */
 #define CAM_ROJO_FRAMES_MIN 5
 #define CAM_ROJO_MS        5000
+/* Solo se reinicia la placa si la imagen sigue roja DESPUES de una recuperacion
+ * (que es cuando el AWB se va) y dentro de esta ventana: asi una escena roja de
+ * verdad no provoca reinicios. */
+#define CAM_ROJO_VENTANA_MS 600000
 #define CAM_REINICIOS_MAX  2       /* reinicios de recuperacion por ENCHUFE */
 #define CAM_SANO_MS        600000  /* 10 min sano -> se olvidan los contadores */
+/* Nombre del sensor tal y como lo registra su driver: es la clave con la que se
+ * busca su configuracion IPA (la del JSON components/ov02c10/cfg/). */
+#define CAM_IPA_SENSOR     "OV02C10"
 #define CAM_ROJO_MAGIC     0x524f4a31u   /* "ROJ1": marca la memoria RTC ya escrita */
 RTC_NOINIT_ATTR static uint32_t s_rojo_magic;
 RTC_NOINIT_ATTR static int      s_reinicios_recup;  /* basura al encender: ver el magic */
 static volatile bool s_cam_roja = false;
 static int  s_cam_rojo_frames = 0;       /* fotogramas rojos de la racha actual */
 static int64_t s_cam_rojo_desde_ms = 0;  /* cuando empezo la racha (0 = ninguna) */
+static volatile int64_t s_cam_recuperado_ms = 0;  /* ultima recuperacion con IPA rearmado */
+static bool s_cam_rojo_rendida = false;  /* ya se agoto el cupo de reinicios */
 static volatile int s_cam_rg = 0;        /* ultimo R/G x100 medido */
 static volatile int s_cam_rosa = 0;      /* ultimo % de rosa quemado medido */
 static bool s_cam_rojo_avisada = false;  /* ya se aviso de esta racha */
@@ -1010,30 +1020,43 @@ static void cam_recupera_task(void *arg)
         ESP_LOGE(TAG, "CAMARA: la recuperacion del sensor fallo: %s", esp_err_to_name(err));
     } else {
         ESP_LOGW(TAG, "CAMARA: sensor reseteado y reconfigurado");
-        /* 3) REINICIAR LA PLACA. No es un extra: es parte de la recuperacion.
+        /* 3) REARME DEL IPA EN CALIENTE (AWB/AE), sin reiniciar la placa.
          *
          * POR QUE: el reset del sensor arregla el ENLACE, pero deja el AWB del ISP
-         * del P4 desbocado y la imagen sale magenta saturada, y NO vuelve sola (el
-         * 4-oct-2026 paso en las 3 recuperaciones que se hicieron: R/G x100 de
-         * 138-195 antes a 269-666 despues). Lo unico que rearma el ISP es un
-         * reinicio, y esta COMPROBADO que despues del reinicio el color vuelve al
-         * de siempre. Ademas el arranque reconfigura el sensor con el driver, o
-         * sea que el conjunto queda como recien encendido.
+         * del P4 desbocado y la imagen sale magenta saturada, y NO vuelve sola
+         * (medido el 4-oct-2026 en las 3 recuperaciones que se hicieron: R/G x100
+         * de 138-195 antes a 269-666 despues). Hasta la v4.15 eso se arreglaba
+         * reiniciando la placa.
          *
-         * La vigilancia no se pierde: el modo ausente vive en la NVS, se restaura
-         * solo y la app recibe el aviso de reinicio. El tope CAM_REINICIOS_MAX por
-         * encendido (contador en memoria RTC, que el corte de corriente si borra)
-         * evita cualquier bucle si algo va mal. */
-        if (s_reinicios_recup < CAM_REINICIOS_MAX) {
-            s_reinicios_recup++;
-            ESP_LOGE(TAG, "CAMARA: REINICIO la placa para rearmar el ISP del P4 "
-                          "(por software, intento %d/%d en este encendido)",
-                     s_reinicios_recup, CAM_REINICIOS_MAX);
-            vTaskDelay(pdMS_TO_TICKS(300));   /* que salga el log por el puerto */
-            esp_restart();
+         * esp_ipa_pipeline_set_config (lo que hay detras de la API de rearme del
+         * IPA) CREA un pipeline nuevo con la configuracion del JSON y lo
+         * INTERCAMBIA con el vivo: los algoritmos (AWB/AE/AGC) arrancan de cero y
+         * ademas se reaplican los parametros iniciales al ISP. Es justo lo que
+         * hacia el reinicio, pero en el sitio.
+         *
+         * Si esto falla (o si la imagen sigue roja: lo dice el detector de abajo),
+         * queda el reinicio de placa como respaldo. */
+        const esp_ipa_config_t *cfg = esp_ipa_pipeline_get_config(CAM_IPA_SENSOR);
+        if (!cfg) cfg = esp_video_isp_pipeline_enum_ipa_configs(CAM_IPA_SENSOR, 0);
+        const esp_err_t ir = cfg ? esp_video_isp_pipeline_set_ipa_config(cfg)
+                                 : ESP_ERR_NOT_FOUND;
+        if (ir == ESP_OK) {
+            s_cam_recuperado_ms = esp_timer_get_time() / 1000;
+            ESP_LOGW(TAG, "CAMARA: IPA rearmado EN CALIENTE (%s), sin reiniciar la placa",
+                     cfg->description ? cfg->description : CAM_IPA_SENSOR);
+        } else {
+            ESP_LOGE(TAG, "CAMARA: el rearme del IPA fallo (%s); queda el reinicio",
+                     esp_err_to_name(ir));
+            if (s_reinicios_recup < CAM_REINICIOS_MAX) {
+                s_reinicios_recup++;
+                ESP_LOGE(TAG, "CAMARA: REINICIO la placa (intento %d/%d en este encendido)",
+                         s_reinicios_recup, CAM_REINICIOS_MAX);
+                vTaskDelay(pdMS_TO_TICKS(300));   /* que salga el log por el puerto */
+                esp_restart();
+            }
+            ESP_LOGE(TAG, "CAMARA: ya reinicie %d veces en este encendido; NO reinicio mas. "
+                          "Si la imagen sigue mal, CORTAR LA CORRIENTE", CAM_REINICIOS_MAX);
         }
-        ESP_LOGE(TAG, "CAMARA: ya reinicie %d veces en este encendido; NO reinicio mas. "
-                      "Si la imagen sigue mal, CORTAR LA CORRIENTE", CAM_REINICIOS_MAX);
     }
     vTaskDelay(pdMS_TO_TICKS(200));
     /* 4) Reanudar (solo si NO se reinicio): los primeros fotogramas seran viejos,
@@ -1775,13 +1798,30 @@ static void camera_stream_task(void *arg)
                             }
                             if (s_cam_roja && !s_cam_rojo_avisada) {
                                 s_cam_rojo_avisada = true;
-                                /* SOLO AVISO: no se reinicia por color. La recuperacion ya
-                                 * reinicia siempre (ver cam_recupera_task); si esto sale sin
-                                 * recuperacion de por medio, es la escena o el AWB del ISP,
-                                 * y lo que toca es decirlo, no reiniciar a ciegas. */
+                                /* Con recuperacion reciente de por medio, esto es el AWB que
+                                 * se fue tras resetear el sensor: si el rearme del IPA en
+                                 * caliente no lo ha arreglado, queda reiniciar la placa
+                                 * (con tope). Sin recuperacion reciente NO se reinicia por
+                                 * color: puede ser la escena, y solo se avisa. */
+                                const bool tras_recuperar = s_cam_recuperado_ms &&
+                                    (ahora - s_cam_recuperado_ms) < CAM_ROJO_VENTANA_MS;
                                 ESP_LOGE(TAG, "CAMARA: imagen ROJA (R/G=%d, R=%d, rosa=%d%%) en %d "
-                                              "fotogramas: el color se ha ido (aviso, no reinicio)",
-                                         s_cam_rg, r_medio, rosa, s_cam_rojo_frames);
+                                              "fotogramas: el color se ha ido%s",
+                                         s_cam_rg, r_medio, rosa, s_cam_rojo_frames,
+                                         tras_recuperar ? " tras recuperar el sensor" : "");
+                                if (tras_recuperar && s_reinicios_recup < CAM_REINICIOS_MAX) {
+                                    s_reinicios_recup++;
+                                    ESP_LOGE(TAG, "CAMARA: el rearme del IPA no basto; REINICIO la "
+                                                  "placa (intento %d/%d en este encendido)",
+                                             s_reinicios_recup, CAM_REINICIOS_MAX);
+                                    vTaskDelay(pdMS_TO_TICKS(300));
+                                    esp_restart();
+                                } else if (tras_recuperar && !s_cam_rojo_rendida) {
+                                    s_cam_rojo_rendida = true;
+                                    ESP_LOGE(TAG, "CAMARA: ya reinicie %d veces en este encendido y "
+                                                  "sigue roja; NO reinicio mas. Si no se arregla sola, "
+                                                  "CORTAR LA CORRIENTE", CAM_REINICIOS_MAX);
+                                }
                             }
                         } else {
                             s_cam_rojo_desde_ms = 0;

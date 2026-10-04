@@ -348,10 +348,28 @@ if grep -q "ov02c10_recover_over_i2c" $CAM && grep -q "s_cam_pausa = true" $CAM;
 else
     mal "se toca el sensor con el bucle corriendo: el AE del ISP escribe a la vez y el sensor deja de responder (PID=0x0)"
 fi
-if grep -q "esp_restart()" $CAM && grep -q "CAM_REINICIOS_MAX" $CAM && grep -q "RTC_NOINIT_ATTR" $CAM; then
-    ok "tras recuperar reinicia la placa para rearmar el ISP, con tope por encendido"
+# 5) Tras recuperar el sensor hay que REARMAR EL IPA (AWB/AE) o la imagen queda
+#    magenta. Desde la v4.16 eso se hace EN CALIENTE con
+#    esp_video_isp_pipeline_set_ipa_config() -- crea un pipeline IPA nuevo con la
+#    configuracion del JSON y lo intercambia con el vivo --, medido el 4-oct-2026:
+#    el techo blanco quedo en R/G 1,03-1,04 justo despues y aguanto estable, en
+#    11 ms y SIN reiniciar (antes: reinicio de placa, ~85 s sin AP y sin
+#    vigilancia). El reinicio queda SOLO como respaldo si el rearme falla o si la
+#    imagen sigue roja, con tope por encendido (contador en memoria RTC).
+# OJO: se busca la LLAMADA (con su argumento), no el nombre suelto: en la primera
+# version de esta regla el nombre aparecia tambien en un comentario y la regla
+# pasaba con la llamada borrada.
+if grep -q "esp_video_isp_pipeline_set_ipa_config(cfg)" $CAM && grep -q "esp_ipa_pipeline_get_config(CAM_IPA_SENSOR)" $CAM; then
+    ok "tras recuperar rearma el IPA EN CALIENTE (sin reiniciar la placa)"
 else
-    mal "no reinicia tras recuperar (la imagen queda magenta) o lo hace sin tope (bucle de reinicios)"
+    mal "no rearma el IPA tras recuperar: la imagen se queda magenta hasta reiniciar"
+fi
+if grep -q "esp_restart()" $CAM && grep -q "s_reinicios_recup < CAM_REINICIOS_MAX" $CAM \
+   && grep -q "RTC_NOINIT_ATTR" $CAM \
+   && grep -q "(ahora - s_cam_recuperado_ms) < CAM_ROJO_VENTANA_MS" $CAM; then
+    ok "el reinicio queda de RESPALDO (con tope por encendido y solo tras recuperar)"
+else
+    mal "falta el respaldo de reinicio, su tope o la ventana tras recuperar (bucle de reinicios o magenta sin salida)"
 fi
 if grep -q "if (s_cam_corrupta)" $CAM; then
     ok "mientras la imagen esta corrupta NO se sirven fotos"
