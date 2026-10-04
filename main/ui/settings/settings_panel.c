@@ -1607,12 +1607,11 @@ static void settings_menu_page_changed_cb(lv_event_t *e)
                 ui_frigo_panel_equalizar();
                 ctx->frigo_igualado = true;
             }
-            lv_obj_update_layout(cur);
-            ESP_LOGI(TAG_SETTINGS, "pagina '%.14s': alto=%d contenido=%d sobra=%d",
-                     (int)(ctx - s_page_ctxs) < SETTINGS_PAGE_CTX_MAX
-                         ? SETTINGS_PAGE_NAMES[(int)(ctx - s_page_ctxs)] : "?",
-                     (int)lv_obj_get_height(cur), (int)lv_obj_get_content_height(cur),
-                     (int)lv_obj_get_scroll_bottom(cur));
+            /* (El aviso de "cabe o no cabe" NO se pone aqui: en este punto el
+             * alto de la pagina es el que se acaba de forzar, y el menu lo
+             * sobrescribe despues con el suyo. El dato bueno -- el que ve el
+             * usuario -- lo escribe ui_settings_panel_show_page(), que mide la
+             * pagina ya colocada.) */
         }
     }
     if (s_settings_back_btn) {
