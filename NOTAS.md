@@ -1,3 +1,32 @@
+v4.20 — la banda superior de Ajustes: medida, unificada dentro de la familia y razonada entre familias
+
+## Qué cambia
+
+- El punto 8 del briefing del 22-sep decía "en Ajustes el contenido empieza en
+  y=103 y en las vistas en y=23-31". **Medido pantalla a pantalla** con
+  `/captura?n=<i>`, no era un padding mal puesto: son **dos familias con cabecera
+  distinta a propósito**:
+
+  | familia | cabecera | primera tarjeta |
+  |---|---|---|
+  | vistas (overview, batería, solar, DC/DC, detalle…) | ninguna: el título va dentro de cada tarjeta | y=26-34 |
+  | Ajustes (wifi, pantalla, tarjeta SD, sonido, GPS, about…) | miga de pan + título centrado | y=84 (el aviso del GPS, que es banner, en 72) |
+  | históricos (log_*, logs) | barra con Hoy/Semana y Cerrar | y=112-185 |
+
+  Igualarlas sería quitarle a Ajustes el saber dónde estás y cómo volver.
+- Lo que **sí** era incoherencia, dentro de Ajustes: cada página ponía su propio
+  relleno (`12`, `8` y `4`), así que el contenido empezaba en 84, 80 o 72 según la
+  página. Ahora todas usan `UI_PAD_PAGE` y las **cinco páginas de tarjeta empiezan
+  exactamente en y=84**.
+
+## Verificado (4-oct-2026)
+
+- 24 capturas antes/después: solo desplazamientos de 4-8 px, contenido idéntico,
+  nada cortado (wifi y pantalla 80 → 84, GPS 72 → 84 en el contenido).
+- El binario publicado renderiza igual que el de trabajo (0,35-0,40% = hora y
+  datos en vivo).
+- `AUDITORIA OK`: 11 reglas de cámara + 3 de estilo.
+
 v4.19 — medidas a la rejilla de 4 px: 93 valores sueltos, redondeados (y una sola banda para la barra)
 
 ## Qué cambia
