@@ -147,7 +147,8 @@ más abajo. La auditoría lo comprueba (regla 3 de la sección 12).
 | **Cifra** | etiqueta `UI_FONT_SMALL` `TEXT_DIM` + valor `UI_FONT_VALUE`/`DISPLAY` `TEXT` + unidad `UI_FONT_SMALL` `TEXT_DIM`; las cifras de una fila comparten línea base |
 | **Fila de ajuste** | alto `UI_ROW_H`, icono en cuadro radio `RADIUS_CTRL`, etiqueta `UI_FONT_TEXT`, control a la derecha |
 | **Estado vacío** | `TEXT_DIM`, misma caja que el dato real (nunca el color del dato) |
-| **Barra inferior** | chips con pad 4 y radio 4; alta fija; mismo `pad_bottom` en las dos pestañas (hoy 50 y 62). **Fondo `BG`** (antes cada zona llevaba su casi-negro: `#000408` y `#000808` en la misma barra) |
+| **Depósito / indicador** | `UI_TANK_GREY_BODY_H` (92) **se pasa UNA vez** a `ui_tank_create`: la caja y el cuerpo comparten alto. Si después se fuerza el alto del widget a otro valor, el cuerpo no cabe y **se le recorta el borde inferior** (el "rectángulo de aguas grises cortado" del 4-oct-2026) |
+| **Barra inferior** | chips con pad 4 y radio 4; alta fija; mismo `pad_bottom` (`UI_BAR_H`) en las dos pestañas. **Fondo `BG`** (antes cada zona llevaba su casi-negro: `#000408` y `#000808` en la misma barra) |
 | **Aviso / diálogo** | acento `ORANGE` en borde, título y botón; fondo de error `RED_DARK`. Nada de rojo puro a pantalla completa |
 
 ## 5. Cómo se comprueba

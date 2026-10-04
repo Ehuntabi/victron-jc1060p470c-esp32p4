@@ -432,6 +432,17 @@ if [ "$ALTOS" -eq 0 ]; then
 else
     mal "$ALTOS altos fuera de la rejilla: usa un multiplo de 4 o el token del papel (UI_ROW_H/UI_TAB_H/UI_SLIDER_H)"
 fi
+# 4) Un solo estilo de etiqueta: nada de espaciar letras a mano. Era el resto del
+#    estilo viejo de versalitas y quedaba en UN sitio (la etiqueta "SATELITES" del
+#    GPS), que hacia que esa etiqueta no se pareciera a las demas de la app.
+#    Se busca la LLAMADA (con parentesis), no la palabra: los comentarios que
+#    explican por que se quito no cuentan.
+LETRA=$(grep -rc "lv_obj_set_style_text_letter_space(" main/ui main/ui.c --include=*.c 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+if [ "$LETRA" -eq 0 ]; then
+    ok "etiquetas con un solo estilo (sin letter_space a mano)"
+else
+    mal "$LETRA usos de letter_space: las etiquetas van como las demas (UI_FONT_SMALL + TEXT_SOFT)"
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

@@ -857,9 +857,13 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * sitio). Mas abajo, en build_camper, se le aplica un translate_y para
      * bajarla hasta que su base coincida con la del nivel de aguas limpias,
      * sin afectar al resto (translate es solo visual). */
-    ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
+    ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, UI_TANK_GREY_BODY_H,
                                  "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
-    lv_obj_set_height(ov->tank_r1, 88);
+    /* El alto se pasa UNA sola vez (UI_TANK_GREY_BODY_H). Antes se creaba con 90
+     * y luego se forzaba el widget a 88: el cuerpo sobresalia 2 px por abajo y se
+     * le RECORTABA el borde inferior -- el "rectangulo de aguas grises cortado"
+     * que se vio el 4-oct-2026 en la pantalla principal. No volver a forzar el
+     * alto por separado. */
     lv_obj_set_width(ov->tank_r1, LV_SIZE_CONTENT);
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);
@@ -1453,11 +1457,33 @@ static void overview_align_grey(ui_overview_view_t *ov)
     lv_obj_set_width(grey_body, pill_w);
     lv_obj_update_layout(ov->base.root);
 
-    /* Bajar el tanque gris hasta igualar su base con la del nivel limpio. */
+    /* Bajar el tanque gris hasta igualar su base con la del nivel limpio...
+     * PERO sin salirse de la tarjeta. El 4-oct-2026, al subir los rellenos a la
+     * rejilla de 4 px (14 -> 16), el nivel limpio quedo mas abajo y este
+     * desplazamiento crecio tanto que el rectangulo gris se salia por el borde
+     * inferior de la tarjeta y salia CORTADO. Se acota: como mucho hasta dejar
+     * UI_PAD_8 de aire sobre el borde inferior de la tarjeta que lo contiene. */
     lv_area_t ca, ga;
     lv_obj_get_coords(clean_body, &ca);
     lv_obj_get_coords(grey_body, &ga);
     lv_coord_t delta = ca.y2 - ga.y2;
+    lv_obj_t *card = lv_obj_get_parent(ov->tank_s1);   /* la tarjeta camper: es la
+                                                        * que RECORTA (el padre
+                                                        * inmediato del gris es la
+                                                        * columna, que no recorta) */
+    lv_area_t cc = {0};
+    if (card) lv_obj_get_coords(card, &cc);
+    lv_obj_t *col = lv_obj_get_parent(ov->tank_r1);   /* la columna: es la que
+                                                       * RECORTA el indicador */
+    lv_area_t lc = {0};
+    if (col) lv_obj_get_coords(col, &lc);
+    const lv_coord_t tope_card = card ? (cc.y2 - UI_PAD_8 - ga.y2) : delta;
+    /* Aire tambien respecto a la columna: si la base del indicador queda justo
+     * en el borde, el recorte se come su borde inferior de 4 px (es lo que se
+     * veia: el rectangulo "sin suelo"). */
+    const lv_coord_t tope_col  = col  ? (lc.y2 - UI_PAD_8 - ga.y2) : delta;
+    lv_coord_t tope = (tope_card < tope_col) ? tope_card : tope_col;
+    if (delta > tope) delta = tope;
     if (delta > 0) lv_obj_set_style_translate_y(ov->tank_r1, delta, 0);
     ov->grey_aligned = true;
 }

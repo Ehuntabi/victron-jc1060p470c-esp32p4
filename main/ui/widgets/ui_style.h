@@ -78,6 +78,11 @@ extern "C" {
 #define UI_HEADER_H           48      /* alto de cabecera de pantalla, y boton grande */
 #define UI_TAB_H              56      /* alto de fila de menu / pestana */
 #define UI_SLIDER_H           24      /* alto de un slider (volumen, brillo) */
+#define UI_TANK_GREY_BODY_H   92      /* alto del indicador de aguas grises (caja Y
+                                       * cuerpo: pasarlo UNA vez a ui_tank_create;
+                                       * si se fuerza despues el alto del widget a
+                                       * otro valor, el cuerpo sobresale y se le
+                                       * recorta el borde inferior) */
 #define UI_BAR_H              48      /* alto de la barra inferior: las DOS pestanas
                                        * reservan lo mismo (antes 50 en vistas y 62
                                        * en ajustes, y por eso el contenido de las

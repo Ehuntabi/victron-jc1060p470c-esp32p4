@@ -241,7 +241,9 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
     s_sats_lbl = lv_label_create(est);
     lv_obj_set_style_text_font(s_sats_lbl, UI_FONT_SMALL, 0);
     lv_obj_set_style_text_color(s_sats_lbl, UI_COLOR_TEXT_SOFT, 0);
-    lv_obj_set_style_text_letter_space(s_sats_lbl, 2, 0);
+    /* Sin letter_space: era el UNICO sitio de la app que espaciaba letras a
+     * mano (resto del estilo viejo de versalitas). Las etiquetas van como las
+     * demas: UI_FONT_SMALL + TEXT_SOFT. Ver docs/GUIA_ESTILO.md. */
     lv_label_set_text(s_sats_lbl, "SATÉLITES");
     lv_obj_align(s_sats_lbl, LV_ALIGN_TOP_RIGHT, 0, 56);
 

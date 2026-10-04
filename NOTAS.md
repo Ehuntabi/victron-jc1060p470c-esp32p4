@@ -1,3 +1,28 @@
+v4.22 — el rectángulo de aguas grises vuelve a tener su borde (regresión de las medidas) y una sola etiqueta
+
+## Qué cambia
+
+- **Regresión arreglada**: al subir los rellenos a la rejilla de 4 px (14 → 16), el
+  indicador de **aguas grises** de la pantalla principal salía **sin el borde
+  inferior** (el "rectángulo cortado"). Causa: su alto se pasaba a
+  `ui_tank_create` (90) y **después se forzaba el widget a 88**; el cuerpo no cabía
+  y perdía el borde de abajo. Ahora el alto se pasa **una sola vez**
+  (`UI_TANK_GREY_BODY_H`, 92) y el encaje del indicador está **acotado** para que no
+  pueda salirse de su columna ni de la tarjeta (antes solo se bajaba "a ojo" hasta
+  alinear con el depósito de agua limpia).
+- La última etiqueta que espaciaba letras a mano (el "SATÉLITES" del GPS) pasa al
+  estilo de las demás: era el resto del estilo viejo de versalitas.
+- Regla nueva en `test/auditar.sh`: prohibido `letter_space` a mano (probada al
+  revés).
+
+## Verificado (4-oct-2026)
+
+- El borde inferior se comprueba **con la captura ampliada 4×** (`/captura?n=0`):
+  antes faltaba la línea horizontal y quedaban solo los rabillos laterales; ahora
+  está completa. Comparado además con la v4.18 (la última buena) en la pantalla
+  entera.
+- `AUDITORIA OK`: 11 reglas de cámara + 5 de estilo.
+
 v4.21 — altos a la rejilla de 4 px y tokens de papel (fila, pestaña, slider)
 
 ## Qué cambia
