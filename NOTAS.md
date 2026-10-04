@@ -1,3 +1,37 @@
+v4.18 — paleta cerrada: los 59 colores sueltos de la UI se colapsan a los 14 tokens
+
+## Qué cambia
+
+- **El único fichero de la UI con `lv_color_hex()` es `ui_style.h`** (15, la
+  definición de los tokens). Antes: **203 literales en 18 ficheros, 59 colores
+  distintos**, con el mismo significado en 3-4 tonos.
+- Criterios (tabla completa en `docs/GUIA_ESTILO.md` §2):
+  - negros y casi-negros → `BG`. La **misma barra inferior** llevaba `#000408` en
+    una zona y `#000808` en otra: ahora es un solo color.
+  - grises de superficie → `CARD`; bordes → `CARD_BORDER`; texto secundario →
+    `TEXT_DIM`; blancos cálidos → `TEXT_SOFT`.
+  - naranjas/ámbares (`FFAA00`, `FFBB33`, `FFA726`, `E0900A`, `FF7043`, `F57C00`)
+    → `ORANGE`; verdes (`00CA52`, `4CD964`, `2E7D32`) → `GREEN`; cianes
+    (`4AC2F7`, `00BFFF`, `29B6F6`, `42A5F5`, `26C6DA`, `008AD6`) → `CYAN`.
+  - rojos oscuros (`882222`, `B51C19`, `8C2021`) → `RED_DARK`; morados
+    (`9C27B0`, `BA68C8`, `BB66FF`) → `VIOLET`.
+  - el rosa `E91E63` era el acento de los **diálogos de aviso** ("¿Borrar
+    carpeta?", "Atención") → `ORANGE`, y queda como regla del componente.
+- La regla de auditoría pasa de **tope** (203) a **cero literales fuera de
+  `ui_style.h`**, probada al revés.
+
+## Verificado (4-oct-2026)
+
+- Las 24 pantallas capturadas antes y después (`/captura?n=<i>`): cambian solo las
+  zonas de color previstas — Ajustes 33% (fondos de fila), overview 21%, y la
+  barra inferior en todas (de dos negros a uno). La **tarjeta Solar sale
+  idéntica** al píxel.
+- El botón "Cerrar" de las gráficas pasa de `#882222` a `RED_DARK` y ahora se lee
+  (antes casi no se distinguía del fondo).
+- El binario publicado renderiza idéntico al de trabajo (0,41% de diferencia =
+  la hora y los datos en vivo).
+- `AUDITORIA OK` (11 reglas de cámara + 3 de estilo).
+
 v4.17 — guía de estilo de la UI: una sola familia tipográfica, paleta cerrada y reglas que la defienden
 
 ## Qué cambia
