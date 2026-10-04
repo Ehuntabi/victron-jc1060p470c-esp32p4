@@ -1,3 +1,35 @@
+v4.15 — la cámara de noche: se va el magenta y la cara sale de la sombra
+
+## Qué cambia
+
+- **AWB: la ventana de puntos blancos vuelve a estar CENTRADA en el neutro real
+  del sensor** (rg 0,53 / bg 0,64, calibrado con el techo blanco de referencia).
+  Queda en rg 0,35-0,80 y bg 0,40-0,90. La v4.8 la había ensanchado a 0,2-1,6
+  para arreglar el rojo de día, y eso **devolvió el magenta de noche**.
+- **AE: modo `low_light_priority`** (protege las sombras) en lugar de
+  `high_light_priority`, que daba 5× de peso a las zonas brillantes.
+- Lo que arreglaba de verdad el rojo de día era el **objetivo del AE** (55 → 100,
+  de la v4.8), no ensanchar la ventana: con la ventana centrada y el objetivo en
+  100 no hay rojo saturado (0,0% en la lámpara cálida).
+
+## Verificado (mismo salón y misma luz, 4-oct-2026)
+
+| medida | antes (v4.14) | después |
+|---|---|---|
+| techo blanco, R/G | 1,99 (magenta) | **0,98-1,03** |
+| imagen completa, R/G | 4,10 | **1,38-1,58** |
+| cara (luma Y) | 46 | **93** |
+| lámpara (luma Y) | 215 (quemando) | 159 |
+| píxeles quemados con luz fuerte | (85% en la v4.7) | 2,9-4,0% (la propia luz) |
+
+- Comprobado en **dos luces**: lámpara cálida (el caso que salía magenta) y luz
+  blanca fuerte (para descartar el fallo contrario, pasarse de exposición).
+- Reglas nuevas en `test/auditar.sh`: ventana del AWB centrada en el neutro real
+  y AE de sombras. **Probadas al revés**: rompiendo cada ajuste, la auditoría falla.
+- Lo que **no** está medido: luz de día natural (a las 17:32 la misma cámara daba
+  R/G 1,46 y la cara bien, pero con la configuración anterior; conviene repetir la
+  foto a plena luz para confirmar).
+
 v4.14 — la cámara atascada se recupera SOLA, por software (ya no hay que cortar la corriente)
 
 ## Qué cambia
