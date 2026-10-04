@@ -1,3 +1,42 @@
+v4.17 — guía de estilo de la UI: una sola familia tipográfica, paleta cerrada y reglas que la defienden
+
+## Qué cambia
+
+- **`docs/GUIA_ESTILO.md`**: la guía, decidida midiendo las 24 pantallas con
+  `/captura?n=<i>` (esa ruta navega a la pantalla y devuelve un BMP, así que la UI
+  se verifica con capturas, no a ojo).
+  - **Tipografía**: una familia (**Inter**) y cinco papeles con nombre:
+    `UI_FONT_DISPLAY` (46), `TITLE` (28), `VALUE` (24), `TEXT` (20), `SMALL` (14).
+  - **Color**: paleta cerrada, sin literales fuera de `ui_style.h`.
+  - **Medidas**: rejilla de 4 px (4/8/12/16/20/24), radios 16/8/4, fila 44,
+    cabecera 48.
+- **`main/ui/widgets/ui_style.h`**: los tokens en un solo sitio (los colores salen
+  de `ui_card.h`, que ahora incluye este; los nombres no cambian y nada se rompe).
+- **41 usos** de `lv_font_montserrat_*` en el código de UI pasan a los papeles.
+  El binario adelgaza **56 KB** (0x320af0 → 0x312ab0): `lv_font_montserrat_36` no
+  estaba aliasado y mantenía su fuente compilada para dos estilos que no usaba
+  nadie.
+- **Sección 12 nueva en `test/auditar.sh`**: prohibido el nombre de una fuente del
+  SDK en la UI, y **tope** a los literales de color (203 hoy, solo puede bajar).
+
+## Corrección de un diagnóstico mío (importante)
+
+Dije que había un bug de acentos (`"Sin señal"` / `"SATÉLITES"` con un hueco) y
+**no era cierto**: `fonts_es.h` **ya aliasaba** los nombres sin `_es` a Inter, y
+todos los ficheros de UI que los usaban incluían esa cabecera. Las capturas antes
+y después salen **idénticas** (las diferencias medidas son la hora, los gráficos
+en vivo y la versión). El motivo real de la regla es otro: el alias es una trampa
+silenciosa (un fichero que use el nombre plano sin incluir `fonts_es.h` sí recibe
+la fuente del SDK, que solo tiene ASCII) y el 36 engordaba el binario sin usarse.
+
+## Verificado (4-oct-2026)
+
+- Las 23 pantallas capturadas antes y después: **sin cambios estructurales**
+  (solo barra inferior con la hora, gráficos y "Acerca de" con la versión nueva).
+- Reglas probadas al revés: metiendo una fuente del SDK y 250 literales de color,
+  la auditoría falla.
+- `AUDITORIA OK` con las 11 reglas de cámara y las 2 de estilo.
+
 v4.16 — la recuperación de la cámara deja de reiniciar la placa (se rearma el ISP en caliente)
 
 ## Qué cambia
