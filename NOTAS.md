@@ -1,3 +1,28 @@
+v4.19 — medidas a la rejilla de 4 px: 93 valores sueltos, redondeados (y una sola banda para la barra)
+
+## Qué cambia
+
+- **93 de 328** pads/radios estaban fuera de la escala (39 con valor `10`, 20 con
+  `6`, 9 con `14`, 7 con `3`, y sueltos `1/2/5/7/28/42`). Redondeo aplicado:
+  `1/2/3/5 → 4`, `6/7 → 8`, `10 → 12` en pads y `10 → 8` en radios, `14 → 16`,
+  `28 → 24`. Ahora **0 fuera de la rejilla**.
+- Las **píldoras** usan `LV_RADIUS_CIRCLE` en vez de un `42` calculado a mano
+  (era la mitad de la altura, escrito a pelo).
+- Las **dos pestañas reservan lo mismo** para la barra inferior (`UI_BAR_H`, 48):
+  antes 50 en las vistas y 62 en ajustes, y esa diferencia dejaba una banda de más
+  abajo en Ajustes.
+- Regla nueva en `test/auditar.sh` (sección 12, regla 3), probada al revés.
+
+## Verificado (4-oct-2026)
+
+- Las 24 capturas antes/después: cambios de espaciado del **2-5%** en la mayoría
+  (más aire, sin nada cortado), y las pantallas con más filas (Pantalla, Frigo,
+  Tarjeta SD) reacomodadas. `log_bateria`, `log_solar` y `galeria` salen
+  **idénticas**.
+- El binario publicado renderiza igual que el de trabajo (0,25-0,27% = hora y
+  datos en vivo).
+- `AUDITORIA OK`: 11 reglas de cámara + 3 de estilo.
+
 v4.18 — paleta cerrada: los 59 colores sueltos de la UI se colapsan a los 14 tokens
 
 ## Qué cambia
