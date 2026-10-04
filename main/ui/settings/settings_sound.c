@@ -285,7 +285,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     /* Slider de volumen a la DERECHA */
     lv_obj_t *slider = lv_slider_create(ctl_row);
     lv_obj_set_width(slider, 440);
-    lv_obj_set_height(slider, 26);
+    lv_obj_set_height(slider, UI_SLIDER_H);
     lv_obj_set_style_bg_color(slider, UI_COLOR_ORANGE, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider, UI_COLOR_ORANGE, LV_PART_KNOB);
     lv_slider_set_range(slider, 0, 100);

@@ -703,7 +703,7 @@ void ui_gallery_open(void)
 
     /* Boton de carpeta (Carrusel <-> Vigilancia) abajo al centro. */
     lv_obj_t *btn_folder = lv_btn_create(scr);
-    lv_obj_set_height(btn_folder, 50);
+    lv_obj_set_height(btn_folder, UI_HEADER_H);
     lv_obj_align(btn_folder, LV_ALIGN_BOTTOM_MID, 0, -12);
     lv_obj_set_style_bg_color(btn_folder, UI_COLOR_CYAN, 0);
     s_lbl_folder = lv_label_create(btn_folder);

@@ -859,7 +859,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
      * sin afectar al resto (translate es solo visual). */
     ov->tank_r1 = ui_tank_create(ind_col, LV_SIZE_CONTENT, 90,
                                  "Aguas grises", UI_COLOR_CYAN, UI_TANK_GREY_H);
-    lv_obj_set_height(ov->tank_r1, 90);
+    lv_obj_set_height(ov->tank_r1, 88);
     lv_obj_set_width(ov->tank_r1, LV_SIZE_CONTENT);
     lv_obj_add_flag(ov->tank_r1, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ov->tank_r1, alarm_mute_r1_cb, LV_EVENT_CLICKED, ov);

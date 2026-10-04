@@ -99,11 +99,18 @@ Reglas:
 | `UI_RADIUS_CARD` | 16 | tarjeta |
 | `UI_RADIUS_CTRL` | 8 | botón, chip, control |
 | `UI_RADIUS_TAG` | 4 | etiqueta pequeña, LED |
-| `UI_ROW_H` | 44 | alto de fila de ajuste |
-| `UI_HEADER_H` | 48 | alto de cabecera |
+| `UI_ROW_H` | 44 | alto de fila de ajuste y de botón |
+| `UI_HEADER_H` | 48 | alto de cabecera de pantalla, y botón grande |
+| `UI_TAB_H` | 56 | alto de fila de menú / pestaña |
+| `UI_SLIDER_H` | 24 | alto de un slider (volumen, brillo) |
+| `UI_BAR_H` | 48 | alto reservado para la barra inferior (igual en las dos pestañas) |
 
 Reglas: nada de 2, 3, 6, 10, 14 px sueltos; los márgenes laterales son los
-mismos en vistas y en ajustes (ya unificado en v3.6, se mantiene).
+mismos en vistas y en ajustes (ya unificado en v3.6, se mantiene); los **altos**
+escritos a mano también son múltiplos de 4 (salvo `0` = oculto y `1` = línea
+separadora, que son estructurales). Aplicado el 4-oct-2026 (v4.21): había 26
+(sliders), 38, 42, 46, 50, 54, 58 y 90 → `24`, `40`, `44` (`UI_ROW_H`), `48`
+(`UI_HEADER_H`), `56` (`UI_TAB_H`), `88`.
 
 **La banda superior, medida y corregida el 4-oct-2026 (v4.19/v4.20).** El punto 8
 del briefing del 22-sep decía "en Ajustes el contenido empieza en y=103 y en las

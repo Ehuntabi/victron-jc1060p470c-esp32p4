@@ -180,7 +180,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_text_font(ui->wifi.ssid, &lv_font_montserrat_24_es, 0);
     /* Altura fija y contenida: por defecto el campo venia alto y era lo que
      * estiraba la fila de arriba (idea del usuario, 22-sep-2026). */
-    lv_obj_set_height(ui->wifi.ssid, 42);
+    lv_obj_set_height(ui->wifi.ssid, UI_ROW_H);
     lv_textarea_set_one_line(ui->wifi.ssid, true);
     lv_obj_set_width(ui->wifi.ssid, 350);
     /* Tope 802.11: SSID max 32 caracteres. Sin esto se podia teclear un SSID
@@ -228,7 +228,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_center(lbl_toggle);
 
     ui->wifi.password = lv_textarea_create(pass_row);
-    lv_obj_set_height(ui->wifi.password, 42);
+    lv_obj_set_height(ui->wifi.password, UI_ROW_H);
     lv_obj_set_style_text_font(ui->wifi.password, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_password_mode(ui->wifi.password, true);
     lv_textarea_set_one_line(ui->wifi.password, true);
@@ -249,7 +249,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * reiniciar ni tocar el interruptor del punto de acceso. */
     lv_obj_t *btn_save = lv_btn_create(card1);
     lv_obj_set_width(btn_save, lv_pct(100));
-    lv_obj_set_height(btn_save, 38);
+    lv_obj_set_height(btn_save, 40);
     lv_obj_set_style_bg_color(btn_save, UI_COLOR_GREEN, 0);
     lv_obj_add_event_cb(btn_save, wifi_save_cb, LV_EVENT_CLICKED, ui);
     lv_obj_t *lbl_save = lv_label_create(btn_save);

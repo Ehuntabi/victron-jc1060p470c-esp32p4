@@ -421,6 +421,17 @@ if [ "$FUERA" -eq 0 ]; then
 else
     mal "$FUERA medidas fuera de la rejilla (2, 6, 10, 14...): usa la escala de ui_style.h o LV_RADIUS_CIRCLE"
 fi
+# 3b) Lo mismo para los ALTOS escritos a mano (lv_obj_set_height): 0 (oculto) y 1
+#     (linea separadora) son estructurales; el resto, multiplo de 4. El 4-oct-2026
+#     habia 26 (sliders), 38, 42, 46, 50, 54, 58 y 90; ahora 24/40/44/48/56/88 y
+#     los papeles tienen token (UI_ROW_H, UI_TAB_H, UI_SLIDER_H, UI_HEADER_H).
+ALTOS=$(grep -rhoE "lv_obj_set_height\([^,]+, *[0-9]+" main/ui main/ui.c --include=*.c \
+        | grep -oE ", *[0-9]+$" | tr -d ' ,' | awk '$1!=0 && $1!=1 && $1%4!=0' | wc -l)
+if [ "$ALTOS" -eq 0 ]; then
+    ok "altos en la rejilla de 4 px (o 0/1 estructurales)"
+else
+    mal "$ALTOS altos fuera de la rejilla: usa un multiplo de 4 o el token del papel (UI_ROW_H/UI_TAB_H/UI_SLIDER_H)"
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

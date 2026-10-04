@@ -477,7 +477,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *btn_gal = lv_btn_create(card_view);
     lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
-    lv_obj_set_height(btn_gal, 46);
+    lv_obj_set_height(btn_gal, UI_ROW_H);
     lv_obj_set_style_pad_hor(btn_gal, 24, 0);
     lv_obj_set_style_bg_color(btn_gal, UI_COLOR_CYAN, 0);
     lv_obj_set_style_radius(btn_gal, 8, 0);
@@ -1470,7 +1470,7 @@ static settings_page_ctx_t *settings_menu_add_entry(
     settings_btn_styles_init();
     lv_obj_t *cont = lv_menu_cont_create(main_page);
     lv_obj_set_width(cont, lv_pct(48));
-    lv_obj_set_height(cont, 58);
+    lv_obj_set_height(cont, UI_TAB_H);
     settings_card_decor(cont, title, subtitle, icon, accent);
 
     /* Reservar ctx y guardarlo como user_data del page; el handler de
@@ -1535,7 +1535,7 @@ static lv_obj_t *settings_card_btn(lv_obj_t *parent,
     lv_obj_remove_style_all(cont);
     lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_width(cont, lv_pct(95));
-    lv_obj_set_height(cont, 58);
+    lv_obj_set_height(cont, UI_TAB_H);
     settings_card_decor(cont, title, subtitle, icon, accent);
     if (cb) lv_obj_add_event_cb(cont, cb, LV_EVENT_CLICKED, user_data);
     return cont;

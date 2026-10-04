@@ -74,8 +74,10 @@ extern "C" {
 #define UI_RADIUS_CARD        16
 #define UI_RADIUS_CTRL        8       /* boton, chip, control */
 #define UI_RADIUS_TAG         4       /* etiqueta pequena, LED */
-#define UI_ROW_H              44      /* alto de fila de ajuste */
-#define UI_HEADER_H           48      /* alto de cabecera de pantalla */
+#define UI_ROW_H              44      /* alto de fila de ajuste y de boton */
+#define UI_HEADER_H           48      /* alto de cabecera de pantalla, y boton grande */
+#define UI_TAB_H              56      /* alto de fila de menu / pestana */
+#define UI_SLIDER_H           24      /* alto de un slider (volumen, brillo) */
 #define UI_BAR_H              48      /* alto de la barra inferior: las DOS pestanas
                                        * reservan lo mismo (antes 50 en vistas y 62
                                        * en ajustes, y por eso el contenido de las

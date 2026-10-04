@@ -194,7 +194,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
      * LONG_DOT la etiqueta se queda con el alto de UNA: la segunda linea no se
      * veia y la primera salia cortada con puntos ("...apuntado...."). Se le da
      * el alto de dos lineas a mano (25-sep-2026, visto en la captura). */
-    lv_obj_set_height(s_lbl, 54);
+    lv_obj_set_height(s_lbl, UI_TAB_H);
     lv_label_set_long_mode(s_lbl, LV_LABEL_LONG_DOT);
     bombona_label_refresh();
     return card;

@@ -183,7 +183,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *slider_brightness = lv_slider_create(card1_sub);
     lv_obj_set_width(slider_brightness, 165);
-    lv_obj_set_height(slider_brightness, 26);
+    lv_obj_set_height(slider_brightness, UI_SLIDER_H);
     lv_obj_set_style_pad_right(card1_sub, 12, 0);
     lv_obj_set_style_bg_color(slider_brightness, UI_COLOR_VIOLET, LV_PART_INDICATOR);
     lv_obj_set_style_radius(slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
@@ -484,7 +484,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     ui->screensaver.slider_brightness = lv_slider_create(row_ss_b);
 
-    lv_obj_set_height(ui->screensaver.slider_brightness, 26);
+    lv_obj_set_height(ui->screensaver.slider_brightness, UI_SLIDER_H);
     lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, UI_COLOR_ORANGE, LV_PART_INDICATOR);
     lv_obj_set_style_radius(ui->screensaver.slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(ui->screensaver.slider_brightness, UI_COLOR_ORANGE, LV_PART_KNOB);
