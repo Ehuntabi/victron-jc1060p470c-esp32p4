@@ -26,6 +26,11 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * camera_init puede fallar sin que el resto del firmware se entere. */
 bool camera_ready(void);
 
+/* true si la camara esta devolviendo imagen corrupta (ruido). NO se arregla
+ * reiniciando: si sigue asi hay que cortar la corriente. */
+bool camera_corrupta(void);
+int  camera_grano(void);
+
 /* Reintenta el arranque de la camara si no llego a arrancar (sensor que no
  * contesta al encender). Devuelve true si la camara esta util. Se llama desde
  * donde se usa (snapshot, modo vigilancia); como mucho lo intenta cada 3 s. */

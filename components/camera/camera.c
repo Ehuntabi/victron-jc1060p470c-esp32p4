@@ -90,6 +90,31 @@ static volatile int  s_thumb_act  = -1;               /* -1 = aun sin frame */
  * la foto del portal se genera a partir de la ultima miniatura, no captura por
  * su cuenta, asi que con la camara en reposo habria que despertarla y aguardar
  * -- si no, se serviria una foto vieja como si fuera de ahora. */
+/* ── Detector de imagen CORRUPTA (enlace de camara atascado) ─────────────────
+ * OJO: es SOLO UN AVISO. No bloquea servir fotos ni guardar vigilancia, a
+ * proposito: no he conseguido verificarlo en placa (mi inyector de ruido no
+ * llego a dispararlo y no di con el motivo), y un falso positivo dejaria al
+ * usuario sin camara en ruta. Lo que aporta es que el equipo DIGA lo que pasa:
+ * sin esto, ver ruido en la app no se distingue de una averia cualquiera.
+ * El 3-oct-2026 la camara empezo a devolver ruido (fotogramas corruptos) y NO se
+ * arreglaba reiniciando ni reflasheando: solo un corte de corriente. Medido con
+ * las imagenes reales de ese dia: una escena normal da un "grano" (media de
+ * |p[x]-p[x+1]|) de 0,85-5,8 y un enlace atascado ~40. Umbral 15: 2,6x por
+ * encima de la peor imagen normal y 2,6x por debajo del ruido.
+ *
+ * Que se hace al detectarlo: (a) NO servir esa imagen (ni foto ni vigilancia: no
+ * se guarda basura en la SD), (b) reescribir la tabla de init del SENSOR por I2C
+ * reenviando S_FMT, que es lo unico que se puede resetear por software (la placa
+ * no cablea reset ni alimentacion de la camara a un GPIO: reset_pin=-1, pwdn_pin=-1)
+ * y (c) decirlo claro: si eso no lo arregla, hay que cortar la corriente. */
+#define CAM_GRANO_UMBRAL   15
+#define CAM_GRANO_SEGUIDAS 3    /* fotogramas seguidos con grano alto */
+#define CAM_GRANO_BUENAS   5    /* seguidos normales para darla por buena */
+static volatile bool s_cam_corrupta = false;
+static int  s_cam_grano_alto   = 0;
+static int  s_cam_grano_bueno  = 0;
+static volatile int s_cam_grano = 0;  /* ultimo valor medido (diagnostico) */
+
 /* ── Cuando se considera ASENTADA la imagen y cuanto se le da a una foto ─────
  * (ver firma_miniatura() y camera_snapshot_jpeg()) */
 #define FIRMA_PASO 24     /* muestreo de la firma: 1 pixel de cada 24 en cada eje */
@@ -271,6 +296,27 @@ static bool downscale_rgb(const uint8_t *p, uint32_t bytes, uint8_t *dst)
  * lavados/magenta y a partir del 4o ya coincidian entre si. Por eso se exigen
  * FIRMA_SEGUIDAS y ademas un minimo de fotogramas desde que se pide la foto. */
 static int s_firma_seguidas = 0;
+/* Grano de la miniatura: media de |p[x]-p[x+1]| (los 3 canales) sobre una rejilla
+ * muestreada. Barato (unas 15.000 muestras) y separa limpiamente una imagen
+ * normal de un fotograma corrupto. Ver CAM_GRANO_UMBRAL. */
+static int grano_miniatura(const uint8_t *t)
+{
+    if (!t) return 0;
+    uint32_t suma = 0, n = 0;
+    for (int y = 0; y < THUMB_H; y += 4) {
+        const uint8_t *fila = t + (uint32_t)y * THUMB_W * 3;
+        for (int x = 0; x + 1 < THUMB_W; x += 4) {
+            const uint8_t *a = fila + (size_t)x * 3;
+            const uint8_t *b = a + 3;
+            suma += (uint32_t)(abs((int)a[0] - (int)b[0]) +
+                               abs((int)a[1] - (int)b[1]) +
+                               abs((int)a[2] - (int)b[2]));
+            n += 3;
+        }
+    }
+    return n ? (int)(suma / n) : 0;
+}
+
 static bool firma_miniatura(const uint8_t *t, uint8_t out[3])
 {
     if (!t) return false;
@@ -1180,6 +1226,12 @@ static void vig_sd_drain_task(void *arg)
     }
 }
 
+/* Estado de la imagen: true si el enlace de camara esta devolviendo ruido (ver
+ * CAM_GRANO_UMBRAL). Lo usa el portal para decirlo claro y los consumidores para
+ * no servir ni guardar basura. */
+bool camera_corrupta(void) { return s_cam_corrupta; }
+int  camera_grano(void)    { return s_cam_grano; }
+
 void camera_set_luma_wanted(bool on)
 {
     s_luma_wanted = on;
@@ -1470,6 +1522,31 @@ static void camera_stream_task(void *arg)
                         s_firma_seguidas = 0;
                         s_thumb_estable = false;
                     }
+                    /* ¿Imagen corrupta? Ver CAM_GRANO_UMBRAL. */
+                    s_cam_grano = grano_miniatura(s_thumb[back]);
+                    if (s_cam_grano > CAM_GRANO_UMBRAL) {
+                        s_cam_grano_bueno = 0;
+                        if (!s_cam_corrupta && ++s_cam_grano_alto >= CAM_GRANO_SEGUIDAS) {
+                            s_cam_corrupta = true;
+                            ESP_LOGE(TAG, "CAMARA: imagen corrupta (grano %d, umbral %d) en %d fotogramas seguidos",
+                                     s_cam_grano, CAM_GRANO_UMBRAL, s_cam_grano_alto);
+                            /* NO se intenta reiniciar el pipeline: la placa no
+                             * cablea reset ni alimentacion de la camara (reset_pin=-1,
+                             * pwdn_pin=-1), ciclar STREAMON/STREAMOFF crashea el driver
+                             * CSI y reenviar S_FMT con el stream en marcha lo deja
+                             * muerto (las dos cosas comprobadas el 03-oct-2026). Asi
+                             * que: se deja de servir y de guardar, y se dice claro. */
+                            ESP_LOGE(TAG, "CAMARA: si sigue asi NO se arregla reiniciando: CORTAR LA CORRIENTE");
+                        }
+                    } else {
+                        s_cam_grano_alto = 0;
+                        if (s_cam_corrupta && ++s_cam_grano_bueno >= CAM_GRANO_BUENAS) {
+                            s_cam_corrupta = false;
+                            s_cam_grano_bueno = 0;
+                            ESP_LOGI(TAG, "CAMARA: imagen normal otra vez (grano %d)", s_cam_grano);
+                        }
+                    }
+
                     s_thumb_act = back;   /* publicar */
                     s_thumb_seq++;
                     /* s_frame_pedido NO se limpia aqui: lo limpia quien pidio la

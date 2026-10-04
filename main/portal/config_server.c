@@ -133,7 +133,11 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
          * muere despues, el estado seguia diciendo "vigilando" mientras no se
          * guardaba nada (auditoria del 27-sep-2026). */
         const char *salud = "";
-        if (activo) {
+        if (camera_corrupta()) {
+            /* El enlace de la camara devolviendo ruido: no se arregla reiniciando,
+             * hay que cortar la corriente (ver camera.c). */
+            salud = "la camara devuelve imagen corrupta: corta la corriente";
+        } else if (activo) {
             if (!datalogger_sd_montada())
                 salud = "la tarjeta SD ya no esta: no se estan guardando las fotos";
             else if (!camera_ready())
