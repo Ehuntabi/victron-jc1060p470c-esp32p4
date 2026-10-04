@@ -1,3 +1,25 @@
+v4.21 — altos a la rejilla de 4 px y tokens de papel (fila, pestaña, slider)
+
+## Qué cambia
+
+- Segunda mitad de las medidas: `lv_obj_set_height` tenía **26** (sliders), **38**,
+  **42**, **46**, **50**, **54**, **58** y **90**, todos fuera de la rejilla.
+  Redondeados a `24`, `40`, `44`, `48`, `56` y `88`.
+- Tokens nuevos para los papeles que se repiten: `UI_TAB_H` 56 (filas de menú y
+  pestañas), `UI_SLIDER_H` 24 (volumen y brillo), y `UI_ROW_H`/`UI_HEADER_H` para
+  filas y botones. El `0` (objeto oculto) y el `1` (línea separadora) se quedan:
+  son estructurales.
+- Regla nueva en `test/auditar.sh` (3b): los altos escritos a mano son múltiplos
+  de 4 salvo 0 y 1. Probada al revés.
+
+## Verificado (4-oct-2026)
+
+- Las 24 capturas: 0,4-0,7% de diferencia en la mayoría (la hora y los datos en
+  vivo) y donde toca más — Pantalla **10,7%** (dos sliders y el campo de texto),
+  Wi-Fi 4,9%, Tarjeta SD 4,1%. Los sliders quedan algo más finos; el resto igual.
+- El binario publicado renderiza igual que el de trabajo (0,42%).
+- `AUDITORIA OK`: 11 reglas de cámara + 4 de estilo.
+
 v4.20 — la banda superior de Ajustes: medida, unificada dentro de la familia y razonada entre familias
 
 ## Qué cambia
