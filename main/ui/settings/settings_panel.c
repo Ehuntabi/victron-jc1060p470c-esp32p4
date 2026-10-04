@@ -356,7 +356,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, 12, 0);
+    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
     lv_obj_set_style_pad_gap(cont, 12, 0);
@@ -641,7 +641,7 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
     /* Aire: 12 de margen y 14 entre filas (la pagina es un flex ROW_WRAP: las
      * entradas Frigo/Victron van en una fila de dos, y cada tarjeta ocupa su
      * fila entera). */
-    lv_obj_set_style_pad_all(page, 12, 0);
+    lv_obj_set_style_pad_all(page, UI_PAD_PAGE, 0);
     lv_obj_set_style_pad_row(page, 16, 0);
     lv_obj_set_style_pad_column(page, 12, 0);
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
@@ -1655,7 +1655,7 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(cont, 12, 0);
+    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
     lv_obj_set_style_pad_gap(cont, 12, 0);

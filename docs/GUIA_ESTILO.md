@@ -103,9 +103,25 @@ Reglas:
 | `UI_HEADER_H` | 48 | alto de cabecera |
 
 Reglas: nada de 2, 3, 6, 10, 14 px sueltos; los márgenes laterales son los
-mismos en vistas y en ajustes (ya unificado en v3.6, se mantiene); **la misma
-banda superior** en todas las pantallas (pendiente del briefing del 22-sep: en
-Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
+mismos en vistas y en ajustes (ya unificado en v3.6, se mantiene).
+
+**La banda superior, medida y corregida el 4-oct-2026 (v4.19/v4.20).** El punto 8
+del briefing del 22-sep decía "en Ajustes el contenido empieza en y=103 y en las
+vistas en y=23-31". Medido pantalla a pantalla con `/captura`, eso NO es un fallo
+de padding: son **dos familias con cabecera distinta a propósito**:
+
+| familia | cabecera | primera tarjeta |
+|---|---|---|
+| **vistas** (overview, batería, solar, DC/DC, detalle…) | ninguna: el título va **dentro** de cada tarjeta | y=26-34 |
+| **Ajustes** (wifi, pantalla, tarjeta SD, sonido, GPS, about…) | miga de pan ("‹ Ajustes") + título centrado | y=84 (el aviso del GPS, que es banner y no tarjeta, en 72) |
+| **históricos** (log_*, logs) | barra de herramientas con Hoy/Semana y Cerrar | y=112-185 |
+
+Lo que sí era incoherencia **dentro** de la familia de Ajustes: cada página ponía
+su propio relleno (12, 8 y 4), así que el contenido empezaba en 80, 84 o 72. Ahora
+todas usan `UI_PAD_PAGE` y las cinco páginas de tarjeta empiezan **exactamente en
+84**. Regla: **la banda es la misma dentro de cada familia**; entre familias no se
+iguala, porque la cabecera de Ajustes (saber dónde estás y cómo volver) es
+información, no adorno.
 
 **Aplicado el 4-oct-2026 (v4.19)**: había **93 usos fuera de la rejilla** de 328
 (39 de valor 10, 20 de 6, 9 de 14, 7 de 3, y sueltos de 1/2/5/7/28/42). Se
@@ -143,14 +159,15 @@ más abajo. La auditoría lo comprueba (regla 3 de la sección 12).
 2. **Colores** (v4.18): **hecho** — 59 colores distintos / 203 literales
    colapsados a los 14 tokens, verificado con las 24 capturas antes/después
    (solo cambian las zonas de color previstas; el resto, idéntico).
-3. **Medidas y componentes** (v4.19): **hecho** — 93 usos fuera de la rejilla
-   redondeados a la escala, píldoras con `LV_RADIUS_CIRCLE` y las dos pestañas
-   reservando lo mismo para la barra (`UI_BAR_H`), verificado con las 24
-   capturas. Queda pendiente, y necesita decisión de diseño:
-   - el **acento por sección** (hoy cada entrada del menú de Ajustes lleva el
-     suyo: azul, naranja, rosa, morado, amarillo, verde);
-   - la **banda superior** (punto 8 del briefing del 22-sep: en Ajustes el
-     contenido empezaba en y=103 y en las vistas en y=23-31).
+3. **Medidas y componentes** (v4.19 y v4.20): **hecho** — 93 usos fuera de la
+   rejilla redondeados a la escala, píldoras con `LV_RADIUS_CIRCLE`, las dos
+   pestañas reservando lo mismo para la barra (`UI_BAR_H`) y el relleno de página
+   de Ajustes unificado a `UI_PAD_PAGE` (las cinco páginas de tarjeta empiezan ya
+   exactamente en y=84; la banda superior entre familias **no** se iguala, y está
+   razonado arriba). Verificado con las 24 capturas.
+   Queda pendiente, y necesita decisión de diseño: el **acento por sección** (hoy
+   cada entrada del menú de Ajustes lleva el suyo: azul, naranja, rosa, morado,
+   amarillo, verde).
 
 Lo que **no** entra: cambiar la distribución de las pantallas ni la información
 que muestran; esto es coherencia, no rediseño.

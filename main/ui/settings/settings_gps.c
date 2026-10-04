@@ -196,7 +196,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * empieza en 550). Antes el contenido pedia 534 y la tarjeta de TRAMAS
      * EN CRUDO se metia debajo de la barra: se veia cortada. Con el reparto de
      * abajo queda en 468 y entra entera. */
-    lv_obj_set_style_pad_all(page, 4, 0);
+    lv_obj_set_style_pad_all(page, UI_PAD_PAGE, 0);
     lv_obj_set_style_pad_row(page, 4, 0);
     /* 16 por la derecha: la barra de scroll (8 px de ancho + 6 de pad_right, ver
      * style_settings_scrollbar) vive en x=1010..1018, y las tarjetas, con solo 4
