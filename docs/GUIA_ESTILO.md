@@ -107,6 +107,14 @@ mismos en vistas y en ajustes (ya unificado en v3.6, se mantiene); **la misma
 banda superior** en todas las pantallas (pendiente del briefing del 22-sep: en
 Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
 
+**Aplicado el 4-oct-2026 (v4.19)**: había **93 usos fuera de la rejilla** de 328
+(39 de valor 10, 20 de 6, 9 de 14, 7 de 3, y sueltos de 1/2/5/7/28/42). Se
+redondearon a la escala —`1/2/3/5→4`, `6/7→8`, `10→12` (pads) y `10→8` (radios),
+`14→16`, `28→24`— y las píldoras pasan a `LV_RADIUS_CIRCLE` en vez de un 42 a
+mano. Además las **dos pestañas reservan lo mismo** para la barra inferior
+(`UI_BAR_H` 48): antes 50 en las vistas y 62 en ajustes, que dejaba una banda de
+más abajo. La auditoría lo comprueba (regla 3 de la sección 12).
+
 ## 4. Componentes
 
 | Componente | Ficha |
@@ -135,13 +143,14 @@ Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
 2. **Colores** (v4.18): **hecho** — 59 colores distintos / 203 literales
    colapsados a los 14 tokens, verificado con las 24 capturas antes/después
    (solo cambian las zonas de color previstas; el resto, idéntico).
-3. **Medidas y componentes**: llevar pads/radios/alturas a la rejilla y unificar
-   la banda superior y el patrón de fila de ajustes. **Pendiente**, con dos
-   decisiones de diseño por delante:
+3. **Medidas y componentes** (v4.19): **hecho** — 93 usos fuera de la rejilla
+   redondeados a la escala, píldoras con `LV_RADIUS_CIRCLE` y las dos pestañas
+   reservando lo mismo para la barra (`UI_BAR_H`), verificado con las 24
+   capturas. Queda pendiente, y necesita decisión de diseño:
    - el **acento por sección** (hoy cada entrada del menú de Ajustes lleva el
      suyo: azul, naranja, rosa, morado, amarillo, verde);
-   - la **banda superior** (punto 8 del briefing del 22-sep, sigue abierto: en
-     Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
+   - la **banda superior** (punto 8 del briefing del 22-sep: en Ajustes el
+     contenido empezaba en y=103 y en las vistas en y=23-31).
 
 Lo que **no** entra: cambiar la distribución de las pantallas ni la información
 que muestran; esto es coherencia, no rediseño.

@@ -76,6 +76,10 @@ extern "C" {
 #define UI_RADIUS_TAG         4       /* etiqueta pequena, LED */
 #define UI_ROW_H              44      /* alto de fila de ajuste */
 #define UI_HEADER_H           48      /* alto de cabecera de pantalla */
+#define UI_BAR_H              48      /* alto de la barra inferior: las DOS pestanas
+                                       * reservan lo mismo (antes 50 en vistas y 62
+                                       * en ajustes, y por eso el contenido de las
+                                       * dos pestanas no empezaba/terminaba igual) */
 
 #ifdef __cplusplus
 }

@@ -137,7 +137,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_hor(card, 16, 0);
-    lv_obj_set_style_pad_ver(card, 2, 0);
+    lv_obj_set_style_pad_ver(card, 4, 0);
     lv_obj_set_style_pad_gap(card, 4, 0);
     lv_obj_set_layout(card, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);

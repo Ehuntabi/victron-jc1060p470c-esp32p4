@@ -364,7 +364,7 @@ void ui_init(void) {
     lv_obj_set_style_bg_color(tab_btns, UI_COLOR_CYAN, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_height(tab_btns, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(tab_btns, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(tab_btns, 4, LV_PART_INDICATOR);
     /* Quitar borde inferior por defecto del tabview */
     lv_obj_set_style_border_width(tab_btns, 0, 0);
     /* Fondo de las dos pestanas = el de la paleta (22-sep-2026): antes lo ponia
@@ -387,8 +387,8 @@ void ui_init(void) {
     /* Reserva inferior = altura exacta de la bottom_bar (50 px), sin margen
      * muerto, para que el overview aproveche toda la pantalla. El pequeno
      * colchon sobre la barra lo da el pad_bottom del root del overview. */
-    lv_obj_set_style_pad_bottom(ui->tab_live, 50, 0);
-    lv_obj_set_style_pad_bottom(ui->tab_settings, 62, 0);
+    lv_obj_set_style_pad_bottom(ui->tab_live, UI_BAR_H, 0);
+    lv_obj_set_style_pad_bottom(ui->tab_settings, UI_BAR_H, 0);   /* antes 62: dejaba una banda de mas abajo */
 
     /* Reloj en barra superior — esquina derecha */
     /* Barra inferior unificada: contenedor flex con 4 zonas (reloj | BLE | volumen | temp ext) */

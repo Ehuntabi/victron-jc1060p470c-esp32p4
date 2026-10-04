@@ -657,7 +657,7 @@ void ui_gallery_open(void)
     lv_obj_set_style_text_color(s_lbl, lv_color_white(), 0);
     lv_obj_set_style_bg_color(s_lbl, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_lbl, LV_OPA_50, 0);
-    lv_obj_set_style_pad_all(s_lbl, 6, 0);
+    lv_obj_set_style_pad_all(s_lbl, 8, 0);
     lv_label_set_text(s_lbl, "");
     lv_obj_align(s_lbl, LV_ALIGN_TOP_MID, 0, 8);
 

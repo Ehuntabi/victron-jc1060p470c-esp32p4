@@ -409,6 +409,18 @@ if [ "$COLORLIT" -eq 0 ]; then
 else
     mal "$COLORLIT literales de color fuera de ui_style.h: usa los tokens (la paleta es cerrada)"
 fi
+# 3) REJILLA de 4 px: los pads/radios escritos a mano tienen que estar en la
+#    escala (0 = sin relleno, 4/8/12/16/20/24), no en 2, 6, 10, 14... El 4-oct-2026
+#    habia 93 usos fuera (39 de 10, 20 de 6, 9 de 14, 7 de 3...): se redondearon y
+#    la unica excepcion es LV_RADIUS_CIRCLE para las pildoras (radius = h/2).
+FUERA=$(grep -rhoE "lv_obj_set_style_(pad_[a-z]+|radius)\([^,]+, *-?[0-9]+" main/ui main/ui.c --include=*.c \
+        | grep -oE ", *-?[0-9]+$" | tr -d ' ,' \
+        | awk '$1!=0 && $1!=4 && $1!=8 && $1!=12 && $1!=16 && $1!=20 && $1!=24' | wc -l)
+if [ "$FUERA" -eq 0 ]; then
+    ok "medidas en la rejilla de 4 px (0/4/8/12/16/20/24)"
+else
+    mal "$FUERA medidas fuera de la rejilla (2, 6, 10, 14...): usa la escala de ui_style.h o LV_RADIUS_CIRCLE"
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

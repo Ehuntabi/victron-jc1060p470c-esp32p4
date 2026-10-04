@@ -265,8 +265,8 @@ static lv_obj_t *ov_make_state_pill(lv_obj_t *card)
 {
     lv_obj_t *pill = ui_pill_create(card, "-", UI_COLOR_TEXT_DIM);
     lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_pad_hor(pill, 10, 0);
-    lv_obj_set_style_pad_ver(pill, 3, 0);
+    lv_obj_set_style_pad_hor(pill, 12, 0);
+    lv_obj_set_style_pad_ver(pill, 4, 0);
     lv_obj_t *lbl = lv_obj_get_child(pill, 0);
     if (lbl) lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
     return pill;
@@ -475,7 +475,7 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, 200, 85);
-    lv_obj_set_style_radius(btn, 42, 0);                 /* píldora: radius = h/2 */
+    lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);                 /* píldora: radius = h/2 */
     lv_obj_set_style_bg_color(btn, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
     /* Borde de color de la funcion (2 px) — ahora SE VE como boton */
@@ -520,7 +520,7 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_t *led = lv_obj_create(btn);
     lv_obj_remove_style_all(led);
     lv_obj_set_size(led, 14, 14);
-    lv_obj_set_style_radius(led, 7, 0);
+    lv_obj_set_style_radius(led, 8, 0);
     lv_obj_set_style_bg_color(led, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
     /* LED centrado horizontalmente, asomando un poco por encima del borde */
@@ -548,7 +548,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     /* Aprovechar la pantalla: pad superior e inferior minimos (los laterales
      * mantienen 8). Asi la rejilla gana alto arriba y abajo. */
     lv_obj_set_style_pad_top(ov->base.root, 4, 0);
-    lv_obj_set_style_pad_bottom(ov->base.root, 3, 0);
+    lv_obj_set_style_pad_bottom(ov->base.root, 4, 0);
     lv_obj_set_style_pad_gap(ov->base.root, 8, 0);
     lv_obj_set_layout(ov->base.root, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ov->base.root, LV_FLEX_FLOW_COLUMN);
@@ -836,7 +836,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_t *pill = lv_obj_create(ind_col);
         lv_obj_remove_style_all(pill);
         lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-        lv_obj_set_style_radius(pill, 14, 0);
+        lv_obj_set_style_radius(pill, 16, 0);
         lv_obj_set_style_border_width(pill, 2, 0);
         lv_obj_set_style_border_color(pill, UI_COLOR_CARD_BORDER, 0);
         lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
@@ -922,12 +922,12 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_border_color(card_fridge, UI_COLOR_ICE, 0);
         lv_obj_set_style_border_width(card_fridge, 2, 0);
         lv_obj_set_style_radius(card_fridge, UI_RADIUS_CARD, 0);
-        lv_obj_set_style_pad_hor(card_fridge, 14, 0);
+        lv_obj_set_style_pad_hor(card_fridge, 16, 0);
         /* Abajo 14 y no 6: el aro del ventilador (92 px) quedaba pegado al
          * borde inferior de la tarjeta (se veia en la captura del 22-sep). */
-        lv_obj_set_style_pad_top(card_fridge, 6, 0);
-        lv_obj_set_style_pad_bottom(card_fridge, 14, 0);
-        lv_obj_set_style_pad_gap(card_fridge, 14, 0);
+        lv_obj_set_style_pad_top(card_fridge, 8, 0);
+        lv_obj_set_style_pad_bottom(card_fridge, 16, 0);
+        lv_obj_set_style_pad_gap(card_fridge, 16, 0);
         lv_obj_set_layout(card_fridge, LV_LAYOUT_FLEX);
         /* Disposicion vertical: Congelador (icono+texto+temp) arriba y el
          * ventilador debajo, ambos centrados. */
@@ -950,7 +950,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_flex_flow(col_freezer, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(col_freezer, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(col_freezer, 2, 0);
+        lv_obj_set_style_pad_gap(col_freezer, 4, 0);
 
         lv_obj_t *t_row = lv_obj_create(col_freezer);
         lv_obj_remove_style_all(t_row);
@@ -996,7 +996,7 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_label_set_text(ov->lbl_freezer_unit, "\xc2\xb0""C");
         /* Pequeno margen inferior para que la unidad case con la base del
          * numero grande en vez de pegarse al fondo del row. */
-        lv_obj_set_style_pad_bottom(ov->lbl_freezer_unit, 6, 0);
+        lv_obj_set_style_pad_bottom(ov->lbl_freezer_unit, 8, 0);
 
         /* Ventilador (debajo dentro de la card): aro-gauge del PWM 0..100 %
          * con el ventilador girando en el centro. El nivel (0 gris ->

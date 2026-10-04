@@ -140,8 +140,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card1, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card1, 2, 0);
     lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card1, 10, 0);
-    lv_obj_set_style_pad_gap(card1, 6, 0);
+    lv_obj_set_style_pad_all(card1, 12, 0);
+    lv_obj_set_style_pad_gap(card1, 8, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
@@ -172,7 +172,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(card1_sub, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_left(card1_sub, 16, 0);
     lv_obj_set_style_pad_right(card1_sub, 16, 0);
-    lv_obj_set_style_pad_gap(card1_sub, 10, 0);
+    lv_obj_set_style_pad_gap(card1_sub, 12, 0);
 
     lv_obj_t *lbl_val_b = lv_label_create(card1_sub);
     lv_obj_set_style_text_font(lbl_val_b, &lv_font_montserrat_20_es, 0);
@@ -218,8 +218,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card_nm, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card_nm, 2, 0);
     lv_obj_set_style_radius(card_nm, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card_nm, 10, 0);
-    lv_obj_set_style_pad_gap(card_nm, 6, 0);
+    lv_obj_set_style_pad_all(card_nm, 12, 0);
+    lv_obj_set_style_pad_gap(card_nm, 8, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
     /* v3.10: cabecera centrada arriba y una fila de controles debajo (antes era
      * todo una fila con el titulo dentro). */
@@ -270,7 +270,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
         lv_obj_set_flex_flow(grp, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(grp, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(grp, 6, 0);
+        lv_obj_set_style_pad_gap(grp, 8, 0);
 
         lv_obj_t *cap = lv_label_create(grp);
         lv_obj_set_style_text_font(cap, &lv_font_montserrat_20_es, 0);
@@ -338,8 +338,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card3, UI_COLOR_GREEN, 0);
     lv_obj_set_style_border_width(card3, 2, 0);
     lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card3, 10, 0);
-    lv_obj_set_style_pad_gap(card3, 6, 0);
+    lv_obj_set_style_pad_all(card3, 12, 0);
+    lv_obj_set_style_pad_gap(card3, 8, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_COLUMN);
 
@@ -378,8 +378,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card_sp, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(card_sp, 2, 0);
     lv_obj_set_style_radius(card_sp, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card_sp, 10, 0);
-    lv_obj_set_style_pad_gap(card_sp, 6, 0);
+    lv_obj_set_style_pad_all(card_sp, 12, 0);
+    lv_obj_set_style_pad_gap(card_sp, 8, 0);
     lv_obj_set_layout(card_sp, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_sp, LV_FLEX_FLOW_COLUMN);
 
@@ -426,7 +426,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     /* Separacion entre 'Salvapantallas' y el switch/Tiempo */
-    lv_obj_set_style_pad_column(title_row, 28, 0);
+    lv_obj_set_style_pad_column(title_row, 24, 0);
 
     lv_obj_t *card2_title = lv_label_create(title_row);
     lv_obj_set_style_text_font(card2_title, UI_FONT_VALUE, 0);
@@ -555,7 +555,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_size(grp_period, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(grp_period, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(grp_period, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(grp_period, 10, 0);
+    lv_obj_set_style_pad_gap(grp_period, 12, 0);
     lv_obj_set_flex_align(grp_period, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *lbl_period = lv_label_create(grp_period);

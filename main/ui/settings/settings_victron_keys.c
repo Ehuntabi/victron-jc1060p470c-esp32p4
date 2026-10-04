@@ -189,7 +189,7 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_size(controls_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_layout(controls_row, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(controls_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(controls_row, 10, 0);
+    lv_obj_set_style_pad_gap(controls_row, 12, 0);
 
     ui->victron_config.add_btn = lv_btn_create(controls_row);
     lv_obj_set_size(ui->victron_config.add_btn, 44, 44);
@@ -232,7 +232,7 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_height(ui->victron_config.list, LV_SIZE_CONTENT);
     lv_obj_set_layout(ui->victron_config.list, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ui->victron_config.list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(ui->victron_config.list, 14, 0);
+    lv_obj_set_style_pad_gap(ui->victron_config.list, 16, 0);
     lv_obj_set_scroll_dir(ui->victron_config.list, LV_DIR_VER);
 
     /* Initialize victron config state */
@@ -391,7 +391,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(body, 14, 0);
+    lv_obj_set_style_pad_gap(body, 16, 0);
 
     /* Columna izquierda — inputs (flex_grow=1 para mitad ancho) */
     lv_obj_t *col_left = lv_obj_create(body);
@@ -400,7 +400,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_grow(col_left, 1);
     lv_obj_set_layout(col_left, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_left, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(col_left, 6, 0);
+    lv_obj_set_style_pad_gap(col_left, 8, 0);
 
     lv_obj_t *name_label = lv_label_create(col_left);
     lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20_es, 0);
@@ -460,7 +460,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_grow(status_container, 1);
     lv_obj_set_layout(status_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(status_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(status_container, 6, 0);
+    lv_obj_set_style_pad_gap(status_container, 8, 0);
     lv_obj_set_style_pad_all(status_container, 12, 0);
     lv_obj_set_style_bg_color(status_container, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(status_container, LV_OPA_COVER, 0);

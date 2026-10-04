@@ -511,8 +511,8 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_layout(tab, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(tab, 10, 0);
-    lv_obj_set_style_pad_gap(tab, 10, 0);
+    lv_obj_set_style_pad_all(tab, 12, 0);
+    lv_obj_set_style_pad_gap(tab, 12, 0);
     lv_obj_set_scroll_dir(tab, LV_DIR_VER);
 
     /* === Card 1: Sensores DS18B20 (azul) ===
@@ -560,7 +560,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *btn_buscar = lv_btn_create(card_sensors);
     lv_obj_set_height(btn_buscar, 48);
     lv_obj_set_style_bg_color(btn_buscar, UI_COLOR_CYAN, 0);
-    lv_obj_set_style_radius(btn_buscar, 10, 0);
+    lv_obj_set_style_radius(btn_buscar, 8, 0);
     lv_obj_add_event_cb(btn_buscar, buscar_sondas_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *lbl_buscar = lv_label_create(btn_buscar);
     lv_label_set_text(lbl_buscar, LV_SYMBOL_REFRESH "  Buscar sondas");
@@ -581,7 +581,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     /* pad_gap recortado (era 24) para que el borde inferior de esta card
      * quede mas cerca del de la card de sensores; sigue separando bien
      * Auto/OFF de Min/Max (antes de esto, 12). */
-    lv_obj_set_style_pad_gap(card_fan, 14, 0);
+    lv_obj_set_style_pad_gap(card_fan, 16, 0);
     lv_obj_set_layout(card_fan, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_fan, LV_FLEX_FLOW_COLUMN);
     /* Centrado horizontal de los hijos (las filas a pct(100) no se ven
@@ -618,7 +618,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_flow(row_mode, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_mode, LV_FLEX_ALIGN_SPACE_EVENLY,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(row_mode, 6, 0);
+    lv_obj_set_style_pad_column(row_mode, 8, 0);
     static const char *mode_labels[4] = { "Auto", "OFF", "50%", "100%" };
     for (int i = 0; i < 4; ++i) {
         lv_obj_t *btn = lv_btn_create(row_mode);
@@ -818,7 +818,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_border_color(card_solar, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(card_solar, 2, 0);
     lv_obj_set_style_radius(card_solar, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card_solar, 10, 0);   /* compactado 22-sep-2026: */
+    lv_obj_set_style_pad_all(card_solar, 12, 0);   /* compactado 22-sep-2026: */
     lv_obj_set_style_pad_gap(card_solar, 8, 0);    /* se cortaba por abajo */
     lv_obj_set_layout(card_solar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_solar, LV_FLEX_FLOW_COLUMN);
@@ -846,7 +846,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_layout(row_soc, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(row_soc, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_soc, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_soc, 10, 0);
+    lv_obj_set_style_pad_gap(row_soc, 12, 0);
 
     /* SoC de activacion (paso 1 %, rango 80..100). */
     lv_obj_t *col_solon = lv_obj_create(row_soc);
@@ -931,7 +931,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_flex_flow(row_solar_estado, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_solar_estado, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row_solar_estado, 10, 0);
+    lv_obj_set_style_pad_gap(row_solar_estado, 12, 0);
 
     s_dot_sol = lv_obj_create(row_solar_estado);
     lv_obj_remove_style_all(s_dot_sol);

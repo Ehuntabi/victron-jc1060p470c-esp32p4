@@ -158,7 +158,7 @@ lv_obj_t *create_ausente_card(lv_obj_t *cont)
      * tarjetas de Autocaravana quepan en pantalla (24-ago-2026). El relleno
      * horizontal se queda en 16, que ese no estorba. */
     lv_obj_set_style_pad_hor(card_aus, 16, 0);
-    lv_obj_set_style_pad_ver(card_aus, 2, 0);
+    lv_obj_set_style_pad_ver(card_aus, 4, 0);
     lv_obj_set_style_pad_gap(card_aus, 4, 0);
     lv_obj_set_layout(card_aus, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_aus, LV_FLEX_FLOW_COLUMN);
@@ -262,8 +262,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(ctl_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(ctl_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_left(ctl_row, 10, 0);     /* separa un poco 'Silenciar avisos' */
-    lv_obj_set_style_pad_column(ctl_row, 14, 0);   /* hueco entre el texto y el switch */
+    lv_obj_set_style_pad_left(ctl_row, 12, 0);     /* separa un poco 'Silenciar avisos' */
+    lv_obj_set_style_pad_column(ctl_row, 16, 0);   /* hueco entre el texto y el switch */
 
     /* Silenciar avisos a la IZQUIERDA (texto + switch) */
     lv_obj_t *lbl_mute = lv_label_create(ctl_row);
@@ -311,7 +311,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(card2, 2, 0);
     lv_obj_set_style_radius(card2, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card2, 12, 0);
-    lv_obj_set_style_pad_gap(card2, 10, 0);
+    lv_obj_set_style_pad_gap(card2, 12, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card2, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card2, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -342,7 +342,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(col_crit, LV_FLEX_FLOW_ROW);   /* icono+texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_crit, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_crit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_crit, 10, 0);   /* un poco separado del selector */
+    lv_obj_set_style_pad_gap(col_crit, 12, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_crit = lv_label_create(col_crit);
     lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_crit, UI_COLOR_RED, 0);
@@ -368,7 +368,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(col_warn, LV_FLEX_FLOW_ROW);   /* icono+texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_warn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_warn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_warn, 10, 0);   /* un poco separado del selector */
+    lv_obj_set_style_pad_gap(col_warn, 12, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_warn = lv_label_create(col_warn);
     lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_warn, UI_COLOR_ORANGE, 0);
@@ -397,7 +397,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(card3, 2, 0);
     lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card3, 12, 0);
-    lv_obj_set_style_pad_gap(card3, 10, 0);
+    lv_obj_set_style_pad_gap(card3, 12, 0);
     lv_obj_set_layout(card3, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card3, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card3, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -427,7 +427,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(col_min_a, LV_FLEX_FLOW_ROW);   /* texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_min_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_min_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_min_a, 10, 0);   /* un poco separado del selector */
+    lv_obj_set_style_pad_gap(col_min_a, 12, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_min_a = lv_label_create(col_min_a);
     lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_min_a, "Tras subir (min)");
@@ -453,7 +453,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_flex_flow(col_t_a, LV_FLEX_FLOW_ROW);   /* texto a la izda, selector a la dcha */
     lv_obj_set_flex_align(col_t_a, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_size(col_t_a, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_gap(col_t_a, 10, 0);   /* un poco separado del selector */
+    lv_obj_set_style_pad_gap(col_t_a, 12, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_t_a = lv_label_create(col_t_a);
     lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_t_a, "Si supera");

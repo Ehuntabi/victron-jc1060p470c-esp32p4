@@ -196,7 +196,7 @@ void style_settings_scrollbar(lv_obj_t *page)
     lv_obj_set_style_bg_opa(page, LV_OPA_80, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(page, 8, LV_PART_SCROLLBAR);
     lv_obj_set_style_radius(page, 4, LV_PART_SCROLLBAR);
-    lv_obj_set_style_pad_right(page, 6, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_right(page, 8, LV_PART_SCROLLBAR);
 }
 
 
@@ -356,7 +356,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, 10, 0);
+    lv_obj_set_style_pad_all(cont, 12, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
     lv_obj_set_style_pad_gap(cont, 12, 0);
@@ -371,7 +371,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_cap, 2, 0);
     lv_obj_set_style_radius(card_cap, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_cap, 12, 0);
-    lv_obj_set_style_pad_gap(card_cap, 10, 0);
+    lv_obj_set_style_pad_gap(card_cap, 12, 0);
     lv_obj_set_layout(card_cap, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_cap, LV_FLEX_FLOW_COLUMN);
 
@@ -429,7 +429,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_eject, 2, 0);
     lv_obj_set_style_radius(card_eject, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_eject, 12, 0);
-    lv_obj_set_style_pad_gap(card_eject, 10, 0);
+    lv_obj_set_style_pad_gap(card_eject, 12, 0);
     lv_obj_set_layout(card_eject, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_eject, LV_FLEX_FLOW_COLUMN);
 
@@ -456,7 +456,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_view, 2, 0);
     lv_obj_set_style_radius(card_view, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_view, 12, 0);
-    lv_obj_set_style_pad_gap(card_view, 10, 0);
+    lv_obj_set_style_pad_gap(card_view, 12, 0);
     lv_obj_set_layout(card_view, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_view, LV_FLEX_FLOW_COLUMN);
 
@@ -519,7 +519,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(card_bak, 2, 0);
     lv_obj_set_style_radius(card_bak, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_bak, 12, 0);
-    lv_obj_set_style_pad_gap(card_bak, 10, 0);
+    lv_obj_set_style_pad_gap(card_bak, 12, 0);
     lv_obj_set_layout(card_bak, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card_bak, LV_FLEX_FLOW_COLUMN);
 
@@ -551,7 +551,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *btn_exp = lv_btn_create(bak_row);
     lv_obj_set_size(btn_exp, 200, 50);
     lv_obj_set_style_bg_color(btn_exp, UI_COLOR_GREEN, 0);
-    lv_obj_set_style_radius(btn_exp, 10, 0);
+    lv_obj_set_style_radius(btn_exp, 8, 0);
     lv_obj_t *lbl_exp = lv_label_create(btn_exp);
     lv_label_set_text(lbl_exp, LV_SYMBOL_UPLOAD "  Exportar");
     lv_obj_set_style_text_font(lbl_exp, &lv_font_montserrat_20_es, 0);
@@ -560,7 +560,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_t *btn_imp = lv_btn_create(bak_row);
     lv_obj_set_size(btn_imp, 200, 50);
     lv_obj_set_style_bg_color(btn_imp, UI_COLOR_ORANGE, 0);
-    lv_obj_set_style_radius(btn_imp, 10, 0);
+    lv_obj_set_style_radius(btn_imp, 8, 0);
     lv_obj_t *lbl_imp = lv_label_create(btn_imp);
     lv_label_set_text(lbl_imp, LV_SYMBOL_DOWNLOAD "  Importar");
     lv_obj_set_style_text_font(lbl_imp, &lv_font_montserrat_20_es, 0);
@@ -611,7 +611,7 @@ lv_obj_t *create_autostart_card(lv_obj_t *cont)
     lv_obj_set_style_radius(card_auto, UI_RADIUS_CARD, 0);
     /* 16 -> 12 (22-sep-2026): la linea de abajo de esta tarjeta, que es la ultima
      * de la pagina Autocaravana, se cortaba por muy poco. */
-    lv_obj_set_style_pad_all(card_auto, 6, 0);
+    lv_obj_set_style_pad_all(card_auto, 8, 0);
     lv_obj_set_style_pad_gap(card_auto, 8, 0);
     lv_obj_set_layout(card_auto, LV_LAYOUT_FLEX);
     /* v3.10: columna con la cabecera centrada arriba y el interruptor debajo. */
@@ -642,8 +642,8 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
      * entradas Frigo/Victron van en una fila de dos, y cada tarjeta ocupa su
      * fila entera). */
     lv_obj_set_style_pad_all(page, 12, 0);
-    lv_obj_set_style_pad_row(page, 14, 0);
-    lv_obj_set_style_pad_column(page, 10, 0);
+    lv_obj_set_style_pad_row(page, 16, 0);
+    lv_obj_set_style_pad_column(page, 12, 0);
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
      * (anadidas en el init). Orden: Modo ausente, Bombonas, Auto-encendido.
      * (La card "Energia del viaje" se quito el 24-sep-2026: sus numeros ya
@@ -737,7 +737,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(back_btn, 0, 0);
     lv_obj_set_style_shadow_width(back_btn, 0, 0);
-    lv_obj_set_style_radius(back_btn, 10, 0);
+    lv_obj_set_style_radius(back_btn, 8, 0);
     lv_obj_set_style_pad_hor(back_btn, 8, 0);
     lv_obj_set_style_pad_ver(back_btn, 12, 0);
     lv_obj_set_style_pad_column(back_btn, 8, 0);
@@ -816,7 +816,7 @@ void ui_settings_panel_init(ui_state_t *ui,
      * Aqui el vertical se queda en 4: el contenido llega a y=528 de 538 y no
      * cabe un margen mayor sin que aparezca la barra de scroll. */
     lv_obj_set_style_pad_hor(page_autocaravana, 12, 0);
-    lv_obj_set_style_pad_top(page_autocaravana, 2, 0);
+    lv_obj_set_style_pad_top(page_autocaravana, 4, 0);
     lv_obj_set_style_pad_bottom(page_autocaravana, 4, 0);
     lv_obj_set_style_pad_row(page_autocaravana, 4, 0);   /* 2 px menos por hueco: el borde de 2 px de las tarjetas suma 8 en esta pagina */
     lv_obj_set_style_pad_column(page_autocaravana, 12, 0);
@@ -1655,7 +1655,7 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(cont, 10, 0);
+    lv_obj_set_style_pad_all(cont, 12, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
     lv_obj_set_style_pad_gap(cont, 12, 0);

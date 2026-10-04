@@ -136,8 +136,8 @@ ui_device_view_t *ui_default_battery_view_create(ui_state_t *ui, lv_obj_t *paren
     lv_bar_set_value(view->bar_current, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(view->bar_current, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(view->bar_current, 5, LV_PART_MAIN);
-    lv_obj_set_style_radius(view->bar_current, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_MAIN);
+    lv_obj_set_style_radius(view->bar_current, 4, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(view->bar_current, UI_COLOR_TEXT_DIM, LV_PART_INDICATOR);
 
     /* Sparkline de potencia (V * I) en los últimos ~90 samples (~1.5 min con

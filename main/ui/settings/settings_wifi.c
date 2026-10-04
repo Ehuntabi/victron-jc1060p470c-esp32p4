@@ -279,7 +279,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card2, UI_COLOR_GREEN, 0);
     lv_obj_set_style_border_width(card2, 2, 0);
     lv_obj_set_style_radius(card2, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card2, 10, 0);
+    lv_obj_set_style_pad_all(card2, 12, 0);
     lv_obj_set_style_pad_gap(card2, 8, 0);
     lv_obj_set_layout(card2, LV_LAYOUT_FLEX);
     /* DOS COLUMNAS (22-sep-2026, idea del usuario): el desplegable de la pagina
@@ -324,7 +324,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * se corte en la card estrecha (pct 49). */
     lv_obj_set_flex_flow(card2_row1, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card2_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(card2_row1, 6, 0);
+    lv_obj_set_style_pad_gap(card2_row1, 8, 0);
 
     /* Rotulo del desplegable (el titulo de la tarjeta ya esta en la cabecera). */
     lv_obj_t *card2_title = lv_label_create(card2_row1);
@@ -375,7 +375,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *btn_react = lv_btn_create(card2_row2);
     lv_obj_set_height(btn_react, 40);
     lv_obj_set_width(btn_react, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_hor(btn_react, 10, 0);   /* boton mas recogido (lo pidio el usuario) */
+    lv_obj_set_style_pad_hor(btn_react, 12, 0);   /* boton mas recogido (lo pidio el usuario) */
     lv_obj_set_style_radius(btn_react, 8, 0);
     lv_obj_set_style_bg_color(btn_react, UI_COLOR_CYAN, 0);
     lv_obj_t *btn_lbl = lv_label_create(btn_react);
@@ -402,8 +402,8 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_border_color(card4, UI_COLOR_GREEN, 0);
     lv_obj_set_style_border_width(card4, 2, 0);
     lv_obj_set_style_radius(card4, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card4, 10, 0);
-    lv_obj_set_style_pad_gap(card4, 6, 0);
+    lv_obj_set_style_pad_all(card4, 12, 0);
+    lv_obj_set_style_pad_gap(card4, 8, 0);
     lv_obj_set_layout(card4, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card4, LV_FLEX_FLOW_COLUMN);
 

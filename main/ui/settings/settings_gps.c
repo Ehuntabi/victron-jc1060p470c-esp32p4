@@ -197,7 +197,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * EN CRUDO se metia debajo de la barra: se veia cortada. Con el reparto de
      * abajo queda en 468 y entra entera. */
     lv_obj_set_style_pad_all(page, 4, 0);
-    lv_obj_set_style_pad_row(page, 2, 0);
+    lv_obj_set_style_pad_row(page, 4, 0);
     /* 16 por la derecha: la barra de scroll (8 px de ancho + 6 de pad_right, ver
      * style_settings_scrollbar) vive en x=1010..1018, y las tarjetas, con solo 4
      * de margen, llegaban a 1020: le pasaban por debajo y la barra se comia su
@@ -257,7 +257,7 @@ void create_gps_settings_page(ui_state_t *ui, lv_obj_t *page)
      * hace scroll, asi que si no cabe se corta por abajo sin avisar. */
     lv_obj_set_size(fila, lv_pct(100), 226);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(fila, 6, 0);
+    lv_obj_set_style_pad_column(fila, 8, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *cpos = tarjeta(fila, "POSICIÓN", lv_pct(100), COL_AZUL);
