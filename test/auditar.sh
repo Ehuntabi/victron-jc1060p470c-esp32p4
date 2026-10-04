@@ -312,6 +312,32 @@ fi
 grep -q "firma_miniatura" components/camera/camera.c && grep -q "FOTO_ESPERA_ITER" components/camera/camera.c \
     && ok "la foto espera a que la imagen este asentada" \
     || mal "la foto se sirve sin esperar a que el AE/AWB asienten (salia buena o roja al azar)"
+# 4) Recuperacion del sensor atascado POR SOFTWARE (4-oct-2026). Lo que cuesta
+#    medir es el ORDEN: la tabla se escribe con el sensor PARADO (si no, la imagen
+#    sale magenta y no vuelve), se respeta REG_END/DELAY como el driver, y despues
+#    se reinicia la placa porque el AWB del ISP del P4 se queda desbocado.
+OV=components/ov02c10/ov02c10.c
+CAM=components/camera/camera.c
+if grep -q "stream OFF" $OV && grep -q "OV02C10_REG_END" $OV && grep -q "OV02C10_REG_DELAY" $OV; then
+    ok "la recuperacion del sensor para el stream y respeta REG_END/DELAY"
+else
+    mal "la recuperacion escribe la tabla con el sensor emitiendo o se salta REG_END/DELAY (sale magenta y no vuelve)"
+fi
+if grep -q "ov02c10_recover_over_i2c" $CAM && grep -q "s_cam_pausa = true" $CAM; then
+    ok "el bucle de captura se PAUSA antes de tocar el sensor"
+else
+    mal "se toca el sensor con el bucle corriendo: el AE del ISP escribe a la vez y el sensor deja de responder (PID=0x0)"
+fi
+if grep -q "esp_restart()" $CAM && grep -q "CAM_REINICIOS_MAX" $CAM && grep -q "RTC_NOINIT_ATTR" $CAM; then
+    ok "tras recuperar reinicia la placa para rearmar el ISP, con tope por encendido"
+else
+    mal "no reinicia tras recuperar (la imagen queda magenta) o lo hace sin tope (bucle de reinicios)"
+fi
+if grep -q "if (s_cam_corrupta)" $CAM; then
+    ok "mientras la imagen esta corrupta NO se sirven fotos"
+else
+    mal "se sirven fotos de un sensor corrupto: ~350 KB de ruido a la galeria y a la app"
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi

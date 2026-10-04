@@ -26,10 +26,17 @@ esp_err_t camera_init(i2c_master_bus_handle_t i2c);
  * camera_init puede fallar sin que el resto del firmware se entere. */
 bool camera_ready(void);
 
-/* true si la camara esta devolviendo imagen corrupta (ruido). NO se arregla
- * reiniciando: si sigue asi hay que cortar la corriente. */
+/* true si la camara esta devolviendo imagen corrupta (ruido). Se recupera por
+ * software (reset del sensor por I2C); si tras varios intentos sigue igual, es
+ * que el sensor no acepta ordenes y hay que cortar la corriente. */
 bool camera_corrupta(void);
 int  camera_grano(void);
+
+/* true si la imagen sale ROJA saturada porque el AWB del ISP se ha ido (pasa tras
+ * recuperar el sensor). Se arregla reiniciando la placa, que es lo unico que
+ * rearma el ISP; el propio modulo lo hace solo (con tope de reinicios). */
+bool camera_roja(void);
+int  camera_rg(void);          /* R/G x100 de la ultima miniatura (diagnostico) */
 
 /* Reintenta el arranque de la camara si no llego a arrancar (sensor que no
  * contesta al encender). Devuelve true si la camara esta util. Se llama desde

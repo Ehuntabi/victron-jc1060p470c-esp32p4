@@ -12,7 +12,15 @@
 #include <sys/mman.h>
 #include "linux/videodev2.h"
 #include "esp_timer.h"
+#include "esp_system.h"        /* esp_restart: unica forma de rearmar el ISP del P4 */
+#include "esp_attr.h"          /* RTC_NOINIT_ATTR: contador de reinicios por imagen roja */
 #include "esp_heap_caps.h"
+#include "driver/i2c_master.h"
+/* Declarada a mano y NO con include+REQUIRES: anadir el componente a las
+ * dependencias de camera cambiaba el enlazado de la camara y el arranque dejaba
+ * de abrir /dev/video0 (visto el 4-oct-2026). El simbolo ya esta enlazado porque
+ * esp_video usa el mismo componente. */
+extern esp_err_t ov02c10_recover_over_i2c(i2c_master_bus_handle_t bus);
 #include "driver/jpeg_encode.h"   /* codec JPEG por HW del ESP32-P4 (esp_driver_jpeg) */
 #include "driver/ppa.h"           /* acelerador de imagen del P4: reduce por HW */
 #include "esp_cache.h"
@@ -114,6 +122,58 @@ static volatile bool s_cam_corrupta = false;
 static int  s_cam_grano_alto   = 0;
 static int  s_cam_grano_bueno  = 0;
 static volatile int s_cam_grano = 0;  /* ultimo valor medido (diagnostico) */
+static int  s_cam_recuperaciones = 0;  /* recuperaciones del sensor ya intentadas */
+
+/* ── Imagen ROJA (AWB del ISP desbocado): SOLO SE AVISA ─────────────────────
+ *
+ * POR QUE EXISTE: al recuperar el sensor (reset + tabla por I2C) el ISP del P4 se
+ * queda con el balance de blancos ido y la imagen sale magenta saturada, y no
+ * vuelve sola. Medido el 4-oct-2026 en las 3 recuperaciones que se hicieron: R/G
+ * (x100) paso de 138-195 (antes) a 269-666 (despues), con hasta el 78% de los
+ * pixeles con R>=250 y G<=140.
+ *
+ * LA ACCION NO ESTA AQUI: como pasa SIEMPRE tras recuperar, la recuperacion
+ * (cam_recupera_task) reinicia la placa directamente, sin depender de una medida
+ * de color. Este detector queda para AVISAR (portal/log) si la imagen sale roja
+ * por cualquier otro motivo, y por eso sus umbrales son CONSERVADORES: en el
+ * propio bucle (miniatura en crudo) una imagen sana de esta camara da R/G
+ * 185-230, y el rosa aparece cuando el JPEG ya sale claramente magenta.
+ *
+ * OJO al calibrar: el JPEG que sirve el portal ESTIRA el color respecto a la
+ * miniatura en crudo (la misma escena: R/G 335 en el JPEG y 201 en el bucle;
+ * Y=114 en el JPEG y brillo=62 en crudo). No se puede comparar una medida con la
+ * otra: los umbrales de abajo son de la ESCALA DEL BUCLE. */
+#define CAM_ROJO_RG_UMBRAL 300     /* R/G x100 medido en la miniatura en crudo */
+#define CAM_ROJO_ROSA      20      /* % de pixeles con R>=250 y G<=140 */
+#define CAM_ROJO_R_MIN     60      /* media de R: descarta imagenes oscuras */
+/* "Seguidos" se mide en TIEMPO, no en fotogramas: en vigilancia el bucle da
+ * ~0,6 fps (medido el 4-oct-2026: los vig: salen cada ~1,7 s), asi que 30
+ * fotogramas serian 50 s. Con 5 fotogramas Y 5 s sobra para no disparar por un
+ * fotograma suelto. */
+#define CAM_ROJO_FRAMES_MIN 5
+#define CAM_ROJO_MS        5000
+#define CAM_REINICIOS_MAX  2       /* reinicios de recuperacion por ENCHUFE */
+#define CAM_SANO_MS        600000  /* 10 min sano -> se olvidan los contadores */
+#define CAM_ROJO_MAGIC     0x524f4a31u   /* "ROJ1": marca la memoria RTC ya escrita */
+RTC_NOINIT_ATTR static uint32_t s_rojo_magic;
+RTC_NOINIT_ATTR static int      s_reinicios_recup;  /* basura al encender: ver el magic */
+static volatile bool s_cam_roja = false;
+static int  s_cam_rojo_frames = 0;       /* fotogramas rojos de la racha actual */
+static int64_t s_cam_rojo_desde_ms = 0;  /* cuando empezo la racha (0 = ninguna) */
+static volatile int s_cam_rg = 0;        /* ultimo R/G x100 medido */
+static volatile int s_cam_rosa = 0;      /* ultimo % de rosa quemado medido */
+static bool s_cam_rojo_avisada = false;  /* ya se aviso de esta racha */
+
+static i2c_master_bus_handle_t s_i2c_bus = NULL;   /* bus del proyecto (camera_init) */
+/* Pausa del bucle de captura. Hace falta para recuperar el sensor: reescribir su
+ * tabla MIENTRAS el AE del ISP tambien le escribe deja el sensor sin responder por
+ * I2C (PID=0x0) y solo lo arregla un corte de corriente -- comprobado el
+ * 4-oct-2026. Con el bucle parado no se hace DQBUF, los buffers se llenan, el
+ * GDMA se para por contrapresion y el AE deja de escribir. */
+static volatile bool s_cam_pausa = false;
+static void cam_recupera_task(void *arg);
+
+
 
 /* ── Cuando se considera ASENTADA la imagen y cuanto se le da a una foto ─────
  * (ver firma_miniatura() y camera_snapshot_jpeg()) */
@@ -315,6 +375,33 @@ static int grano_miniatura(const uint8_t *t)
         }
     }
     return n ? (int)(suma / n) : 0;
+}
+
+/* Media de R y G de la miniatura (rejilla de 4 en 4, como el grano) para cazar
+ * el AWB desbocado. Devuelve R/G x100 (0 si no hay imagen) y deja la media de R
+ * en *r_medio y el % de pixeles "rosa quemado" (R>=250 y G<=140) en *rosa_pct.
+ * Ver CAM_ROJO_RG_UMBRAL / CAM_ROJO_ROSA. */
+static int rojo_miniatura(const uint8_t *t, int *r_medio, int *rosa_pct)
+{
+    if (r_medio)  *r_medio = 0;
+    if (rosa_pct) *rosa_pct = 0;
+    if (!t) return 0;
+    uint32_t sr = 0, sg = 0, n = 0, rosa = 0;
+    for (int y = 0; y < THUMB_H; y += 4) {
+        const uint8_t *fila = t + (uint32_t)y * THUMB_W * 3;
+        for (int x = 0; x + 1 < THUMB_W; x += 4) {
+            const uint8_t *p = fila + (size_t)x * 3;
+            sr += p[0];
+            sg += p[1];
+            if (p[0] >= 250 && p[1] <= 140) rosa++;
+            n++;
+        }
+    }
+    if (!n || !sg) return 0;
+    const uint32_t r = sr / n, g = sg / n;
+    if (r_medio)  *r_medio  = (int)r;
+    if (rosa_pct) *rosa_pct = (int)((rosa * 100) / n);
+    return (int)((r * 100) / g);
 }
 
 static bool firma_miniatura(const uint8_t *t, uint8_t out[3])
@@ -573,6 +660,19 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
      * sin esto, un fallo de arranque dejaba el snapshot en 503 para toda la
      * sesion aunque la camara estuviera perfectamente. */
     camera_reintentar();
+
+    /* Imagen CORRUPTA (ver grano_miniatura): no se sirve. Una foto de un sensor
+     * atascado son ~350 KB de ruido, y eso no vale ni para la galeria ni para la
+     * app. La recuperacion la lleva el bucle de captura (cam_recupera_task) en
+     * cuanto detecta CAM_GRANO_SEGUIDAS fotogramas malos; aqui solo se evita
+     * guardar basura mientras tanto. Si el sensor sigue igual tras las 3
+     * recuperaciones, esto deja de servir fotos y el portal lo dice (salud). */
+    if (s_cam_corrupta) {
+        ESP_LOGE(TAG, "NO sirvo la foto: imagen CORRUPTA (grano %d, umbral %d); "
+                      "la recuperacion la lleva el bucle de captura",
+                 s_cam_grano, CAM_GRANO_UMBRAL);
+        return false;
+    }
 
     /* Con la camara EN REPOSO (ni vigilancia ni auto-brillo) la ultima
      * miniatura puede ser de hace horas, y esto sirve fotos: hay que despertarla
@@ -852,6 +952,96 @@ bool camera_vig_fetch(uint32_t id, uint8_t **out, size_t *out_len)
 #define CAM_WARMUP_FRAMES  40
 #define CAM_WARMUP_MS      25    /* ~30 fps durante la rafaga */
 static volatile int s_warmup = CAM_WARMUP_FRAMES;   /* tambien al arrancar */
+
+/* Si la camara lleva CAM_SANO_MS sin dar problemas, se olvidan los contadores de
+ * recuperaciones y de reinicios: no tiene sentido negarse a recuperar (ni a
+ * reiniciar) dentro de un mes por lo que paso hoy. Se llama una vez por fotograma
+ * y es barato (dos restas). */
+static void cam_olvida_problemas(bool sana)
+{
+    static int64_t sano_desde_ms = 0;
+    const int64_t ahora = esp_timer_get_time() / 1000;
+    if (!sana)          { sano_desde_ms = 0; return; }
+    if (!sano_desde_ms) { sano_desde_ms = ahora; return; }
+    if ((ahora - sano_desde_ms) < CAM_SANO_MS) return;
+    sano_desde_ms = ahora;      /* se reevalua cada CAM_SANO_MS */
+    if (s_cam_recuperaciones) {
+        ESP_LOGI(TAG, "CAMARA: %d min sin problemas; olvido las recuperaciones usadas",
+                 (int)(CAM_SANO_MS / 60000));
+        s_cam_recuperaciones = 0;
+    }
+    if (s_reinicios_recup) {
+        /* Se olvida el cupo de reinicios: si la camara lleva 10 min bien, el
+         * proximo atasco puede volver a recuperarse con reinicio. La memoria RTC
+         * se sobrescribe, asi que el tope vuelve a estar disponible. */
+        ESP_LOGI(TAG, "CAMARA: %d min sin problemas; olvido los reinicios usados",
+                 (int)(CAM_SANO_MS / 60000));
+        s_reinicios_recup = 0;
+    }
+}
+
+/* Recuperacion de una camara corrupta: reset por software del sensor + reescritura
+ * de su tabla de modo, TODO por I2C y SIN tocar el CSI/ISP del P4. El pipeline
+ * sigue vivo, asi que en cuanto el sensor vuelve a mandar datos buenos las fotos
+ * se recuperan solas (el aviso se limpia con 5 fotogramas normales).
+ *
+ * Las otras vias estan comprobadas y NO valen (3-oct/4-oct-2026): un reinicio del
+ * P4 no lo arregla (el sensor sigue alimentado y conserva su estado, la placa no
+ * cablea su reset ni su pwdn a un GPIO); ciclar STREAMON/STREAMOFF en el mismo
+ * descriptor crashea el driver CSI; reenviar S_FMT con el stream en marcha deja el
+ * stream muerto; y esp_video_deinit+init se cuelga en el re-init.
+ *
+ * OJO: esto arregla el SENSOR, pero puede dejar el AWB del ISP del P4 desbocado
+ * (imagen roja). De eso se encarga el detector de CAM_ROJO_RG_UMBRAL, que reinicia
+ * la placa. Las dos capas son por software. */
+static void cam_recupera_task(void *arg)
+{
+    (void)arg;
+    ESP_LOGW(TAG, "CAMARA: recuperando el sensor (pauso captura, reset+tabla por I2C)");
+    /* 1) Pausar la captura y dar tiempo a que el pipeline se pare: sin DQBUF los
+     *    buffers se llenan y el GDMA se para por contrapresion, asi que el AE deja
+     *    de escribir en el sensor. Sin esto, su escritura se cruza con la mia y el
+     *    sensor se queda sin responder. */
+    s_cam_pausa = true;
+    vTaskDelay(pdMS_TO_TICKS(700));
+    /* 2) Reset + tabla completa, por I2C. */
+    const esp_err_t err = ov02c10_recover_over_i2c(s_i2c_bus);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "CAMARA: la recuperacion del sensor fallo: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGW(TAG, "CAMARA: sensor reseteado y reconfigurado");
+        /* 3) REINICIAR LA PLACA. No es un extra: es parte de la recuperacion.
+         *
+         * POR QUE: el reset del sensor arregla el ENLACE, pero deja el AWB del ISP
+         * del P4 desbocado y la imagen sale magenta saturada, y NO vuelve sola (el
+         * 4-oct-2026 paso en las 3 recuperaciones que se hicieron: R/G x100 de
+         * 138-195 antes a 269-666 despues). Lo unico que rearma el ISP es un
+         * reinicio, y esta COMPROBADO que despues del reinicio el color vuelve al
+         * de siempre. Ademas el arranque reconfigura el sensor con el driver, o
+         * sea que el conjunto queda como recien encendido.
+         *
+         * La vigilancia no se pierde: el modo ausente vive en la NVS, se restaura
+         * solo y la app recibe el aviso de reinicio. El tope CAM_REINICIOS_MAX por
+         * encendido (contador en memoria RTC, que el corte de corriente si borra)
+         * evita cualquier bucle si algo va mal. */
+        if (s_reinicios_recup < CAM_REINICIOS_MAX) {
+            s_reinicios_recup++;
+            ESP_LOGE(TAG, "CAMARA: REINICIO la placa para rearmar el ISP del P4 "
+                          "(por software, intento %d/%d en este encendido)",
+                     s_reinicios_recup, CAM_REINICIOS_MAX);
+            vTaskDelay(pdMS_TO_TICKS(300));   /* que salga el log por el puerto */
+            esp_restart();
+        }
+        ESP_LOGE(TAG, "CAMARA: ya reinicie %d veces en este encendido; NO reinicio mas. "
+                      "Si la imagen sigue mal, CORTAR LA CORRIENTE", CAM_REINICIOS_MAX);
+    }
+    vTaskDelay(pdMS_TO_TICKS(200));
+    /* 4) Reanudar (solo si NO se reinicio): los primeros fotogramas seran viejos,
+     *    como al arrancar. */
+    s_cam_pausa = false;
+    s_warmup = CAM_WARMUP_FRAMES;
+    vTaskDelete(NULL);
+}
 
 /* Precalentamiento al ARMAR la vigilancia. En vigilancia la camara va a 1
  * fotograma cada CAM_SURV_IDLE_MS (1,5 s) y el AE/AWB del ISP dan un paso por
@@ -1231,6 +1421,10 @@ static void vig_sd_drain_task(void *arg)
  * no servir ni guardar basura. */
 bool camera_corrupta(void) { return s_cam_corrupta; }
 int  camera_grano(void)    { return s_cam_grano; }
+/* Imagen ROJA por el AWB del ISP desbocado (ver CAM_ROJO_RG_UMBRAL). El portal lo
+ * usa para decirlo y el propio detector para reiniciar la placa. */
+bool camera_roja(void)     { return s_cam_roja; }
+int  camera_rg(void)       { return s_cam_rg; }
 
 void camera_set_luma_wanted(bool on)
 {
@@ -1530,13 +1724,26 @@ static void camera_stream_task(void *arg)
                             s_cam_corrupta = true;
                             ESP_LOGE(TAG, "CAMARA: imagen corrupta (grano %d, umbral %d) en %d fotogramas seguidos",
                                      s_cam_grano, CAM_GRANO_UMBRAL, s_cam_grano_alto);
-                            /* NO se intenta reiniciar el pipeline: la placa no
-                             * cablea reset ni alimentacion de la camara (reset_pin=-1,
-                             * pwdn_pin=-1), ciclar STREAMON/STREAMOFF crashea el driver
-                             * CSI y reenviar S_FMT con el stream en marcha lo deja
-                             * muerto (las dos cosas comprobadas el 03-oct-2026). Asi
-                             * que: se deja de servir y de guardar, y se dice claro. */
-                            ESP_LOGE(TAG, "CAMARA: si sigue asi NO se arregla reiniciando: CORTAR LA CORRIENTE");
+                            /* Que se hace: reset del sensor + tabla de registros
+                             * por I2C, con el bucle de captura EN PAUSA (ver
+                             * cam_recupera_task). Y por que NO se toca el
+                             * pipeline: la placa no cablea reset ni alimentacion
+                             * de la camara (reset_pin=-1, pwdn_pin=-1); ciclar
+                             * STREAMON/STREAMOFF crashea el driver CSI y reenviar
+                             * S_FMT con el stream en marcha lo deja muerto (las
+                             * dos comprobadas el 03-oct-2026). Mientras el sensor
+                             * este corrupto NO se sirven fotos (ver
+                             * camera_snapshot_jpeg), para no guardar basura. */
+                            if (s_cam_recuperaciones < 3) {
+                                s_cam_recuperaciones++;
+                                ESP_LOGW(TAG, "CAMARA: recuperacion %d/3 del sensor", s_cam_recuperaciones);
+                                if (xTaskCreate(cam_recupera_task, "cam_recupera", 4096, NULL, 3, NULL) != pdPASS)
+                                    ESP_LOGE(TAG, "CAMARA: no pude lanzar la recuperacion");
+                            } else {
+                                ESP_LOGE(TAG, "CAMARA: sigue corrupta tras %d recuperaciones; "
+                                              "esto ya NO se arregla por software: CORTAR LA CORRIENTE",
+                                         s_cam_recuperaciones);
+                            }
                         }
                     } else {
                         s_cam_grano_alto = 0;
@@ -1545,6 +1752,47 @@ static void camera_stream_task(void *arg)
                             s_cam_grano_bueno = 0;
                             ESP_LOGI(TAG, "CAMARA: imagen normal otra vez (grano %d)", s_cam_grano);
                         }
+                    }
+
+                    /* ¿Imagen ROJA (AWB del ISP desbocado)? Ver CAM_ROJO_RG_UMBRAL.
+                     * Esto es lo que queda despues de recuperar el sensor, y solo
+                     * lo arregla reiniciar el ISP -> reiniciar la placa. */
+                    {
+                        int r_medio = 0, rosa = 0;
+                        s_cam_rg = rojo_miniatura(s_thumb[back], &r_medio, &rosa);
+                        s_cam_rosa = rosa;
+                        const bool rojo = (s_cam_rg >= CAM_ROJO_RG_UMBRAL ||
+                                           rosa >= CAM_ROJO_ROSA) && r_medio >= CAM_ROJO_R_MIN;
+                        if (rojo) {
+                            const int64_t ahora = esp_timer_get_time() / 1000;
+                            if (!s_cam_rojo_desde_ms) s_cam_rojo_desde_ms = ahora;
+                            s_cam_rojo_frames++;
+                            if (!s_cam_roja &&
+                                s_cam_rojo_frames >= CAM_ROJO_FRAMES_MIN &&
+                                (ahora - s_cam_rojo_desde_ms) >= CAM_ROJO_MS) {
+                                s_cam_roja = true;
+                                s_cam_rojo_avisada = false;
+                            }
+                            if (s_cam_roja && !s_cam_rojo_avisada) {
+                                s_cam_rojo_avisada = true;
+                                /* SOLO AVISO: no se reinicia por color. La recuperacion ya
+                                 * reinicia siempre (ver cam_recupera_task); si esto sale sin
+                                 * recuperacion de por medio, es la escena o el AWB del ISP,
+                                 * y lo que toca es decirlo, no reiniciar a ciegas. */
+                                ESP_LOGE(TAG, "CAMARA: imagen ROJA (R/G=%d, R=%d, rosa=%d%%) en %d "
+                                              "fotogramas: el color se ha ido (aviso, no reinicio)",
+                                         s_cam_rg, r_medio, rosa, s_cam_rojo_frames);
+                            }
+                        } else {
+                            s_cam_rojo_desde_ms = 0;
+                            s_cam_rojo_frames = 0;
+                            if (s_cam_roja) {
+                                s_cam_roja = false;
+                                ESP_LOGI(TAG, "CAMARA: color normal otra vez (R/G=%d, rosa=%d%%)",
+                                         s_cam_rg, rosa);
+                            }
+                        }
+                        cam_olvida_problemas(!s_cam_corrupta && !s_cam_roja);
                     }
 
                     s_thumb_act = back;   /* publicar */
@@ -1584,9 +1832,9 @@ static void camera_stream_task(void *arg)
                     /* DIAGNOSTICO rico (cada frame de vigilancia ~1.5s): mov=celdas que
                      * cambian, maxdiff=mayor cambio de una celda (vs umbral MOT_CELL_DIFF),
                      * brillo=valor medio (si ~0 la escena esta oscura). */
-                    ESP_LOGI(TAG, "vig: mov=%d(>=%d capta) maxdiff=%d(umbral %d) brillo=%d",
+                    ESP_LOGI(TAG, "vig: mov=%d(>=%d capta) maxdiff=%d(umbral %d) brillo=%d R/G=%d rosa=%d%%",
                              changed, MOT_CELL_COUNT, maxd, MOT_CELL_DIFF,
-                             sumv / (MOT_GW * MOT_GH));
+                             sumv / (MOT_GW * MOT_GH), s_cam_rg, s_cam_rosa);
                     int64_t now = esp_timer_get_time();
                     /* Sin tope que corte: la sesion rota sola (borra la mas
                      * antigua) cuando llega a VIG_SESION_MAX, en el drenador. */
@@ -1759,6 +2007,15 @@ static esp_err_t camera_init_intento(void)
 esp_err_t camera_init(i2c_master_bus_handle_t i2c)
 {
     if (i2c) s_i2c_init = i2c;
+    if (i2c) s_i2c_bus = i2c;
+    /* Contador de reinicios de recuperacion: vive en memoria RTC (sobrevive al
+     * reinicio de software -- que es justo lo que hay que contar -- y se borra al
+     * cortar la corriente). Al encender la memoria trae BASURA, asi que solo se da
+     * por buena si esta la marca. */
+    if (s_rojo_magic != CAM_ROJO_MAGIC) {
+        s_rojo_magic = CAM_ROJO_MAGIC;
+        s_reinicios_recup = 0;
+    }
     if (s_ready) return ESP_OK;                       /* ya arrancada */
     if (!s_init_mtx) s_init_mtx = xSemaphoreCreateMutex();
     if (s_init_mtx && xSemaphoreTake(s_init_mtx, pdMS_TO_TICKS(4000)) != pdTRUE) {

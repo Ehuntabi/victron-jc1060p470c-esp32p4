@@ -1114,7 +1114,70 @@ static const ov02c10_gain_t ov02c10_gain_map[] = {
      return 0;
  }
  
- static esp_err_t ov02c10_soft_reset(esp_cam_sensor_device_t *dev)
+ /* Recuperacion del sensor desde FUERA del driver (la usa components/camera cuando
+ * la imagen sale corrupta): reset por software + reescritura completa de la tabla
+ * del modo por defecto, todo por I2C y SIN tocar el CSI/ISP del P4. El pipeline
+ * sigue vivo, asi que en cuanto el sensor vuelve a mandar datos buenos las fotos
+ * se recuperan solas.
+ *
+ * Por que asi: un reinicio del P4 no arregla el ruido (el sensor sigue alimentado
+ * y conserva su estado), ciclar STREAMON/STREAMOFF en el mismo descriptor crashea
+ * el driver CSI, reenviar S_FMT con el stream en marcha lo deja muerto y
+ * esp_video_deinit+init se cuelga. Esto es lo unico que queda y es lo mas parecido
+ * al corte de corriente que si lo arreglaba. */
+esp_err_t ov02c10_recover_over_i2c(i2c_master_bus_handle_t bus)
+{
+    if (!bus) return ESP_ERR_INVALID_ARG;
+    i2c_master_dev_handle_t dev = NULL;
+    const i2c_device_config_t cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address  = OV02C10_SCCB_ADDR,
+        .scl_speed_hz    = 100000,
+    };
+    esp_err_t ret = i2c_master_bus_add_device(bus, &cfg, &dev);
+    if (ret != ESP_OK) return ret;
+    uint8_t w[3];
+    /* 1) PARAR EL STREAM DEL SENSOR (0x0100 <- 0x00) antes de tocar nada.
+     *
+     * POR QUE: el driver escribe esta tabla en FRIO (set_format, con el stream
+     * parado). Escribirla con el sensor YA emitiendo deja la imagen ROJA
+     * saturada -- el AWB se va y NO vuelve solo: medido el 04-oct-2026, R/G paso
+     * de 1,46 (antes) a 2,7 -> 4,4 -> 6,7 (despues), y solo se arreglaba
+     * reiniciando el chip. Parar el stream primero es lo que hace el arranque. */
+    w[0] = 0x01; w[1] = 0x00; w[2] = 0x00;          /* stream OFF */
+    ret = i2c_master_transmit(dev, w, sizeof(w), 200);
+    if (ret == ESP_OK) vTaskDelay(pdMS_TO_TICKS(40)); /* que acabe el fotograma en curso (30 fps) */
+
+    /* 2) Reset por software + los 5 ms que espera el propio driver. */
+    w[0] = 0x01; w[1] = 0x03; w[2] = 0x01;
+    if (ret == ESP_OK) ret = i2c_master_transmit(dev, w, sizeof(w), 200);
+    if (ret == ESP_OK) vTaskDelay(pdMS_TO_TICKS(5));
+
+    /* 3) Tabla de formato, IGUAL que ov02c10_write_array(): se para en
+     * OV02C10_REG_END y se respetan los OV02C10_REG_DELAY. La tabla termina
+     * poniendo 0x0100 <- 0x01, o sea que el sensor vuelve a emitir aqui. */
+    if (ret == ESP_OK) {
+        const esp_cam_sensor_format_t *f =
+            &ov02c10_format_info[CONFIG_CAMERA_OV02C10_MIPI_IF_FORMAT_INDEX_DAFAULT];
+        const ov02c10_reginfo_t *t = (const ov02c10_reginfo_t *)f->regs;
+        for (size_t i = 0; i < f->regs_size && ret == ESP_OK; i++) {
+            if (t[i].reg == OV02C10_REG_END) break;
+            if (t[i].reg == OV02C10_REG_DELAY) {
+                vTaskDelay(pdMS_TO_TICKS(t[i].val));
+                continue;
+            }
+            w[0] = (uint8_t)(t[i].reg >> 8);
+            w[1] = (uint8_t)(t[i].reg & 0xFF);
+            w[2] = t[i].val;
+            ret = i2c_master_transmit(dev, w, sizeof(w), 200);
+        }
+    }
+    if (ret == ESP_OK) vTaskDelay(pdMS_TO_TICKS(50)); /* que arranque el stream */
+    i2c_master_bus_rm_device(dev);
+    return ret;
+}
+
+static esp_err_t ov02c10_soft_reset(esp_cam_sensor_device_t *dev)
  {
      esp_err_t ret = ov02c10_set_reg_bits(dev->sccb_handle, 0x0103, 0, 1, 0x01);
      delay_ms(5);

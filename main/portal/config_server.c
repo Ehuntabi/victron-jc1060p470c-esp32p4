@@ -134,9 +134,14 @@ static esp_err_t handle_ausente(httpd_req_t *req) {
          * guardaba nada (auditoria del 27-sep-2026). */
         const char *salud = "";
         if (camera_corrupta()) {
-            /* El enlace de la camara devolviendo ruido: no se arregla reiniciando,
-             * hay que cortar la corriente (ver camera.c). */
-            salud = "la camara devuelve imagen corrupta: corta la corriente";
+            /* Enlace de la camara devolviendo ruido: se recupera por software
+             * (reset del sensor por I2C); si no cede, hay que cortar la corriente
+             * (ver camera.c). */
+            salud = "la camara devuelve imagen corrupta: intentando recuperarla";
+        } else if (camera_roja()) {
+            /* Recuperado el sensor pero el AWB del ISP se ha ido: la imagen sale
+             * roja y solo lo arregla reiniciar la placa, que lo hace solo. */
+            salud = "la camara da imagen roja (balance de blancos): reiniciando para rearmarla";
         } else if (activo) {
             if (!datalogger_sd_montada())
                 salud = "la tarjeta SD ya no esta: no se estan guardando las fotos";

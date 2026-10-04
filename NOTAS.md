@@ -1,3 +1,45 @@
+v4.14 — la cámara atascada se recupera SOLA, por software (ya no hay que cortar la corriente)
+
+## Qué cambia
+
+- **Recuperación del sensor por I2C**, en tres pasos y con el bucle de captura
+  **en pausa** para que el AE del ISP no escriba a la vez:
+  1. parar el stream del sensor (`0x0100=0x00`);
+  2. reset por software (`0x0103=0x01`) y reescritura de su **tabla de modo
+     completa** por I2C, respetando `REG_END`/`REG_DELAY` como el driver;
+  3. **reiniciar la placa** para rearmar el ISP del P4.
+- Mientras la imagen esté corrupta **no se sirven fotos**: se acabó guardar en la
+  galería ~350 KB de ruido.
+- El paso 3 no es un adorno: el reset del sensor deja el **AWB del ISP del P4
+  desbocado** (imagen magenta saturada) y **no vuelve sola**. Medido en **3 de 3**
+  recuperaciones: R/G (×100) pasaba de 138-195 a 269-666, con hasta el 78% de los
+  píxeles con R≥250. Tras reiniciar, el color vuelve al de siempre (comprobado).
+- **Tope de 2 reinicios por enchufe** (contador en memoria RTC: sobrevive al
+  reinicio de software —que es lo que hay que contar— y el corte de corriente lo
+  borra). Si se agotan, deja de reiniciar y lo dice: nada de bucles.
+- **Aviso de imagen roja** en el log y en el portal (`salud`), sin reiniciar por
+  color: solo informa. Si la cámara lleva 3 recuperaciones sin obedecer, el
+  mensaje sigue siendo **cortar la corriente** (entonces el sensor no acepta
+  órdenes y no hay software que lo arregle).
+
+## Verificado (con la placa, 4-oct-2026)
+
+- Cadena completa en el log, forzando la corrupción a propósito:
+  `imagen corrupta (grano 99)` → `recuperando el sensor (pauso captura...)` →
+  `sensor reseteado y reconfigurado` → `REINICIO la placa ... intento 2/2` →
+  arranque con `MOTIVO ULTIMO REINICIO: 3` (= `ESP_RST_SW`, reinicio por software,
+  no un cuelgue) → **cámara sana y neutra** (R/G 1,22 en la foto siguiente).
+- El contador RTC sobrevivió a dos reinicios de software (marcó `intento 2/2`), que
+  es justo lo que tiene que hacer para no entrar en bucle.
+- Reglas nuevas en `test/auditar.sh` (sección 11): orden de la recuperación, pausa
+  del bucle, reinicio con tope y no servir fotos corruptas. **Probadas al revés**:
+  rompiendo cada cosa a propósito, la auditoría falla.
+- Trampas del banco, documentadas en `documentacion/CONTINUAR_AQUI.md`: abrir
+  `/dev/ttyACM0` **reinicia la placa** (un lector que se reconecta la deja
+  arrancando en bucle: 341 arranques en 4 minutos), y el JPEG del portal **estira
+  el color** respecto a la miniatura en crudo (R/G 335 vs 201 en la misma escena),
+  así que las medidas de una vía y de la otra no se pueden comparar.
+
 v4.7 — el watchdog vigila también el enlace con la cabina (y dice qué tarea se colgó)
 
 ## Qué cambia
