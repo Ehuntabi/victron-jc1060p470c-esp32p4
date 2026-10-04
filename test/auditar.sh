@@ -293,19 +293,39 @@ if [ -n "$TARGET" ] && [ "$TARGET" -ge 70 ] && [ "$TARGET" -le 110 ]; then
 else
     mal "objetivo de brillo del AE fuera de rango ($TARGET): con 55 la cara sale oscura y por encima de 110 se satura el rojo"
 fi
-# 2) Ventana de puntos blancos del AWB. Con 0,35-0,8 (la que traia) los pixeles
-#    calidos quedaban FUERA y con luz de lampara el AWB sobregiraba: el 85% de los
-#    pixeles salian saturados en rojo y el techo blanco se grababa (248,17,164).
+# 2) Ventana de puntos blancos del AWB, CENTRADA en el neutro real del sensor
+#    (rg 0,53 / bg 0,64, medido el 3-oct-2026 con el techo blanco de referencia).
+#    Historia de este numero, que costo tres vueltas:
+#      - 0,573-0,9096 (heredada del SC2336): excluia el neutro real -> MAGENTA de
+#        noche.
+#      - 0,35-0,80 / 0,40-0,90 (centrada): bien de noche.
+#      - 0,2-1,6 (v4.8, "abrirla a los pixeles calidos"): arreglo el rojo de dia
+#        pero devolvio el magenta de noche -- medido el 4-oct-2026 en el mismo
+#        salon: el TECHO BLANCO salia R/G=1,99 (magenta) y con la ventana centrada
+#        sale R/G=0,98-1,03 en las dos luces (lampara calida y luz blanca fuerte).
+#    O sea: ancha NO es mejor. Lo que arreglaba el rojo de dia era el objetivo del
+#    AE (55 -> 100), no ensanchar la ventana.
 read -r RGMIN RGMAX BGMIN BGMAX <<EOF
 $(python3 -c "
 import json;a=json.load(open('$CAMJSON'))['OV02C10']['awb']['range']
 print(a['rg']['min'], a['rg']['max'], a['bg']['min'], a['bg']['max'])" 2>/dev/null)
 EOF
-if python3 -c "import sys;sys.exit(0 if float('$RGMIN')<=0.3 and float('$RGMAX')>=1.0 and float('$BGMIN')<=0.3 and float('$BGMAX')>=1.0 else 1)" 2>/dev/null; then
-    ok "ventana del AWB abierta a los pixeles calidos (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX)"
+if python3 -c "
+import sys
+rgmin,rgmax,bgmin,bgmax = float('$RGMIN'),float('$RGMAX'),float('$BGMIN'),float('$BGMAX')
+# tiene que CONTENER el neutro real (0,53/0,64) y no ser un colador (0,2-1,6)
+sys.exit(0 if rgmin>=0.3 and rgmin<=0.53 and rgmax>=0.64 and rgmax<=1.0
+           and bgmin>=0.35 and bgmin<=0.64 and bgmax>=0.64 and bgmax<=1.1 else 1)
+" 2>/dev/null; then
+    ok "ventana del AWB centrada en el neutro real (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX)"
 else
-    mal "ventana del AWB estrecha (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX): con luz calida sobregira a rojo"
+    mal "ventana del AWB descentrada o demasiado ancha (R/G $RGMIN-$RGMAX, B/G $BGMIN-$BGMAX): si excluye el neutro (0,53/0,64) sale magenta, y si lo acepta TODO tambien (medido: techo R/G 1,99)"
 fi
+# 2b) El AE tiene que proteger las SOMBRAS, no las luces altas: la camara mira a
+#     contraluz (lampara detras de la cabeza) y con high_light_priority el AE
+#     daba 5x de peso a las zonas brillantes -> CARA EN Y=46 mientras la lampara
+#     estaba en 215. Con low_light_priority: cara Y=93 y la lampara 159 (mismo
+#     salon, misma luz, 4-oct-2026).
 # 3) La foto pedida con la camara en reposo tiene que esperar a que la imagen este
 #    asentada: sin eso se servia a mitad de convergencia del AE/AWB y con la MISMA
 #    configuracion salia una foto buena y otra roja.
@@ -337,6 +357,13 @@ if grep -q "if (s_cam_corrupta)" $CAM; then
     ok "mientras la imagen esta corrupta NO se sirven fotos"
 else
     mal "se sirven fotos de un sensor corrupto: ~350 KB de ruido a la galeria y a la app"
+fi
+
+AEMODE=$(python3 -c "import json;print(json.load(open('$CAMJSON'))['OV02C10']['agc'].get('mode',''))" 2>/dev/null)
+if [ "$AEMODE" = "low_light_priority" ]; then
+    ok "el AE protege las SOMBRAS (mode=$AEMODE): la cara a contraluz no queda negra"
+else
+    mal "el AE esta en modo '$AEMODE': con las luces altas prioritarias la cara a contraluz se queda en sombra (medido: Y=46 frente a 93)"
 fi
 
 echo

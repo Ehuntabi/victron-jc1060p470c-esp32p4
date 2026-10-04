@@ -12,12 +12,12 @@
                     "min": 60
                 },
                 "rg": {
-                    "max": 1.6,
-                    "min": 0.2
+                    "max": 0.8,
+                    "min": 0.35
                 },
                 "bg": {
-                    "max": 1.6,
-                    "min": 0.2
+                    "max": 0.9,
+                    "min": 0.4
                 }
             },
             "green_luma_env": "dummy_awb_luma",
@@ -75,7 +75,7 @@
                     1
                 ]
             },
-            "mode": "high_light_priority",
+            "mode": "low_light_priority",
             "high_light_priority": {
                 "low_threshold": 119,
                 "high_threshold": 202,
