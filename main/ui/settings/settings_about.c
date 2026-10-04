@@ -236,7 +236,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
      * que se mira para diagnosticar. */
     lv_obj_t *btn_zero = lv_btn_create(card2);
     lv_obj_set_size(btn_zero, 230, 44);
-    lv_obj_set_style_bg_color(btn_zero, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_zero, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_zero, 8, 0);
     lv_obj_t *lbl_zero = lv_label_create(btn_zero);
     lv_label_set_text(lbl_zero, LV_SYMBOL_REFRESH "  Poner a cero");
@@ -250,7 +250,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card3, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card3, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card3, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card3, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_border_color(card3, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_style_border_width(card3, 2, 0);
     lv_obj_set_style_radius(card3, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card3, 12, 0);
@@ -263,7 +263,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_color(card3_title, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Versión, Repo y Créditos");
     /* Titulo normal, sin control al lado: ver el boton Reiniciar al final. */
-    ui_card_wrap_title(card3, card3_title, lv_color_hex(0x666666));
+    ui_card_wrap_title(card3, card3_title, UI_COLOR_TEXT_DIM);
 
     /* Version + fecha/hora de compilacion, todo en una linea. */
     const esp_app_desc_t *app_desc = esp_app_get_description();
@@ -279,7 +279,7 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
      * esta pantalla es exactamente lo que dice el nombre del .bin. */
     lv_obj_t *lbl_ver_top = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_ver_top, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_ver_top, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_style_text_color(lbl_ver_top, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text_fmt(lbl_ver_top, "Versión: %s    Compilado: %s  %s",
                           raw_ver,
                           app_desc ? app_desc->date : __DATE__,
@@ -290,23 +290,23 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     esp_chip_info(&chip);
     lv_obj_t *lbl_chip = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_chip, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_chip, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_color(lbl_chip, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text_fmt(lbl_chip, "ESP32 model=%d cores=%d rev=%d  |  IDF: %s",
         chip.model, chip.cores, chip.revision, esp_get_idf_version());
 
     lv_obj_t *lbl_port = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_port, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_port, lv_color_hex(0xCCCCCC), 0);
+    lv_obj_set_style_text_color(lbl_port, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(lbl_port, "Port para Guition JC1060P470C_I por Ehuntabi");
 
     lv_obj_t *lbl_gh = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_gh, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_gh, lv_color_hex(0x90A4AE), 0);
+    lv_obj_set_style_text_color(lbl_gh, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(lbl_gh, "github.com/Ehuntabi/victron-jc1060p470c-esp32p4");
 
     lv_obj_t *lbl_cred = lv_label_create(card3);
     lv_obj_set_style_text_font(lbl_cred, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_cred, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(lbl_cred, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(lbl_cred, "Basado en: CamdenSutherland, wytr");
 
     /* === Boton Reiniciar: abajo a la derecha de esta tarjeta ===

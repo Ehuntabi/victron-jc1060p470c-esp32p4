@@ -137,7 +137,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card1, lv_color_hex(0xBA68C8), 0);
+    lv_obj_set_style_border_color(card1, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card1, 2, 0);
     lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card1, 10, 0);
@@ -155,11 +155,11 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *card1_title = lv_label_create(card1_row);
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0xBA68C8), 0);
+    lv_obj_set_style_text_color(card1_title, UI_COLOR_VIOLET, 0);
     lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
     /* v3.10: titulito unico (centrado con subrayado). La fila se queda como
      * cuerpo y el control se va al extremo derecho, que es donde estaba. */
-    ui_card_wrap_title(card1, card1_title, lv_color_hex(0xBA68C8));
+    ui_card_wrap_title(card1, card1_title, UI_COLOR_VIOLET);
     lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_END,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -185,9 +185,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_width(slider_brightness, 165);
     lv_obj_set_height(slider_brightness, 26);
     lv_obj_set_style_pad_right(card1_sub, 12, 0);
-    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0xBA68C8), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider_brightness, UI_COLOR_VIOLET, LV_PART_INDICATOR);
     lv_obj_set_style_radius(slider_brightness, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(0xBA68C8), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider_brightness, UI_COLOR_VIOLET, LV_PART_KNOB);
     lv_slider_set_range(slider_brightness, 5, 100);
     /* Pasos de 5: snap del valor inicial al múltiplo más cercano (mínimo 5) */
     int b_init = ((ui->brightness + 2) / 5) * 5;
@@ -215,7 +215,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(card_nm, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_nm, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_nm, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_nm, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_border_color(card_nm, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card_nm, 2, 0);
     lv_obj_set_style_radius(card_nm, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_nm, 10, 0);
@@ -233,16 +233,16 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* El interruptor se crea antes que el titulo porque va EN la cabecera: asi
      * la tarjeta no crece (el espaciador de la izquierda lo equilibra). */
     lv_obj_t *nm_sw = lv_switch_create(card_nm);
-    lv_obj_set_style_bg_color(nm_sw, lv_color_hex(0x9C27B0),
+    lv_obj_set_style_bg_color(nm_sw, UI_COLOR_VIOLET,
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ui->night_mode.enabled) lv_obj_add_state(nm_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(nm_sw, night_switch_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_obj_t *nm_title = lv_label_create(card_nm);
     lv_obj_set_style_text_font(nm_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(nm_title, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_text_color(nm_title, UI_COLOR_VIOLET, 0);
     lv_label_set_text(nm_title, LV_SYMBOL_EYE_CLOSE "  Modo nocturno");
-    ui_card_wrap_title_with(card_nm, nm_title, lv_color_hex(0x9C27B0), nm_sw);
+    ui_card_wrap_title_with(card_nm, nm_title, UI_COLOR_VIOLET, nm_sw);
 
     /* Spacer flexible: empuja los selectores Inicio/Fin al borde derecho */
     /* Los selectores Inicio/Fin van en una fila-cuerpo: el espaciador flexible
@@ -274,12 +274,12 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
         lv_obj_t *cap = lv_label_create(grp);
         lv_obj_set_style_text_font(cap, &lv_font_montserrat_20_es, 0);
-        lv_obj_set_style_text_color(cap, lv_color_hex(0xBBBBBB), 0);
+        lv_obj_set_style_text_color(cap, UI_COLOR_TEXT_DIM, 0);
         lv_label_set_text(cap, slot == 0 ? "Inicio" : "Fin");
 
         lv_obj_t *btn_dec = lv_btn_create(grp);
         lv_obj_set_size(btn_dec, 34, 34);
-        lv_obj_set_style_bg_color(btn_dec, lv_color_hex(0x9C27B0), 0);
+        lv_obj_set_style_bg_color(btn_dec, UI_COLOR_VIOLET, 0);
         lv_obj_set_style_radius(btn_dec, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_pad_all(btn_dec, 0, 0);
         lv_obj_t *bd = lv_label_create(btn_dec);
@@ -297,7 +297,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
         lv_obj_t *btn_inc = lv_btn_create(grp);
         lv_obj_set_size(btn_inc, 34, 34);
-        lv_obj_set_style_bg_color(btn_inc, lv_color_hex(0x9C27B0), 0);
+        lv_obj_set_style_bg_color(btn_inc, UI_COLOR_VIOLET, 0);
         lv_obj_set_style_radius(btn_inc, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_pad_all(btn_inc, 0, 0);
         lv_obj_t *bi = lv_label_create(btn_inc);
@@ -404,7 +404,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_t *card1_sep = lv_obj_create(card1);
     lv_obj_remove_style_all(card1_sep);
     lv_obj_set_size(card1_sep, lv_pct(100), 1);
-    lv_obj_set_style_bg_color(card1_sep, lv_color_hex(0x2D3340), 0);
+    lv_obj_set_style_bg_color(card1_sep, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1_sep, LV_OPA_COVER, 0);
 
     /* Contenedor del sub-bloque Screensaver (sin estilo propio: hereda del card1) */
@@ -506,7 +506,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* +/- y label dentro de cont_to (mismo estilo que el selector de tiempo del modo) */
     lv_obj_t *btn_dec = lv_btn_create(cont_to);
     lv_obj_set_size(btn_dec, 40, 40);
-    lv_obj_set_style_bg_color(btn_dec, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_dec, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_dec, 8, 0);
     lv_obj_t *lbl_dec = lv_label_create(btn_dec);
     lv_label_set_text(lbl_dec, LV_SYMBOL_MINUS);
@@ -572,7 +572,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
 
     lv_obj_t *btn_period_dec = lv_btn_create(cont_period);
     lv_obj_set_size(btn_period_dec, 40, 40);
-    lv_obj_set_style_bg_color(btn_period_dec, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_period_dec, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_period_dec, 8, 0);
     lv_obj_t *lbl_pdec = lv_label_create(btn_period_dec);
     lv_label_set_text(lbl_pdec, LV_SYMBOL_MINUS);

@@ -395,7 +395,7 @@ static void mostrar_aviso_sondas(uint8_t flags)
 
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -408,7 +408,7 @@ static void mostrar_aviso_sondas(uint8_t flags)
     lv_obj_center(dlg);
     lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0xFFBB33), 0);  /* ambar: atencion */
+    lv_obj_set_style_border_color(dlg, UI_COLOR_ORANGE, 0);  /* ambar: atencion */
     lv_obj_set_style_border_width(dlg, 2, 0);
     lv_obj_set_style_radius(dlg, 16, 0);
     lv_obj_set_style_pad_all(dlg, 24, 0);
@@ -419,7 +419,7 @@ static void mostrar_aviso_sondas(uint8_t flags)
 
     lv_obj_t *title = lv_label_create(dlg);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFFBB33), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, LV_SYMBOL_WARNING "  Sondas del frigo");
 
     lv_obj_t *msg = lv_label_create(dlg);
@@ -432,12 +432,12 @@ static void mostrar_aviso_sondas(uint8_t flags)
 
     lv_obj_t *btn = lv_btn_create(dlg);
     lv_obj_set_size(btn, 240, 60);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xFFBB33), 0);
+    lv_obj_set_style_bg_color(btn, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn, 12, 0);
     lv_obj_t *lb = lv_label_create(btn);
     lv_label_set_text(lb, "Entendido");
     lv_obj_set_style_text_font(lb, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(lb, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_set_style_text_color(lb, UI_COLOR_BG, 0);
     lv_obj_center(lb);
     lv_obj_add_event_cb(btn, aviso_sondas_cerrar_cb, LV_EVENT_CLICKED, NULL);
 }
@@ -565,7 +565,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *lbl_buscar = lv_label_create(btn_buscar);
     lv_label_set_text(lbl_buscar, LV_SYMBOL_REFRESH "  Buscar sondas");
     lv_obj_set_style_text_font(lbl_buscar, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_buscar, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_set_style_text_color(lbl_buscar, UI_COLOR_BG, 0);
     lv_obj_center(lbl_buscar);
 
     /* === Card 2: Ventilador y temperaturas (verde) === */
@@ -624,7 +624,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
         lv_obj_t *btn = lv_btn_create(row_mode);
         lv_obj_set_size(btn, 78, 44);
         lv_obj_set_style_radius(btn, 8, 0);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0x444444), 0);
+        lv_obj_set_style_bg_color(btn, UI_COLOR_CARD_BORDER, 0);
         lv_obj_t *lbl = lv_label_create(btn);
         lv_label_set_text(lbl, mode_labels[i]);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_20_es, 0);
@@ -680,7 +680,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_tmin_m = lv_btn_create(sel_min);
     lv_obj_set_size(s_btn_tmin_m, 44, 44);
     lv_obj_set_style_radius(s_btn_tmin_m, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_tmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(s_btn_tmin_m, UI_COLOR_CARD_BORDER, 0);
     lv_obj_t *lbl_mm = lv_label_create(s_btn_tmin_m);
     lv_label_set_text(lbl_mm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_mm, UI_FONT_VALUE, 0);
@@ -716,7 +716,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     lv_obj_t *lbl_tmax = lv_label_create(col_max);
     lv_obj_set_style_text_font(lbl_tmax, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_tmax, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_text_color(lbl_tmax, UI_COLOR_ORANGE, 0);
     lv_label_set_text(lbl_tmax, "Max:");
 
     lv_obj_t *sel_max = lv_obj_create(col_max);
@@ -730,7 +730,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_tmax_m = lv_btn_create(sel_max);
     lv_obj_set_size(s_btn_tmax_m, 44, 44);
     lv_obj_set_style_radius(s_btn_tmax_m, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_tmax_m, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_m, UI_COLOR_CARD_BORDER, 0);
     lv_obj_t *lbl_xm = lv_label_create(s_btn_tmax_m);
     lv_label_set_text(lbl_xm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_xm, UI_FONT_VALUE, 0);
@@ -747,7 +747,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_tmax_p = lv_btn_create(sel_max);
     lv_obj_set_size(s_btn_tmax_p, 44, 44);
     lv_obj_set_style_radius(s_btn_tmax_p, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_tmax_p, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_bg_color(s_btn_tmax_p, UI_COLOR_ORANGE, 0);
     lv_obj_t *lbl_xp = lv_label_create(s_btn_tmax_p);
     lv_label_set_text(lbl_xp, LV_SYMBOL_PLUS);
     lv_obj_set_style_text_font(lbl_xp, UI_FONT_VALUE, 0);
@@ -780,7 +780,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     s_btn_fanmin_m = lv_btn_create(col_fanmin);
     lv_obj_set_size(s_btn_fanmin_m, 44, 44);
     lv_obj_set_style_radius(s_btn_fanmin_m, 8, 0);
-    lv_obj_set_style_bg_color(s_btn_fanmin_m, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(s_btn_fanmin_m, UI_COLOR_CARD_BORDER, 0);
     lv_obj_t *lbl_fmm = lv_label_create(s_btn_fanmin_m);
     lv_label_set_text(lbl_fmm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_fmm, UI_FONT_VALUE, 0);
@@ -815,7 +815,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_height(card_solar, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_solar, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_solar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_solar, lv_color_hex(0xE0900A), 0);
+    lv_obj_set_style_border_color(card_solar, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(card_solar, 2, 0);
     lv_obj_set_style_radius(card_solar, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_solar, 10, 0);   /* compactado 22-sep-2026: */
@@ -827,7 +827,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
 
     lv_obj_t *lbl_solar_sec = lv_label_create(card_solar);
     lv_obj_set_style_text_font(lbl_solar_sec, UI_FONT_VALUE, 0);
-    lv_obj_set_style_text_color(lbl_solar_sec, lv_color_hex(0xE0900A), 0);
+    lv_obj_set_style_text_color(lbl_solar_sec, UI_COLOR_ORANGE, 0);
     /* Con el icono delante, como el resto de tarjetas (22-sep-2026): era la
      * unica de la pestana sin el. */
     lv_label_set_text(lbl_solar_sec, LV_SYMBOL_CHARGE "  Aprovechar excedente solar");
@@ -836,7 +836,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_bg_color(sw_solar, UI_COLOR_GREEN, LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (frigo_solar_get_enabled()) lv_obj_add_state(sw_solar, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_solar, sw_solar_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    ui_card_wrap_title_with(card_solar, lbl_solar_sec, lv_color_hex(0xE0900A), sw_solar);
+    ui_card_wrap_title_with(card_solar, lbl_solar_sec, UI_COLOR_ORANGE, sw_solar);
 
     /* Activar y Cortar en la MISMA linea (dos selectores lado a lado). */
     lv_obj_t *row_soc = lv_obj_create(card_solar);
@@ -860,7 +860,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *btn_solon_m = lv_btn_create(col_solon);
     lv_obj_set_size(btn_solon_m, 44, 44);
     lv_obj_set_style_radius(btn_solon_m, 8, 0);
-    lv_obj_set_style_bg_color(btn_solon_m, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_solon_m, UI_COLOR_CARD_BORDER, 0);
     lv_obj_t *lbl_som = lv_label_create(btn_solon_m);
     lv_label_set_text(lbl_som, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_som, UI_FONT_VALUE, 0);
@@ -896,7 +896,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_t *btn_soloff_m = lv_btn_create(col_soloff);
     lv_obj_set_size(btn_soloff_m, 44, 44);
     lv_obj_set_style_radius(btn_soloff_m, 8, 0);
-    lv_obj_set_style_bg_color(btn_soloff_m, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_soloff_m, UI_COLOR_CARD_BORDER, 0);
     lv_obj_t *lbl_sfm = lv_label_create(btn_soloff_m);
     lv_label_set_text(lbl_sfm, LV_SYMBOL_MINUS);
     lv_obj_set_style_text_font(lbl_sfm, UI_FONT_VALUE, 0);
@@ -938,11 +938,11 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_size(s_dot_sol, 14, 14);
     lv_obj_set_style_radius(s_dot_sol, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(s_dot_sol, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(s_dot_sol, lv_color_hex(0x555555), 0);
+    lv_obj_set_style_bg_color(s_dot_sol, UI_COLOR_CARD_BORDER, 0);
 
     s_lbl_sol_estado = lv_label_create(row_solar_estado);
     lv_obj_set_style_text_font(s_lbl_sol_estado, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_lbl_sol_estado, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(s_lbl_sol_estado, UI_COLOR_TEXT_DIM, 0);
     s_sol_est_min = 0xFFFFFFFFu;   /* forzar el primer pintado del chivato */
     refresh_sol_estado_label();
 
@@ -955,7 +955,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
     lv_obj_set_style_pad_column(overlay_cont, 4, 0);
     lv_obj_set_style_pad_all(overlay_cont, 4, 0);
     lv_obj_set_style_bg_opa(overlay_cont, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(overlay_cont, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(overlay_cont, UI_COLOR_BG, 0);
     lv_obj_set_style_radius(overlay_cont, 4, 0);
     /* LV_SIZE_CONTENT en ancho: el texto ya tiene longitud fija
      * (formato "%+6.1f" en update) asi que el cont mide siempre lo mismo
@@ -968,13 +968,13 @@ void ui_frigo_panel_init(ui_state_t *ui)
     font_thermo_with_fallback.fallback = NULL;
     lv_obj_t *lbl_thermo_icon = lv_label_create(overlay_cont);
     lv_obj_set_style_text_font(lbl_thermo_icon, &font_thermo_with_fallback, 0);
-    lv_obj_set_style_text_color(lbl_thermo_icon, lv_color_hex(0x00BFFF), 0);
+    lv_obj_set_style_text_color(lbl_thermo_icon, UI_COLOR_CYAN, 0);
     lv_label_set_text(lbl_thermo_icon, "\xef\x8b\x89");
     /* Texto fijo "Exterior:" pegado al icono del termometro (no cambia, asi
      * que no se desplaza). El numero va aparte, en su propia caja. */
     lv_obj_t *lbl_ext_prefix = lv_label_create(overlay_cont);
     lv_obj_add_style(lbl_ext_prefix, &ui->styles.small, 0);
-    lv_obj_set_style_text_color(lbl_ext_prefix, lv_color_hex(0x00BFFF), 0);
+    lv_obj_set_style_text_color(lbl_ext_prefix, UI_COLOR_CYAN, 0);
     lv_label_set_text(lbl_ext_prefix, "Exterior:");
 
     /* Solo el valor: caja de ancho fijo alineada a la DERECHA. Asi el "\xc2\xb0""C"
@@ -985,7 +985,7 @@ void ui_frigo_panel_init(ui_state_t *ui)
      * para que el icono y "Exterior:" no queden lejos del valor. */
     s_lbl_exterior_overlay = lv_label_create(overlay_cont);
     lv_obj_add_style(s_lbl_exterior_overlay, &ui->styles.small, 0);
-    lv_obj_set_style_text_color(s_lbl_exterior_overlay, lv_color_hex(0x00BFFF), 0);
+    lv_obj_set_style_text_color(s_lbl_exterior_overlay, UI_COLOR_CYAN, 0);
     lv_obj_set_width(s_lbl_exterior_overlay, 124);
     lv_label_set_long_mode(s_lbl_exterior_overlay, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(s_lbl_exterior_overlay, LV_TEXT_ALIGN_RIGHT, 0);

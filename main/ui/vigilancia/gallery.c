@@ -505,7 +505,7 @@ static void gallery_show_delete_confirm(const char *msg)
 
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -518,7 +518,7 @@ static void gallery_show_delete_confirm(const char *msg)
     lv_obj_center(dlg);
     lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_color(dlg, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
     lv_obj_set_style_radius(dlg, 16, 0);
     lv_obj_set_style_pad_all(dlg, 24, 0);
@@ -529,7 +529,7 @@ static void gallery_show_delete_confirm(const char *msg)
 
     lv_obj_t *title = lv_label_create(dlg);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, LV_SYMBOL_WARNING "  ¿Borrar carpeta?");
 
     lv_obj_t *m = lv_label_create(dlg);
@@ -550,7 +550,7 @@ static void gallery_show_delete_confirm(const char *msg)
 
     lv_obj_t *btn_cancel = lv_btn_create(row_btns);
     lv_obj_set_size(btn_cancel, 200, 56);
-    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_cancel, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, "Cancelar");
@@ -560,7 +560,7 @@ static void gallery_show_delete_confirm(const char *msg)
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 200, 56);
-    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_bg_color(btn_ok, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_ok, 12, 0);
     lv_obj_t *lo = lv_label_create(btn_ok);
     lv_label_set_text(lo, LV_SYMBOL_TRASH " Borrar");
@@ -675,7 +675,7 @@ void ui_gallery_open(void)
     s_btn_open = lv_btn_create(scr);
     lv_obj_set_size(s_btn_open, 300, 100);
     lv_obj_center(s_btn_open);
-    lv_obj_set_style_bg_color(s_btn_open, lv_color_hex(0x2E7D32), 0);
+    lv_obj_set_style_bg_color(s_btn_open, UI_COLOR_GREEN, 0);
     s_lbl_open = lv_label_create(s_btn_open);
     lv_obj_set_style_text_font(s_lbl_open, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_align(s_lbl_open, LV_TEXT_ALIGN_CENTER, 0);
@@ -690,7 +690,7 @@ void ui_gallery_open(void)
     s_btn_delete = lv_btn_create(scr);
     lv_obj_set_size(s_btn_delete, 220, 60);
     lv_obj_align_to(s_btn_delete, s_btn_open, LV_ALIGN_OUT_BOTTOM_MID, 0, 50);
-    lv_obj_set_style_bg_color(s_btn_delete, lv_color_hex(0xB71C1C), 0);
+    lv_obj_set_style_bg_color(s_btn_delete, UI_COLOR_RED_DARK, 0);
     lv_obj_t *lbl_delete = lv_label_create(s_btn_delete);
     lv_obj_set_style_text_font(lbl_delete, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_delete, LV_SYMBOL_TRASH " Borrar carpeta");
@@ -705,7 +705,7 @@ void ui_gallery_open(void)
     lv_obj_t *btn_folder = lv_btn_create(scr);
     lv_obj_set_height(btn_folder, 50);
     lv_obj_align(btn_folder, LV_ALIGN_BOTTOM_MID, 0, -12);
-    lv_obj_set_style_bg_color(btn_folder, lv_color_hex(0x0288D1), 0);
+    lv_obj_set_style_bg_color(btn_folder, UI_COLOR_CYAN, 0);
     s_lbl_folder = lv_label_create(btn_folder);
     lv_obj_set_style_text_font(s_lbl_folder, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(s_lbl_folder, FOLDERS[s_folder].label);
@@ -715,7 +715,7 @@ void ui_gallery_open(void)
     lv_obj_t *btn_close = lv_btn_create(scr);
     lv_obj_set_size(btn_close, 100, 50);
     lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
+    lv_obj_set_style_bg_color(btn_close, UI_COLOR_RED_DARK, 0);
     lv_obj_t *lc = lv_label_create(btn_close);
     lv_label_set_text(lc, "Cerrar");
     lv_obj_center(lc);

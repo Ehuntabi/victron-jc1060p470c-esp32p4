@@ -80,7 +80,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     /* Modal background */
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -93,7 +93,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
     lv_obj_center(dlg);
     lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_color(dlg, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
     lv_obj_set_style_radius(dlg, 16, 0);
     lv_obj_set_style_pad_all(dlg, 24, 0);
@@ -103,7 +103,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
 
     lv_obj_t *title = lv_label_create(dlg);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, LV_SYMBOL_WARNING "  Atencion");
 
     lv_obj_t *msg = lv_label_create(dlg);
@@ -123,7 +123,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
 
     lv_obj_t *btn_cancel = lv_btn_create(row_btns);
     lv_obj_set_size(btn_cancel, 220, 60);
-    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_cancel, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, "Cancelar");
@@ -133,7 +133,7 @@ static void victron_keys_show_warning(ui_state_t *ui)
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 220, 60);
-    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_bg_color(btn_ok, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_ok, 12, 0);
     lv_obj_t *lo = lv_label_create(btn_ok);
     lv_label_set_text(lo, "Continuar");
@@ -178,10 +178,10 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
 
     /* === Card de controles — border magenta de la seccion Victron Keys === */
-    lv_obj_t *card_ctrl = ui_card_create(victron_container, lv_color_hex(0xE91E63));
+    lv_obj_t *card_ctrl = ui_card_create(victron_container, UI_COLOR_ORANGE);
     lv_obj_t *header = ui_card_set_title(card_ctrl, LV_SYMBOL_LIST,
                                          "Dispositivos Victron",
-                                         lv_color_hex(0xE91E63));
+                                         UI_COLOR_ORANGE);
 
     /* Botones +/- a la derecha del header */
     lv_obj_t *controls_row = lv_obj_create(header);
@@ -462,7 +462,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_flow(status_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(status_container, 6, 0);
     lv_obj_set_style_pad_all(status_container, 12, 0);
-    lv_obj_set_style_bg_color(status_container, lv_color_hex(0x0A1018), 0);
+    lv_obj_set_style_bg_color(status_container, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(status_container, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(status_container, 8, 0);
     lv_obj_set_style_border_width(status_container, 1, 0);
@@ -699,7 +699,7 @@ static void victron_show_confirm_modal(const char *msg,
 
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -712,7 +712,7 @@ static void victron_show_confirm_modal(const char *msg,
     lv_obj_center(dlg);
     lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_color(dlg, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
     lv_obj_set_style_radius(dlg, 16, 0);
     lv_obj_set_style_pad_all(dlg, 24, 0);
@@ -723,7 +723,7 @@ static void victron_show_confirm_modal(const char *msg,
 
     lv_obj_t *title = lv_label_create(dlg);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, LV_SYMBOL_WARNING "  ¿Confirmar cambio?");
 
     lv_obj_t *m = lv_label_create(dlg);
@@ -744,7 +744,7 @@ static void victron_show_confirm_modal(const char *msg,
 
     lv_obj_t *btn_cancel = lv_btn_create(row_btns);
     lv_obj_set_size(btn_cancel, 200, 56);
-    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_cancel, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, "Cancelar");
@@ -754,7 +754,7 @@ static void victron_show_confirm_modal(const char *msg,
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 200, 56);
-    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_bg_color(btn_ok, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_ok, 12, 0);
     lv_obj_t *lo = lv_label_create(btn_ok);
     lv_label_set_text(lo, "Confirmar");

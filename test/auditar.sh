@@ -397,15 +397,17 @@ if [ "$FONTSDK" -eq 0 ]; then
 else
     mal "$FONTSDK usos de fuente del SDK en la UI: escribe el papel (UI_FONT_DISPLAY/TITLE/VALUE/TEXT/SMALL)"
 fi
-# 2) Paleta cerrada. La migracion va por pasos, asi que de momento es un TOPE que
-#    solo puede bajar (4-oct-2026: 203 literales en 18 ficheros). Cuando llegue a
-#    0, este trinquete se cambia por "== 0".
-COLORLIT=$(grep -rhoE "lv_color_hex\(0x" main/ui main/ui.c --include=*.c --include=*.h 2>/dev/null | wc -l)
-LIMITE_LIT=203
-if [ "$COLORLIT" -le "$LIMITE_LIT" ]; then
-    ok "literales de color en la UI: $COLORLIT (tope $LIMITE_LIT, solo puede bajar)"
+# 2) Paleta CERRADA: el unico sitio con lv_color_hex(0x...) es ui_style.h (donde
+#    se DEFINEN los tokens). Empezó siendo un tope (203 literales en 18 ficheros,
+#    4-oct-2026) y el 4-oct por la noche ya es 0: los 59 colores distintos que
+#    habia repartidos se colapsaron a los 14 tokens (tabla de equivalencias en
+#    docs/GUIA_ESTILO.md §2, aplicada con /tmp/mapeo_color.py).
+COLORLIT=$(grep -rhoE "lv_color_hex\(0x" main/ui main/ui.c --include=*.c --include=*.h \
+           --exclude=ui_style.h 2>/dev/null | wc -l)
+if [ "$COLORLIT" -eq 0 ]; then
+    ok "paleta cerrada: 0 literales de color fuera de ui_style.h"
 else
-    mal "literales de color en la UI: $COLORLIT > $LIMITE_LIT: usa los tokens de ui_style.h (la paleta es cerrada)"
+    mal "$COLORLIT literales de color fuera de ui_style.h: usa los tokens (la paleta es cerrada)"
 fi
 
 echo

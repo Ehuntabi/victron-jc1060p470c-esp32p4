@@ -49,7 +49,7 @@ static void mostrar_dialogo(const char *title, const char *msg,
     /* Fondo modal a pantalla completa (mismo que el aviso de Victron Keys) */
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -62,7 +62,7 @@ static void mostrar_dialogo(const char *title, const char *msg,
     lv_obj_center(dlg);
     lv_obj_set_style_bg_color(dlg, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(dlg, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_border_color(dlg, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(dlg, 2, 0);
     lv_obj_set_style_radius(dlg, 16, 0);
     lv_obj_set_style_pad_all(dlg, 24, 0);
@@ -72,7 +72,7 @@ static void mostrar_dialogo(const char *title, const char *msg,
 
     lv_obj_t *title_lbl = lv_label_create(dlg);
     lv_obj_set_style_text_font(title_lbl, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(title_lbl, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_text_color(title_lbl, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title_lbl, title);
 
     lv_obj_t *msg_lbl = lv_label_create(dlg);
@@ -93,7 +93,7 @@ static void mostrar_dialogo(const char *title, const char *msg,
     lv_obj_t *btn_cancel = cancelar_txt ? lv_btn_create(row_btns) : NULL;
     if (btn_cancel) {
     lv_obj_set_size(btn_cancel, 220, 60);
-    lv_obj_set_style_bg_color(btn_cancel, lv_color_hex(0x444444), 0);
+    lv_obj_set_style_bg_color(btn_cancel, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(btn_cancel, 12, 0);
     lv_obj_t *lc = lv_label_create(btn_cancel);
     lv_label_set_text(lc, cancelar_txt);
@@ -104,7 +104,7 @@ static void mostrar_dialogo(const char *title, const char *msg,
 
     lv_obj_t *btn_ok = lv_btn_create(row_btns);
     lv_obj_set_size(btn_ok, 220, 60);
-    lv_obj_set_style_bg_color(btn_ok, lv_color_hex(0xE91E63), 0);
+    lv_obj_set_style_bg_color(btn_ok, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(btn_ok, 12, 0);
     lv_obj_t *lo = lv_label_create(btn_ok);
     lv_label_set_text(lo, ok_txt);

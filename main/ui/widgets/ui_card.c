@@ -432,11 +432,11 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     const lv_coord_t body_h   = height - term_h - volt_h - 4;
 
     /* Paleta realista: subida para contrastar con el card (0x1B2230) */
-    const lv_color_t COL_CASING    = lv_color_hex(0x4a4a55); /* gris medio carcasa */
-    const lv_color_t COL_CASING_HI = lv_color_hex(0x70707c); /* separadores celdas */
-    const lv_color_t COL_BORDER    = lv_color_hex(0x2a2a30); /* borde oscuro casing */
-    const lv_color_t COL_TOP_PLATE = lv_color_hex(0x2e2e36); /* franja superior */
-    const lv_color_t COL_TERM_NEG  = lv_color_hex(0x9e9e9e); /* metalico gris claro */
+    const lv_color_t COL_CASING    = UI_COLOR_CARD; /* gris medio carcasa */
+    const lv_color_t COL_CASING_HI = UI_COLOR_CARD; /* separadores celdas */
+    const lv_color_t COL_BORDER    = UI_COLOR_CARD; /* borde oscuro casing */
+    const lv_color_t COL_TOP_PLATE = UI_COLOR_CARD; /* franja superior */
+    const lv_color_t COL_TERM_NEG  = UI_COLOR_TEXT_DIM; /* metalico gris claro */
 
     lv_obj_t *box = lv_obj_create(parent);
     lv_obj_remove_style_all(box);
@@ -468,7 +468,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     lv_obj_set_style_bg_opa(plus, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(plus, 3, 0);
     lv_obj_set_style_border_width(plus, 1, 0);
-    lv_obj_set_style_border_color(plus, lv_color_hex(0x801010), 0);
+    lv_obj_set_style_border_color(plus, UI_COLOR_RED_DARK, 0);
     lv_obj_clear_flag(plus, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *lp = lv_label_create(plus);
     lv_obj_set_style_text_font(lp, &lv_font_montserrat_14_es, 0);
@@ -484,7 +484,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     lv_obj_set_style_bg_opa(minus, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(minus, 3, 0);
     lv_obj_set_style_border_width(minus, 1, 0);
-    lv_obj_set_style_border_color(minus, lv_color_hex(0x2a2a30), 0);
+    lv_obj_set_style_border_color(minus, UI_COLOR_CARD, 0);
     lv_obj_clear_flag(minus, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *lm = lv_label_create(minus);
     lv_obj_set_style_text_font(lm, &lv_font_montserrat_14_es, 0);
@@ -541,7 +541,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
         lv_obj_set_size(cap, 6, 4);
         lv_coord_t cx = (inner_w * (2*i + 1) / 12) - 3;
         lv_obj_align(cap, LV_ALIGN_TOP_LEFT, cx, 1);
-        lv_obj_set_style_bg_color(cap, lv_color_hex(0x1c1c20), 0);
+        lv_obj_set_style_bg_color(cap, UI_COLOR_BG, 0);
         lv_obj_set_style_bg_opa(cap, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(cap, 2, 0);
     }
@@ -550,14 +550,14 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     lv_obj_t *soc_lbl = lv_label_create(body);
     lv_obj_set_style_text_font(soc_lbl, UI_FONT_TITLE, 0);   /* el alias 32 iba a Inter 28 */
     lv_obj_set_style_text_color(soc_lbl, UI_COLOR_TEXT, 0);
-    lv_obj_set_style_text_color(soc_lbl, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_color(soc_lbl, UI_COLOR_TEXT, 0);
     lv_label_set_text(soc_lbl, "--");
     lv_obj_align(soc_lbl, LV_ALIGN_CENTER, 0, 0);
 
     /* Voltage debajo con separacion del cuerpo */
     lv_obj_t *volt_lbl = lv_label_create(box);
     lv_obj_set_style_text_font(volt_lbl, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(volt_lbl, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_color(volt_lbl, UI_COLOR_TEXT, 0);
     lv_obj_set_style_pad_top(volt_lbl, 8, 0);
     lv_label_set_text(volt_lbl, "--");
 
@@ -651,11 +651,11 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_set_style_radius(tank, 10, 0);
     lv_obj_set_style_border_width(tank, 4, 0);
     lv_obj_set_style_border_color(tank, accent_color, 0);
-    lv_obj_set_style_bg_color(tank, lv_color_hex(0x0a1620), 0);
+    lv_obj_set_style_bg_color(tank, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(tank, LV_OPA_COVER, 0);
     /* Sombra interior sutil para dar sensacion de profundidad */
     lv_obj_set_style_shadow_width(tank, 8, 0);
-    lv_obj_set_style_shadow_color(tank, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_shadow_color(tank, UI_COLOR_BG, 0);
     lv_obj_set_style_shadow_opa(tank, LV_OPA_50, 0);
     lv_obj_set_style_shadow_spread(tank, -2, 0);
     lv_obj_set_style_pad_all(tank, 4, 0);
@@ -758,7 +758,7 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         /* Label grande con el % */
         lv_obj_t *lbl = lv_label_create(tank);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_28_es, 0);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(lbl, UI_COLOR_TEXT, 0);
         lv_label_set_text(lbl, "--");
         lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
 

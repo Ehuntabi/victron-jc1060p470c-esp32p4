@@ -62,22 +62,31 @@ Los tokens viven en `main/ui/widgets/ui_style.h` (una sola fuente de verdad).
 Reglas:
 
 1. **Cero `lv_color_hex()` fuera de `ui_style.h`.** Si falta un color, se añade
-   un token (con nombre y motivo), no un literal.
-2. **Un solo tono por significado.** Medido en pantalla el 4-oct-2026, hoy
-   conviven varios tonos del mismo color semántico y hay que colapsarlos:
+   un token (con nombre y motivo), no un literal. **Aplicado el 4-oct-2026**: los
+   **59 colores distintos / 203 literales** que había repartidos en 18 ficheros se
+   colapsaron a los 14 tokens (el único fichero con `lv_color_hex` es ahora
+   `ui_style.h`), y la auditoría falla si vuelve a aparecer uno.
+2. **Un solo tono por significado.** Tonos que se colapsaron (medidos en pantalla
+   antes del cambio):
 
-   | significado | tonos en pantalla hoy | queda |
+   | significado | tonos que había | queda |
    |---|---|---|
-   | naranja | `FF9800`, `FF9A00`, `FFAA00`, `FF7043`, `FF7142` | `FF9800` |
-   | verde | `00C851`, `00CA52`, `4CD964`, `297D31` | `00C851` |
-   | cian | `4FC3F7`, `4AC2F7`, `008AD6`, `10456B` | `4FC3F7` |
-   | rojo | `FF4444`, `FF595A`, `B51C19`, `8C2021`, `CC3333` | `FF4444` / `CC3333` |
-   | grises | `313131`, `292831`, `424542`, `3A414A`, `081019`, `444444`, `666666`, `888888`, `AAAAAA` | `CARD` / `CARD_BORDER` / `TEXT_DIM` |
-   | blanco cálido | `E6EBF7` | `TEXT_SOFT` |
+   | naranja (aviso, **y acento de diálogo**) | `FF9800`, `FF9A00`, `FFAA00`, `FFBB33`, `FFA726`, `E0900A`, `FF7043`, `FF7142`, `F57C00`, `E91E63` | `FF9800` |
+   | verde (correcto) | `00C851`, `00CA52`, `4CD964`, `2E7D32`, `297D31`, `00E676`, `44FF44` | `00C851` |
+   | cian (información/solar) | `4FC3F7`, `4AC2F7`, `29B6F6`, `00BFFF`, `42A5F5`, `26C6DA`, `008AD6`, `10456B`, `0288D1`, `1565C0`, `00897B` | `4FC3F7` |
+   | rojo (error) | `FF4444`, `F44336`, `B51C19`, `882222`, `8C2021`, `B71C1C`, `801010` | `FF4444` / `CC3333` |
+   | violeta (camper/habitable) | `B388FF`, `9C27B0`, `BA68C8`, `BB66FF` | `B388FF` |
+   | superficies | `2A2A30`, `2E2E36`, `2A3340`, `2D3340`, `292831`, `313131`, `424542`, `4A4A55`, `4A5568`, `70707C`… | `CARD` |
+   | bordes | `333333`, `444444`, `555555`, `37474F`, `5D4037` | `CARD_BORDER` |
+   | texto secundario | `666666`, `888888`, `AAAAAA`, `9E9E9E`, `90A4AE`, `B0BEC5`, `BBBBBB`, `CCCCCC`, `DDDDDD`… | `TEXT_DIM` |
+   | fondos (página, modales, gráficas) | `000000`, `0A0A0A`, `06080C`, `0A1018`, `0A1620`, `121212`… | `BG` |
+
+   El rosa `E91E63` era el acento de los **diálogos de aviso** ("¿Borrar
+   carpeta?", "Atención"): pasa a `UI_COLOR_ORANGE` (aviso) y así queda la regla.
 3. **Acento por sección como máximo**: una pantalla puede tener un color de
-   sección; el resto de colores son de **estado** (bien/atención/mal). Hoy hay
-   pantallas con 6 acentos a la vez (Ajustes, Frigo, Sonido): eso es lo que hay
-   que reducir.
+   sección; el resto son de **estado** (bien/atención/mal). En Ajustes todavía
+   conviven varios acentos a la vez (cada entrada del menú tiene el suyo): es lo
+   siguiente que hay que reducir.
 
 ## 3. Medidas — rejilla de 4 px
 
@@ -107,8 +116,8 @@ Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
 | **Cifra** | etiqueta `UI_FONT_SMALL` `TEXT_DIM` + valor `UI_FONT_VALUE`/`DISPLAY` `TEXT` + unidad `UI_FONT_SMALL` `TEXT_DIM`; las cifras de una fila comparten línea base |
 | **Fila de ajuste** | alto `UI_ROW_H`, icono en cuadro radio `RADIUS_CTRL`, etiqueta `UI_FONT_TEXT`, control a la derecha |
 | **Estado vacío** | `TEXT_DIM`, misma caja que el dato real (nunca el color del dato) |
-| **Barra inferior** | chips con pad 4 y radio 4; alta fija; mismo `pad_bottom` en las dos pestañas (hoy 50 y 62) |
-| **Aviso** | fondo `RED_DARK`/`ORANGE` con texto `TEXT`; nada de rojo puro a pantalla completa |
+| **Barra inferior** | chips con pad 4 y radio 4; alta fija; mismo `pad_bottom` en las dos pestañas (hoy 50 y 62). **Fondo `BG`** (antes cada zona llevaba su casi-negro: `#000408` y `#000808` en la misma barra) |
+| **Aviso / diálogo** | acento `ORANGE` en borde, título y botón; fondo de error `RED_DARK`. Nada de rojo puro a pantalla completa |
 
 ## 5. Cómo se comprueba
 
@@ -121,12 +130,18 @@ Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
 
 ## 6. Plan de aplicación (por pasos, cada uno publicable)
 
-1. **Tokens y reglas** (esta ronda): `ui_style.h`, arreglo de los acentos, reglas
-   de auditoría para fuentes y para colores *nuevos*.
-2. **Colores**: colapsar los tonos duplicados de la tabla del punto 2, pantalla a
-   pantalla, comparando capturas.
+1. **Tokens y reglas** (v4.17): `ui_style.h`, migración de los 41 usos de fuente
+   a los papeles, reglas de auditoría para fuentes y colores.
+2. **Colores** (v4.18): **hecho** — 59 colores distintos / 203 literales
+   colapsados a los 14 tokens, verificado con las 24 capturas antes/después
+   (solo cambian las zonas de color previstas; el resto, idéntico).
 3. **Medidas y componentes**: llevar pads/radios/alturas a la rejilla y unificar
-   las dos bandas superiores y el patrón de fila de ajustes.
+   la banda superior y el patrón de fila de ajustes. **Pendiente**, con dos
+   decisiones de diseño por delante:
+   - el **acento por sección** (hoy cada entrada del menú de Ajustes lleva el
+     suyo: azul, naranja, rosa, morado, amarillo, verde);
+   - la **banda superior** (punto 8 del briefing del 22-sep, sigue abierto: en
+     Ajustes el contenido empezaba en y=103 y en las vistas en y=23-31).
 
 Lo que **no** entra: cambiar la distribución de las pantallas ni la información
 que muestran; esto es coherencia, no rediseño.

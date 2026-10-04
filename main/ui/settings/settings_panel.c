@@ -367,7 +367,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_height(card_cap, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_cap, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_cap, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_cap, lv_color_hex(0x29B6F6), 0);  /* azul */
+    lv_obj_set_style_border_color(card_cap, UI_COLOR_CYAN, 0);  /* azul */
     lv_obj_set_style_border_width(card_cap, 2, 0);
     lv_obj_set_style_radius(card_cap, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_cap, 12, 0);
@@ -377,26 +377,26 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *cap_title = lv_label_create(card_cap);
     lv_obj_set_style_text_font(cap_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(cap_title, lv_color_hex(0x29B6F6), 0);
+    lv_obj_set_style_text_color(cap_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(cap_title, LV_SYMBOL_IMAGE "  Carrusel captura pantalla");
 
     ui->capture_switch = lv_switch_create(card_cap);
     lv_obj_set_size(ui->capture_switch, 50, 28);
-    lv_obj_set_style_bg_color(ui->capture_switch, lv_color_hex(0x29B6F6),
+    lv_obj_set_style_bg_color(ui->capture_switch, UI_COLOR_CYAN,
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     lv_obj_add_event_cb(ui->capture_switch, cb_capture_carousel_cb,
                         LV_EVENT_VALUE_CHANGED, ui);
-    ui_card_wrap_title_with(card_cap, cap_title, lv_color_hex(0x29B6F6), ui->capture_switch);
+    ui_card_wrap_title_with(card_cap, cap_title, UI_COLOR_CYAN, ui->capture_switch);
 
     ui->capture_status_lbl = lv_label_create(card_cap);
     lv_obj_set_style_text_font(ui->capture_status_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ui->capture_status_lbl, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(ui->capture_status_lbl, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(ui->capture_status_lbl,
                       "Guarda una captura de cada pantalla (Live, históricos y Ajustes) en la SD");
 
     ui->lbl_about_sd = lv_label_create(card_cap);
     lv_obj_set_style_text_font(ui->lbl_about_sd, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ui->lbl_about_sd, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(ui->lbl_about_sd, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(ui->lbl_about_sd, "SD: --");
 
     /* === Fila de dos columnas: Visor de imagenes | Sacar la tarjeta ===
@@ -425,7 +425,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_height(card_eject, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_eject, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_eject, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_eject, lv_color_hex(0x42A5F5), 0);   /* azul: el acento de la pagina de la SD */
+    lv_obj_set_style_border_color(card_eject, UI_COLOR_CYAN, 0);   /* azul: el acento de la pagina de la SD */
     lv_obj_set_style_border_width(card_eject, 2, 0);
     lv_obj_set_style_radius(card_eject, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_eject, 12, 0);
@@ -435,9 +435,9 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *eject_title = lv_label_create(card_eject);
     lv_obj_set_style_text_font(eject_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(eject_title, lv_color_hex(0x64B5F6), 0);
+    lv_obj_set_style_text_color(eject_title, UI_COLOR_ICE, 0);
     lv_label_set_text(eject_title, LV_SYMBOL_SD_CARD "  Sacar la tarjeta");
-    ui_card_wrap_title(card_eject, eject_title, lv_color_hex(0x42A5F5));
+    ui_card_wrap_title(card_eject, eject_title, UI_COLOR_CYAN);
 
     /* El boton va directo en la tarjeta (no en una fila aparte alineada a la
      * derecha): asi queda CENTRADO, igual que el del visor de al lado. El
@@ -452,7 +452,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_height(card_view, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_view, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_view, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_view, lv_color_hex(0x26C6DA), 0);  /* cyan */
+    lv_obj_set_style_border_color(card_view, UI_COLOR_CYAN, 0);  /* cyan */
     lv_obj_set_style_border_width(card_view, 2, 0);
     lv_obj_set_style_radius(card_view, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_view, 12, 0);
@@ -466,20 +466,20 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
      * juntas y otras muy separadas"). Sin el, SPACE_EVENLY reparte titulo y
      * boton por igual. */
     lv_obj_set_style_text_font(view_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(view_title, lv_color_hex(0x26C6DA), 0);
+    lv_obj_set_style_text_color(view_title, UI_COLOR_CYAN, 0);
     lv_label_set_text(view_title, LV_SYMBOL_IMAGE "  Visor de imagenes");
 
     /* Titulo solo y el boton DEBAJO (convencion que pidio el usuario en
      * Bombonas: el boton en la fila del titulo deja el titulo descentrado).
      * La descripcion "Vigilancia y capturas del carrusel" se quita: repetia lo
      * que ya dice el boton. */
-    ui_card_wrap_title(card_view, view_title, lv_color_hex(0x26C6DA));
+    ui_card_wrap_title(card_view, view_title, UI_COLOR_CYAN);
 
     lv_obj_t *btn_gal = lv_btn_create(card_view);
     lv_obj_set_width(btn_gal, LV_SIZE_CONTENT);   /* acorde al texto + icono */
     lv_obj_set_height(btn_gal, 46);
     lv_obj_set_style_pad_hor(btn_gal, 24, 0);
-    lv_obj_set_style_bg_color(btn_gal, lv_color_hex(0x0288D1), 0);
+    lv_obj_set_style_bg_color(btn_gal, UI_COLOR_CYAN, 0);
     lv_obj_set_style_radius(btn_gal, 8, 0);
     lv_obj_t *lbl_gal = lv_label_create(btn_gal);
     lv_obj_set_style_text_font(lbl_gal, &lv_font_montserrat_20_es, 0);
@@ -515,7 +515,7 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_height(card_bak, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_bak, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_bak, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_bak, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_border_color(card_bak, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card_bak, 2, 0);
     lv_obj_set_style_radius(card_bak, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card_bak, 12, 0);
@@ -525,13 +525,13 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
 
     lv_obj_t *bak_title = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(bak_title, lv_color_hex(0x9C27B0), 0);
+    lv_obj_set_style_text_color(bak_title, UI_COLOR_VIOLET, 0);
     lv_label_set_text(bak_title, LV_SYMBOL_SD_CARD "  Copia de seguridad de la configuracion");
-    ui_card_wrap_title(card_bak, bak_title, lv_color_hex(0x9C27B0));
+    ui_card_wrap_title(card_bak, bak_title, UI_COLOR_VIOLET);
 
     lv_obj_t *bak_desc = lv_label_create(card_bak);
     lv_obj_set_style_text_font(bak_desc, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(bak_desc, lv_color_hex(0xBBBBBB), 0);
+    lv_obj_set_style_text_color(bak_desc, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_width(bak_desc, lv_pct(96));   /* no toca los bordes */
     lv_obj_set_style_text_align(bak_desc, LV_TEXT_ALIGN_CENTER, 0);
     /* WRAP (ancho fijo pct 100, no flex_grow -> sin riesgo WDT): las lineas
@@ -606,7 +606,7 @@ lv_obj_t *create_autostart_card(lv_obj_t *cont)
     lv_obj_set_height(card_auto, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card_auto, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card_auto, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card_auto, lv_color_hex(0xFFAA00), 0);  /* ambar */
+    lv_obj_set_style_border_color(card_auto, UI_COLOR_ORANGE, 0);  /* ambar */
     lv_obj_set_style_border_width(card_auto, 2, 0);
     lv_obj_set_style_radius(card_auto, UI_RADIUS_CARD, 0);
     /* 16 -> 12 (22-sep-2026): la linea de abajo de esta tarjeta, que es la ultima
@@ -621,16 +621,16 @@ lv_obj_t *create_autostart_card(lv_obj_t *cont)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *auto_sw = lv_switch_create(card_auto);
-    lv_obj_set_style_bg_color(auto_sw, lv_color_hex(0xFFAA00),
+    lv_obj_set_style_bg_color(auto_sw, UI_COLOR_ORANGE,
                               LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (ne185_get_autostart()) lv_obj_add_state(auto_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(auto_sw, autostart_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t *auto_title = lv_label_create(card_auto);
     lv_obj_set_style_text_font(auto_title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(auto_title, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_text_color(auto_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(auto_title, LV_SYMBOL_POWER "  Auto-encendido (luz + bomba)");
-    ui_card_wrap_title_with(card_auto, auto_title, lv_color_hex(0xFFAA00), auto_sw);
+    ui_card_wrap_title_with(card_auto, auto_title, UI_COLOR_ORANGE, auto_sw);
     return card_auto;
 }
 
@@ -743,7 +743,7 @@ void ui_settings_panel_init(ui_state_t *ui,
     lv_obj_set_style_pad_column(back_btn, 8, 0);
     /* Al pulsar, un tinte suave del acento: se nota el toque sin volver a la
      * pildora de color. */
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x4CD964), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(back_btn, UI_COLOR_GREEN, LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_20, LV_STATE_PRESSED);
 
     /* El chevron que crea lv_menu dentro del boton no lo usamos: lo dibujamos
@@ -757,7 +757,7 @@ void ui_settings_panel_init(ui_state_t *ui,
      * los rangos de FontAwesome y sin fallback, asi que LV_SYMBOL_LEFT salia como
      * una caja. La normal lleva Montserrat de fallback y dibuja el simbolo. */
     lv_obj_set_style_text_font(s_settings_back_chev, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_settings_back_chev, lv_color_hex(0x4CD964), 0);
+    lv_obj_set_style_text_color(s_settings_back_chev, UI_COLOR_GREEN, 0);
 
     s_settings_back_label = lv_label_create(back_btn);
     lv_label_set_text(s_settings_back_label, "Ajustes");
@@ -1274,7 +1274,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
             lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], UI_COLOR_GREEN, 0); // Green for active
         } else {
             lv_label_set_text(ui->victron_config.device_type_labels[index], "Device: --");
-            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
+            lv_obj_set_style_text_color(ui->victron_config.device_type_labels[index], UI_COLOR_TEXT_DIM, 0); // Gray for inactive
         }
     }
 
@@ -1285,7 +1285,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
             lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], UI_COLOR_GREEN, 0); // Green for active
         } else {
             lv_label_set_text(ui->victron_config.product_name_labels[index], "Product: --");
-            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], lv_color_hex(0x888888), 0); // Gray for inactive
+            lv_obj_set_style_text_color(ui->victron_config.product_name_labels[index], UI_COLOR_TEXT_DIM, 0); // Gray for inactive
         }
     }
 
@@ -1295,7 +1295,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
             lv_label_set_text_fmt(ui->victron_config.error_labels[index], "Status: %s", error_info);
             /* Color code based on content */
             if (strstr(error_info, "error") || strstr(error_info, "Error") || strstr(error_info, "ERROR")) {
-                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0xF44336), 0); // Red for errors
+                lv_obj_set_style_text_color(ui->victron_config.error_labels[index], UI_COLOR_RED, 0); // Red for errors
             } else if (strstr(error_info, "Active") || strstr(error_info, "OK") || strstr(error_info, "Connected")) {
                 lv_obj_set_style_text_color(ui->victron_config.error_labels[index], UI_COLOR_GREEN, 0); // Green for OK
             } else {
@@ -1303,7 +1303,7 @@ static void victron_config_update_device_status(ui_state_t *ui, const char *mac_
             }
         } else {
             lv_label_set_text(ui->victron_config.error_labels[index], "Status: No data");
-            lv_obj_set_style_text_color(ui->victron_config.error_labels[index], lv_color_hex(0x888888), 0); // Gray for no data
+            lv_obj_set_style_text_color(ui->victron_config.error_labels[index], UI_COLOR_TEXT_DIM, 0); // Gray for no data
         }
     }
 }
@@ -1369,7 +1369,7 @@ static void settings_btn_styles_init(void)
 
     /* Pressed: simplemente un poco mas claro, sin pisar el color de rol. */
     lv_style_init(&s_settings_btn_pressed_style);
-    lv_style_set_bg_color(&s_settings_btn_pressed_style, lv_color_hex(0x2A3446));  /* paleta, un punto mas clara al pulsar */
+    lv_style_set_bg_color(&s_settings_btn_pressed_style, UI_COLOR_CARD);  /* paleta, un punto mas clara al pulsar */
     s_settings_styles_inited = true;
 }
 

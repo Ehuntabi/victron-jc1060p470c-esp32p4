@@ -292,7 +292,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     lv_obj_t *btn_close = lv_btn_create(scr);
     lv_obj_set_size(btn_close, 100, 50);
     lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
+    lv_obj_set_style_bg_color(btn_close, UI_COLOR_RED_DARK, 0);
     lv_obj_t *lbl_close = lv_label_create(btn_close);
     lv_label_set_text(lbl_close, "Cerrar");
     lv_obj_center(lbl_close);
@@ -314,7 +314,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     /* Boton de modo (mismo sitio y tamano que el de Corriente/Tension) */
     lv_obj_t *bmode = lv_btn_create(scr);
     lv_obj_set_size(bmode, 140, 40);
-    lv_obj_set_style_bg_color(bmode, lv_color_hex(0x2A3340), 0);
+    lv_obj_set_style_bg_color(bmode, UI_COLOR_CARD, 0);
     lv_obj_set_style_radius(bmode, 8, 0);
     lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 84);
     s_lbl_modo = lv_label_create(bmode);
@@ -344,14 +344,14 @@ void ui_show_solar_history_screen(ui_state_t *ui)
     lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(chart, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(chart, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_border_color(chart, UI_COLOR_CARD_BORDER, 0);
     lv_chart_set_div_line_count(chart, 5, 8);
-    lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_line_color(chart, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
     lv_obj_set_style_size(chart, 0, LV_PART_INDICATOR);   /* sin puntos gordos */
     lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 8, 4, 5, 1, true, 80);
     lv_obj_set_style_pad_left(chart, 8, 0);
     lv_obj_set_style_pad_top(chart, 16, 0);
-    lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
+    lv_obj_set_style_text_color(chart, UI_COLOR_TEXT_DIM, LV_PART_TICKS);
     lv_obj_set_style_text_font(chart, &lv_font_montserrat_20_es, LV_PART_TICKS);
     s_chart = chart;
 
@@ -374,7 +374,7 @@ void ui_show_solar_history_screen(ui_state_t *ui)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(s_xlabels);
-        lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
+        lv_obj_set_style_text_color(l, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_text(l, "--:--");
     }

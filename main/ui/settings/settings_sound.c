@@ -183,7 +183,7 @@ lv_obj_t *create_ausente_card(lv_obj_t *cont)
 
     lv_obj_t *aus_hint = lv_label_create(card_aus);
     lv_obj_set_style_text_font(aus_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(aus_hint, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_color(aus_hint, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_width(aus_hint, lv_pct(100));
     /* UNA sola linea (peticion del usuario, 24-ago-2026). Antes eran dos, con
       * un salto de linea a mano. El texto se acorto para que quepa: la tarjeta
@@ -224,7 +224,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_height(card1, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card1, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card1, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card1, lv_color_hex(0xFF7043), 0);
+    lv_obj_set_style_border_color(card1, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_border_width(card1, 2, 0);
     lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card1, 12, 0);
@@ -244,10 +244,10 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *card1_title = lv_label_create(title_row);
     /* El LV_SYMBOL_VOLUME_MAX lo dibuja el fallback a Montserrat. */
     lv_obj_set_style_text_font(card1_title, UI_FONT_VALUE, 0);
-    lv_obj_set_style_text_color(card1_title, lv_color_hex(0xFF7043), 0);
+    lv_obj_set_style_text_color(card1_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card1_title, LV_SYMBOL_VOLUME_MAX "  Sonido");
 
-    ui_card_wrap_title(card1, card1_title, lv_color_hex(0xFF7043));
+    ui_card_wrap_title(card1, card1_title, UI_COLOR_ORANGE);
     lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_END,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *lbl_vol = lv_label_create(title_row);
@@ -271,7 +271,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_label_set_text(lbl_mute, "Silenciar avisos");
 
     lv_obj_t *sw = lv_switch_create(ctl_row);
-    lv_obj_set_style_bg_color(sw, lv_color_hex(0xFF7043), LV_STATE_CHECKED | LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sw, UI_COLOR_ORANGE, LV_STATE_CHECKED | LV_PART_INDICATOR);
     if (audio_is_muted()) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, sound_mute_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     ui->sound_mute_switch = sw;
@@ -286,8 +286,8 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *slider = lv_slider_create(ctl_row);
     lv_obj_set_width(slider, 440);
     lv_obj_set_height(slider, 26);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0xFF7043), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, UI_COLOR_ORANGE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, UI_COLOR_ORANGE, LV_PART_KNOB);
     lv_slider_set_range(slider, 0, 100);
     lv_slider_set_value(slider, audio_get_volume(), LV_ANIM_OFF);
     lv_obj_add_event_cb(slider, sound_volume_changed_cb, LV_EVENT_VALUE_CHANGED, lbl_vol);
@@ -371,7 +371,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_pad_gap(col_warn, 10, 0);   /* un poco separado del selector */
     lv_obj_t *lbl_warn = lv_label_create(col_warn);
     lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_warn, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_text_color(lbl_warn, UI_COLOR_ORANGE, 0);
     lv_label_set_text(lbl_warn, LV_SYMBOL_BELL " Aviso");
     lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
     lv_obj_set_width(dd_warn, 130);

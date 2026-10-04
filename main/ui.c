@@ -354,10 +354,10 @@ void ui_init(void) {
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28_es, 0);
     /* Fondo de la barra de tabs */
-    lv_obj_set_style_bg_color(tab_btns, lv_color_hex(0x121212), 0);
+    lv_obj_set_style_bg_color(tab_btns, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_COVER, 0);
     /* Color de texto en estado normal: gris claro */
-    lv_obj_set_style_text_color(tab_btns, lv_color_hex(0xBBBBBB), 0);
+    lv_obj_set_style_text_color(tab_btns, UI_COLOR_TEXT_DIM, 0);
     /* Color de texto en estado activo: blanco */
     lv_obj_set_style_text_color(tab_btns, lv_color_white(), LV_PART_ITEMS | LV_STATE_CHECKED);
     /* Indicador (linea bajo el activo) en azul */
@@ -396,7 +396,7 @@ void ui_init(void) {
     lv_obj_remove_style_all(ui->bottom_bar);
     lv_obj_set_size(ui->bottom_bar, lv_pct(100), 50);
     lv_obj_align(ui->bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(ui->bottom_bar, lv_color_hex(0x06080C), 0);
+    lv_obj_set_style_bg_color(ui->bottom_bar, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(ui->bottom_bar, LV_OPA_COVER, 0);
     lv_obj_set_layout(ui->bottom_bar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(ui->bottom_bar, LV_FLEX_FLOW_ROW);
@@ -419,7 +419,7 @@ void ui_init(void) {
     lv_obj_set_style_text_color(ui->lbl_clock, lv_color_white(), 0);
     lv_label_set_text(ui->lbl_clock, "00:00");
     lv_obj_set_style_bg_opa(ui->lbl_clock, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_clock, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_clock, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_clock, 4, 0);
     lv_obj_set_style_radius(ui->lbl_clock, 4, 0);
     lv_obj_set_width(ui->lbl_clock, 280);
@@ -431,7 +431,7 @@ void ui_init(void) {
     lv_obj_set_style_text_color(ui->lbl_ble, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(ui->lbl_ble, LV_SYMBOL_BLUETOOTH);
     lv_obj_set_style_bg_opa(ui->lbl_ble, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_ble, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_ble, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_ble, 4, 0);
     lv_obj_set_style_radius(ui->lbl_ble, 4, 0);
     lv_obj_set_size(ui->lbl_ble, 44, 38);
@@ -442,7 +442,7 @@ void ui_init(void) {
     lv_obj_set_style_text_font(ui->lbl_volume, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(ui->lbl_volume, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(ui->lbl_volume, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_volume, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_volume, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_volume, 4, 0);
     lv_obj_set_style_radius(ui->lbl_volume, 4, 0);
     lv_label_set_text(ui->lbl_volume, audio_is_muted() ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
@@ -455,7 +455,7 @@ void ui_init(void) {
     ui->lbl_wifi = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_wifi, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_bg_opa(ui->lbl_wifi, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_wifi, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_wifi, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_wifi, 4, 0);
     lv_obj_set_style_radius(ui->lbl_wifi, 4, 0);
     lv_label_set_text(ui->lbl_wifi, LV_SYMBOL_WIFI);
@@ -472,7 +472,7 @@ void ui_init(void) {
     ui->lbl_gps = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_gps, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_bg_opa(ui->lbl_gps, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_gps, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_gps, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_gps, 4, 0);
     lv_obj_set_style_radius(ui->lbl_gps, 4, 0);
     lv_label_set_text(ui->lbl_gps, LV_SYMBOL_GPS);
@@ -481,7 +481,7 @@ void ui_init(void) {
     lv_obj_add_flag(ui->lbl_gps, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(ui->lbl_gps, gps_icon_clicked_cb, LV_EVENT_CLICKED, ui);
     lv_obj_set_style_text_align(ui->lbl_gps, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(ui->lbl_gps, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_text_color(ui->lbl_gps, UI_COLOR_TEXT_DIM, 0);
 
     /* Icono SD — mismo tamano y forma que los de Wi-Fi/GPS. NO es pulsable: es un
      * indicador. Cambia a TRIANGULO ROJO cuando la tarjeta no esta montada o
@@ -492,13 +492,13 @@ void ui_init(void) {
     ui->lbl_sd = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->lbl_sd, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_bg_opa(ui->lbl_sd, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->lbl_sd, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->lbl_sd, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->lbl_sd, 4, 0);
     lv_obj_set_style_radius(ui->lbl_sd, 4, 0);
     lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
     lv_obj_set_size(ui->lbl_sd, 44, 38);
     lv_obj_set_style_text_align(ui->lbl_sd, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x666666), 0);
+    lv_obj_set_style_text_color(ui->lbl_sd, UI_COLOR_TEXT_DIM, 0);
 
     /* Color inicial segun NVS */
     {
@@ -509,7 +509,7 @@ void ui_init(void) {
             nvs_close(h);
         }
         lv_obj_set_style_text_color(ui->lbl_wifi,
-            en ? UI_COLOR_CYAN : lv_color_hex(0x666666), 0);
+            en ? UI_COLOR_CYAN : UI_COLOR_TEXT_DIM, 0);
     }
     /* (Indicador "12V sol" de la barra inferior QUITADO el 15-sep-2026:
      * ahora el chivato del excedente solar es el COLOR del aro del
@@ -520,10 +520,10 @@ void ui_init(void) {
      * demás iconos de estado de la barra (sin fondo destacado). */
     ui->btn_nav = lv_label_create(ui->bottom_bar);
     lv_obj_set_style_text_font(ui->btn_nav, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(ui->btn_nav, lv_color_hex(0xBBBBBB), 0);
+    lv_obj_set_style_text_color(ui->btn_nav, UI_COLOR_TEXT_DIM, 0);
     lv_label_set_text(ui->btn_nav, LV_SYMBOL_SETTINGS);
     lv_obj_set_style_bg_opa(ui->btn_nav, LV_OPA_50, 0);
-    lv_obj_set_style_bg_color(ui->btn_nav, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(ui->btn_nav, UI_COLOR_BG, 0);
     lv_obj_set_style_pad_all(ui->btn_nav, 4, 0);
     lv_obj_set_style_radius(ui->btn_nav, 4, 0);
     lv_obj_set_size(ui->btn_nav, 44, 38);
@@ -841,7 +841,7 @@ void ui_ota_overlay_show(const char *msg)
     if (!s_ota_overlay) {
         s_ota_overlay = lv_obj_create(lv_layer_top());
         lv_obj_set_size(s_ota_overlay, lv_pct(100), lv_pct(100));
-        lv_obj_set_style_bg_color(s_ota_overlay, lv_color_hex(0x06080C), 0);
+        lv_obj_set_style_bg_color(s_ota_overlay, UI_COLOR_BG, 0);
         lv_obj_set_style_bg_opa(s_ota_overlay, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(s_ota_overlay, 0, 0);
         lv_obj_set_style_radius(s_ota_overlay, 0, 0);
@@ -932,14 +932,14 @@ static void ui_card_detail_ensure_back_btn(void)
     lv_obj_set_size(btn, 54, 54);
     lv_obj_align(btn, LV_ALIGN_TOP_LEFT, 10, 10);
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1E2635), 0);
+    lv_obj_set_style_bg_color(btn, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_90, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_border_color(btn, lv_color_hex(0x4A5568), 0);
+    lv_obj_set_style_border_color(btn, UI_COLOR_CARD, 0);
     lv_obj_add_event_cb(btn, card_detail_back_btn_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LV_SYMBOL_LEFT);
-    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(lbl, UI_COLOR_TEXT, 0);
     lv_obj_center(lbl);
     s_card_detail_back_btn = btn;
 }
@@ -1422,10 +1422,10 @@ static void sd_indicator_timer_cb(lv_timer_t *t)
         /* La soltaste tu (Ajustes -> Soltar tarjeta): apagada a proposito, ni
          * fallo ni "todo bien". Gris neutro. */
         lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
-        lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x666666), 0);
+        lv_obj_set_style_text_color(ui->lbl_sd, UI_COLOR_TEXT_DIM, 0);
     } else {
         lv_label_set_text(ui->lbl_sd, LV_SYMBOL_SD_CARD);
-        lv_obj_set_style_text_color(ui->lbl_sd, lv_color_hex(0x4CD964), 0);
+        lv_obj_set_style_text_color(ui->lbl_sd, UI_COLOR_GREEN, 0);
     }
 }
 

@@ -165,7 +165,7 @@ void ui_show_chart_screen(ui_state_t *ui)
      * vivo "12V sol" de la barra (que es otra cosa: si esta tirando AHORA). */
     s_frigo_lbl_sol = lv_label_create(scr);
     lv_obj_set_style_text_font(s_frigo_lbl_sol, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_frigo_lbl_sol, lv_color_hex(0xBB66FF), 0);
+    lv_obj_set_style_text_color(s_frigo_lbl_sol, UI_COLOR_VIOLET, 0);
     lv_label_set_text(s_frigo_lbl_sol, "");
     lv_obj_align(s_frigo_lbl_sol, LV_ALIGN_TOP_LEFT, 16, 42);
 
@@ -199,7 +199,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_t *btn_close = lv_btn_create(scr);
     lv_obj_set_size(btn_close, 100, 50);
     lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
+    lv_obj_set_style_bg_color(btn_close, UI_COLOR_RED_DARK, 0);
     lv_obj_t *lbl_close = lv_label_create(btn_close);
     lv_label_set_text(lbl_close, "Cerrar");
     lv_obj_center(lbl_close);
@@ -211,11 +211,11 @@ void ui_show_chart_screen(ui_state_t *ui)
      * forma de saber que era esa linea (visto el 13-sep-2026). */
     const char *leyenda[] = {"Aletas", "Congel.", "Exter.", "Fan%", "Sol"};
     lv_color_t colores[]  = {
-        lv_color_hex(0x00BFFF),
+        UI_COLOR_CYAN,
         UI_COLOR_RED,
-        lv_color_hex(0x44FF44),
-        lv_color_hex(0xFFAA00),
-        lv_color_hex(0xBB66FF)      /* violeta: el ambar (0xE0900A) se confundia con
+        UI_COLOR_GREEN,
+        UI_COLOR_ORANGE,
+        UI_COLOR_VIOLET      /* violeta: el ambar (0xE0900A) se confundia con
                                      * el naranja del ventilador (0xFFAA00), visto
                                      * el 13-sep-2026 */
     };
@@ -292,9 +292,9 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(s_chart, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(s_chart, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(s_chart, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_border_color(s_chart, UI_COLOR_CARD_BORDER, 0);
     lv_chart_set_div_line_count(s_chart, 5, 10);
-    lv_obj_set_style_line_color(s_chart, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_line_color(s_chart, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
 
     lv_chart_set_range(s_chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
     lv_chart_set_axis_tick(s_chart, LV_CHART_AXIS_PRIMARY_Y,   8, 4, 5, 1, true, 60);
@@ -303,7 +303,7 @@ void ui_show_chart_screen(ui_state_t *ui)
     lv_obj_set_style_pad_right(s_chart, 8, 0);
     /* Hueco arriba para que la etiqueta Y superior (fuente 20) no se recorte. */
     lv_obj_set_style_pad_top(s_chart, 16, 0);
-    lv_obj_set_style_text_color(s_chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
+    lv_obj_set_style_text_color(s_chart, UI_COLOR_TEXT_DIM, LV_PART_TICKS);
     lv_obj_set_style_text_font(s_chart, &lv_font_montserrat_20_es, LV_PART_TICKS);
 
     s_ser_aletas     = lv_chart_add_series(s_chart, colores[0], LV_CHART_AXIS_PRIMARY_Y);
@@ -323,7 +323,7 @@ void ui_show_chart_screen(ui_state_t *ui)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(s_frigo_xlabels);
-        lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
+        lv_obj_set_style_text_color(l, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_text(l, "--:--");
     }
@@ -373,7 +373,7 @@ static void frigo_legend_toggle_cb(lv_event_t *e)
     lv_chart_hide_series(s_chart, ser, hide);
     if (s_frigo_leg_lbl[i])
         lv_obj_set_style_text_color(s_frigo_leg_lbl[i],
-            hide ? lv_color_hex(0x555555) : s_frigo_leg_col[i], 0);
+            hide ? UI_COLOR_CARD_BORDER : s_frigo_leg_col[i], 0);
     if (s_frigo_leg_dot[i])
         lv_obj_set_style_bg_opa(s_frigo_leg_dot[i],
             hide ? LV_OPA_30 : LV_OPA_COVER, 0);

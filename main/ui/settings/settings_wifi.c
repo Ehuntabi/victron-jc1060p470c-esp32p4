@@ -160,7 +160,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * cada vez que se enciende o apaga el AP. */
     ui->wifi.ap_ip = lv_label_create(card1);
     lv_obj_set_style_text_font(ui->wifi.ap_ip, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(ui->wifi.ap_ip, lv_color_hex(0xB0BEC5), 0);
+    lv_obj_set_style_text_color(ui->wifi.ap_ip, UI_COLOR_TEXT_DIM, 0);
     wifi_pintar_ip_ap(ui);   /* que se vea ya al entrar, no solo al tocar el interruptor */
 
     /* SSID row: label + input */
@@ -250,7 +250,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_t *btn_save = lv_btn_create(card1);
     lv_obj_set_width(btn_save, lv_pct(100));
     lv_obj_set_height(btn_save, 38);
-    lv_obj_set_style_bg_color(btn_save, lv_color_hex(0x2E7D32), 0);
+    lv_obj_set_style_bg_color(btn_save, UI_COLOR_GREEN, 0);
     lv_obj_add_event_cb(btn_save, wifi_save_cb, LV_EVENT_CLICKED, ui);
     lv_obj_t *lbl_save = lv_label_create(btn_save);
     lv_obj_set_style_text_font(lbl_save, &lv_font_montserrat_24_es, 0);
@@ -263,7 +263,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     s_wifi_estado = lv_label_create(card1);
     lv_label_set_text(s_wifi_estado, "");
     lv_obj_set_style_text_font(s_wifi_estado, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0x4CD964), 0);
+    lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_GREEN, 0);
     lv_obj_set_width(s_wifi_estado, lv_pct(100));
     lv_label_set_long_mode(s_wifi_estado, LV_LABEL_LONG_WRAP);
 
@@ -380,7 +380,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_style_bg_color(btn_react, UI_COLOR_CYAN, 0);
     lv_obj_t *btn_lbl = lv_label_create(btn_react);
     lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(btn_lbl, lv_color_hex(0x0A0A0A), 0);
+    lv_obj_set_style_text_color(btn_lbl, UI_COLOR_BG, 0);
     lv_label_set_text(btn_lbl, "Reactivar");
     lv_obj_center(btn_lbl);
     lv_obj_add_event_cb(btn_react, reactivate_portal_cb, LV_EVENT_CLICKED, NULL);
@@ -425,7 +425,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 
     lv_obj_t *c4_hint = lv_label_create(card4);
     lv_obj_set_style_text_font(c4_hint, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(c4_hint, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_color(c4_hint, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_width(c4_hint, lv_pct(100));
     lv_label_set_long_mode(c4_hint, LV_LABEL_LONG_WRAP);
     /* Ancho completo de la tarjeta y que envuelva sola: antes el texto llevaba
@@ -560,7 +560,7 @@ static void wifi_save_cb(lv_event_t *e)
     }
     ESP_LOGI(TAG_SETTINGS, "Wi-Fi guardado: SSID='%s' -> reaplicando AP", ssid);
     if (s_wifi_estado) {
-        lv_obj_set_style_text_color(s_wifi_estado, lv_color_hex(0x4CD964), 0);
+        lv_obj_set_style_text_color(s_wifi_estado, UI_COLOR_GREEN, 0);
         lv_label_set_text_fmt(s_wifi_estado, "Guardado. Reconectando como \"%s\"...", ssid);
     }
     config_server_request_wifi_apply();

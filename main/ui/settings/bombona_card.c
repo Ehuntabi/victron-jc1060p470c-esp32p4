@@ -133,7 +133,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
     lv_obj_set_height(card, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(card, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xFFA726), 0);   /* naranja: gas */
+    lv_obj_set_style_border_color(card, UI_COLOR_ORANGE, 0);   /* naranja: gas */
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_hor(card, 16, 0);
@@ -147,7 +147,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
 
     lv_obj_t *title = lv_label_create(card);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24_es, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFFA726), 0);
+    lv_obj_set_style_text_color(title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(title, LV_SYMBOL_CHARGE "  Bombonas");
 
     lv_obj_t *btns = lv_obj_create(card);
@@ -159,7 +159,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
 
     lv_obj_t *b1 = lv_btn_create(btns);
     lv_obj_set_size(b1, 220, 44);
-    lv_obj_set_style_bg_color(b1, lv_color_hex(0xF57C00), 0);
+    lv_obj_set_style_bg_color(b1, UI_COLOR_ORANGE, 0);
     lv_obj_set_style_radius(b1, 8, 0);
     lv_obj_t *l1 = lv_label_create(b1);
     lv_label_set_text(l1, "Cambio de bombona");
@@ -169,7 +169,7 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
 
     lv_obj_t *b2 = lv_btn_create(btns);
     lv_obj_set_size(b2, 120, 44);
-    lv_obj_set_style_bg_color(b2, lv_color_hex(0x5D4037), 0);
+    lv_obj_set_style_bg_color(b2, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_radius(b2, 8, 0);
     lv_obj_t *l2 = lv_label_create(b2);
     lv_label_set_text(l2, "Deshacer");
@@ -181,12 +181,12 @@ lv_obj_t *create_bombona_card(lv_obj_t *cont)
      * con el contenido repartido (SPACE_EVENLY) y el cruce centrado, asi que los
      * botones quedan centrados justo debajo del titulo, y el texto del estado
      * debajo de los botones. */
-    ui_card_wrap_title(card, title, lv_color_hex(0xFFA726));
+    ui_card_wrap_title(card, title, UI_COLOR_ORANGE);
     lv_obj_add_event_cb(b2, deshacer_cb, LV_EVENT_CLICKED, NULL);
 
     s_lbl = lv_label_create(card);
     lv_obj_set_style_text_font(s_lbl, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(s_lbl, lv_color_hex(0xDDDDDD), 0);
+    lv_obj_set_style_text_color(s_lbl, UI_COLOR_TEXT_DIM, 0);
     lv_obj_set_width(s_lbl, lv_pct(100));
     /* LONG_DOT y no WRAP, igual que el resto de tarjetas de Ajustes: el wrap al
      * construir ha dado sustos con el watchdog. Pero el texto son DOS lineas

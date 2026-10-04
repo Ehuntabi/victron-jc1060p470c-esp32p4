@@ -172,7 +172,7 @@ static void ov_show_state_info(uint8_t state)
 {
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
     lv_obj_set_style_radius(modal, 0, 0);
@@ -366,7 +366,7 @@ static void refresh_mute_iconos(ui_overview_view_t *ov)
          * lee de un vistazo sin tener que aprender nada. */
         lv_label_set_text(iconos[i], callada ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
         lv_obj_set_style_text_color(iconos[i],
-                                    callada ? lv_color_hex(0x777777) : lv_color_hex(0xFFFFFF), 0);
+                                    callada ? UI_COLOR_TEXT_DIM : UI_COLOR_TEXT, 0);
         lv_obj_clear_flag(iconos[i], LV_OBJ_FLAG_HIDDEN);
     }
 }
@@ -476,7 +476,7 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, 200, 85);
     lv_obj_set_style_radius(btn, 42, 0);                 /* píldora: radius = h/2 */
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x37474F), 0);
+    lv_obj_set_style_bg_color(btn, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
     /* Borde de color de la funcion (2 px) — ahora SE VE como boton */
     lv_obj_set_style_border_color(btn, accent, 0);
@@ -521,7 +521,7 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_remove_style_all(led);
     lv_obj_set_size(led, 14, 14);
     lv_obj_set_style_radius(led, 7, 0);
-    lv_obj_set_style_bg_color(led, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_bg_color(led, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
     /* LED centrado horizontalmente, asomando un poco por encima del borde */
     lv_obj_align(led, LV_ALIGN_TOP_MID, 0, -5);
@@ -1323,7 +1323,7 @@ static void overview_render(ui_overview_view_t *ov)
             lv_obj_t *led = (lv_obj_t *)lv_obj_get_user_data(btn);          \
             if (led) {                                                      \
                 lv_obj_set_style_bg_color(led,                              \
-                    (on) ? UI_COLOR_GREEN : lv_color_hex(0x333333), 0);     \
+                    (on) ? UI_COLOR_GREEN : UI_COLOR_CARD_BORDER, 0);     \
                 lv_obj_set_style_shadow_width(led, (on) ? 10 : 0, 0);       \
                 lv_obj_set_style_shadow_color(led, UI_COLOR_GREEN, 0);      \
                 lv_obj_set_style_shadow_opa(led,                            \
@@ -1407,7 +1407,7 @@ static void overview_render(ui_overview_view_t *ov)
              * la tarjeta). Antes las aspas eran siempre grises. */
             lv_obj_set_style_img_recolor(ov->img_fan,
                 frigo_solar_get_active()
-                    ? lv_color_hex(0x00E676)
+                    ? UI_COLOR_GREEN
                     : UI_COLOR_TEXT_DIM, 0);
         }
     }

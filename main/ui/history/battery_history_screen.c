@@ -178,7 +178,7 @@ static void bh_legend_toggle_cb(lv_event_t *e)
     lv_chart_hide_series(s_bh_chart, s_bh_series[i], hide);
     if (s_bh_totals[i])
         lv_obj_set_style_text_color(s_bh_totals[i],
-            hide ? lv_color_hex(0x555555) : lv_color_hex(s_bh_col[i]), 0);
+            hide ? UI_COLOR_CARD_BORDER : lv_color_hex(s_bh_col[i]), 0);
 }
 
 /* Formatea las etiquetas del eje Y con 1 decimal: los valores del chart se
@@ -219,7 +219,7 @@ static void bh_zero_line_draw_cb(lv_event_t *e)
     lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
     lv_draw_line_dsc_t line_dsc;
     lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = lv_color_hex(0x9AA0A6);
+    line_dsc.color = UI_COLOR_TEXT_DIM;
     line_dsc.width = 2;
     line_dsc.opa = LV_OPA_COVER;
     lv_point_t p1 = { a.x1, y0 };
@@ -258,7 +258,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_t *btn_close = lv_btn_create(scr);
     lv_obj_set_size(btn_close, 100, 50);
     lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -10, 10);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0x882222), 0);
+    lv_obj_set_style_bg_color(btn_close, UI_COLOR_RED_DARK, 0);
     lv_obj_t *lbl_close = lv_label_create(btn_close);
     lv_label_set_text(lbl_close, "Cerrar");
     lv_obj_center(lbl_close);
@@ -340,7 +340,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     {
         lv_obj_t *bmode = lv_btn_create(scr);
         lv_obj_set_size(bmode, 140, 40);
-        lv_obj_set_style_bg_color(bmode, lv_color_hex(0x2A3340), 0);
+        lv_obj_set_style_bg_color(bmode, UI_COLOR_CARD, 0);
         lv_obj_set_style_radius(bmode, 8, 0);
         lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 84);
         s_bh_lbl_mode = lv_label_create(bmode);
@@ -384,9 +384,9 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_obj_set_style_bg_color(chart, UI_COLOR_CARD, 0);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(chart, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_border_color(chart, UI_COLOR_CARD_BORDER, 0);
     lv_chart_set_div_line_count(chart, 5, 8);
-    lv_obj_set_style_line_color(chart, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_line_color(chart, UI_COLOR_CARD_BORDER, LV_PART_MAIN);
     /* Limitar puntos del chart LVGL a un nº manejable; con BH_POINTS=8640
      * y 4 series LVGL aloca demasiado y el render se cuelga. Hacemos
      * downsample por step antes de meter los puntos.
@@ -409,7 +409,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     lv_obj_set_style_pad_left(chart, 8, 0);
     /* Hueco arriba para que la etiqueta Y superior (fuente 20) no se recorte. */
     lv_obj_set_style_pad_top(chart, 16, 0);
-    lv_obj_set_style_text_color(chart, lv_color_hex(0xAAAAAA), LV_PART_TICKS);
+    lv_obj_set_style_text_color(chart, UI_COLOR_TEXT_DIM, LV_PART_TICKS);
     lv_obj_set_style_text_font(chart, &lv_font_montserrat_20_es, LV_PART_TICKS);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_CIRCULAR);
     /* Etiquetas del eje Y con 1 decimal (deci-A / deci-V) */
@@ -435,7 +435,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     for (int i = 0; i < 5; ++i) {
         lv_obj_t *l = lv_label_create(s_bh_xlabels);
-        lv_obj_set_style_text_color(l, lv_color_hex(0xAAAAAA), 0);
+        lv_obj_set_style_text_color(l, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_text_font(l, &lv_font_montserrat_20_es, 0);
         lv_label_set_text(l, "--:--");
     }
