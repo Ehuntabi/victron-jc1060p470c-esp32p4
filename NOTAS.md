@@ -1,3 +1,19 @@
+v4.24 — un solo diagnóstico de "sobra" por página (el que mide la página ya colocada)
+
+## Qué cambia
+
+- Había **dos** líneas midiendo lo mismo en momentos distintos y daban números
+  distintos para la misma página (`alto=430 sobra=+82` y `alto=540 sobra=-28`):
+  la primera medía **antes** de que el menú colocase la página, con el alto que se
+  fuerza un momento antes. Se queda **solo la de `ui_settings_panel_show_page()`**,
+  que mide la página ya colocada — lo que ve el usuario.
+
+## Verificado (4-oct-2026)
+
+- Las páginas siguen cabiendo: victron_keys **-7**, logs 0, display -9,
+  tarjeta_sd -11, wifi -28, frigo -39, gps -52, sonido -71, autocaravana -75.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.23 — ninguna página de Ajustes obliga ya a desplazar en vertical
 
 ## Qué cambia
