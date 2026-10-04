@@ -149,6 +149,7 @@ más abajo. La auditoría lo comprueba (regla 3 de la sección 12).
 | **Tarjeta** | `CARD` + borde `CARD_BORDER` 1 px + radio 16 + pad 20; título en `UI_FONT_VALUE` con icono; nunca sin icono |
 | **Cifra** | etiqueta `UI_FONT_SMALL` `TEXT_DIM` + valor `UI_FONT_VALUE`/`DISPLAY` `TEXT` + unidad `UI_FONT_SMALL` `TEXT_DIM`; las cifras de una fila comparten línea base |
 | **Fila de ajuste** | alto `UI_ROW_H`, icono en cuadro radio `RADIUS_CTRL`, etiqueta `UI_FONT_TEXT`, control a la derecha |
+| **Página de Ajustes** | **no puede obligar a desplazar en vertical**: el contenido tiene que caber. Se comprueba con el log permanente de `settings_panel.c`, que al entrar en cada página escribe `sobra=<px>`: **negativo = cabe**; si sale positivo, se reorganiza (paginador, campos en una fila, texto repetido fuera), no se deja que el usuario tenga que arrastrar |
 | **Estado vacío** | `TEXT_DIM`, misma caja que el dato real (nunca el color del dato) |
 | **Depósito / indicador** | `UI_TANK_GREY_BODY_H` (92) **se pasa UNA vez** a `ui_tank_create`: la caja y el cuerpo comparten alto. Si después se fuerza el alto del widget a otro valor, el cuerpo no cabe y **se le recorta el borde inferior** (el "rectángulo de aguas grises cortado" del 4-oct-2026) |
 | **Barra inferior** | chips con pad 4 y radio 4; alta fija; mismo `pad_bottom` (`UI_BAR_H`) en las dos pestañas. **Fondo `BG`** (antes cada zona llevaba su casi-negro: `#000408` y `#000808` en la misma barra) |

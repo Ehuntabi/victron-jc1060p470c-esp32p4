@@ -1,3 +1,31 @@
+v4.23 — ninguna página de Ajustes obliga ya a desplazar en vertical
+
+## Qué cambia
+
+- **Victron Keys** era la única que desbordaba, y mucho: **819 px de más** sobre
+  los 540 visibles (una tarjeta grande por dispositivo, hasta 8). Ahora:
+  - **paginador** `◀ n/m ▶` en la tarjeta de controles: se ve **un dispositivo a
+    la vez** (los botones + y − de añadir/quitar siguen igual);
+  - los tres campos (**Nombre / Dirección MAC / Clave AES**) pasan a **una fila
+    cada uno** (etiqueta a la izquierda, caja a la derecha): antes la etiqueta iba
+    encima y la columna medía ~70 px de más;
+  - la nota de dos líneas se queda en una.
+  Medido: de **+819 a −7** (cabe con 7 px de sobra).
+- **Diagnóstico permanente** en `settings_panel.c`: al entrar en cada página
+  escribe `sobra=<px>` (negativo = cabe). Así se comprueba sin adivinar, y queda
+  como red para futuros cambios.
+
+## Verificado (4-oct-2026)
+
+- Las 10 páginas de Ajustes, medidas por el log: victron_keys **-7**, logs 0,
+  display -9, tarjeta_sd -11, wifi -28, frigo -39, gps -52, sonido -71,
+  autocaravana -75. Ninguna necesita scroll.
+- Las vistas (overview, batería, solar, DC/DC, detalle…) y los históricos: se
+  comprobó que su última tarjeta termina por encima de la barra inferior (539-548
+  de 552 disponibles). La **galería** sí desplaza, y es lo correcto: crece con las
+  fotos.
+- `AUDITORIA OK`: 11 reglas de cámara + 5 de estilo.
+
 v4.22 — el rectángulo de aguas grises vuelve a tener su borde (regresión de las medidas) y una sola etiqueta
 
 ## Qué cambia

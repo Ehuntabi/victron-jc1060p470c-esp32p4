@@ -1520,6 +1520,20 @@ void ui_settings_panel_show_page(int idx)
         ctx->populate(ctx, ctx->page);
         ctx->populated = true;
     }
+    /* DIAGNOSTICO PERMANENTE: cuanto le sobra (o le falta) a cada pagina.
+     *
+     * POR QUE SE QUEDA: el 4-oct-2026 el usuario pidio que NINGUNA pagina de
+     * Ajustes obligue a desplazar en vertical para ver el contenido. Esta linea,
+     * que sale cada vez que se entra en una pagina, es como se comprueba:
+     *   sobra >= 0 -> cabe entera
+     *   sobra <  0 -> le faltan |sobra| px: hay que reorganizar las tarjetas
+     * (Ejemplo real: victron_keys daba 819 px de mas con una tarjeta por
+     * dispositivo; con el paginador y los campos en una fila quedo en -7.) */
+    lv_obj_update_layout(ctx->page);
+    ESP_LOGI("UI_SETTINGS", "pagina '%.14s': alto=%d contenido=%d sobra=%d "
+             "(sobra<0 = NO cabe, hay que reorganizar)",
+             SETTINGS_PAGE_NAMES[idx], (int)lv_obj_get_height(ctx->page),
+             (int)lv_obj_get_content_height(ctx->page), (int)lv_obj_get_scroll_bottom(ctx->page));
 }
 
 /* Card clickable con la misma estetica que settings_menu_add_entry pero con

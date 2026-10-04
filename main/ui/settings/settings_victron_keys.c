@@ -161,6 +161,46 @@ static void victron_warning_btn_cb(lv_event_t *e)
     }
 }
 
+/* ── Paginador de dispositivos (4-oct-2026) ─────────────────────────────────
+ * Con hasta 8 dispositivos, mostrar TODAS las tarjetas a la vez obligaba a
+ * desplazar la pagina en vertical (medido en la placa: 819 px de mas sobre los
+ * 540 visibles). Ahora se ve UNA tarjeta cada vez y se cambia con ◀ / ▶, asi
+ * que la pagina entra entera sin scroll. Los botones +/- de anadir y quitar no
+ * cambian. */
+static int        s_vk_sel = 0;          /* dispositivo visible */
+static lv_obj_t  *s_vk_pager_lbl = NULL;
+static ui_state_t *s_vk_ui = NULL;
+
+static void victron_pager_aplicar(ui_state_t *ui)
+{
+    if (!ui) return;
+    const int n = (int)ui->victron_config.count;
+    if (n <= 0)            s_vk_sel = 0;
+    else if (s_vk_sel >= n) s_vk_sel = n - 1;
+    if (s_vk_sel < 0)      s_vk_sel = 0;
+
+    for (int i = 0; i < UI_MAX_VICTRON_DEVICES; ++i) {
+        lv_obj_t *r = ui->victron_config.rows[i];
+        if (!r) continue;
+        if (i == s_vk_sel) lv_obj_clear_flag(r, LV_OBJ_FLAG_HIDDEN);
+        else               lv_obj_add_flag(r, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (s_vk_pager_lbl) {
+        char buf[24];
+        snprintf(buf, sizeof buf, "%d/%d", n ? s_vk_sel + 1 : 0, n);
+        lv_label_set_text(s_vk_pager_lbl, buf);
+    }
+}
+
+static void victron_pager_cb(lv_event_t *e)
+{
+    const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+    if (s_vk_ui) {
+        s_vk_sel += dir;
+        victron_pager_aplicar(s_vk_ui);
+    }
+}
+
 /* Callback en el boton del menu principal para mostrar warning antes */
 void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
 {
@@ -174,7 +214,7 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_layout(victron_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(victron_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(victron_container, 16, 0);
-    lv_obj_set_style_pad_gap(victron_container, 16, 0);
+    lv_obj_set_style_pad_gap(victron_container, UI_PAD_12, 0);
     lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
 
     /* === Card de controles — border magenta de la seccion Victron Keys === */
@@ -221,7 +261,45 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_style_text_color(lbl_header, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_long_mode(lbl_header, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(lbl_header, lv_pct(100));
-    lv_label_set_text(lbl_header, "Configura hasta 8 dispositivos Victron\ncon su dirección MAC y clave AES.");
+    lv_label_set_text(lbl_header, "Hasta 8 dispositivos, con su dirección MAC y clave AES.");
+
+    /* Paginador: ◀  n/m  ▶  (se oculta solo si hay 0 o 1 dispositivos) */
+    s_vk_ui = ui;   /* el paginador necesita el estado para ocultar/mostrar */
+    lv_obj_t *pager = lv_obj_create(card_ctrl);
+    lv_obj_remove_style_all(pager);
+    lv_obj_set_size(pager, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_layout(pager, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(pager, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(pager, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(pager, 12, 0);
+    lv_obj_set_style_pad_top(pager, 8, 0);
+    lv_obj_clear_flag(pager, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *btn_prev = lv_btn_create(pager);
+    lv_obj_set_size(btn_prev, UI_ROW_H, UI_ROW_H);
+    lv_obj_set_style_bg_color(btn_prev, UI_COLOR_CARD, 0);
+    lv_obj_set_style_radius(btn_prev, UI_RADIUS_CTRL, 0);
+    lv_obj_t *lbl_prev = lv_label_create(btn_prev);
+    lv_label_set_text(lbl_prev, LV_SYMBOL_LEFT);
+    lv_obj_set_style_text_font(lbl_prev, UI_FONT_VALUE, 0);
+    lv_obj_center(lbl_prev);
+    lv_obj_add_event_cb(btn_prev, victron_pager_cb, LV_EVENT_CLICKED, (void *)(intptr_t)-1);
+
+    s_vk_pager_lbl = lv_label_create(pager);
+    lv_obj_set_style_text_font(s_vk_pager_lbl, UI_FONT_VALUE, 0);
+    lv_obj_set_style_text_color(s_vk_pager_lbl, UI_COLOR_TEXT_SOFT, 0);
+    lv_label_set_text(s_vk_pager_lbl, "0/0");
+
+    lv_obj_t *btn_next = lv_btn_create(pager);
+    lv_obj_set_size(btn_next, UI_ROW_H, UI_ROW_H);
+    lv_obj_set_style_bg_color(btn_next, UI_COLOR_ORANGE, 0);
+    lv_obj_set_style_radius(btn_next, UI_RADIUS_CTRL, 0);
+    lv_obj_t *lbl_next = lv_label_create(btn_next);
+    lv_label_set_text(lbl_next, LV_SYMBOL_RIGHT);
+    lv_obj_set_style_text_font(lbl_next, UI_FONT_VALUE, 0);
+    lv_obj_center(lbl_next);
+    lv_obj_add_event_cb(btn_next, victron_pager_cb, LV_EVENT_CLICKED, (void *)(intptr_t)1);
 
     ui->victron_config.container = victron_container;
 
@@ -303,6 +381,8 @@ void victron_config_load(ui_state_t *ui)
             }
         }
     }
+    /* Que se vea UN dispositivo (el seleccionado) sin scroll */
+    victron_pager_aplicar(ui);
 }
 
 void victron_config_refresh(ui_state_t *ui)
@@ -391,7 +471,7 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(body, 16, 0);
+    lv_obj_set_style_pad_gap(body, UI_PAD_12, 0);
 
     /* Columna izquierda — inputs (flex_grow=1 para mitad ancho) */
     lv_obj_t *col_left = lv_obj_create(body);
@@ -400,16 +480,29 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_set_flex_grow(col_left, 1);
     lv_obj_set_layout(col_left, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(col_left, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(col_left, 8, 0);
+    lv_obj_set_style_pad_gap(col_left, UI_PAD_4, 0);
 
-    lv_obj_t *name_label = lv_label_create(col_left);
+    /* Campo en UNA fila: etiqueta a la izquierda y caja a la derecha. Antes iba
+     * la etiqueta encima: con tres campos la columna medía ~70 px de mas y la
+     * pagina no cabia sin desplazar (medido el 4-oct-2026). */
+    lv_obj_t *fila_name = lv_obj_create(col_left);
+    lv_obj_remove_style_all(fila_name);
+    lv_obj_set_width(fila_name, lv_pct(100));
+    lv_obj_set_height(fila_name, LV_SIZE_CONTENT);
+    lv_obj_set_layout(fila_name, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fila_name, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_name, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(fila_name, UI_PAD_8, 0);
+    lv_obj_clear_flag(fila_name, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *name_label = lv_label_create(fila_name);
     lv_obj_set_style_text_font(name_label, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(name_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(name_label, "Nombre:");
 
-    lv_obj_t *name_ta = lv_textarea_create(col_left);
+    lv_obj_t *name_ta = lv_textarea_create(fila_name);
+    lv_obj_set_flex_grow(name_ta, 1);
     lv_textarea_set_max_length(name_ta, 31);
-    lv_obj_set_width(name_ta, lv_pct(100));
     lv_textarea_set_one_line(name_ta, true);
     lv_textarea_set_placeholder_text(name_ta, "ej. Solar Charger 1");
     lv_obj_set_style_text_font(name_ta, &lv_font_montserrat_20_es, 0);
@@ -419,14 +512,27 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(name_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
 
-    lv_obj_t *mac_label = lv_label_create(col_left);
+    /* Campo en UNA fila: etiqueta a la izquierda y caja a la derecha. Antes iba
+     * la etiqueta encima: con tres campos la columna medía ~70 px de mas y la
+     * pagina no cabia sin desplazar (medido el 4-oct-2026). */
+    lv_obj_t *fila_mac = lv_obj_create(col_left);
+    lv_obj_remove_style_all(fila_mac);
+    lv_obj_set_width(fila_mac, lv_pct(100));
+    lv_obj_set_height(fila_mac, LV_SIZE_CONTENT);
+    lv_obj_set_layout(fila_mac, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fila_mac, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_mac, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(fila_mac, UI_PAD_8, 0);
+    lv_obj_clear_flag(fila_mac, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *mac_label = lv_label_create(fila_mac);
     lv_obj_set_style_text_font(mac_label, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(mac_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(mac_label, "Dirección MAC:");
 
-    lv_obj_t *mac_ta = lv_textarea_create(col_left);
+    lv_obj_t *mac_ta = lv_textarea_create(fila_mac);
+    lv_obj_set_flex_grow(mac_ta, 1);
     lv_textarea_set_max_length(mac_ta, 17);
-    lv_obj_set_width(mac_ta, lv_pct(100));
     lv_textarea_set_one_line(mac_ta, true);
     lv_textarea_set_placeholder_text(mac_ta, "XX:XX:XX:XX:XX:XX");
     lv_obj_set_style_text_font(mac_ta, &lv_font_montserrat_20_es, 0);
@@ -436,14 +542,27 @@ void victron_config_create_row(ui_state_t *ui, size_t index)
     lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_DEFOCUSED, ui);
     lv_obj_add_event_cb(mac_ta, victron_field_ta_event_cb, LV_EVENT_READY, ui);
 
-    lv_obj_t *key_label = lv_label_create(col_left);
+    /* Campo en UNA fila: etiqueta a la izquierda y caja a la derecha. Antes iba
+     * la etiqueta encima: con tres campos la columna medía ~70 px de mas y la
+     * pagina no cabia sin desplazar (medido el 4-oct-2026). */
+    lv_obj_t *fila_key = lv_obj_create(col_left);
+    lv_obj_remove_style_all(fila_key);
+    lv_obj_set_width(fila_key, lv_pct(100));
+    lv_obj_set_height(fila_key, LV_SIZE_CONTENT);
+    lv_obj_set_layout(fila_key, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(fila_key, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_key, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(fila_key, UI_PAD_8, 0);
+    lv_obj_clear_flag(fila_key, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *key_label = lv_label_create(fila_key);
     lv_obj_set_style_text_font(key_label, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(key_label, UI_COLOR_TEXT_SOFT, 0);
     lv_label_set_text(key_label, "Clave AES (32 hex):");
 
-    lv_obj_t *key_ta = lv_textarea_create(col_left);
+    lv_obj_t *key_ta = lv_textarea_create(fila_key);
+    lv_obj_set_flex_grow(key_ta, 1);
     lv_textarea_set_max_length(key_ta, 32);
-    lv_obj_set_width(key_ta, lv_pct(100));
     lv_textarea_set_one_line(key_ta, true);
     lv_textarea_set_placeholder_text(key_ta, "00000000000000000000000000000000");
     lv_obj_set_style_text_font(key_ta, &lv_font_montserrat_20_es, 0);
