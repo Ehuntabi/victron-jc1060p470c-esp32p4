@@ -735,28 +735,65 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
             lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
         }
     } else if (kind == UI_TANK_GREY_H) {
-        /* Indicador CUADRADO: fijamos el contenedor con borde a un cuadrado
-         * (anula el width pct(100)/flex_grow genericos, que lo hacian seguir
-         * el ancho del titulo) y el LED rojo lo rellena. */
+        /* ICONO de aguas grises (5-oct-2026, idea del usuario): deposito con
+         * tapa, TRES ONDAS dentro y pitorro abajo, en vez del rectangulo liso.
+         * El hijo 0 sigue siendo el "agua": ui_tank_set lo pone gris tenue si
+         * cabe y ROJO si esta lleno (es un aviso, el NE185 solo da lleno/no).
+         * Los adornos llevan IGNORE_LAYOUT para colocarlos a mano. */
         lv_obj_set_flex_grow(tank, 0);
-        /* 64 y no 56: mas cerca del alto del deposito de agua limpia, para que
-         * los dos se lean como el mismo tipo de chisme. */
-        lv_obj_set_size(tank, 64, 64);
+        lv_obj_set_size(tank, 76, 54);
         lv_obj_set_layout(tank, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(tank, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tank, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
         lv_obj_t *led = lv_obj_create(tank);
         lv_obj_remove_style_all(led);
-        lv_obj_set_size(led, lv_pct(100), lv_pct(100));
-        lv_obj_set_style_radius(led, 8, 0);
+        lv_obj_set_size(led, 62, 26);
+        lv_obj_set_style_radius(led, 4, 0);
         lv_obj_set_style_bg_color(led, UI_COLOR_TEXT_DIM, 0);
-        /* Apagado (nivel 0) se queda en un gris muy tenue (UI_COLOR_TEXT_DIM
-         * con OPA_10); lleno, rojo vivo (lo sube ui_tank_set). Antes 20 %:
-         * ni se veia ni dejaba de verse. */
         lv_obj_set_style_bg_opa(led, LV_OPA_10, 0);
+        lv_obj_add_flag(led, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_align(led, LV_ALIGN_BOTTOM_MID, 0, -3);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Tres ondas (lineas con 7 puntos, subiendo y bajando 3 px) */
+        static const lv_point_t onda[] = {
+            {0, 3}, {6, 0}, {12, 3}, {18, 0}, {24, 3}, {30, 0}, {36, 3}, {42, 0}, {48, 3}
+        };
+        for (int i = 0; i < 3; i++) {
+            lv_obj_t *w = lv_line_create(tank);
+            lv_line_set_points(w, onda, 9);
+            lv_obj_set_style_line_width(w, 2, 0);
+            lv_obj_set_style_line_color(w, UI_COLOR_CYAN, 0);
+            lv_obj_set_style_line_opa(w, i == 2 ? LV_OPA_60 : LV_OPA_COVER, 0);
+            lv_obj_set_style_line_rounded(w, true, 0);
+            lv_obj_add_flag(w, LV_OBJ_FLAG_IGNORE_LAYOUT);
+            lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_align(w, LV_ALIGN_TOP_LEFT, 13, 12 + i * 9);
+        }
+
+        /* Tapa: la linea de arriba, separada del borde */
+        lv_obj_t *tapa = lv_obj_create(tank);
+        lv_obj_remove_style_all(tapa);
+        lv_obj_set_size(tapa, 52, 2);
+        lv_obj_set_style_bg_color(tapa, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_bg_opa(tapa, LV_OPA_COVER, 0);
+        lv_obj_add_flag(tapa, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_clear_flag(tapa, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(tapa, LV_ALIGN_TOP_MID, 0, 6);
+
+        /* Pitorro: cuelga del deposito (hijo de la caja, no del cuerpo) */
+        lv_obj_t *pitorro = lv_obj_create(lv_obj_get_parent(tank));
+        lv_obj_remove_style_all(pitorro);
+        lv_obj_set_size(pitorro, 16, 6);
+        lv_obj_set_style_bg_color(pitorro, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_bg_opa(pitorro, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(pitorro, UI_RADIUS_TAG, 0);
+        lv_obj_add_flag(pitorro, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_clear_flag(pitorro, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align_to(pitorro, tank, LV_ALIGN_OUT_BOTTOM_MID, 0, -1);
     } else {
         /* Fill (sube de abajo a arriba con el nivel). Gradiente vertical:
          * arriba mas claro, abajo mas saturado → efecto 'agua con brillo'. */

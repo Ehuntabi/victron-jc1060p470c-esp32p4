@@ -1,3 +1,23 @@
+v4.30 — icono de aguas grises (depósito, ondas y pitorro) en la pantalla principal
+
+## Qué cambia
+
+- El indicador de **aguas grises** deja de ser un **rectángulo liso** y pasa a ser
+  el **icono** que propuso el usuario: depósito con **tapa**, **tres ondas**
+  dentro y **pitorro** abajo. Dibujado con formas (como la batería o el
+  ventilador), sin meter imágenes.
+- Se mantiene lo que hacía: el "agua" (hijo 0) se pone **ROJO cuando está lleno**
+  (es un aviso; el NE185 solo da lleno/no lleno) y el **toque silencia** la alarma.
+- El icono tiene su propia medida: ya no se le fuerza el ancho del pill de 230 V,
+  que lo estiraba.
+
+## Verificado (5-oct-2026)
+
+- Captura de la pantalla principal: se ve el depósito con las tres ondas y el
+  pitorro, en el sitio del rectángulo.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo). De paso saltó una: había
+  puesto un radio de 2 px en el pitorro, fuera de la rejilla → `UI_RADIUS_TAG`.
+
 v4.29 — todos los desplegables de la app, con la fuente de la casa (20)
 
 ## Qué cambia
