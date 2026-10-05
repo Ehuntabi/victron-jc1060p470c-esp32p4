@@ -1,3 +1,20 @@
+v4.29 — todos los desplegables de la app, con la fuente de la casa (20)
+
+## Qué cambia
+
+- Los selectores (`lv_dropdown`) iban con la **fuente del tema** (14 px, la del SDK,
+  solo ASCII) mientras la etiqueta de al lado iba a 20 y los títulos a 24. Ahora
+  **todos** (los 9 de la app: Pantalla, Wi-Fi, Sonido, Frigo…) usan `UI_FONT_TEXT`
+  (20), en el botón **y** en la lista al abrirse.
+- Un solo sitio: ayudante `ui_dd_create(parent)` en `ui_card.c/h`; se sustituyen
+  las 9 llamadas a `lv_dropdown_create()`. Regla: **usar siempre `ui_dd_create()`**.
+
+## Verificado (5-oct-2026)
+
+- Captura de la página Pantalla: "Modo: [Atenuar]" con el texto al tamaño de su
+  etiqueta.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.27 — Pantalla: la disposición que pidió el usuario (a mano, con foto de la placa delante)
 
 ## Qué cambia

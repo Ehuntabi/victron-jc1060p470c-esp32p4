@@ -333,7 +333,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text(card2_title, "Página inicial del portal");
 
     /* Dropdown: 0=Keys, 1=Logs, 2=Dashboard */
-    lv_obj_t *dd_portal = lv_dropdown_create(card2_row1);
+    lv_obj_t *dd_portal = ui_dd_create(card2_row1);
     lv_obj_set_width(dd_portal, lv_pct(75));   /* mas estrecho (lo pidio el usuario) */
     lv_dropdown_set_options(dd_portal, "Keys\nLogs\nDashboard");
     lv_obj_set_style_text_font(dd_portal, &lv_font_montserrat_24_es, 0);

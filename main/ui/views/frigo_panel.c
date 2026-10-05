@@ -480,7 +480,7 @@ static lv_obj_t *make_sensor_row(lv_obj_t *parent, ui_state_t *ui,
     *lbl_val_out = lbl_val;
 
     /* Selector: ocupa el resto de la fila */
-    lv_obj_t *dd = lv_dropdown_create(row);
+    lv_obj_t *dd = ui_dd_create(row);
     lv_obj_set_flex_grow(dd, 1);
     lv_obj_set_height(dd, 44);
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_20_es, 0);

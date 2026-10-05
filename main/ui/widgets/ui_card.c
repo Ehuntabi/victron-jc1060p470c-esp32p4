@@ -423,6 +423,16 @@ void ui_arc_soc_set(lv_obj_t *arc_box, uint16_t soc_deci, uint16_t voltage_centi
  *
  * ui_battery_soc_set toma fill = body.child(0) y soc_lbl = last child,
  * asi es robusto si anaden mas hijos decorativos a body. */
+lv_obj_t *ui_dd_create(lv_obj_t *parent)
+{
+    lv_obj_t *dd = lv_dropdown_create(parent);
+    if (!dd) return NULL;
+    lv_obj_set_style_text_font(dd, UI_FONT_TEXT, 0);
+    lv_obj_t *lst = lv_dropdown_get_list(dd);
+    if (lst) lv_obj_set_style_text_font(lst, UI_FONT_TEXT, 0);
+    return dd;
+}
+
 lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
                                 lv_coord_t width, lv_coord_t height)
 {

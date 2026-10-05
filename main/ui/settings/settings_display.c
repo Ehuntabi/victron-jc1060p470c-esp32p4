@@ -47,6 +47,8 @@
 #include <time.h>
 #include "settings_common.h"
 
+
+
 void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display);
 /* Callbacks propios de esta pagina (definidos mas abajo). */
 static void brightness_slider_event_cb(lv_event_t *e);
@@ -358,7 +360,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_label_set_text(card3_title, LV_SYMBOL_LIST "  Vista por defecto");
     ui_card_wrap_title(card3, card3_title, UI_COLOR_GREEN);
 
-    ui->view_selection.dropdown = lv_dropdown_create(card3);
+    ui->view_selection.dropdown = ui_dd_create(card3);
     lv_obj_set_width(ui->view_selection.dropdown, lv_pct(100));
     lv_dropdown_set_options(ui->view_selection.dropdown,
         "Auto Detection\n"
@@ -398,7 +400,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_label_set_text(sp_title, LV_SYMBOL_IMAGE "  Pantalla de bienvenida");
     ui_card_wrap_title(card_sp, sp_title, UI_COLOR_ORANGE);
 
-    lv_obj_t *sp_dd = lv_dropdown_create(card_sp);
+    lv_obj_t *sp_dd = ui_dd_create(card_sp);
     lv_obj_set_width(sp_dd, lv_pct(100));
     lv_dropdown_set_options(sp_dd, "Sin splash\nLogo furgo");
     {
@@ -554,7 +556,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(lbl_mode, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_mode, "Modo:");
 
-    lv_obj_t *dd_mode = lv_dropdown_create(row_mode);
+    lv_obj_t *dd_mode = ui_dd_create(row_mode);
     lv_dropdown_set_options(dd_mode, "Atenuar\nRotar vistas");
     lv_obj_set_width(dd_mode, 200);
     lv_dropdown_set_selected(dd_mode, ui->screensaver.mode);

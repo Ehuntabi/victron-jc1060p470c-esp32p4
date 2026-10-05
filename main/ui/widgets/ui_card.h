@@ -96,6 +96,13 @@ void ui_arc_soc_set(lv_obj_t *arc_box, uint16_t soc_deci, uint16_t voltage_centi
  * mismos umbrales (verde/naranja/rojo). Encima del cuerpo aparece el
  * %; debajo del contenedor, el voltaje. Tamanos sugeridos: w=70 h=160.
  */
+/* Desplegable (lv_dropdown) con la fuente de la casa: TODOS los selectores de la
+ * app salen a UI_FONT_TEXT (20) tanto en el boton como en la lista al abrirse.
+ * El 5-oct-2026 iban con la fuente del tema (14 px, la del SDK, solo ASCII)
+ * mientras la etiqueta de al lado iba a 20. Usar SIEMPRE esto en vez de
+ * lv_dropdown_create(). */
+lv_obj_t *ui_dd_create(lv_obj_t *parent);
+
 lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
                                 lv_coord_t width, lv_coord_t height);
 void      ui_battery_soc_set(lv_obj_t *bat_box,

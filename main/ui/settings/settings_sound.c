@@ -347,7 +347,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_crit, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_crit, UI_COLOR_RED, 0);
     lv_label_set_text(lbl_crit, LV_SYMBOL_WARNING " Critico");
-    lv_obj_t *dd_crit = lv_dropdown_create(col_crit);
+    lv_obj_t *dd_crit = ui_dd_create(col_crit);
     lv_obj_set_width(dd_crit, 130);
     lv_obj_set_style_text_font(dd_crit, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_crit, "10 %\n20 %\n30 %\n40 %");
@@ -373,7 +373,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_text_font(lbl_warn, &lv_font_montserrat_20_es, 0);
     lv_obj_set_style_text_color(lbl_warn, UI_COLOR_ORANGE, 0);
     lv_label_set_text(lbl_warn, LV_SYMBOL_BELL " Aviso");
-    lv_obj_t *dd_warn = lv_dropdown_create(col_warn);
+    lv_obj_t *dd_warn = ui_dd_create(col_warn);
     lv_obj_set_width(dd_warn, 130);
     lv_obj_set_style_text_font(dd_warn, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_warn, "40 %\n50 %\n60 %\n70 %");
@@ -431,7 +431,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *lbl_min_a = lv_label_create(col_min_a);
     lv_obj_set_style_text_font(lbl_min_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_min_a, "Tras subir (min)");
-    lv_obj_t *dd_min_a = lv_dropdown_create(col_min_a);
+    lv_obj_t *dd_min_a = ui_dd_create(col_min_a);
     lv_obj_set_width(dd_min_a, 130);
     lv_obj_set_style_text_font(dd_min_a, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_min_a, "15\n30\n45\n60\n90");
@@ -457,7 +457,7 @@ void create_sound_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_t *lbl_t_a = lv_label_create(col_t_a);
     lv_obj_set_style_text_font(lbl_t_a, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(lbl_t_a, "Si supera");
-    lv_obj_t *dd_t_a = lv_dropdown_create(col_t_a);
+    lv_obj_t *dd_t_a = ui_dd_create(col_t_a);
     lv_obj_set_width(dd_t_a, 140);
     lv_obj_set_style_text_font(dd_t_a, &lv_font_montserrat_20_es, 0);
     lv_dropdown_set_options(dd_t_a, "-5 \xc2\xb0""C\n-2 \xc2\xb0""C\n0 \xc2\xb0""C\n+2 \xc2\xb0""C");
