@@ -1,3 +1,31 @@
+v4.32 — la pastilla de 230 V sin LED, y el icono de aguas grises cuadrado
+
+## Qué cambia
+
+- **230 V**: se quita el **LED redondo** — la propia pastilla ya se pone verde
+  cuando detecta 230 V, así que el redondo sobraba (lo dijo el usuario). La onda
+  (corriente alterna) se queda pegada al texto, como se escribe "230 V ~".
+- **Aguas grises**: fuera la **"tapa"** (una línea horizontal suelta encima de las
+  ondas; el usuario la vio como una raya rara). El **agua** (el rectángulo gris)
+  llena el ancho útil del depósito y llega hasta abajo — antes 62×26 con 3 px de
+  aire y parecía flotar —, las **tres ondas van centradas** sobre el agua y el
+  **pitorro** pasa a la esquina inferior DERECHA, como el dibujo del usuario.
+
+## Trampa medida (6-oct-2026)
+
+`overview_align_grey()` seguía **forzando el ancho del icono gris al de la
+pastilla de 230 V** (119 px en vez de 76): era herencia de cuando el indicador era
+un rectángulo liso que se alineaba con la pastilla. Con el icono dibujado eso lo
+estirada y, por dentro, las ondas se iban a la izquierda ("no están centradas").
+Ahora el icono tiene su medida y se centra solo; esa función únicamente lo baja
+para igualar su base con la del nivel de aguas limpias.
+
+## Verificado (6-oct-2026)
+
+- Captura de la pantalla principal: "230 V ~" sin LED y el icono de grises
+  centrado, con las ondas sobre el agua y el pitorro abajo a la derecha.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.31 — los botones de la pantalla principal, como los pictogramas del panel
 
 ## Qué cambia

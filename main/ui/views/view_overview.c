@@ -69,7 +69,6 @@ typedef struct {
     lv_obj_t *tank_r1;           /* tanque aguas grises (debajo de DC/DC) */
     lv_obj_t *pill_shore;        /* indicador 230 V (debajo de Bateria) */
     lv_obj_t *pill_shore_lbl;    /* texto interno del pill (ON/OFF) */
-    lv_obj_t *led_shore;         /* LED redondo del 230 V (a la derecha) */
     /* ── Widgets frigo (DS18B20 + ventilador PWM) ─────────────── */
     lv_obj_t *lbl_freezer_temp;  /* T_Congelador valor numerico (fuente grande) */
     lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
@@ -953,10 +952,10 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_pad_hor(pill, 12, 0);
         lv_obj_set_style_pad_ver(pill, 8, 0);
         lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
-        /* Contenido en FILA: el texto y el LED. La pastilla es de tamano
+        /* Contenido en FILA: el texto y la onda. La pastilla es de tamano
          * CONTENIDO, asi que un hijo alineado fuera la hace crecer y acaba
-         * montandose sobre el texto (medido el 5-oct-2026: el LED pisaba la
-         * "V"). En fila, el LED tiene su sitio y su hueco. */
+         * montandose sobre el texto (medido el 5-oct-2026, cuando el LED pisaba
+         * la "V"). En fila, cada cosa tiene su sitio y su hueco. */
         lv_obj_set_layout(pill, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(pill, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(pill, LV_FLEX_ALIGN_CENTER,
@@ -968,31 +967,18 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_text_color(ov->pill_shore_lbl, UI_COLOR_TEXT, 0);
         lv_label_set_text(ov->pill_shore_lbl, "230 V");
 
-        /* LED redondo a la DERECHA, dentro de la pastilla: mismo lenguaje que el
-         * de los botones (verde conectado / gris no). */
-        lv_obj_t *led = lv_obj_create(pill);
-        lv_obj_remove_style_all(led);
-        lv_obj_set_size(led, 14, 14);
-        lv_obj_set_style_radius(led, 8, 0);
-        lv_obj_set_style_bg_color(led, UI_COLOR_CARD_BORDER, 0);
-        lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
-        lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
-        ov->led_shore = led;
-
-        /* Simbolito de onda (corriente alterna) ENCIMA del LED, como el de la
-         * serigrafia del panel. Va con IGNORE_LAYOUT (la fila no lo coloca) en el
-         * hueco que queda por encima del LED dentro de la pastilla. */
+        /* Simbolito de onda (corriente alterna) pegado al texto, como se
+         * escribe "230 V ~". NO lleva LED redondo: la propia pastilla ya se pone
+         * verde cuando hay 230 V, asi que el redondo sobraba (6-oct-2026). */
         static const lv_point_t onda_ac[] = {
             {0, 3}, {4, 0}, {8, 3}, {12, 0}, {16, 3}
         };
         lv_obj_t *ac = lv_line_create(pill);
         lv_line_set_points(ac, onda_ac, 5);
         lv_obj_set_style_line_width(ac, 2, 0);
-        lv_obj_set_style_line_color(ac, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_line_color(ac, UI_COLOR_TEXT, 0);
         lv_obj_set_style_line_rounded(ac, true, 0);
-        lv_obj_add_flag(ac, LV_OBJ_FLAG_IGNORE_LAYOUT);
         lv_obj_clear_flag(ac, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align(ac, LV_ALIGN_TOP_RIGHT, 1, 0);
 
         ov->pill_shore = pill;
     }
@@ -1467,7 +1453,6 @@ static void overview_render(ui_overview_view_t *ov)
             lv_obj_set_style_bg_color(ov->pill_shore,
                 cd.fresh && cd.shore ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM, 0);
         }
-        camper_led_paint(ov->led_shore, cd.fresh && cd.shore);
         /* El texto "230 V" se mantiene fijo; solo cambia el color del pill */
         /* Estetica del boton se mantiene igual ON/OFF (bg gris, texto
          * del color del acento). Unico indicador de estado: el LED
@@ -1577,11 +1562,14 @@ static void overview_render(ui_overview_view_t *ov)
     }
 }
 
-/* Una sola vez, con el layout ya resuelto: hace el indicador de aguas grises
- * rectangular con el mismo ancho que el pill de 230V, y lo baja (con su titulo)
- * para que su base coincida con la base del nivel de aguas limpias. El
- * translate_y es solo visual: no mueve el 230V ni nada mas, y al estar en el
- * flujo el ancho de la columna no cambia (el texto no se recorta). */
+/* Una sola vez, con el layout ya resuelto: baja el indicador de aguas grises
+ * (con su titulo) para que su base coincida con la base del nivel de aguas
+ * limpias. El translate_y es solo visual: no mueve el 230V ni nada mas, y al
+ * estar en el flujo el ancho de la columna no cambia (el texto no se recorta).
+ * OJO: aqui se le forzaba el ANCHO al del pill de 230V (era un rectangulo liso).
+ * Desde que es un ICONO dibujado (v4.31) eso lo estiraba a 119 px y descuadraba
+ * el dibujo por dentro: las ondas se iban a la izquierda (visto el 6-oct-2026).
+ * El icono tiene su medida (76) y se centra solo. */
 static void overview_align_grey(ui_overview_view_t *ov)
 {
     if (!ov || ov->grey_aligned) return;
@@ -1594,10 +1582,7 @@ static void overview_align_grey(ui_overview_view_t *ov)
     lv_obj_t *grey_body  = lv_obj_get_child(ov->tank_r1, 1);
     lv_obj_t *clean_body = lv_obj_get_child(ov->tank_s1, 1);
     if (!grey_body || !clean_body) return;
-
-    /* Forma rectangular: ancho como el 230V (alto sin tocar). */
-    lv_obj_set_width(grey_body, pill_w);
-    lv_obj_update_layout(ov->base.root);
+    (void)pill_w;   /* ya no se usa: el icono NO se estira al ancho del 230V */
 
     /* Bajar el tanque gris hasta igualar su base con la del nivel limpio...
      * PERO sin salirse de la tarjeta. El 4-oct-2026, al subir los rellenos a la

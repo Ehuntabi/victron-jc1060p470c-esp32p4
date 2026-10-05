@@ -776,7 +776,10 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         lv_obj_clear_flag(onda, LV_OBJ_FLAG_CLICKABLE);
     } else if (kind == UI_TANK_GREY_H) {
         /* ICONO de aguas grises (5-oct-2026, idea del usuario): deposito con
-         * tapa, TRES ONDAS dentro y pitorro abajo, en vez del rectangulo liso.
+         * TRES ONDAS dentro y pitorro abajo, en vez del rectangulo liso.
+         * La "tapa" (una linea horizontal suelta arriba) se QUITO el 6-oct-2026:
+         * el usuario la vio como una raya rara encima de las ondas; el borde de
+         * arriba del deposito ya hace de tapa.
          * El hijo 0 sigue siendo el "agua": ui_tank_set lo pone gris tenue si
          * cabe y ROJO si esta lleno (es un aviso, el NE185 solo da lleno/no).
          * Los adornos llevan IGNORE_LAYOUT para colocarlos a mano. */
@@ -789,12 +792,14 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
 
         lv_obj_t *led = lv_obj_create(tank);
         lv_obj_remove_style_all(led);
-        lv_obj_set_size(led, 62, 26);
+        /* El agua ocupa el ancho util del deposito y llega hasta el borde de
+         * abajo (antes 62x26 con 3 px de aire y se quedaba flotando). */
+        lv_obj_set_size(led, 60, 32);
         lv_obj_set_style_radius(led, 4, 0);
         lv_obj_set_style_bg_color(led, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_bg_opa(led, LV_OPA_10, 0);
         lv_obj_add_flag(led, LV_OBJ_FLAG_IGNORE_LAYOUT);
-        lv_obj_align(led, LV_ALIGN_BOTTOM_MID, 0, -3);
+        lv_obj_align(led, LV_ALIGN_BOTTOM_MID, 0, 0);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -811,20 +816,13 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
             lv_obj_set_style_line_rounded(w, true, 0);
             lv_obj_add_flag(w, LV_OBJ_FLAG_IGNORE_LAYOUT);
             lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_align(w, LV_ALIGN_TOP_LEFT, 13, 12 + i * 9);
+            /* Centradas sobre el agua (ancho util 60, la onda mide 48) */
+            lv_obj_align(w, LV_ALIGN_TOP_LEFT, 6, 8 + i * 9);
         }
 
-        /* Tapa: la linea de arriba, separada del borde */
-        lv_obj_t *tapa = lv_obj_create(tank);
-        lv_obj_remove_style_all(tapa);
-        lv_obj_set_size(tapa, 52, 2);
-        lv_obj_set_style_bg_color(tapa, UI_COLOR_CYAN, 0);
-        lv_obj_set_style_bg_opa(tapa, LV_OPA_COVER, 0);
-        lv_obj_add_flag(tapa, LV_OBJ_FLAG_IGNORE_LAYOUT);
-        lv_obj_clear_flag(tapa, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align(tapa, LV_ALIGN_TOP_MID, 0, 6);
-
-        /* Pitorro: cuelga del deposito (hijo de la caja, no del cuerpo) */
+        /* Pitorro: cuelga del deposito por la ESQUINA DERECHA (como el dibujo
+         * del usuario) y es hijo de la caja, no del cuerpo: en LVGL 8.4 los hijos
+         * se recortan contra el padre (lv_obj_redraw) y asoma por abajo. */
         lv_obj_t *pitorro = lv_obj_create(lv_obj_get_parent(tank));
         lv_obj_remove_style_all(pitorro);
         lv_obj_set_size(pitorro, 16, 6);
@@ -833,7 +831,7 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         lv_obj_set_style_radius(pitorro, UI_RADIUS_TAG, 0);
         lv_obj_add_flag(pitorro, LV_OBJ_FLAG_IGNORE_LAYOUT);
         lv_obj_clear_flag(pitorro, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_align_to(pitorro, tank, LV_ALIGN_OUT_BOTTOM_MID, 0, -1);
+        lv_obj_align_to(pitorro, tank, LV_ALIGN_OUT_BOTTOM_RIGHT, -12, -1);
     } else {
         /* Fill (sube de abajo a arriba con el nivel). Gradiente vertical:
          * arriba mas claro, abajo mas saturado → efecto 'agua con brillo'. */
