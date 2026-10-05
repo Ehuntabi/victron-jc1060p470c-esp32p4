@@ -133,7 +133,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    /* Empaquetadas ARRIBA con el hueco normal (5-oct-2026: con SPACE_BETWEEN
+     * quedaba un hueco grande entre tarjetas que el usuario no queria). */
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
     lv_obj_set_style_pad_gap(cont, 8, 0);
@@ -164,10 +166,11 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(card1_title, &lv_font_montserrat_24_es, 0);
     lv_obj_set_style_text_color(card1_title, UI_COLOR_VIOLET, 0);
     lv_label_set_text(card1_title, LV_SYMBOL_EYE_OPEN "  Brillo pantalla");
-    /* v3.10: titulito unico (centrado con subrayado). La fila se queda como
-     * cuerpo y el control se va al extremo derecho, que es donde estaba. */
-    ui_card_wrap_title(card1, card1_title, UI_COLOR_VIOLET);
-    lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_END,
+    /* El titulo se queda EN LA MISMA LINEA que su valor y su deslizador
+     * (5-oct-2026, peticion del usuario: asi se gana una linea entera). Antes se
+     * sacaba a una cabecera centrada con su raya y el "70% [slider]" quedaba
+     * debajo. Titulo a la izquierda, valor+deslizador a la derecha. */
+    lv_obj_set_flex_align(card1_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Sub-row: valor + slider */
@@ -265,7 +268,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     /* Separacion entre el grupo de Inicio y el de Fin (5-oct-2026: el usuario
      * los queria separados; con el bloque centrado quedaban pegados). */
-    lv_obj_set_style_pad_column(nm_body, 48, 0);
+    lv_obj_set_style_pad_column(nm_body, UI_PAD_24, 0);
 
     /* (Sin espaciador: el usuario pidio el bloque Inicio/Fin CENTRADO.) */
     for (int slot = 0; slot < 2; slot++) {
