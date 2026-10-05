@@ -69,6 +69,7 @@ typedef struct {
     lv_obj_t *tank_r1;           /* tanque aguas grises (debajo de DC/DC) */
     lv_obj_t *pill_shore;        /* indicador 230 V (debajo de Bateria) */
     lv_obj_t *pill_shore_lbl;    /* texto interno del pill (ON/OFF) */
+    lv_obj_t *led_shore;         /* LED redondo del 230 V (a la derecha) */
     /* ── Widgets frigo (DS18B20 + ventilador PWM) ─────────────── */
     lv_obj_t *lbl_freezer_temp;  /* T_Congelador valor numerico (fuente grande) */
     lv_obj_t *lbl_freezer_unit;  /* unidad "C" en fuente _es (tiene glifo grado) */
@@ -452,6 +453,19 @@ static void overview_fan_rotate_cb(lv_timer_t *t)
     lv_img_set_angle(ov->img_fan, ov->fan_angle_deci);
 }
 
+/* Pinta un LED redondo de estado: verde con halo cuando esta encendido y gris
+ * apagado cuando no. Lo usan los tres botones camper y el LED del 230 V, para
+ * que los cuatro hablen el mismo idioma (5-oct-2026). */
+static void camper_led_paint(lv_obj_t *led, bool on)
+{
+    if (!led) return;
+    lv_obj_set_style_bg_color(led, on ? UI_COLOR_GREEN : UI_COLOR_CARD_BORDER, 0);
+    lv_obj_set_style_shadow_width(led, on ? 10 : 0, 0);
+    lv_obj_set_style_shadow_color(led, UI_COLOR_GREEN, 0);
+    lv_obj_set_style_shadow_opa(led, on ? LV_OPA_80 : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_shadow_spread(led, on ? 2 : 0, 0);
+}
+
 static void camper_btn_event_cb(lv_event_t *e)
 {
     char cmd = (char)(intptr_t)lv_event_get_user_data(e);
@@ -466,26 +480,118 @@ static void camper_btn_event_cb(lv_event_t *e)
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
-/* Crea un botón "píldora" con icono + texto y un LED indicador en la esquina
- * superior derecha. El LED queda accesible via lv_obj_get_user_data(btn).
- * El `accent` se usa como color del borde (2 px) para distinguir la funcion. */
-static lv_obj_t *camper_make_button(lv_obj_t *parent,
-                                    const char *icon, const char *text,
-                                    char cmd_char, lv_color_t accent)
+/* Dibujo del icono de un boton camper: la BOMBILLA con rayos de las luces y el
+ * GRIFO de la Bomba. Los dos van DIBUJADOS con formas (FontAwesome libre no trae
+ * ni rayos ni un grifo claro), como el deposito de aguas grises de ui_card.c:
+ * piezas sobre la rejilla de 4 px, colocadas a mano con IGNORE_LAYOUT y sin
+ * robarle el toque al boton. */
+typedef enum {
+    CAMPER_ICON_BULB = 0,    /* bombilla con rayos (Luz INT / Luz EXT) */
+    CAMPER_ICON_TAP,         /* grifo (Bomba) */
+} camper_icon_t;
+
+/* Bombilla CON RAYOS, como el pictograma del panel fisico: el glifo FontAwesome
+ * de la bombilla en el centro y seis trazos cortos alrededor. */
+static lv_obj_t *camper_make_bulb_icon(lv_obj_t *parent, lv_color_t color)
+{
+    static const struct { lv_coord_t x, y, dx, dy; } rayos[] = {
+        {  4, 24,  6,  0 },   /* izquierda */
+        { 44, 24, -6,  0 },   /* derecha */
+        {  9, 11,  5, -5 },   /* arriba-izquierda */
+        { 39, 11, -5, -5 },   /* arriba-derecha */
+        {  9, 37,  5,  5 },   /* abajo-izquierda */
+        { 39, 37, -5,  5 },   /* abajo-derecha */
+    };
+    /* OJO: lv_line NO copia los puntos, se queda con el puntero -> tienen que
+     * vivir en un array estatico (uno por rayo) que se rellena una sola vez. */
+    static lv_point_t pts[sizeof(rayos) / sizeof(rayos[0])][2];
+    static bool pts_listos = false;
+    if (!pts_listos) {
+        for (size_t i = 0; i < sizeof(rayos) / sizeof(rayos[0]); i++) {
+            pts[i][0].x = 0;           pts[i][0].y = 0;
+            pts[i][1].x = rayos[i].dx; pts[i][1].y = rayos[i].dy;
+        }
+        pts_listos = true;
+    }
+
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, 48, 48);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *bombilla = lv_label_create(box);
+    lv_obj_set_style_text_font(bombilla, &lv_font_montserrat_28_es, 0);
+    lv_obj_set_style_text_color(bombilla, color, 0);
+    lv_label_set_text(bombilla, "\xEF\x83\xAB");   /* U+F0EB = fa-lightbulb */
+    lv_obj_center(bombilla);
+
+    for (size_t i = 0; i < sizeof(rayos) / sizeof(rayos[0]); i++) {
+        lv_obj_t *r = lv_line_create(box);
+        lv_line_set_points(r, pts[i], 2);
+        lv_obj_set_style_line_width(r, 2, 0);
+        lv_obj_set_style_line_color(r, color, 0);
+        lv_obj_set_style_line_rounded(r, true, 0);
+        lv_obj_add_flag(r, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_clear_flag(r, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(r, LV_ALIGN_TOP_LEFT, rayos[i].x, rayos[i].y);
+    }
+    return box;
+}
+
+/* Grifo DIBUJADO, con la forma del pictograma del panel (6-oct-2026): maneta
+ * de DOS barras (la de arriba mas larga, como el mando del grifo de la foto),
+ * cuello corto, cuerpo horizontal largo, bajante en el extremo derecho y boca de
+ * salida hacia la izquierda. La caja es MAS ANCHA QUE ALTA (64x48). */
+static lv_obj_t *camper_make_tap_icon(lv_obj_t *parent, lv_color_t color)
+{
+    static const struct { lv_coord_t x, y, w, h; } piezas[] = {
+        { 20,  2, 22,  5 },   /* maneta: barra de arriba */
+        { 24,  7, 14,  5 },   /* maneta: barra de abajo, mas corta */
+        { 29, 12,  6,  5 },   /* cuello que baja al cuerpo */
+        {  4, 17, 56,  9 },   /* cuerpo: el tubo horizontal */
+        { 52, 26,  8, 14 },   /* bajante, en el extremo derecho */
+        { 34, 40, 26,  5 },   /* boca de salida, hacia la izquierda */
+    };
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, 64, 48);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    for (size_t i = 0; i < sizeof(piezas) / sizeof(piezas[0]); i++) {
+        lv_obj_t *p = lv_obj_create(box);
+        lv_obj_remove_style_all(p);
+        lv_obj_set_size(p, piezas[i].w, piezas[i].h);
+        lv_obj_set_style_radius(p, UI_RADIUS_TAG, 0);
+        lv_obj_set_style_bg_color(p, color, 0);
+        lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
+        lv_obj_add_flag(p, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_align(p, LV_ALIGN_TOP_LEFT, piezas[i].x, piezas[i].y);
+        lv_obj_clear_flag(p, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
+    }
+    return box;
+}
+
+/* Crea un botón ÓVALO como los del panel fisico del usuario: contorno fino del
+ * color de la funcion, SIN relleno (se ve el fondo de la tarjeta) y sin sombra,
+ * con el dibujo dentro, su texto corto si lo lleva y el LED redondo de estado
+ * asomando por el borde. El LED queda accesible via lv_obj_get_user_data(btn).
+ * `text` puede ser NULL (la Bomba va sin rotulo). El LED de estado va DENTRO
+ * del oval, a la IZQUIERDA, en los tres botones (6-oct-2026). */
+static lv_obj_t *camper_make_button(lv_obj_t *parent, const char *text,
+                                    char cmd_char, lv_color_t accent,
+                                    camper_icon_t dibujo)
 {
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, 200, 85);
-    lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);                 /* píldora: radius = h/2 */
-    lv_obj_set_style_bg_color(btn, UI_COLOR_CARD_BORDER, 0);
+    lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);                 /* óvalo: radius = h/2 */
+    /* Oval del panel: sin relleno, sin sombra y con el contorno de la funcion */
+    lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_style_text_color(btn, UI_COLOR_TEXT, 0);
-    /* Borde de color de la funcion (2 px) — ahora SE VE como boton */
     lv_obj_set_style_border_color(btn, accent, 0);
     lv_obj_set_style_border_width(btn, 2, 0);
-    /* Sombra suave para sensación de elevación */
-    lv_obj_set_style_shadow_width(btn, 14, 0);
-    lv_obj_set_style_shadow_color(btn, lv_color_black(), 0);
-    lv_obj_set_style_shadow_opa(btn, LV_OPA_30, 0);
-    lv_obj_set_style_shadow_ofs_y(btn, 4, 0);
 
     /* Contenedor horizontal con icono (fuente regular para los glyphs FA)
      * + texto (SemiBold para mejor contraste sin oscurecer el fondo). */
@@ -504,27 +610,30 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent,
     lv_obj_set_style_pad_gap(row, 8, 0);
     lv_obj_center(row);
 
-    if (icon && icon[0]) {
-        lv_obj_t *l_icon = lv_label_create(row);
-        lv_obj_set_style_text_font(l_icon, &lv_font_montserrat_28_es, 0);
-        lv_obj_set_style_text_color(l_icon, accent, 0);
-        lv_label_set_text(l_icon, icon);
-    }
-    lv_obj_t *l_text = lv_label_create(row);
-    lv_obj_set_style_text_font(l_text, &lv_font_montserrat_28_es, 0);
-    lv_obj_set_style_text_color(l_text, accent, 0);
-    lv_label_set_text(l_text, text ? text : "");
+    if (dibujo == CAMPER_ICON_TAP) camper_make_tap_icon(row, accent);
+    else                           camper_make_bulb_icon(row, accent);
 
-    /* LED indicador 10x10 esquina sup. dcha. Off gris oscuro; on cambia
-     * color + halo en el refresh general. */
+    /* Rotulo corto ("INT"/"EXT"); la Bomba va SIN texto (el grifo ya lo dice). */
+    if (text && text[0]) {
+        lv_obj_t *l_text = lv_label_create(row);
+        lv_obj_set_style_text_font(l_text, &lv_font_montserrat_28_es, 0);
+        lv_obj_set_style_text_color(l_text, accent, 0);
+        lv_label_set_text(l_text, text);
+    }
+
+    /* LED redondo de estado (Off gris oscuro; on verde + halo, lo pinta
+     * camper_led_paint en el refresh general). Va DENTRO del oval, mas grande y
+     * a la IZQUIERDA en los tres botones (6-oct-2026). La alineacion es de
+     * estilo, asi que se reaplica si el boton cambia de tamaño; el 4 de
+     * desplazamiento es lo que lo separa del borde (el area de contenido del
+     * boton empieza ~13 px dentro por el relleno del tema, medido en captura). */
     lv_obj_t *led = lv_obj_create(btn);
     lv_obj_remove_style_all(led);
-    lv_obj_set_size(led, 14, 14);
-    lv_obj_set_style_radius(led, 8, 0);
+    lv_obj_set_size(led, 20, 20);
+    lv_obj_set_style_radius(led, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(led, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
-    /* LED centrado horizontalmente, asomando un poco por encima del borde */
-    lv_obj_align(led, LV_ALIGN_TOP_MID, 0, -5);
+    lv_obj_align(led, LV_ALIGN_LEFT_MID, 4, 0);
     lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_user_data(btn, led);
 
@@ -841,14 +950,50 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_border_color(pill, UI_COLOR_CARD_BORDER, 0);
         lv_obj_set_style_bg_color(pill, UI_COLOR_TEXT_DIM, 0);
         lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-        lv_obj_set_style_pad_hor(pill, 16, 0);
+        lv_obj_set_style_pad_hor(pill, 12, 0);
         lv_obj_set_style_pad_ver(pill, 8, 0);
         lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+        /* Contenido en FILA: el texto y el LED. La pastilla es de tamano
+         * CONTENIDO, asi que un hijo alineado fuera la hace crecer y acaba
+         * montandose sobre el texto (medido el 5-oct-2026: el LED pisaba la
+         * "V"). En fila, el LED tiene su sitio y su hueco. */
+        lv_obj_set_layout(pill, LV_LAYOUT_FLEX);
+        lv_obj_set_flex_flow(pill, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(pill, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(pill, 4, 0);
+
         ov->pill_shore_lbl = lv_label_create(pill);
         lv_obj_set_style_text_font(ov->pill_shore_lbl, &lv_font_montserrat_24_es, 0);
         lv_obj_set_style_text_color(ov->pill_shore_lbl, UI_COLOR_TEXT, 0);
         lv_label_set_text(ov->pill_shore_lbl, "230 V");
-        lv_obj_center(ov->pill_shore_lbl);
+
+        /* LED redondo a la DERECHA, dentro de la pastilla: mismo lenguaje que el
+         * de los botones (verde conectado / gris no). */
+        lv_obj_t *led = lv_obj_create(pill);
+        lv_obj_remove_style_all(led);
+        lv_obj_set_size(led, 14, 14);
+        lv_obj_set_style_radius(led, 8, 0);
+        lv_obj_set_style_bg_color(led, UI_COLOR_CARD_BORDER, 0);
+        lv_obj_set_style_bg_opa(led, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
+        ov->led_shore = led;
+
+        /* Simbolito de onda (corriente alterna) ENCIMA del LED, como el de la
+         * serigrafia del panel. Va con IGNORE_LAYOUT (la fila no lo coloca) en el
+         * hueco que queda por encima del LED dentro de la pastilla. */
+        static const lv_point_t onda_ac[] = {
+            {0, 3}, {4, 0}, {8, 3}, {12, 0}, {16, 3}
+        };
+        lv_obj_t *ac = lv_line_create(pill);
+        lv_line_set_points(ac, onda_ac, 5);
+        lv_obj_set_style_line_width(ac, 2, 0);
+        lv_obj_set_style_line_color(ac, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_line_rounded(ac, true, 0);
+        lv_obj_add_flag(ac, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_clear_flag(ac, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(ac, LV_ALIGN_TOP_RIGHT, 1, 0);
+
         ov->pill_shore = pill;
     }
 
@@ -907,12 +1052,15 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
     lv_obj_clear_flag(top_group, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Icono bombilla FA5 (0xF0EB) en UTF-8 = "\xEF\x83\xAB" */
-    ov->btn_lin  = camper_make_button(top_group, "\xEF\x83\xAB", "Luz INT", 'i',
-                                       UI_COLOR_YELLOW);
-    ov->btn_pump = camper_make_button(top_group, LV_SYMBOL_TINT, "Bomba",   'p',
-                                       UI_COLOR_CYAN);
-    ov->btn_lout = camper_make_button(btn_col, "\xEF\x83\xAB", "Luz EXT", 'o',
-                                       UI_COLOR_YELLOW);
+    /* Los tres son el pictograma del panel fisico, con el LED en su borde:
+     * las luces con la bombilla y sus rayos + "INT"/"EXT", y la Bomba con el
+     * grifo y sin rotulo (6-oct-2026). */
+    ov->btn_lin  = camper_make_button(top_group, "INT", 'i', UI_COLOR_YELLOW,
+                                       CAMPER_ICON_BULB);
+    ov->btn_pump = camper_make_button(top_group, NULL, 'p', UI_COLOR_CYAN,
+                                       CAMPER_ICON_TAP);
+    ov->btn_lout = camper_make_button(btn_col, "EXT", 'o', UI_COLOR_YELLOW,
+                                       CAMPER_ICON_BULB);
 
     /* ── Card frigo (derecha, mas alta: rellena el alto de la fila;
      *    ancho = su contenido, igual que antes). ── */
@@ -1312,11 +1460,14 @@ static void overview_render(ui_overview_view_t *ov)
          * cambia de dibujo segun este sonando o silenciada. */
         refresh_mute_iconos(ov);
 
-        /* Indicador 230 V grande */
+        /* Indicador 230 V grande: la pastilla se pinta como siempre (verde si
+         * hay 230 V) y ademas su LED de la derecha, igual que el de los botones
+         * (5-oct-2026: "230 V con LED a la derecha"). */
         if (ov->pill_shore) {
             lv_obj_set_style_bg_color(ov->pill_shore,
                 cd.fresh && cd.shore ? UI_COLOR_GREEN : UI_COLOR_TEXT_DIM, 0);
         }
+        camper_led_paint(ov->led_shore, cd.fresh && cd.shore);
         /* El texto "230 V" se mantiene fijo; solo cambia el color del pill */
         /* Estetica del boton se mantiene igual ON/OFF (bg gris, texto
          * del color del acento). Unico indicador de estado: el LED
@@ -1324,16 +1475,7 @@ static void overview_render(ui_overview_view_t *ov)
         #define UPDATE_CAMPER_BTN(btn, on, color_on) do {                   \
             if (!(btn)) break;                                              \
             (void)(color_on);                                               \
-            lv_obj_t *led = (lv_obj_t *)lv_obj_get_user_data(btn);          \
-            if (led) {                                                      \
-                lv_obj_set_style_bg_color(led,                              \
-                    (on) ? UI_COLOR_GREEN : UI_COLOR_CARD_BORDER, 0);     \
-                lv_obj_set_style_shadow_width(led, (on) ? 10 : 0, 0);       \
-                lv_obj_set_style_shadow_color(led, UI_COLOR_GREEN, 0);      \
-                lv_obj_set_style_shadow_opa(led,                            \
-                    (on) ? LV_OPA_80 : LV_OPA_TRANSP, 0);                   \
-                lv_obj_set_style_shadow_spread(led, (on) ? 2 : 0, 0);       \
-            }                                                               \
+            camper_led_paint((lv_obj_t *)lv_obj_get_user_data(btn), (on));  \
         } while (0)
 
         UPDATE_CAMPER_BTN(ov->btn_lin,  cd.fresh && cd.light_in,  UI_COLOR_YELLOW);

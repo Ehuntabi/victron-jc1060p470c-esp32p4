@@ -734,6 +734,46 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
             lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
         }
+
+        /* TAPON arriba a la derecha (dibujo del usuario, 5-oct-2026): media
+         * altura fuera del deposito y media dentro, como la boca de llenado.
+         * Es hijo de la CAJA, no del cuerpo: en LVGL 8.4 los hijos se recortan
+         * contra el padre (lv_obj_redraw, salvo LV_OBJ_FLAG_OVERFLOW_VISIBLE) y
+         * el tapon asoma por arriba del deposito -> recortado y no se veia. Es
+         * el mismo motivo por el que el pitorro de las grises cuelga de la caja.
+         * La posicion la pone ui_tank_set en cada refresco (aqui la caja aun
+         * mide 1 px: el alto se le da despues, al colocarla en la tarjeta). */
+        lv_obj_t *tapon = lv_obj_create(lv_obj_get_parent(tank));
+        lv_obj_remove_style_all(tapon);
+        lv_obj_set_size(tapon, 24, 8);
+        lv_obj_set_style_radius(tapon, UI_RADIUS_TAG, 0);
+        lv_obj_set_style_bg_color(tapon, accent_color, 0);
+        lv_obj_set_style_bg_opa(tapon, LV_OPA_COVER, 0);
+        lv_obj_add_flag(tapon, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_clear_flag(tapon, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(tapon, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* ONDA de la superficie del agua. Es hija de la columna de LEDs y va la
+         * ULTIMA (indice 4, despues de las 4 barras): ui_tank_set sigue leyendo
+         * las barras en los indices 0..3 y coloca esta onda sobre la barra
+         * encendida mas alta, para que la superficie suba y baje con el nivel
+         * (el nivel ES el agua). Ancho = 64 px = el de la columna. */
+        static const lv_point_t onda_agua[] = {
+            {0, 3}, {8, 0}, {16, 3}, {24, 0}, {32, 3},
+            {40, 0}, {48, 3}, {56, 0}, {64, 3}
+        };
+        lv_obj_t *onda = lv_line_create(leds);
+        /* La columna no recorta a sus hijos: con el deposito LLENO la onda queda
+         * 4 px por encima de la barra de arriba y sin esto desaparecia (LVGL
+         * recorta los hijos contra el padre). */
+        lv_obj_add_flag(leds, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_line_set_points(onda, onda_agua, 9);
+        lv_obj_set_style_line_width(onda, 2, 0);
+        lv_obj_set_style_line_color(onda, UI_COLOR_CYAN, 0);
+        lv_obj_set_style_line_rounded(onda, true, 0);
+        lv_obj_add_flag(onda, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_add_flag(onda, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(onda, LV_OBJ_FLAG_CLICKABLE);
     } else if (kind == UI_TANK_GREY_H) {
         /* ICONO de aguas grises (5-oct-2026, idea del usuario): deposito con
          * tapa, TRES ONDAS dentro y pitorro abajo, en vez del rectangulo liso.
@@ -896,6 +936,26 @@ void ui_tank_set(lv_obj_t *tank_box, uint8_t level_0_to_3)
                 bool on = (i < lv);   /* acumulativo: LEDs 0..lv-1 encendidos */
                 lv_obj_set_style_bg_color(led, UI_COLOR_CYAN, 0);
                 lv_obj_set_style_bg_opa(led, on ? LV_OPA_COVER : LV_OPA_20, 0);
+            }
+        }
+        /* El TAPON (hijo 2 de la caja) se pone aqui: a caballo del borde de
+         * arriba y a 16 px del canto derecho. Se hace en cada refresco porque es
+         * cuando el deposito ya tiene su tamaño definitivo (al crearlo, la caja
+         * mide 1 px). */
+        lv_obj_t *tapon = lv_obj_get_child(lv_obj_get_parent(tank), 2);
+        if (tapon) lv_obj_align_to(tapon, tank, LV_ALIGN_OUT_TOP_RIGHT, -16, 4);
+
+        /* La onda de la superficie (hija 4) se pega al borde de ARRIBA de la
+         * barra encendida mas alta: la superficie del agua sube y baja con el
+         * nivel. Sin agua (reserva) o sin dato, no se enseña. */
+        lv_obj_t *onda = lv_obj_get_child(leds, 4);
+        if (onda) {
+            if (no_data || empty) {
+                lv_obj_add_flag(onda, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_t *arriba = lv_obj_get_child(leds, lv - 1);
+                lv_obj_clear_flag(onda, LV_OBJ_FLAG_HIDDEN);
+                if (arriba) lv_obj_align_to(onda, arriba, LV_ALIGN_OUT_TOP_LEFT, 0, 0);
             }
         }
         return;

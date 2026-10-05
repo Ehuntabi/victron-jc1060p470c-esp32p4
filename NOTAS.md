@@ -1,3 +1,51 @@
+v4.31 — los botones de la pantalla principal, como los pictogramas del panel
+
+## Qué cambia
+
+- **Luz INT / Luz EXT y Bomba** dejan de ser pastillas con icono+texto y pasan a
+  ser el pictograma del panel físico del usuario: **óvalo de contorno fino y SIN
+  relleno**, el dibujo dentro y el **LED de estado dentro, a la izquierda**, más
+  grande (20 px) en los tres.
+- **Bombilla con rayos** (glifo FontAwesome + seis trazos dibujados) y rótulo corto
+  "INT"/"EXT". La **Bomba va sin texto**: el grifo ya lo dice.
+- **Grifo dibujado** (64×48, más ancho que alto): maneta de dos barras, cuello,
+  cuerpo largo, bajante en el extremo derecho y boca de salida hacia la izquierda.
+- **230 V**: la pastilla pasa a fila [texto][LED] — al ser de tamaño contenido, un
+  hijo alineado fuera la hacía crecer y el LED acababa montado sobre la "V" — y
+  lleva el **simbolito de onda** (corriente alterna) encima del LED.
+- **Aguas limpias**: el depósito lleva **tapón arriba a la derecha** (a caballo del
+  borde) y una **onda en la superficie del agua**, que se pega a la barra encendida
+  más alta (el nivel ES el agua). En reserva o sin dato, la onda no se enseña.
+
+## Trampas medidas (5-6 oct-2026, para el que siga)
+
+- **LVGL 8.4 recorta los hijos contra el padre** (`lv_obj_redraw`, `clip_coords_for_children`)
+  salvo que el padre lleve `LV_OBJ_FLAG_OVERFLOW_VISIBLE`. Por eso el tapón (que
+  asoma por arriba del depósito) no se veía, y por eso el pitorro de las grises es
+  hijo de la CAJA y no del cuerpo. Ahora el tapón cuelga de la caja y `ui_tank_set`
+  lo recoloca en cada refresco; la columna de barras lleva `OVERFLOW_VISIBLE` para
+  que la onda no desaparezca con el depósito lleno (4/4).
+- `lv_obj_align()` **no aplica las alineaciones `OUT_*`**: caen en el caso por
+  defecto de `lv_obj_refr_pos` y el objeto se va a la esquina superior izquierda
+  (el tapón salió en la esquina contraria). Los `OUT_*` solo los resuelve
+  `lv_area_align()`, o sea `lv_obj_align_to()`.
+- `lv_obj_align_to()` calcula la posición **una sola vez**, y al crear el tanque la
+  caja todavía mide 1 px (el alto se le pone después, al colocarla en la tarjeta):
+  ahí no vale; `align` es de estilo y se reaplica en cada reflujo.
+- El LED con `lv_obj_align(..., LEFT_MID/TOP_MID, ...)` se alinea contra el **área
+  de contenido** del botón (que lleva el relleno del tema): quedaba 8 px dentro del
+  óvalo y en la Bomba se leía como un punto del dibujo.
+
+## Verificado (6-oct-2026)
+
+- Captura con **estado inyectado** (agua limpia 3/4, grises llenas, Luz INT y Bomba
+  encendidas, 230 V conectado): los tres LEDs en verde, la bombilla con rayos, el
+  grifo y la onda de la superficie en su sitio. La inyección era temporal (llama a
+  `ne185_sim_inject`, no a `sim_overview`: así no escribe CSV inventados en la SD) y
+  **se quitó antes de publicar**.
+- Captura final con el firmware de producción (tapón y dibujos en su sitio) y
+  `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.30 — icono de aguas grises (depósito, ondas y pitorro) en la pantalla principal
 
 ## Qué cambia
