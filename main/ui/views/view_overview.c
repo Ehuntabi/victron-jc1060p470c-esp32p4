@@ -479,6 +479,15 @@ static void camper_btn_event_cb(lv_event_t *e)
 /* (helper camper_make_tank antiguo eliminado: ahora se usa
  *  ui_tank_create de ui_card.c, que es el widget visual grande) */
 
+/* Fuente de UN SOLO GLIFO para el grifo de la Bomba, generada con
+ * lv_font_conv a partir de Material Design Icons (mdi-faucet, U+F1B29), como se
+ * hizo con el rayo y el panel solar. En FontAwesome libre NO hay grifo, y
+ * dibujarlo con formas salia a cartel de barritas (lo dijo el usuario): con el
+ * glifo se ve como la bombilla de las luces. */
+/* 64 px: el grifo es el UNICO contenido del ovalo de la Bomba y con 40 se
+ * quedaba pequeño (lo dijo el usuario: "el icono ok pero mas grande"). */
+LV_FONT_DECLARE(mdi_faucet_64);
+
 /* Dibujo del icono de un boton camper: la BOMBILLA con rayos de las luces y el
  * GRIFO de la Bomba. Los dos van DIBUJADOS con formas (FontAwesome libre no trae
  * ni rayos ni un grifo claro), como el deposito de aguas grises de ui_card.c:
@@ -538,40 +547,6 @@ static lv_obj_t *camper_make_bulb_icon(lv_obj_t *parent, lv_color_t color)
     return box;
 }
 
-/* Grifo DIBUJADO, con la forma del pictograma del panel (6-oct-2026): maneta
- * de DOS barras (la de arriba mas larga, como el mando del grifo de la foto),
- * cuello corto, cuerpo horizontal largo, bajante en el extremo derecho y boca de
- * salida hacia la izquierda. La caja es MAS ANCHA QUE ALTA (64x48). */
-static lv_obj_t *camper_make_tap_icon(lv_obj_t *parent, lv_color_t color)
-{
-    static const struct { lv_coord_t x, y, w, h; } piezas[] = {
-        { 20,  2, 22,  5 },   /* maneta: barra de arriba */
-        { 24,  7, 14,  5 },   /* maneta: barra de abajo, mas corta */
-        { 29, 12,  6,  5 },   /* cuello que baja al cuerpo */
-        {  4, 17, 56,  9 },   /* cuerpo: el tubo horizontal */
-        { 52, 26,  8, 14 },   /* bajante, en el extremo derecho */
-        { 34, 40, 26,  5 },   /* boca de salida, hacia la izquierda */
-    };
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, 64, 48);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    for (size_t i = 0; i < sizeof(piezas) / sizeof(piezas[0]); i++) {
-        lv_obj_t *p = lv_obj_create(box);
-        lv_obj_remove_style_all(p);
-        lv_obj_set_size(p, piezas[i].w, piezas[i].h);
-        lv_obj_set_style_radius(p, UI_RADIUS_TAG, 0);
-        lv_obj_set_style_bg_color(p, color, 0);
-        lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
-        lv_obj_add_flag(p, LV_OBJ_FLAG_IGNORE_LAYOUT);
-        lv_obj_align(p, LV_ALIGN_TOP_LEFT, piezas[i].x, piezas[i].y);
-        lv_obj_clear_flag(p, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
-    }
-    return box;
-}
-
 /* Crea un botón ÓVALO como los del panel fisico del usuario: contorno fino del
  * color de la funcion, SIN relleno (se ve el fondo de la tarjeta) y sin sombra,
  * con el dibujo dentro, su texto corto si lo lleva y el LED redondo de estado
@@ -609,8 +584,14 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent, const char *text,
     lv_obj_set_style_pad_gap(row, 8, 0);
     lv_obj_center(row);
 
-    if (dibujo == CAMPER_ICON_TAP) camper_make_tap_icon(row, accent);
-    else                           camper_make_bulb_icon(row, accent);
+    if (dibujo == CAMPER_ICON_TAP) {
+        lv_obj_t *l_tap = lv_label_create(row);
+        lv_obj_set_style_text_font(l_tap, &mdi_faucet_64, 0);
+        lv_obj_set_style_text_color(l_tap, accent, 0);
+        lv_label_set_text(l_tap, "\xF3\xB1\xAC\xA9");   /* U+F1B29 = mdi-faucet */
+    } else {
+        camper_make_bulb_icon(row, accent);
+    }
 
     /* Rotulo corto ("INT"/"EXT"); la Bomba va SIN texto (el grifo ya lo dice). */
     if (text && text[0]) {

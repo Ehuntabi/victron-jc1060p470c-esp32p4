@@ -1,3 +1,25 @@
+v4.34 — ondas dentro de cada paso de nivel, y el grifo con un glifo de verdad
+
+## Qué cambia
+
+- **Aguas limpias**: cada uno de los cuatro rectángulos de nivel (1/4 … 4/4) lleva
+  dentro **dos ondas** del color del fondo del depósito. Al ser de ese color solo
+  se ven cuando el paso está encendido (con agua): en un paso apagado o sin dato
+  (20 % de opacidad) no se notan. Son hijas del rectángulo, así que las recorta él
+  y se mueven con él.
+- **Bomba**: el grifo deja de estar **dibujado con formas** (quedaba a "cartel de
+  barritas": se veían las costuras entre las piezas) y pasa a ser un **glifo**,
+  como la bombilla de las luces: `mdi-faucet` (U+F1B29) de **Material Design
+  Icons**, generado a 64 px con `lv_font_conv` en `main/fonts/mdi_faucet_64.c`
+  (misma receta que `font_awesome_bolt_40.c`). En FontAwesome libre no hay grifo.
+  Es el único contenido del óvalo, así que va grande.
+
+## Verificado (6-oct-2026)
+
+- Captura con estado inyectado (agua limpia 3/4, grises llenas, Luz INT y Bomba
+  encendidas, 230 V conectado) y captura final de producción: los tres LEDs, las
+  ondas del nivel, el grifo y el tapón en su sitio. `AUDITORIA OK`.
+
 v4.33 — el gráfico de la batería: marco fino, bornes altos y sin líneas de celdas
 
 ## Qué cambia

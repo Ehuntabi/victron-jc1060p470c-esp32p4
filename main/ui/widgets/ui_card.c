@@ -722,6 +722,15 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
         lv_obj_set_flex_align(leds, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(leds, LV_OBJ_FLAG_SCROLLABLE);
+        /* Cada paso de nivel es un trozo de AGUA: lleva dentro DOS ONDAS del
+         * color del fondo del deposito (6-oct-2026, idea del usuario). Al ser del
+         * color del fondo, solo se ven cuando el rectangulo esta encendido (con
+         * el agua): en un paso apagado o sin dato (OPA_20) no se notan, que es lo
+         * que tiene que pasar. Son hijas del rectangulo, asi que las recorta el y
+         * se mueven con el. */
+        static const lv_point_t onda_nivel[] = {
+            {0, 3}, {8, 0}, {16, 3}, {24, 0}, {32, 3}, {40, 0}, {48, 3}
+        };
         for (int i = 0; i < 4; i++) {
             lv_obj_t *led = lv_obj_create(leds);
             lv_obj_remove_style_all(led);
@@ -731,6 +740,16 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
             lv_obj_set_style_bg_opa(led, LV_OPA_20, 0);
             lv_obj_clear_flag(led, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
+            for (int k = 0; k < 2; k++) {
+                lv_obj_t *w = lv_line_create(led);
+                lv_line_set_points(w, onda_nivel, 7);
+                lv_obj_set_style_line_width(w, 2, 0);
+                lv_obj_set_style_line_color(w, UI_COLOR_BG, 0);
+                lv_obj_set_style_line_rounded(w, true, 0);
+                lv_obj_add_flag(w, LV_OBJ_FLAG_IGNORE_LAYOUT);
+                lv_obj_clear_flag(w, LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_align(w, LV_ALIGN_TOP_MID, 0, 8 + k * 12);
+            }
         }
 
         /* TAPON arriba a la derecha (dibujo del usuario, 5-oct-2026): media
