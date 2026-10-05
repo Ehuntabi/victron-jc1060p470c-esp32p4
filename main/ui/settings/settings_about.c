@@ -187,8 +187,8 @@ void create_about_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(cont, 12, 0);
-    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
+    lv_obj_set_style_pad_gap(cont, UI_PAD_4, 0);   /* 5-oct: menos aire vertical, la pagina tiene que caber */
+    lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
 
 
     /* === Card 2: Info dinamica === */

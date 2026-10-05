@@ -356,10 +356,10 @@ void create_sd_settings_page(ui_state_t *ui, lv_obj_t *page_sd)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
+    lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
-    lv_obj_set_style_pad_gap(cont, 12, 0);
+    lv_obj_set_style_pad_gap(cont, UI_PAD_4, 0);   /* 5-oct: menos aire vertical, la pagina tiene que caber */
 
     /* === Card Carrusel captura pantalla === */
     lv_obj_t *card_cap = lv_obj_create(cont);
@@ -641,7 +641,7 @@ void populate_autocaravana(settings_page_ctx_t *ctx, lv_obj_t *page)
     /* Aire: 12 de margen y 14 entre filas (la pagina es un flex ROW_WRAP: las
      * entradas Frigo/Victron van en una fila de dos, y cada tarjeta ocupa su
      * fila entera). */
-    lv_obj_set_style_pad_all(page, UI_PAD_PAGE, 0);
+    lv_obj_set_style_pad_all(page, UI_PAD_4, 0);
     lv_obj_set_style_pad_row(page, 16, 0);
     lv_obj_set_style_pad_column(page, 12, 0);
     /* Cards del vehiculo bajo las entradas "Opciones Frigo" y "Victron Keys"
@@ -707,7 +707,11 @@ void ui_settings_panel_init(ui_state_t *ui,
     }
 
     lv_obj_t *menu = lv_menu_create(ui->tab_settings);
-    lv_obj_set_size(menu, lv_pct(100), lv_pct(100));
+    /* ALTO: pantalla - barra de pestanas (60, ver ui.c) - barra inferior
+     * (UI_BAR_H). Con lv_pct(100) el menu ocupaba los 540 px de debajo de las
+     * pestanas y los ultimos ~48 los tapaba la barra inferior: las ultimas
+     * tarjetas de cada pagina salian CORTADAS (visto el 5-oct-2026). */
+    lv_obj_set_size(menu, lv_pct(100), LV_VER_RES - 60 - UI_BAR_H);
     lv_obj_center(menu);
     /* Fondo coherente con el resto de pestanas */
     /* Fondo del menu = el de la paleta (22-sep-2026). Iba en negro puro: mas
@@ -1530,10 +1534,34 @@ void ui_settings_panel_show_page(int idx)
      * (Ejemplo real: victron_keys daba 819 px de mas con una tarjeta por
      * dispositivo; con el paginador y los campos en una fila quedo en -7.) */
     lv_obj_update_layout(ctx->page);
-    ESP_LOGI("UI_SETTINGS", "pagina '%.14s': alto=%d contenido=%d sobra=%d "
-             "(sobra<0 = NO cabe, hay que reorganizar)",
+    /* El que desplaza NO siempre es la pagina: casi siempre es un contenedor de
+     * dentro (el que lleva las tarjetas). Mirar solo la pagina daba -11 mientras
+     * la ultima tarjeta se veia CORTADA por abajo (visto por el usuario el
+     * 5-oct-2026). Se toma el PEOR de la pagina y de sus hijos directos. */
+    lv_coord_t peor = lv_obj_get_scroll_bottom(ctx->page);
+    /* RECURSIVO (3 niveles): el contenedor que desplaza puede ser nieto o
+     * bisnieto de la pagina, y mirando solo los hijos directos salia 0 mientras
+     * la ultima tarjeta se veia cortada (5-oct-2026, pantalla "Pantalla"). */
+    lv_obj_t *pila[24];
+    int np = 0;
+    const uint32_t n_hijos = lv_obj_get_child_cnt(ctx->page);
+    for (uint32_t i = 0; i < n_hijos && np < 24; ++i) {
+        lv_obj_t *h = lv_obj_get_child(ctx->page, i);
+        if (h) pila[np++] = h;
+    }
+    for (int k = 0; k < np; ++k) {
+        const lv_coord_t sc = lv_obj_get_scroll_bottom(pila[k]);
+        if (sc > peor) peor = sc;
+        const uint32_t nh = lv_obj_get_child_cnt(pila[k]);
+        for (uint32_t i = 0; i < nh && np < 24; ++i) {
+            lv_obj_t *g = lv_obj_get_child(pila[k], i);
+            if (g) pila[np++] = g;
+        }
+    }
+    ESP_LOGI("UI_SETTINGS", "pagina '%.14s': alto=%d contenido=%d SOBRA=%d "
+             "(SOBRA>0 = NO cabe: hay que reorganizar)",
              SETTINGS_PAGE_NAMES[idx], (int)lv_obj_get_height(ctx->page),
-             (int)lv_obj_get_content_height(ctx->page), (int)lv_obj_get_scroll_bottom(ctx->page));
+             (int)lv_obj_get_content_height(ctx->page), (int)peor);
 }
 
 /* Card clickable con la misma estetica que settings_menu_add_entry pero con
@@ -1668,10 +1696,10 @@ static void create_logs_settings_page(ui_state_t *ui, lv_obj_t *page)
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
+    lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
     /* Misma separacion entre tarjetas (12) que dentro de cada una: con 10/6/8
      * mezclados se veia "muy junto" en unos sitios y "muy separado" en otros. */
-    lv_obj_set_style_pad_gap(cont, 12, 0);
+    lv_obj_set_style_pad_gap(cont, UI_PAD_4, 0);   /* 5-oct: menos aire vertical, la pagina tiene que caber */
 
     lv_obj_t *btn_frigo = settings_card_btn(cont,
         "Nevera",  "Histórico de temperaturas y ventilador",

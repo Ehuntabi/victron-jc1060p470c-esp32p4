@@ -214,7 +214,7 @@ void create_victron_keys_settings_page(ui_state_t *ui, lv_obj_t *page_victron)
     lv_obj_set_layout(victron_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(victron_container, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(victron_container, 16, 0);
-    lv_obj_set_style_pad_gap(victron_container, UI_PAD_12, 0);
+    lv_obj_set_style_pad_gap(victron_container, UI_PAD_8, 0);
     lv_obj_set_scroll_dir(victron_container, LV_DIR_VER);
 
     /* === Card de controles — border magenta de la seccion Victron Keys === */

@@ -69,7 +69,7 @@ extern "C" {
 #define UI_PAD_20             20
 #define UI_PAD_24             24
 #define UI_PAD_PAGE           12      /* margen lateral de pagina (vistas y ajustes IGUAL) */
-#define UI_PAD_CARD           20      /* relleno interior de tarjeta */
+#define UI_PAD_CARD           16      /* relleno interior de tarjeta */
 #define UI_GAP_CARD           16      /* separacion entre tarjetas */
 #define UI_RADIUS_CARD        16
 #define UI_RADIUS_CTRL        8       /* boton, chip, control */

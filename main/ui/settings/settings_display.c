@@ -128,7 +128,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);
+    lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
     lv_obj_set_style_pad_gap(cont, 8, 0);
 
     /* === Card 1: Brillo === */
@@ -404,7 +404,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_t *card1_sep = lv_obj_create(card1);
     lv_obj_remove_style_all(card1_sep);
     lv_obj_set_size(card1_sep, lv_pct(100), 1);
-    lv_obj_set_style_bg_color(card1_sep, UI_COLOR_CARD, 0);
+    lv_obj_set_style_bg_color(card1_sep, UI_COLOR_CARD_BORDER, 0);   /* separador: tiene que verse */
     lv_obj_set_style_bg_opa(card1_sep, LV_OPA_COVER, 0);
 
     /* Contenedor del sub-bloque Screensaver (sin estilo propio: hereda del card1) */
@@ -432,14 +432,6 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_text_font(card2_title, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
-
-    /* Switch JUNTO al titulo (sin label, mismo estilo que Modo nocturno). */
-    ui->screensaver.checkbox = lv_switch_create(title_row);
-    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
-    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
-                              LV_STATE_CHECKED | LV_PART_INDICATOR);
-    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     /* Spacer invisible flex_grow=1: empuja el cont_to hacia la derecha
      * dejando el switch pegado al titulo. */
@@ -470,6 +462,16 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(row_ss_b, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_ss_b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_ss_b, 16, 0);
+
+    /* Switch de Salvapantallas EN LA MISMA LINEA que el porcentaje (5-oct-2026,
+     * peticion del usuario): antes iba en la fila del titulo y el porcentaje
+     * ("Brillo en reposo: 25%") quedaba en la linea de abajo. */
+    ui->screensaver.checkbox = lv_switch_create(row_ss_b);
+    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
+    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
 
     lv_obj_t *lbl_ss = lv_label_create(row_ss_b);
     lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);

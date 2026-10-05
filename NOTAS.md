@@ -1,3 +1,36 @@
+v4.25 — el gráfico de la batería vuelve, y las páginas de Ajustes ya no se cortan
+
+## Qué cambia
+
+- **El gráfico de la batería de la pantalla principal había DESAPARECIDO** (visto
+  por el usuario). Causa: al cerrar la paleta (v4.18) colapsé los grises de su
+  **carcasa** (`4A4A55`), los separadores de celda (`70707C`), el contorno
+  (`2A2A30`) y la franja (`2E2E36`) a `UI_COLOR_CARD`… que es **el fondo de la
+  propia tarjeta**: la batería se dibujaba, pero invisible. Ahora usan colores de
+  la paleta **con contraste** (`CARD_BORDER` carcasa y franja, `TEXT_DIM`
+  separadores, `BG` contorno). Lo mismo pasaba con un **separador** en Pantalla y
+  con los fondos de dos **botones de modo** (histórico de batería y de solar):
+  corregidos.
+- **Las páginas de Ajustes se cortaban por abajo** (Tarjeta SD y Pantalla, visto
+  por el usuario). Dos causas: (1) yo había **subido** los rellenos y huecos en la
+  migración a la rejilla, y (2) el menú de Ajustes ocupaba los 540 px de debajo de
+  las pestañas, pero los últimos ~48 los tapa la **barra inferior**. Ahora el menú
+  se dimensiona descontando la barra (`LV_VER_RES - 60 - UI_BAR_H`), las páginas
+  van a `UI_PAD_4`/`UI_PAD_4` de relleno y hueco, y el relleno de tarjeta baja de
+  20 a 16 (`UI_PAD_CARD`).
+- El diagnóstico de "sobra" pasa a ser **recursivo (3 niveles)**: miraba solo la
+  página y sus hijos directos, y daba 0 mientras la última tarjeta se veía
+  cortada.
+- Pantalla: el **switch de Salvapantallas** pasa a la línea del porcentaje
+  (`[switch] Brillo en reposo: 25% [slider]`), como pidió el usuario.
+
+## Verificado (5-oct-2026)
+
+- Batería: comparada con la captura de referencia (v4.16), el dibujo vuelve a
+  verse.
+- Tarjeta SD: la última tarjeta ya muestra su borde inferior completo.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.24 — un solo diagnóstico de "sobra" por página (el que mide la página ya colocada)
 
 ## Qué cambia

@@ -432,10 +432,16 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     const lv_coord_t body_h   = height - term_h - volt_h - 4;
 
     /* Paleta realista: subida para contrastar con el card (0x1B2230) */
-    const lv_color_t COL_CASING    = UI_COLOR_CARD; /* gris medio carcasa */
-    const lv_color_t COL_CASING_HI = UI_COLOR_CARD; /* separadores celdas */
-    const lv_color_t COL_BORDER    = UI_COLOR_CARD; /* borde oscuro casing */
-    const lv_color_t COL_TOP_PLATE = UI_COLOR_CARD; /* franja superior */
+    /* OJO con estos cuatro: son FORMA (la carcasa de la bateria), no fondo, y
+     * tienen que verse sobre la tarjeta. El 4-oct-2026 la migracion a la paleta
+     * los dejo en UI_COLOR_CARD (= el fondo de la tarjeta) y el grafico de la
+     * bateria DESAPARECIO de la pantalla principal. Valores de la paleta con
+     * contraste: carcasa y franja en el gris de bordes, separadores y metalico en
+     * el gris claro, y el contorno en el fondo (mas oscuro que la carcasa). */
+    const lv_color_t COL_CASING    = UI_COLOR_CARD_BORDER; /* gris medio carcasa */
+    const lv_color_t COL_CASING_HI = UI_COLOR_TEXT_DIM;    /* separadores celdas */
+    const lv_color_t COL_BORDER    = UI_COLOR_BG;          /* borde oscuro casing */
+    const lv_color_t COL_TOP_PLATE = UI_COLOR_CARD_BORDER; /* franja superior */
     const lv_color_t COL_TERM_NEG  = UI_COLOR_TEXT_DIM; /* metalico gris claro */
 
     lv_obj_t *box = lv_obj_create(parent);
@@ -484,7 +490,7 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     lv_obj_set_style_bg_opa(minus, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(minus, 4, 0);
     lv_obj_set_style_border_width(minus, 1, 0);
-    lv_obj_set_style_border_color(minus, UI_COLOR_CARD, 0);
+    lv_obj_set_style_border_color(minus, UI_COLOR_CARD_BORDER, 0);
     lv_obj_clear_flag(minus, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *lm = lv_label_create(minus);
     lv_obj_set_style_text_font(lm, &lv_font_montserrat_14_es, 0);

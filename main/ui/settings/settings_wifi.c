@@ -121,7 +121,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(cont, UI_PAD_PAGE, 0);    /* 4-oct-2026: el relleno de pagina es UI_PAD_PAGE en TODAS las paginas de Ajustes */
+    lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);    /* 4-oct-2026: el relleno de pagina es UI_PAD_PAGE en TODAS las paginas de Ajustes */
     lv_obj_set_style_pad_gap(cont, 8, 0);   /* la pagina tiene que caber */
 
     /* === Card 1: Punto de acceso (mitad ancho, lado izdo) === */

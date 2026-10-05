@@ -340,7 +340,7 @@ void ui_show_battery_history_screen(ui_state_t *ui)
     {
         lv_obj_t *bmode = lv_btn_create(scr);
         lv_obj_set_size(bmode, 140, 40);
-        lv_obj_set_style_bg_color(bmode, UI_COLOR_CARD, 0);
+        lv_obj_set_style_bg_color(bmode, UI_COLOR_CARD_BORDER, 0);
         lv_obj_set_style_radius(bmode, 8, 0);
         lv_obj_align(bmode, LV_ALIGN_TOP_LEFT, 16, 84);
         s_bh_lbl_mode = lv_label_create(bmode);
