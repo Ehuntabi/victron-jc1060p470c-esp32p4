@@ -1,3 +1,19 @@
+v4.26 — Pantalla: el switch de Salvapantallas vuelve junto al título y el modo nocturno centrado
+
+## Qué cambia
+
+- **Salvapantallas**: el switch vuelve a la **misma línea que el texto** (el intento
+  anterior lo movió a la fila del porcentaje y quedaba el texto solo arriba). El
+  usuario lo vio en la placa y dio el visto bueno ("mejor así").
+- **Modo nocturno**: el bloque **Inicio / Fin** va **centrado** (se quita el
+  espaciador flexible que lo empujaba al borde derecho).
+
+## Verificado (5-oct-2026)
+
+- Captura de la página Pantalla con el usuario delante: `Salvapantallas [switch] …
+  Tiempo (min): − 1 +` en una línea y `Inicio − 22:00 +   Fin − 07:00 +` centrado.
+- `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.25 — el gráfico de la batería vuelve, y las páginas de Ajustes ya no se cortan
 
 ## Qué cambia
