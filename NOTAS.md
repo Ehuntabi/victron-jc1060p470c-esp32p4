@@ -1,3 +1,22 @@
+v4.33 — el gráfico de la batería: marco fino, bornes altos y sin líneas de celdas
+
+## Qué cambia
+
+- **Marco fino y claro** en la carcasa: el contorno estaba en `UI_COLOR_BG` (el
+  fondo de la página), así que sobre la tarjeta NO se veía y el dibujo parecía no
+  tener marco (lo dijo el usuario). Ahora va en `UI_COLOR_TEXT_SOFT`, 2 px.
+- **Bornes más altos** (14 → 24 px) y algo más estrechos (ancho/5): con 14 px
+  parecían barritas pegadas al cuerpo.
+- **Fuera las 5 líneas verticales** que dividían el cuerpo en 6 "celdas": el
+  usuario preguntó qué representaban — cortaban el relleno del nivel y ensuciaban
+  el dibujo. Se quedan los **6 puntitos** de la franja superior (los tapones de
+  celda) y el relleno del nivel con el % dentro.
+
+## Verificado (6-oct-2026)
+
+- Captura de la pantalla principal (Batería): marco visible, bornes altos y cuerpo
+  limpio. `AUDITORIA OK` (11 reglas de cámara + 5 de estilo).
+
 v4.32 — la pastilla de 230 V sin LED, y el icono de aguas grises cuadrado
 
 ## Qué cambia

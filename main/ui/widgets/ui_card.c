@@ -436,8 +436,10 @@ lv_obj_t *ui_dd_create(lv_obj_t *parent)
 lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
                                 lv_coord_t width, lv_coord_t height)
 {
-    const lv_coord_t term_h   = 14;
-    const lv_coord_t term_w   = width / 4;
+    /* Bornes ALTOS: con 14 px parecian barritas pegadas al cuerpo (lo dijo el
+     * usuario el 6-oct-2026). 24 de alto y un poco mas estrechos. */
+    const lv_coord_t term_h   = 24;
+    const lv_coord_t term_w   = width / 5;
     const lv_coord_t volt_h   = 32;
     const lv_coord_t body_h   = height - term_h - volt_h - 4;
 
@@ -449,8 +451,11 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
      * contraste: carcasa y franja en el gris de bordes, separadores y metalico en
      * el gris claro, y el contorno en el fondo (mas oscuro que la carcasa). */
     const lv_color_t COL_CASING    = UI_COLOR_CARD_BORDER; /* gris medio carcasa */
-    const lv_color_t COL_CASING_HI = UI_COLOR_TEXT_DIM;    /* separadores celdas */
-    const lv_color_t COL_BORDER    = UI_COLOR_BG;          /* borde oscuro casing */
+    /* MARCO fino y CLARO de la carcasa. Estaba en UI_COLOR_BG (el fondo de la
+     * pagina): sobre la tarjeta no se veia y el dibujo parecia no tener marco
+     * (lo dijo el usuario el 6-oct-2026). En gris claro se lee siempre, tambien
+     * cuando el relleno es naranja (que es el mismo color de la tarjeta). */
+    const lv_color_t COL_BORDER    = UI_COLOR_TEXT_SOFT;   /* marco fino claro */
     const lv_color_t COL_TOP_PLATE = UI_COLOR_CARD_BORDER; /* franja superior */
     const lv_color_t COL_TERM_NEG  = UI_COLOR_TEXT_DIM; /* metalico gris claro */
 
@@ -538,17 +543,10 @@ lv_obj_t *ui_battery_soc_create(lv_obj_t *parent,
     lv_obj_set_style_bg_opa(top_plate, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(top_plate, 4, 0);
 
-    /* 5 separadores verticales para visualizar las 6 celdas internas */
+    /* (Fuera las 5 lineas verticales que dividian el cuerpo en 6 "celdas":
+     * el usuario pregunto que representaban y sobraban — cortaban el relleno del
+     * nivel y ensuciaban el dibujo. 6-oct-2026) */
     lv_coord_t inner_w = width - 8;
-    for (int i = 1; i < 6; i++) {
-        lv_obj_t *sep = lv_obj_create(body);
-        lv_obj_remove_style_all(sep);
-        lv_obj_set_size(sep, 2, body_h - 8);
-        lv_coord_t x = (inner_w * i / 6) - 1;
-        lv_obj_align(sep, LV_ALIGN_TOP_LEFT, x, 0);
-        lv_obj_set_style_bg_color(sep, COL_CASING_HI, 0);
-        lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
-    }
 
     /* 6 tapones de celda en la franja superior (puntitos oscuros) */
     for (int i = 0; i < 6; i++) {
