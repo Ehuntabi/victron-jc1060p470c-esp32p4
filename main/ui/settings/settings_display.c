@@ -123,11 +123,18 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     /* Root container */
     lv_obj_t *cont = lv_obj_create(page_display);
     lv_obj_set_width(cont, lv_pct(100));
-    lv_obj_set_height(cont, LV_SIZE_CONTENT);
+    /* ALTO COMPLETO y tarjetas REPARTIDAS (5-oct-2026, peticion del usuario):
+     * antes el contenedor media lo que sumaban las tarjetas y, al no caber, la
+     * ultima fila quedaba cortada por la barra inferior. Ahora ocupa el alto de
+     * la pagina y reparte el hueco entre las tres filas (SPACE_BETWEEN), asi que
+     * se ven las cuatro tarjetas enteras. */
+    lv_obj_set_height(cont, lv_pct(100));
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_layout(cont, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_all(cont, UI_PAD_4, 0);
     lv_obj_set_style_pad_gap(cont, 8, 0);
 
@@ -140,8 +147,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card1, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card1, 2, 0);
     lv_obj_set_style_radius(card1, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card1, 12, 0);
-    lv_obj_set_style_pad_gap(card1, 8, 0);
+    lv_obj_set_style_pad_all(card1, UI_PAD_8, 0);
+    lv_obj_set_style_pad_gap(card1, UI_PAD_4, 0);
     lv_obj_set_layout(card1, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(card1, LV_FLEX_FLOW_COLUMN);
 
@@ -218,7 +225,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_style_border_color(card_nm, UI_COLOR_VIOLET, 0);
     lv_obj_set_style_border_width(card_nm, 2, 0);
     lv_obj_set_style_radius(card_nm, UI_RADIUS_CARD, 0);
-    lv_obj_set_style_pad_all(card_nm, 12, 0);
+    lv_obj_set_style_pad_all(card_nm, UI_PAD_8, 0);
     lv_obj_set_style_pad_gap(card_nm, 8, 0);
     lv_obj_set_layout(card_nm, LV_LAYOUT_FLEX);
     /* v3.10: cabecera centrada arriba y una fila de controles debajo (antes era
@@ -256,6 +263,9 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_flow(nm_body, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(nm_body, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    /* Separacion entre el grupo de Inicio y el de Fin (5-oct-2026: el usuario
+     * los queria separados; con el bloque centrado quedaban pegados). */
+    lv_obj_set_style_pad_column(nm_body, 48, 0);
 
     /* (Sin espaciador: el usuario pidio el bloque Inicio/Fin CENTRADO.) */
     for (int slot = 0; slot < 2; slot++) {
@@ -422,13 +432,21 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     /* Separacion entre 'Salvapantallas' y el switch/Tiempo */
-    lv_obj_set_style_pad_column(title_row, 24, 0);
+    lv_obj_set_style_pad_column(title_row, UI_PAD_8, 0);
 
     lv_obj_t *card2_title = lv_label_create(title_row);
     lv_obj_set_style_text_font(card2_title, UI_FONT_VALUE, 0);
     lv_obj_set_style_text_color(card2_title, UI_COLOR_ORANGE, 0);
     lv_label_set_text(card2_title, LV_SYMBOL_EYE_CLOSE "  Salvapantallas");
 
+    /* Switch PEGADO al texto de Salvapantallas (5-oct-2026). Se crea ANTES del
+     * separador elastico que empuja el bloque de Tiempo a la derecha. */
+    ui->screensaver.checkbox = lv_switch_create(title_row);
+    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
+    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
     /* Spacer invisible flex_grow=1: empuja el cont_to hacia la derecha
      * dejando el switch pegado al titulo. */
     lv_obj_t *spacer = lv_obj_create(title_row);
@@ -436,27 +454,8 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(spacer, 1);
     lv_obj_set_flex_grow(spacer, 1);
 
-    /* Switch y porcentaje EN LA MISMA LINEA que "Salvapantallas" (5-oct-2026,
-     * peticion del usuario: antes el switch iba en la linea del titulo y el
-     * porcentaje en la de abajo, y al moverlo quedo el texto solo arriba).
-     * La fila del deslizador se queda debajo, a ancho completo. */
-    ui->screensaver.checkbox = lv_switch_create(title_row);
-    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
-    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
-                              LV_STATE_CHECKED | LV_PART_INDICATOR);
-    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-
-    lv_obj_t *lbl_ss = lv_label_create(title_row);
-    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_ss, "Brillo en reposo:");
-
-    lv_obj_t *lbl_val_ss = lv_label_create(title_row);
-    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
-    lv_obj_set_width(lbl_val_ss, 70);
-    lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_text_fmt(lbl_val_ss, "%d%%", ui->screensaver.brightness);
+    /* (El switch se crea ANTES del separador elastico: si va despues, el
+     * separador lo empuja a la derecha y deja de estar pegado al texto.) */
 
     /* Tiempo (min): label + [-][spin][+] (los botones se anaden mas abajo
      * a cont_to, no aqui). */
@@ -481,7 +480,16 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(row_ss_b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_ss_b, 16, 0);
 
-    /* (La etiqueta y el porcentaje van arriba, en la fila del titulo.) */
+    lv_obj_t *lbl_ss = lv_label_create(row_ss_b);
+    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_ss, "Brillo en reposo:");
+
+    lv_obj_t *lbl_val_ss = lv_label_create(row_ss_b);
+    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
+    lv_obj_set_width(lbl_val_ss, 70);
+    lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(lbl_val_ss, "%d%%", ui->screensaver.brightness);
     ui->screensaver.slider_brightness = lv_slider_create(row_ss_b);
 
     lv_obj_set_height(ui->screensaver.slider_brightness, UI_SLIDER_H);

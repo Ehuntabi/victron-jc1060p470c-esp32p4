@@ -1,3 +1,26 @@
+v4.27 — Pantalla: la disposición que pidió el usuario (a mano, con foto de la placa delante)
+
+## Qué cambia
+
+- **Switch de Salvapantallas pegado al texto**: se creaba DESPUÉS del separador
+  elástico de la fila, así que el separador lo empujaba a la derecha. Ahora se crea
+  antes y el hueco es `UI_PAD_8`.
+- **"Brillo en reposo: X%" vuelve a su propia línea**, con su deslizador (lo había
+  subido a la línea del título en un intento anterior).
+- **Modo nocturno**: los grupos **Inicio** y **Fin** van separados (`pad_column`
+  48) y centrados.
+- **Las cuatro tarjetas caben**: el contenedor de la página ocupa el alto completo
+  y reparte el hueco (`SPACE_BETWEEN`); la tarjeta de brillo y la de modo nocturno
+  van más compactas. La fila de abajo (Vista por defecto / Pantalla de bienvenida)
+  ya no queda cortada.
+
+## Cómo se cerró (importante para la próxima vez)
+
+El usuario mandó una **foto de la pantalla física** (`08:52`) que fue lo que
+resolvió el malentendido: mis capturas por `/captura` y sus imágenes se parecían
+demasiado y estuve tres intentos adivinando. Con la foto delante, la diferencia
+salto a la vista. **Para cambios de disposición, pedir foto de la pantalla.**
+
 v4.26 — Pantalla: el switch de Salvapantallas vuelve junto al título y el modo nocturno centrado
 
 ## Qué cambia
