@@ -254,14 +254,10 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_size(nm_body, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_layout(nm_body, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(nm_body, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(nm_body, LV_FLEX_ALIGN_START,
+    lv_obj_set_flex_align(nm_body, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t *nm_spacer = lv_obj_create(nm_body);
-    lv_obj_remove_style_all(nm_spacer);
-    lv_obj_set_height(nm_spacer, 1);
-    lv_obj_set_flex_grow(nm_spacer, 1);
-
+    /* (Sin espaciador: el usuario pidio el bloque Inicio/Fin CENTRADO.) */
     for (int slot = 0; slot < 2; slot++) {
         lv_obj_t *grp = lv_obj_create(nm_body);
         lv_obj_remove_style_all(grp);
@@ -440,6 +436,28 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_height(spacer, 1);
     lv_obj_set_flex_grow(spacer, 1);
 
+    /* Switch y porcentaje EN LA MISMA LINEA que "Salvapantallas" (5-oct-2026,
+     * peticion del usuario: antes el switch iba en la linea del titulo y el
+     * porcentaje en la de abajo, y al moverlo quedo el texto solo arriba).
+     * La fila del deslizador se queda debajo, a ancho completo. */
+    ui->screensaver.checkbox = lv_switch_create(title_row);
+    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
+    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
+                              LV_STATE_CHECKED | LV_PART_INDICATOR);
+    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
+
+    lv_obj_t *lbl_ss = lv_label_create(title_row);
+    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text(lbl_ss, "Brillo en reposo:");
+
+    lv_obj_t *lbl_val_ss = lv_label_create(title_row);
+    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
+    lv_obj_set_width(lbl_val_ss, 70);
+    lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text_fmt(lbl_val_ss, "%d%%", ui->screensaver.brightness);
+
     /* Tiempo (min): label + [-][spin][+] (los botones se anaden mas abajo
      * a cont_to, no aqui). */
     lv_obj_t *cont_to = lv_obj_create(title_row);
@@ -463,27 +481,7 @@ void create_display_settings_page(ui_state_t *ui, lv_obj_t *page_display)
     lv_obj_set_flex_align(row_ss_b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_ss_b, 16, 0);
 
-    /* Switch de Salvapantallas EN LA MISMA LINEA que el porcentaje (5-oct-2026,
-     * peticion del usuario): antes iba en la fila del titulo y el porcentaje
-     * ("Brillo en reposo: 25%") quedaba en la linea de abajo. */
-    ui->screensaver.checkbox = lv_switch_create(row_ss_b);
-    lv_obj_set_size(ui->screensaver.checkbox, 50, 28);
-    lv_obj_set_style_bg_color(ui->screensaver.checkbox, UI_COLOR_ORANGE,
-                              LV_STATE_CHECKED | LV_PART_INDICATOR);
-    if (ui->screensaver.enabled) lv_obj_add_state(ui->screensaver.checkbox, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(ui->screensaver.checkbox, cb_screensaver_event_cb, LV_EVENT_VALUE_CHANGED, ui);
-
-    lv_obj_t *lbl_ss = lv_label_create(row_ss_b);
-    lv_obj_set_style_text_font(lbl_ss, &lv_font_montserrat_20_es, 0);
-    lv_label_set_text(lbl_ss, "Brillo en reposo:");
-
-    lv_obj_t *lbl_val_ss = lv_label_create(row_ss_b);
-    lv_obj_set_style_text_font(lbl_val_ss, &lv_font_montserrat_20_es, 0);
-    lv_obj_set_style_text_color(lbl_val_ss, lv_color_white(), 0);
-    lv_obj_set_width(lbl_val_ss, 70);
-    lv_obj_set_style_text_align(lbl_val_ss, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_label_set_text_fmt(lbl_val_ss, "%d%%", ui->screensaver.brightness);
-
+    /* (La etiqueta y el porcentaje van arriba, en la fila del titulo.) */
     ui->screensaver.slider_brightness = lv_slider_create(row_ss_b);
 
     lv_obj_set_height(ui->screensaver.slider_brightness, UI_SLIDER_H);
