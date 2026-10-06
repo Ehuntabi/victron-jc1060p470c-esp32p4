@@ -28,7 +28,6 @@
 #include "esp_lvgl_port.h"
 #include "log_capture/log_capture.h"
 #include "display.h"   /* bsp_display_brightness_set/get */
-#include "hal/axi_icm_ll.h"  /* QoS del AXI-ICM: prioridad del DMA2D (pantalla) */
 
 static const char *TAG = "ota";
 
@@ -287,7 +286,7 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* Deja rastro en la SD de que esta OTA paso por aqui (el log de cada
      * arranque se guarda en el boot; el de esta sesion, si no, se pierde). */
     esp_err_t err_log = log_capture_autosave_now(20);
-    ESP_LOGW(TAG, "OTA: pantalla congelada y QoS del DMA2D al maximo, %d bytes (log a SD: %s)",
+    ESP_LOGW(TAG, "OTA: aviso congelado y pantalla a oscuras, %d bytes (log a SD: %s)",
              req->content_len, esp_err_to_name(err_log));
 
     esp_ota_handle_t ota = 0;

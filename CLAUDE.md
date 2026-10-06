@@ -39,6 +39,28 @@ panel JD9165, pero no es parte del componente) vive en
 `main/esp_bsp.c:33-53` y se autoprotege con `_Static_assert` contra un
 cambio de layout privado de IDF.
 
+## Límite conocido: la pantalla parpadea mientras se graba flash (OTA)
+
+No es un fallo del código y **no tiene arreglo por software en esta placa**: el
+panel MIPI-DSI lee su framebuffer de la PSRAM y, mientras la OTA borra/escribe la
+flash, esas lecturas no llegan a tiempo (underrun del DSI: el panel se va a
+negro/azul y vuelve). Descartado con medidas y con log, no por intuición:
+`CONFIG_SPI_FLASH_AUTO_SUSPEND` (el chip es un **BOYA** y su driver dice
+"flash-suspend is not supported"), el QoS del AXI-ICM para el DMA2D (no cambia
+nada y el burst del puente DSI a 64 B lo **empeora**), el DPI a 42 MHz (quita los
+underruns pero el panel muestra **los colores cambiados**), el bounce buffer (no
+existe en el DPI del P4) y el framebuffer en RAM interna (1,2 MB contra los
+~768 KB del P4; además el heap interno tiene ~2 MB de mínimo histórico con la
+cámara, el Wi-Fi y los buffers de audio dentro).
+
+Por eso la OTA **enseña el aviso con la pantalla encendida y después la apaga**
+mientras graba (`main/portal/ota_update.c`). Si algún día se "arregla" el
+parpadeo, hay que poder borrar ese apagado: por eso el brillo anterior se guarda
+y se restaura en TODAS las salidas. Detalle completo y referencias en `NOTAS.md`
+(v4.35). Ojo con un detalle del reinicio de la OTA: es un reset **por software**,
+el panel no se reinicializa y su RAM conserva el último fotograma, así que
+`main.c` fuerza un repintado completo al arrancar.
+
 ## Comandos habituales
 - Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.5/export.sh`
 - Compilar: `idf.py build`
