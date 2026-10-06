@@ -24,10 +24,35 @@ v4.35 — OTA sin parpadeo visible (pantalla a oscuras mientras graba) y aviso d
 - **Solución aplicada**: que no se vea. La OTA enseña el aviso "Actualizando
   firmware / No apagues la pantalla" **congelado y ya pintado** (se fuerza un
   `lv_refr_now` antes de coger el lock de LVGL; sin eso se congelaba el dibujo
-  anterior y el mensaje no se veía nunca — lo pilló el usuario), lo deja **3 s
-  limpios** sin tocar la flash, y luego **apaga el brillo** durante el
-  borrado/escritura. El brillo se devuelve en todas las salidas, así que el
-  "Firmware instalado / Reiniciando" se lee limpio.
+  anterior y el mensaje no se veía nunca — lo pilló el usuario), y luego **apaga el
+  brillo** durante el borrado/escritura. El brillo se devuelve en todas las
+  salidas, así que el "Firmware instalado / Reiniciando" se lee limpio.
+- **El mensaje no se veía (6-oct-2026)**: se pintaba con **el brillo que hubiera en
+  ese momento** y después se apagaba casi enseguida. Si el salvapantallas lo tenía
+  al 25% o el modo noche lo había dejado a 0%, el cartel salía invisible; y desde
+  que el apagado pasó a ser lo primero, no quedaba ni un instante encendido (dos
+  OTA del log: `Backlight 0%` 6 ms después de empezar a recibir y 2,6 s después
+  otra vez, sin fase encendida). Ahora:
+  1. La página web pide **antes de subir nada** `POST /ota_aviso`; el firmware
+     **sube el brillo al 70%** (guardando el del usuario), despierta el
+     salvapantallas y pinta el mensaje. **5 s** después el navegador empieza a
+     subir (`setTimeout(subir,5000)`).
+  2. Al llegar la subida, `ota_update_receive` repite el aviso por si no hubo
+     pre-aviso (curl), lo pinta **con la pantalla encendida** y lo congela; solo
+     entonces se apaga, y toda la grabación va a oscuras.
+  3. En el éxito se **restaura el brillo y se cambia el texto ANTES de
+     descongelar**, para que el "Firmware instalado" lo pinte la tarea de LVGL ya
+     encendido y de una vez.
+- **El panel se quedaba con el cartel viejo pegado**, incluso con la versión nueva
+  ya arrancada: el reinicio de la OTA es un reset **por software**, el panel
+  MIPI-DSI **no se reinicializa** y su RAM conserva el último fotograma de la
+  sesión anterior. Como LVGL repinta solo las regiones sucias, el aviso congelado
+  se quedaba en la pantalla física **para siempre** (comprobado: la captura de
+  `/captura` traía la UI nueva y la pantalla seguía con el mensaje; el usuario lo
+  vio así: "la pantalla se ha quedado con el mensaje Actualizando firmware"). Se
+  arregla en `main.c`: tras `ui_init()` + `splash_show()` se invalidan
+  `lv_scr_act()`, `lv_layer_top()` y `lv_layer_sys()` y se hace `lv_refr_now()`,
+  que reescribe los 1024x600 completos.
 - La OTA deja rastro en la SD (`ESP_LOGW` + `log_capture_autosave_now`) y al
   arrancar se registra **versión y fecha del firmware**, para poder comprobar desde
   el log qué imagen está instalada.
@@ -52,6 +77,13 @@ v4.35 — OTA sin parpadeo visible (pantalla a oscuras mientras graba) y aviso d
   panel (1024x600 @ 51 MHz)`, `Display OK`). `AUDITORIA OK`.
 - Capturas comparadas píxel a píxel: marco del depósito gris (6.080 píxeles
   cambiados solo en esa tarjeta, el título intacto) y el resto de la UI idéntico.
+- **OTA completa de punta a punta, lanzada por Wi-Fi desde el banco** con el
+  firmware final: `POST /ota_aviso` → 5 s → `POST /ota` (3.228.736 bytes, **51,8 s
+  de subida y grabación**) → respuesta "Actualizacion instalada" → reinicio → la
+  página que sirve la placa ya trae el código nuevo (`setTimeout(subir,5000)`) y el
+  log de arranque dice `### FIRMWARE: v4.35 compilado Oct 6 2026 17:07:38 ###`.
+  **El usuario lo vio entero** (aviso, pantalla a oscuras, "Firmware instalado" y
+  arranque limpio sin el cartel pegado): "ahora ok, ha hecho el proceso completo".
 - En el log de la OTA se ve el camino completo: aviso congelado, pantalla a
   oscuras, y al final brillo restaurado + QoS/burst en sus valores de siempre.
 
