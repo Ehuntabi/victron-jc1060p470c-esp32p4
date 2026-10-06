@@ -192,10 +192,15 @@ esp_err_t bsp_display_brightness_init(void)
     return ESP_OK;
 }
 
+/* Ultimo brillo pedido, en %: la OTA apaga la pantalla mientras graba flash y
+ * luego tiene que devolverla al brillo que tuviera el usuario. */
+static int s_brillo_pct = 0;
+
 esp_err_t bsp_display_brightness_set(int pct)
 {
     if (pct > 100) pct = 100;
     if (pct <   0) pct =   0;
+    s_brillo_pct = pct;
     ESP_LOGI(TAG, "Backlight %d%%", pct);
     /* Correccion gamma (~2.2): el ojo percibe el brillo de forma logaritmica,
      * no lineal. Sin esto el tramo 5-50% se siente "todo apagado" y 50-100%
@@ -206,6 +211,13 @@ esp_err_t bsp_display_brightness_set(int pct)
     ESP_RETURN_ON_ERROR(ledc_update_duty(LEDC_LOW_SPEED_MODE, BSP_LEDC_CHANNEL_NUM),
                         TAG, "ledc_update_duty");
     return ESP_OK;
+}
+
+/* Ultimo brillo pedido (%). El duty real lleva correccion gamma, asi que no se
+ * puede sacar de ledc_get_duty(). */
+int bsp_display_brightness_get(void)
+{
+    return s_brillo_pct;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

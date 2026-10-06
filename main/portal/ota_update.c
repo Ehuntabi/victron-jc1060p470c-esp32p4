@@ -27,8 +27,8 @@
 #include "ui.h"
 #include "esp_lvgl_port.h"
 #include "log_capture/log_capture.h"
+#include "display.h"   /* bsp_display_brightness_set/get */
 #include "hal/axi_icm_ll.h"  /* QoS del AXI-ICM: prioridad del DMA2D (pantalla) */
-#include "hal/mipi_dsi_brg_ll.h" /* burst del puente DSI: lecturas del framebuffer */
 
 static const char *TAG = "ota";
 
@@ -78,7 +78,8 @@ static void ota_wdt_suspend(bool suspend)
     if (lvgl) {
         esp_err_t err_lvgl = suspend ? esp_task_wdt_delete(lvgl) : esp_task_wdt_add(lvgl);
         if (err_lvgl != ESP_OK) {
-            ESP_LOGW(TAG, "TWDT LVGL: no se pudo %s (%s)",
+            /* Normal: la tarea de LVGL del port no esta suscrita al TWDT */
+            ESP_LOGI(TAG, "TWDT LVGL: no se pudo %s (%s)",
                      suspend ? "desuscribir" : "resuscribir", esp_err_to_name(err_lvgl));
         }
     }
@@ -139,6 +140,13 @@ static void ota_ui_congelar(void)
     /* 1 s de margen: si la tarea de LVGL esta terminando un fotograma, que
      * acabe. Si no se consigue, se sigue igual (peor, pero no se aborta). */
     s_ui_congelada = lvgl_port_lock(1000);
+    if (s_ui_congelada) {
+        /* El aviso se acaba de crear: refrescar AHORA, con el lock cogido, para
+         * que quede PINTADO antes de congelar. Sin esto se congelaba el dibujo
+         * anterior y el mensaje no se veia nunca (lo vio el usuario el
+         * 6-oct-2026: "sin mensaje de actualizando firmware"). */
+        lv_refr_now(NULL);
+    }
     ESP_LOGI(TAG, "pantalla congelada durante la grabacion%s",
              s_ui_congelada ? "" : " (NO se pudo coger el lock de LVGL)");
 }
@@ -148,70 +156,48 @@ static void ota_ui_descongelar(void)
     if (!s_ui_congelada) return;
     lvgl_port_unlock();
     s_ui_congelada = false;
-    ESP_LOGI(TAG, "pantalla descongelada");
+    /* La OTA dura ~40 s con la pantalla apagada, asi que el salvapantallas ha
+     * podido entrar (en el log se veia "Backlight 25%" justo despues de
+     * devolver el brillo, y el "Firmware instalado" salia atenuado). Esto lo
+     * despierta y devuelve el brillo del usuario. */
+    ui_notify_user_activity();
+    ESP_LOGI(TAG, "pantalla descongelada y despertada");
 }
 
-/* ── Prioridad del DMA2D (el que lee el framebuffer para el MIPI-DSI) ─────────
- * El propio driver de IDF dice donde esta el problema y como atacarlo:
- *   esp_lcd_panel_dpi.c: "can't fetch data from external memory fast enough,
- *   underrun happens ... a hint to the user that he should optimize the memory
- *   bandwidth (with AXI-ICM)"  y "...the LCD display may already becomes blue".
- * Mientras la OTA borra/escribe flash, el AXI esta ocupado y el panel se queda
- * sin datos (underrun) -> azul/negro. Subiendo el QoS del maestro DMA2D durante
- * la grabacion, sus lecturas de framebuffer pasan por delante y no hay underrun;
- * el valor anterior se guarda y se restaura en todas las salidas. */
-static uint32_t s_dma2d_arqos_previo = 0;
-static bool     s_qos_tocado = false;
 
-static void ota_qos_pantalla_primero(void)
+/* ── La pantalla, a oscuras mientras se graba la flash ───────────────────────
+ * Con la UI congelada el parpadeo no viene de la UI: el panel se queda sin poder
+ * leer su framebuffer mientras la flash se borra/escribe (underrun del DSI). En
+ * esta placa no hay ajuste que lo quite: el chip de flash es un BOYA y el driver
+ * de IDF dice que no soporta flash-suspend, el DPI del P4 no tiene bounce buffer
+ * y el framebuffer (1,2 MB) no cabe en RAM interna. Lo unico que queda es que no
+ * se vea: se enseña el aviso 3 s con la pantalla encendida y SIN tocar la flash
+ * (limpio, sin parpadeo) y despues se apaga el brillo durante la grabacion. El
+ * brillo se devuelve en todas las salidas. */
+static int s_brillo_previo = -1;
+
+static void ota_pantalla_oscura(void)
 {
-    s_dma2d_arqos_previo = AXI_ICM.mst_arqos_reg0.reg_dma2d_arqos;
-    /* Escritura: se deja como estaba; lectura (la del framebuffer): al maximo. */
-    axi_icm_ll_set_dma2d_qos_arbiter_prio(AXI_ICM.mst_awqos_reg0.reg_dma2d_awqos, 15);
-    s_qos_tocado = true;
-    ESP_LOGW(TAG, "QoS DMA2D (pantalla) a 15, estaba en %u", (unsigned)s_dma2d_arqos_previo);
+    if (s_brillo_previo >= 0) return;
+    s_brillo_previo = bsp_display_brightness_get();
+    bsp_display_brightness_set(0);
+    ESP_LOGW(TAG, "pantalla a oscuras durante la grabacion (brillo previo %d%%)",
+             s_brillo_previo);
 }
 
-static void ota_qos_restaurar(void)
+/* Vuelve a encender con el brillo que se guardo (sin olvidarlo: el apagado
+ * definitivo y la restauracion final lo siguen necesitando). */
+static void ota_pantalla_encender(void)
 {
-    if (!s_qos_tocado) return;
-    axi_icm_ll_set_dma2d_qos_arbiter_prio(AXI_ICM.mst_awqos_reg0.reg_dma2d_awqos,
-                                          s_dma2d_arqos_previo);
-    s_qos_tocado = false;
-    ESP_LOGW(TAG, "QoS DMA2D restaurado a %u", (unsigned)s_dma2d_arqos_previo);
+    if (s_brillo_previo >= 0) bsp_display_brightness_set(s_brillo_previo);
 }
 
-/* ── Rafagas mas cortas del puente DSI durante la grabacion ──────────────────
- * El driver de IDF deja el burst en 256 palabras de 64 bits = 2 KB por rafaga
- * (esp_lcd_panel_dpi.c: mipi_dsi_brg_ll_set_burst_len(hal->bridge, 256)). Una
- * rafaga tan larga necesita un hueco largo y tranquilo en el PSRAM; mientras la
- * OTA borra/escribe flash esos huecos no existen y el panel se queda sin datos
- * (underrun = pantalla azul). Con rafagas de 64 B cada peticion es corta y cabe
- * entre dos operaciones de flash. Es el mismo razonamiento del issue de LVGL
- * #9590 ("(draw/ppa) cause DSI underrun under heavy load on ESP32-P4"), donde
- * bajar el burst del PPA de 128 a 64 B quita los artefactos. Se restaura al
- * acabar. */
-static uint32_t s_burst_previo = 0;
-static bool     s_burst_tocado = false;
-
-static void ota_burst_panel_corto(void)
+static void ota_pantalla_restaurar(void)
 {
-    dsi_brg_dev_t *brg = MIPI_DSI_LL_GET_BRG(0);
-    if (!brg) return;
-    s_burst_previo = brg->dma_req_cfg.dma_burst_len;
-    mipi_dsi_brg_ll_set_burst_len(brg, 8);   /* 8 x 64 bits = 64 B */
-    s_burst_tocado = true;
-    ESP_LOGW(TAG, "burst del DSI a 64 B (antes %u palabras de 64 bits)",
-             (unsigned)s_burst_previo);
-}
-
-static void ota_burst_panel_restaurar(void)
-{
-    dsi_brg_dev_t *brg = MIPI_DSI_LL_GET_BRG(0);
-    if (!s_burst_tocado || !brg) return;
-    mipi_dsi_brg_ll_set_burst_len(brg, s_burst_previo);
-    s_burst_tocado = false;
-    ESP_LOGW(TAG, "burst del DSI restaurado a %u palabras", (unsigned)s_burst_previo);
+    if (s_brillo_previo < 0) return;
+    bsp_display_brightness_set(s_brillo_previo);
+    ESP_LOGW(TAG, "brillo restaurado al %d%%", s_brillo_previo);
+    s_brillo_previo = -1;
 }
 
 esp_err_t ota_update_receive(httpd_req_t *req)
@@ -247,12 +233,25 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* Tapa el parpadeo de pantalla durante la OTA (no lo arregla, ver ui.c).
      * Se oculta en TODAS las salidas de fallo de aqui en adelante; en exito
      * se deja puesto (con el texto cambiado) porque la placa reinicia sola. */
+    /* La pantalla se apaga LO PRIMERO: mientras esta encendida ya hay trafico
+     * (la subida por Wi-Fi, el refresco del aviso) que le quita PSRAM al panel y
+     * se veia parpadear hasta que se ponia negra (lo describio el usuario asi:
+     * "empieza parpadeando hasta que se pone negra"). El aviso se sigue pintando
+     * (y se congela), pero ya a oscuras: el usuario lo lee en la pagina web y en
+     * la pantalla solo ve el "Firmware instalado" del final. */
+    /* 1) A oscuras: se pinta el aviso y se congela. El parpadeo del propio
+     *    dibujado (copia PSRAM->PSRAM del DMA2D) no se ve. */
+    ota_pantalla_oscura();
     ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
-    /* Foto fija: a partir de aqui nada redibuja hasta que se descongele al
-     * final (ver ota_ui_congelar). El aviso se queda en pantalla todo el rato. */
-    ota_ui_congelar();
-    ota_qos_pantalla_primero();
-    ota_burst_panel_corto();
+    ota_ui_congelar();          /* incluye lv_refr_now: queda PINTADO */
+    /* 2) Se enciende: el aviso ya esta completo en el framebuffer y no hay nada
+     *    redibujando (la UI esta congelada), asi que se lee LIMPIO, sin
+     *    parpadeo. Y todavia no se ha tocado la flash. */
+    ota_pantalla_encender();
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    /* 3) A oscuras otra vez: toda la grabacion (borrado + escritura) se hace sin
+     *    que se vea el panel quedarse sin datos. */
+    ota_pantalla_oscura();
     /* Deja rastro en la SD de que esta OTA paso por aqui (el log de cada
      * arranque se guarda en el boot; el de esta sesion, si no, se pierde). */
     esp_err_t err_log = log_capture_autosave_now(20);
@@ -262,9 +261,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     esp_ota_handle_t ota = 0;
     esp_err_t err = esp_ota_begin(destino, req->content_len, &ota);
     if (err != ESP_OK) {
+        ota_pantalla_restaurar();
         ota_ui_descongelar();
-        ota_qos_restaurar();
-        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_begin: %s", esp_err_to_name(err));
@@ -276,9 +274,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     char *buf = malloc(OTA_CHUNK);
     if (!buf) {
         esp_ota_abort(ota);
+        ota_pantalla_restaurar();
         ota_ui_descongelar();
-        ota_qos_restaurar();
-        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -346,9 +343,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
 
     if (fallo) {
         esp_ota_abort(ota);
+        ota_pantalla_restaurar();
         ota_ui_descongelar();
-        ota_qos_restaurar();
-        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -361,9 +357,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* esp_ota_end valida la imagen (cabecera y firma del binario). */
     err = esp_ota_end(ota);
     if (err != ESP_OK) {
+        ota_pantalla_restaurar();
         ota_ui_descongelar();
-        ota_qos_restaurar();
-        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_end: %s", esp_err_to_name(err));
@@ -377,9 +372,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     err = esp_ota_set_boot_partition(destino);
     ota_wdt_suspend(false);
     if (err != ESP_OK) {
+        ota_pantalla_restaurar();
         ota_ui_descongelar();
-        ota_qos_restaurar();
-        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ESP_LOGE(TAG, "esp_ota_set_boot_partition: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -391,9 +385,8 @@ esp_err_t ota_update_receive(httpd_req_t *req)
      * reinicie sola en 1,5 s — no hace falta ocultarlo. El brillo se devuelve
      * antes, para que se lea el "Firmware instalado" (y ya no se toca la flash,
      * asi que esa pantalla sale limpia). */
+    ota_pantalla_restaurar();
     ota_ui_descongelar();
-    ota_qos_restaurar();
-    ota_burst_panel_restaurar();
     /* Segundo volcado del log, ahora que la grabacion ha terminado: deja en la SD
      * la sesion completa de la OTA (el primero se hace al empezar, para no
      * perderla si algo sale mal). */
@@ -435,9 +428,12 @@ esp_err_t ota_update_page(httpd_req_t *req)
         "<p><input type='file' id='f' accept='.bin'></p>"
         "<p><button id='b' style='padding:12px 20px;font-size:16px'>Instalar</button></p>"
         "<p id='e'></p>"
+        "<p style='background:#fff3cd;border:2px solid #ffb300;padding:12px;"
+        "border-radius:8px'><b>No apagues la pantalla durante la actualizacion.</b> "
+        "Se pondra <b>negra</b> unos segundos mientras se graba (es normal: asi no "
+        "parpadea) y volvera sola. Tarda menos de un minuto.</p>"
         "<p style='color:#666;font-size:14px'>Sube el fichero terminado en "
-        "<code>-app.bin</code> de la version que quieras. No apagues la pantalla "
-        "durante la subida. Si se corta, no pasa nada: sigue arrancando la "
+        "<code>-app.bin</code>. Si se corta, no pasa nada: sigue arrancando la "
         "version actual.</p>"
         "<script>"
         "var b=document.getElementById('b'),f=document.getElementById('f'),e=document.getElementById('e');"

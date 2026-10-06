@@ -62,14 +62,7 @@
  * descubrir que 52 cuelga el init del JD9165 en mipi_dsi_hal_host_gen_read_
  * short_packet (5 s WDT). El repo cheops/JC1060P470C_I_W usa 51.2 MHz y
  * funciona, y el header del componente recomienda 50 como default. */
-/* Reloj del DPI (pixel clock). 51 MHz daba ~68 Hz de refresco, pero el panel se
- * queda sin datos (underrun -> pantalla azul) cuando el PSRAM esta ocupado, y en
- * esta placa hay escrituras de flash continuas (OTA, NVS, logs). La FAQ de
- * Espressif para este sintoma dice: "try to reduce the frequency of PCLK and
- * decrease the bandwidth utilization of PSRAM". Con 42 MHz el refresco queda en
- * ~49 Hz (de sobra para una pantalla de datos) y el DPI pide un 18% menos de
- * ancho de banda al PSRAM. Ver NOTAS.md v4.35. */
-#define BSP_LCD_MIPI_DPI_CLK_MHZ            (42)
+#define BSP_LCD_MIPI_DPI_CLK_MHZ            (51)
 
 /* Horizontal. El dtsi oficial dice HS=24, HBP=136, HFP=160 (ver la tabla de
  * arriba); HS y HFP se usan tal cual, pero HBP esta a 160 en vez de 136 desde
@@ -167,6 +160,8 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config,
 
 esp_err_t bsp_display_brightness_init(void);
 esp_err_t bsp_display_brightness_set(int brightness_percent);
+/* Ultimo brillo pedido, en % (el duty lleva gamma, no se deduce del LEDC). */
+int       bsp_display_brightness_get(void);
 
 #ifdef __cplusplus
 }

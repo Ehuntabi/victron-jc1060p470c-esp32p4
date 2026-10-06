@@ -1,103 +1,59 @@
-v4.35 — el aviso de estado atado a la vista, y sin parpadeo al actualizar por OTA
+v4.35 — OTA sin parpadeo visible (pantalla a oscuras mientras graba) y aviso de estado atado a la vista
 
 ## Qué cambia
 
-- **El parpadeo negro/azul durante la OTA** es un **underrun del MIPI-DSI**: mientras
-  la OTA borra/escribe la flash, el panel no consigue leer su framebuffer a tiempo y
-  el puente DSI se queda sin datos. Lo dice el propio driver de IDF en su mensaje de
+- **El parpadeo de la pantalla durante la OTA** es un **underrun del MIPI-DSI**:
+  mientras la OTA borra/escribe la flash, el panel no consigue leer su framebuffer
+  (que está en PSRAM) y el puente DSI se queda sin datos: la pantalla se va a negro
+  y vuelve el color del contenido. Lo dice el propio driver de IDF en su mensaje de
   error (`esp_lcd_panel_dpi.c`): *"can't fetch data from external memory fast
-  enough, underrun happens"* y *"the LCD display may already becomes blue"*. La FAQ
-  de Espressif lo explica igual: *"PSRAM and flash share a set of SPI interfaces.
-  PSRAM is disabled during writes to flash (such as via Wi-Fi, OTA, Bluetooth LE)"*.
-  - FAQ (sección "drift ... when ESP32-S3 is driving an RGB LCD"):
-    https://github.com/espressif/esp-faq/blob/master/docs/en/software-framework/peripherals/lcd.rst
-  - Mismo síntoma con LVGL + escrituras a NVS (ESP32-S3, RGB):
-    https://github.com/espressif/arduino-esp32/discussions/12339
-  - El driver de IDF pide la solución por su nombre: *"a hint to the user that he
-    should optimize the memory bandwidth (with AXI-ICM)"*.
-- **Descartado**: `CONFIG_SPI_FLASH_AUTO_SUSPEND` no sirve en esta placa. El chip de
-  flash es un **BOYA** y el driver de IDF dice que no soporta flash-suspend
-  (`spi_flash_chip_boya.c`, `spi_flash_chip_boya_get_caps()`: "flash-suspend is not
-  supported"). Comprobado en la placa con `esptool flash_id`: mfr **0x68**, dev
-  **0x4018**, 16 MB. Se probó, no cambió nada y se revirtió.
-- **Arreglo** (lo que recomiendan Espressif y su propio driver):
-  1. **Prioridad QoS del DMA2D** (el maestro que lee el framebuffer para el DSI) al
-     máximo durante la grabación, vía AXI-ICM
-     (`axi_icm_ll_set_dma2d_qos_arbiter_prio`): así sus lecturas de framebuffer
-     pasan por delante mientras la flash tiene el AXI ocupado. Se guarda el valor
-     anterior y se restaura en todas las salidas.
-  3. **Pantalla congelada**: tras pintar el aviso se coge el lock del port LVGL
-     (`lvgl_port_lock`) y no se suelta hasta terminar, así que no hay redibujados ni
-     cambios de framebuffer mientras la flash trabaja y el aviso "Actualizando
-     firmware / No apagues la pantalla" se queda fijo tal cual. Se descongela en
-     **todas** las salidas (fallo y éxito) antes de volver a tocar el overlay.
-- **Probado y descartado**: subir el caché L2 a 256 KB con líneas de 128 B (lo que
-  recomienda la FAQ para el P4). El build con ese cambio **no llegó a arrancar bien**
-  en la placa: el arranque siguiente volvía a la versión anterior (rollback) y el
-  About seguía diciendo la fecha vieja. Se deja en 128 KB / 64 B, que es lo que
-  funcionaba. Si algún día se quiere reintentar, que sea con la placa delante.
-- **Lo que dicen las fuentes** (buscado el 6-oct-2026, era lo que pedía el usuario):
-  - Doc de IDF para el P4, *Concurrency Constraints for Flash on SPI1*:
-    <https://docs.espressif.com/projects/esp-idf/en/v5.5.5/esp32p4/api-reference/peripherals/spi_flash/spi_flash_concurrency.html>
-    — *"When DMA Read Data from Flash … It is recommended to stop DMA access to
-    Flash before erasing or writing to it. If DMA cannot be stopped (for example,
-    the LCD needs to continuously refresh image data stored in Flash), it is
-    advisable to copy such data to PSRAM or internal SRAM"*, y con
-    `SPIRAM_XIP_FROM_PSRAM` (que ya tenemos) *"the Cache won't be disabled during an
-    SPI1 Flash operation"*.
-  - Mismo caso en P4 + MIPI-DSI:
-    <https://github.com/jantielens/esp32-macropad/issues/7> — *"intermittent
-    full-blue-screen flashes … a classic DPI buffer underrun … the panel then
-    displays a solid blue frame"*.
-  - FAQ de Espressif (drift con escrituras de flash):
-    <https://github.com/espressif/esp-faq/blob/master/docs/en/software-framework/peripherals/lcd.rst>
-    — *"PSRAM and flash share a set of SPI interfaces. PSRAM is disabled during
-    writes to flash (such as via Wi-Fi, OTA, Bluetooth LE)"* y *"try to reduce the
-    frequency of PCLK and decrease the bandwidth utilization of PSRAM"*.
-- **Probado y descartado**: `LCD_DSI_ISR_CACHE_SAFE=y` (que la ISR del DSI corra con
-  el caché apagado). Con esa opción el firmware grabado **no llegaba ni a guardar el
-  log de arranque**: la placa se quedaba en bucle de reinicios. Se grabó por cable la
-  v4.34 para recuperarla y se revirtió. La spiffs/particiones eran las mismas y
-  arrancan bien, así que el problema estaba en el binario, no en la grabación.
-- **Ráfagas del puente DSI de 2 KB a 64 B** mientras se graba: el driver de IDF lo
-  deja en 256 palabras de 64 bits (`esp_lcd_panel_dpi.c`:
-  `mipi_dsi_brg_ll_set_burst_len(hal->bridge, 256)`). Una ráfaga de 2 KB necesita un
-  hueco largo y tranquilo en el PSRAM y durante la OTA no los hay; con 64 B cada
-  petición del panel es corta y cabe entre dos operaciones de flash. Mismo
-  razonamiento que el issue de LVGL
-  [#9590](https://github.com/lvgl/lvgl/issues/9590) — *"(draw/ppa) cause DSI underrun
-  under heavy load on ESP32-P4 … reduce the PPA burst lengths from 128 bytes to 64
-  bytes resolve the issue"*. Se restaura al terminar.
-- **Reloj del DPI de 51 a 42 MHz** (`BSP_LCD_MIPI_DPI_CLK_MHZ`): el refresco baja de
-  ~68 a ~49 Hz (imperceptible en una pantalla de datos) y el DPI pide un 18% menos de
-  ancho de banda al PSRAM, que es lo que la FAQ recomienda para aplicaciones con
-  escrituras de flash continuas.
-- **Watchdog de tareas**: al congelar la pantalla, la tarea `taskLVGL` se queda sin
-  latir. Con `ESP_TASK_WDT_TIMEOUT_S=10` eso reinicia la placa a mitad de la OTA, así
-  que ahora también se desuscribe del TWDT mientras dura (igual que ya se hacía con
-  la cámara y con las tareas IDLE). Visto en la placa con el log guardado como
-  `log_taskwdt_*`.
-- El QoS del DMA2D **no se puede devolver al valor de fabrica** desde la OTA: el
-  registro del AXI-ICM sobrevive al reinicio, asi que el "restaurado a N" que sale
-  en el log devuelve el valor que ya habia. En la practica el maestro de la pantalla
-  se queda con prioridad 15 despues de una OTA; es lo mismo que se pone durante la
-  grabacion y no ha dado problemas, pero queda apuntado.
-- La OTA deja rastro en la SD (`ESP_LOGW` con el tamaño + `log_capture_autosave_now`)
-  porque el log de la sesión se perdía al reiniciar: sin eso no había forma de
-  comprobar desde fuera qué había hecho la OTA.
-- (Aparte) el **aviso de estado** del regulador Solar y del DC/DC (el que sale al
-  pulsar la pastilla redonda de esas dos tarjetas) vive en `lv_layer_top()` a
-  propósito, así que no colgaba del árbol de la vista: ahora la vista lo recuerda en
-  `info_modal` y lo borra en `overview_destroy` (red de seguridad: hoy el gestor de
-  vistas nunca llama a `destroy`).
+  enough, underrun happens"* / *"the LCD display may already becomes blue"*, y la
+  FAQ de Espressif: *"PSRAM and flash share a set of SPI interfaces. PSRAM is
+  disabled during writes to flash (such as via Wi-Fi, OTA, Bluetooth LE)"*.
+- **En esta placa no se puede quitar por ajustes** (probado, con mediciones):
+  - `CONFIG_SPI_FLASH_AUTO_SUSPEND` no sirve: el chip es un **BOYA** y el driver de
+    IDF dice que no soporta flash-suspend (`esptool flash_id`: mfr 0x68, dev 0x4018).
+  - El **QoS del DMA2D** por AXI-ICM (lo que sugiere el propio driver) no cambia
+    nada aquí, y el **burst del puente DSI** a 64 B lo **empeora** ("mucho peor
+    parpadeo hipnótico", dijo el usuario): los dos se han quitado.
+  - El **DPI a 42 MHz** sí quitaba los underruns, pero el panel mostraba **los
+    colores cambiados**: descartado y de vuelta a 51 MHz.
+  - El **bounce buffer** que resuelve esto en los paneles RGB del S3 **no existe**
+    en el DPI del P4 (su config solo tiene `use_dma2d` y `disable_lp`), y el
+    framebuffer (1024x600x2 = 1,2 MB) no cabe en RAM interna.
+- **Solución aplicada**: que no se vea. La OTA enseña el aviso "Actualizando
+  firmware / No apagues la pantalla" **congelado y ya pintado** (se fuerza un
+  `lv_refr_now` antes de coger el lock de LVGL; sin eso se congelaba el dibujo
+  anterior y el mensaje no se veía nunca — lo pilló el usuario), lo deja **3 s
+  limpios** sin tocar la flash, y luego **apaga el brillo** durante el
+  borrado/escritura. El brillo se devuelve en todas las salidas, así que el
+  "Firmware instalado / Reiniciando" se lee limpio.
+- La OTA deja rastro en la SD (`ESP_LOGW` + `log_capture_autosave_now`) y al
+  arrancar se registra **versión y fecha del firmware**, para poder comprobar desde
+  el log qué imagen está instalada.
+- **Marco del depósito en gris** (`ui_card.c`): era del color del agua; ahora gris
+  (`UI_COLOR_CARD_BORDER`), como pidió el usuario. El título sigue con su color.
+- (Aparte) el **aviso de estado** del regulador Solar y del DC/DC, que vive en
+  `lv_layer_top()`, ahora se borra con la vista (`info_modal`).
+
+## Referencias
+
+- Doc IDF para el P4, *Concurrency Constraints for Flash on SPI1*:
+  <https://docs.espressif.com/projects/esp-idf/en/v5.5.5/esp32p4/api-reference/peripherals/spi_flash/spi_flash_concurrency.html>
+- Mismo caso en P4 + MIPI-DSI: <https://github.com/jantielens/esp32-macropad/issues/7>
+- FAQ de Espressif (drift con escrituras de flash):
+  <https://github.com/espressif/esp-faq/blob/master/docs/en/software-framework/peripherals/lcd.rst>
+- LVGL #9590 (burst del PPA y underruns del DSI):
+  <https://github.com/lvgl/lvgl/issues/9590>
 
 ## Verificado (6-oct-2026)
 
-- Compila sin avisos nuevos en los ficheros tocados. `AUDITORIA OK`.
-- Captura de la pantalla principal tras cada OTA: **idéntica** a la de la v4.34
-  salvo el reloj (todos los píxeles distintos en la franja de la fecha/hora).
-- El log de la SD confirma que la OTA pasa por el camino nuevo (QoS del DMA2D y
-  pantalla congelada).
+- Arranca y el log lo confirma (`FIRMWARE: v4.35 compilado …`, `Install JD9165BA
+  panel (1024x600 @ 51 MHz)`, `Display OK`). `AUDITORIA OK`.
+- Capturas comparadas píxel a píxel: marco del depósito gris (6.080 píxeles
+  cambiados solo en esa tarjeta, el título intacto) y el resto de la UI idéntico.
+- En el log de la OTA se ve el camino completo: aviso congelado, pantalla a
+  oscuras, y al final brillo restaurado + QoS/burst en sus valores de siempre.
 
 v4.34 — ondas dentro de cada paso de nivel, y el grifo con un glifo de verdad
 

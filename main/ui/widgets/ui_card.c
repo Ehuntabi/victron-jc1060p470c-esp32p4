@@ -664,7 +664,9 @@ lv_obj_t *ui_tank_create(lv_obj_t *parent, lv_coord_t width, lv_coord_t height,
     lv_obj_set_flex_grow(tank, 1);
     lv_obj_set_style_radius(tank, 8, 0);
     lv_obj_set_style_border_width(tank, 4, 0);
-    lv_obj_set_style_border_color(tank, accent_color, 0);
+    /* Marco del deposito en gris (no en el color del agua): lo pidio el usuario
+     * el 6-oct-2026. El titulo si sigue en su color de accent. */
+    lv_obj_set_style_border_color(tank, UI_COLOR_CARD_BORDER, 0);
     lv_obj_set_style_bg_color(tank, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(tank, LV_OPA_COVER, 0);
     /* Sombra interior sutil para dar sensacion de profundidad */
