@@ -80,6 +80,14 @@ volver a investigarlos:
 - Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.5/export.sh`
 - Compilar: `idf.py build`
 - Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
+  - **TRAMPA (6-oct-2026, costo media hora):** despues de una OTA la placa queda
+    arrancando de la OTRA particion (`ota_1`, 0x410000), asi que un
+    `write_flash ... 0x10000` se escribe en `ota_0` **y no arranca**: la placa
+    sigue con el firmware viejo y parece que el cambio "no se ve". Para dejarlo
+    claro por USB:
+    `python -m esptool --chip esp32p4 -p /dev/ttyACM0 write_flash 0xd000 build/ota_data_initial.bin 0x10000 build/joint_spl_145_control.bin 0x410000 build/joint_spl_145_control.bin`
+    (ota_data_initial reinicia el registro de arranque; NVS y SPIFFS no se tocan).
+    La forma de comprobarlo es el log de arranque: `### FIRMWARE: vX compilado <fecha> ###`.
 - Monitor: `idf.py -p /dev/ttyACM0 monitor`
 - OTA habitual: subir directamente por Wi-Fi desde este portatil a
   `http://192.168.4.1:8081/ota` (pide Basic Auth strict: usuario/clave de

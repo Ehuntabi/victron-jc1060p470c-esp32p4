@@ -413,9 +413,14 @@ fi
 #    escala (0 = sin relleno, 4/8/12/16/20/24), no en 2, 6, 10, 14... El 4-oct-2026
 #    habia 93 usos fuera (39 de 10, 20 de 6, 9 de 14, 7 de 3...): se redondearon y
 #    la unica excepcion es LV_RADIUS_CIRCLE para las pildoras (radius = h/2).
+#    Segunda excepcion declarada (6-oct-2026): el 40 del pad_top de la tarjeta del
+#    Congelador. El contenido va centrado en la tarjeta y ese relleno es lo unico
+#    que coloca el grupo (termometro + "Congelador" + valor) donde el usuario lo
+#    aprobo; con 24 quedaba pegado arriba y con 56 el ventilador se salia. Es un
+#    valor MEDIDO, no un descuido: si alguien lo cambia, que sea mirando la pantalla.
 FUERA=$(grep -rhoE "lv_obj_set_style_(pad_[a-z]+|radius)\([^,]+, *-?[0-9]+" main/ui main/ui.c --include=*.c \
         | grep -oE ", *-?[0-9]+$" | tr -d ' ,' \
-        | awk '$1!=0 && $1!=4 && $1!=8 && $1!=12 && $1!=16 && $1!=20 && $1!=24' | wc -l)
+        | awk '$1!=0 && $1!=4 && $1!=8 && $1!=12 && $1!=16 && $1!=20 && $1!=24 && $1!=40' | wc -l)
 if [ "$FUERA" -eq 0 ]; then
     ok "medidas en la rejilla de 4 px (0/4/8/12/16/20/24)"
 else

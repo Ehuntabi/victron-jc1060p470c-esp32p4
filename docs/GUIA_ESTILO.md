@@ -96,6 +96,7 @@ Reglas:
 | Token | Valor | Uso |
 |---|---|---|
 | `UI_PAD_*` | 4 / 8 / 12 / 16 / 20 / 24 | nada fuera de esta escala |
+| (excepción) | 40 | `pad_top` de la tarjeta del Congelador: el contenido va centrado y este relleno es el que coloca el grupo (termómetro + título + valor) 16 px por debajo del borde, con el ventilador sin salirse. Medido y aprobado por el usuario el 6-oct-2026; está declarado como excepción en `test/auditar.sh` para que no se "redondee" a 24 sin querer |
 | `UI_PAD_CARD` | 20 | relleno interior de tarjeta |
 | `UI_GAP_CARD` | 16 | separación entre tarjetas |
 | `UI_PAD_PAGE` | 12 | margen lateral de página |

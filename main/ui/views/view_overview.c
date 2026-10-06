@@ -1053,10 +1053,16 @@ ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
         lv_obj_set_style_border_width(card_fridge, 2, 0);
         lv_obj_set_style_radius(card_fridge, UI_RADIUS_CARD, 0);
         lv_obj_set_style_pad_hor(card_fridge, 16, 0);
-        /* Abajo 14 y no 6: el aro del ventilador (92 px) quedaba pegado al
-         * borde inferior de la tarjeta (se veia en la captura del 22-sep). */
-        lv_obj_set_style_pad_top(card_fridge, 8, 0);
-        lv_obj_set_style_pad_bottom(card_fridge, 16, 0);
+        /* Arriba 12 y abajo 24 (abajo no 6: el aro del ventilador de 92 px quedaba
+         * pegado al borde inferior, visto el 22-sep). El grupo y el ventilador
+         * van en el MISMO flex centrado, asi que estos rellenos mueven a los dos:
+         * la pareja de valores esta elegida para que el grupo no se pegue al
+         * borde de arriba Y el ventilador no se salga por abajo (dos intentos
+         * fallidos el 6-oct-2026: con 40/16 el ventilador se salia, y con una
+         * columna de alto fijo tambien). Lo aprobado por el usuario es ESTO: si
+         * se toca, mirar la pantalla. */
+        lv_obj_set_style_pad_top(card_fridge, 12, 0);
+        lv_obj_set_style_pad_bottom(card_fridge, 24, 0);
         lv_obj_set_style_pad_gap(card_fridge, 16, 0);
         lv_obj_set_layout(card_fridge, LV_LAYOUT_FLEX);
         /* Disposicion vertical: Congelador (icono+texto+temp) arriba y el
