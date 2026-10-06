@@ -135,18 +135,17 @@ static void ota_reboot_en(uint32_t ms)
  * ocupado. */
 static bool s_ui_congelada = false;
 
-static void ota_ui_congelar(void)
+/* refrescar=true: pinta AHORA, con el lock cogido, lo que se acabe de crear en
+ * el overlay. Sin esto se congelaba el dibujo ANTERIOR y el mensaje no se veia
+ * nunca (lo vio el usuario el 6-oct-2026: "sin mensaje de actualizando
+ * firmware"). En el exito se llama con false a proposito: el "Firmware
+ * instalado" lo pinta la tarea de LVGL un instante despues, ya descongelada. */
+static void ota_ui_congelar(bool refrescar)
 {
     /* 1 s de margen: si la tarea de LVGL esta terminando un fotograma, que
      * acabe. Si no se consigue, se sigue igual (peor, pero no se aborta). */
     s_ui_congelada = lvgl_port_lock(1000);
-    if (s_ui_congelada) {
-        /* El aviso se acaba de crear: refrescar AHORA, con el lock cogido, para
-         * que quede PINTADO antes de congelar. Sin esto se congelaba el dibujo
-         * anterior y el mensaje no se veia nunca (lo vio el usuario el
-         * 6-oct-2026: "sin mensaje de actualizando firmware"). */
-        lv_refr_now(NULL);
-    }
+    if (s_ui_congelada && refrescar) lv_refr_now(NULL);
     ESP_LOGI(TAG, "pantalla congelada durante la grabacion%s",
              s_ui_congelada ? "" : " (NO se pudo coger el lock de LVGL)");
 }
@@ -174,30 +173,71 @@ static void ota_ui_descongelar(void)
  * se vea: se enseña el aviso 3 s con la pantalla encendida y SIN tocar la flash
  * (limpio, sin parpadeo) y despues se apaga el brillo durante la grabacion. El
  * brillo se devuelve en todas las salidas. */
-static int s_brillo_previo = -1;
+static int  s_brillo_previo = -1;
+static bool s_pantalla_apagada = false;
 
+/* Apaga SIEMPRE (no se salta si ya hay brillo guardado: si no, el segundo
+ * apagado -- el de la grabacion -- no hacia nada y la OTA se grababa con la
+ * pantalla encendida. Visto en el log del 6-oct-2026: "Backlight 0%" y 250 ms
+ * despues "Backlight 25%", y de ahi no volvia a apagarse). */
 static void ota_pantalla_oscura(void)
 {
-    if (s_brillo_previo >= 0) return;
-    s_brillo_previo = bsp_display_brightness_get();
+    if (s_brillo_previo < 0) s_brillo_previo = bsp_display_brightness_get();
     bsp_display_brightness_set(0);
-    ESP_LOGW(TAG, "pantalla a oscuras durante la grabacion (brillo previo %d%%)",
-             s_brillo_previo);
+    s_pantalla_apagada = true;
+    ESP_LOGW(TAG, "pantalla a oscuras (brillo guardado %d%%)", s_brillo_previo);
 }
 
 /* Vuelve a encender con el brillo que se guardo (sin olvidarlo: el apagado
  * definitivo y la restauracion final lo siguen necesitando). */
 static void ota_pantalla_encender(void)
 {
-    if (s_brillo_previo >= 0) bsp_display_brightness_set(s_brillo_previo);
+    /* Atenuado a proposito: con la pantalla a plena luz el parpadeo de la subida
+     * (trafico de PSRAM, no se puede parar) se nota, y a ~20% apenas se ve
+     * mientras el aviso se sigue leyendo. El brillo bueno se devuelve al final. */
+    int b = s_brillo_previo >= 20 ? 20 : s_brillo_previo;
+    if (b >= 0) bsp_display_brightness_set(b);
+    s_pantalla_apagada = false;
 }
 
 static void ota_pantalla_restaurar(void)
 {
     if (s_brillo_previo < 0) return;
     bsp_display_brightness_set(s_brillo_previo);
-    ESP_LOGW(TAG, "brillo restaurado al %d%%", s_brillo_previo);
+    ESP_LOGW(TAG, "brillo restaurado al %d%% (apagada=%d)", s_brillo_previo,
+             (int)s_pantalla_apagada);
     s_brillo_previo = -1;
+    s_pantalla_apagada = false;
+}
+
+/* Enciende la pantalla para que el aviso se LEA, y deja guardado el brillo que
+ * tenia el usuario. Es el paso que faltaba: el aviso se pintaba con el brillo
+ * que hubiera en ese momento (25% del salvapantallas, o 0% si el modo noche lo
+ * habia apagado) y el usuario no veia ningun mensaje. Se pone el brillo alto
+ * solo mientras se lee; en cuanto empieza la grabacion se apaga otra vez. */
+static void ota_pantalla_aviso(void)
+{
+    if (s_brillo_previo < 0) s_brillo_previo = bsp_display_brightness_get();
+    int b = s_brillo_previo > 70 ? s_brillo_previo : 70;
+    bsp_display_brightness_set(b);
+    s_pantalla_apagada = false;
+    ESP_LOGW(TAG, "aviso en pantalla: brillo al %d%% (el del usuario era %d%%)",
+             b, s_brillo_previo);
+}
+
+/* Aviso previo: la pagina web lo pide ANTES de subir nada. Asi el mensaje se
+ * pinta con la placa tranquila (sin subida por Wi-Fi, sin tocar flash) y se lee
+ * LIMPIO, sin el parpadeo que salia cuando se encendia ya con la subida en
+ * marcha. La pagina espera 5 s antes de subir; despues la pantalla se apaga y no
+ * se vuelve a encender hasta el "Firmware instalado" del final. */
+esp_err_t ota_aviso_post(httpd_req_t *req)
+{
+    ota_pantalla_aviso();
+    ui_notify_user_activity();   /* por si el salvapantallas lo tenia atenuado */
+    ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_sendstr(req, "ok");
+    return ESP_OK;
 }
 
 esp_err_t ota_update_receive(httpd_req_t *req)
@@ -233,25 +273,17 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* Tapa el parpadeo de pantalla durante la OTA (no lo arregla, ver ui.c).
      * Se oculta en TODAS las salidas de fallo de aqui en adelante; en exito
      * se deja puesto (con el texto cambiado) porque la placa reinicia sola. */
-    /* La pantalla se apaga LO PRIMERO: mientras esta encendida ya hay trafico
-     * (la subida por Wi-Fi, el refresco del aviso) que le quita PSRAM al panel y
-     * se veia parpadear hasta que se ponia negra (lo describio el usuario asi:
-     * "empieza parpadeando hasta que se pone negra"). El aviso se sigue pintando
-     * (y se congela), pero ya a oscuras: el usuario lo lee en la pagina web y en
-     * la pantalla solo ve el "Firmware instalado" del final. */
-    /* 1) A oscuras: se pinta el aviso y se congela. El parpadeo del propio
-     *    dibujado (copia PSRAM->PSRAM del DMA2D) no se ve. */
-    ota_pantalla_oscura();
+    /* 1) El aviso se pinta CON LA PANTALLA ENCENDIDA y se congela: asi queda
+     *    completo en el framebuffer antes de tocar la flash. La pagina ya lo
+     *    pidio antes (ota_aviso_post) y ha dejado 5 s para leerlo; se repite
+     *    aqui por si la subida llega sin aviso (curl, o un aviso que se perdio).
+     * 2) Y solo entonces se apaga: toda la grabacion (borrado + escritura) va
+     *    con la pantalla a oscuras, que es donde salia el parpadeo. */
+    ota_pantalla_aviso();
     ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
-    ota_ui_congelar();          /* incluye lv_refr_now: queda PINTADO */
-    /* 2) Se enciende: el aviso ya esta completo en el framebuffer y no hay nada
-     *    redibujando (la UI esta congelada), asi que se lee LIMPIO, sin
-     *    parpadeo. Y todavia no se ha tocado la flash. */
-    ota_pantalla_encender();
-    vTaskDelay(pdMS_TO_TICKS(3000));
-    /* 3) A oscuras otra vez: toda la grabacion (borrado + escritura) se hace sin
-     *    que se vea el panel quedarse sin datos. */
+    ota_ui_congelar(true);      /* pinta el aviso y congela */
     ota_pantalla_oscura();
+
     /* Deja rastro en la SD de que esta OTA paso por aqui (el log de cada
      * arranque se guarda en el boot; el de esta sesion, si no, se pierde). */
     esp_err_t err_log = log_capture_autosave_now(20);
@@ -382,16 +414,18 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     }
 
     /* Exito: se deja el overlay puesto (con el texto cambiado) hasta que
-     * reinicie sola en 1,5 s — no hace falta ocultarlo. El brillo se devuelve
-     * antes, para que se lea el "Firmware instalado" (y ya no se toca la flash,
-     * asi que esa pantalla sale limpia). */
+     * reinicie sola en 1,5 s — no hace falta ocultarlo. El orden importa: el
+     * brillo se devuelve ANTES de descongelar, y el texto se cambia ANTES de
+     * descongelar, para que la tarea de LVGL pinte el "Firmware instalado" ya
+     * con la pantalla encendida y de una sola vez (antes se descongelaba con el
+     * texto viejo y el aviso bueno salia tarde o no salia). */
     ota_pantalla_restaurar();
+    ui_ota_overlay_show("Firmware instalado\n\nReiniciando...");
     ota_ui_descongelar();
     /* Segundo volcado del log, ahora que la grabacion ha terminado: deja en la SD
      * la sesion completa de la OTA (el primero se hace al empezar, para no
      * perderla si algo sale mal). */
     log_capture_autosave_now(20);
-    ui_ota_overlay_show("Firmware instalado\n\nReiniciando...");
     ESP_LOGI(TAG, "actualizacion grabada en '%s'", destino->label);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr(req,
@@ -430,8 +464,10 @@ esp_err_t ota_update_page(httpd_req_t *req)
         "<p id='e'></p>"
         "<p style='background:#fff3cd;border:2px solid #ffb300;padding:12px;"
         "border-radius:8px'><b>No apagues la pantalla durante la actualizacion.</b> "
-        "Se pondra <b>negra</b> unos segundos mientras se graba (es normal: asi no "
-        "parpadea) y volvera sola. Tarda menos de un minuto.</p>"
+        "Primero saldra el aviso <b>en la pantalla</b> (5 segundos, para que lo "
+        "leas); despues se pondra <b>negra</b> mientras se graba (es normal: asi "
+        "no parpadea) y al final volvera sola con el mensaje de que ha "
+        "terminado. Tarda menos de un minuto.</p>"
         "<p style='color:#666;font-size:14px'>Sube el fichero terminado en "
         "<code>-app.bin</code>. Si se corta, no pasa nada: sigue arrancando la "
         "version actual.</p>"
@@ -439,14 +475,21 @@ esp_err_t ota_update_page(httpd_req_t *req)
         "var b=document.getElementById('b'),f=document.getElementById('f'),e=document.getElementById('e');"
         "b.onclick=function(){"
         " if(!f.files.length){e.textContent='Elige primero el fichero.';return;}"
-        " var x=new XMLHttpRequest();b.disabled=true;"
+        " b.disabled=true;e.textContent='Avisando a la pantalla...';"
+        " var a=new XMLHttpRequest();"
+        " a.onload=function(){setTimeout(subir,5000);};"
+        " a.onerror=function(){setTimeout(subir,500);};"
+        " a.open('POST','/ota_aviso');a.send();"
+        "};"
+        "function subir(){"
+        " var x=new XMLHttpRequest();"
         " x.upload.onprogress=function(p){"
         "  if(p.lengthComputable){e.textContent='Subiendo... '+Math.round(p.loaded*100/p.total)+'%%';}};"
         " x.onload=function(){e.innerHTML=x.responseText;};"
         " x.onerror=function(){e.textContent='Se corto la conexion. La pantalla sigue igual.';b.disabled=false;};"
         " x.open('POST','/ota');"
         " x.setRequestHeader('Content-Type','application/octet-stream');"
-        " x.send(f.files[0]);};"
+        " x.send(f.files[0]);}"
         "</script>"
         "</body>",
         app ? app->version : "?",

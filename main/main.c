@@ -564,6 +564,20 @@ static void init_display_ui(void)
         /* Splash inmediatamente despues de ui_init para tapar la pantalla
          * mientras dura el resto del setup (BLE, audio, datalogger...). */
         splash_show();
+        /* Repintado COMPLETO del panel al arrancar. Hace falta cuando el
+         * arranque viene de una actualizacion por Wi-Fi: el reinicio de la OTA
+         * es un reset por software, el panel MIPI-DSI NO se reinicializa, y su
+         * RAM se queda con el ultimo fotograma de la sesion anterior -- que es
+         * justo el aviso "Actualizando firmware" congelado. LVGL repinta solo
+         * lo que cambia (regiones sucias), asi que ese cartel se quedaba en la
+         * pantalla para siempre aunque el framebuffer ya tuviera la UI nueva
+         * (comprobado el 6-oct-2026: la captura de /captura traia el fondo
+         * normal y la pantalla fisica seguia con el aviso). Invalidar todo y
+         * refrescar reescribe los 1024x600 y borra lo viejo. */
+        lv_obj_invalidate(lv_scr_act());
+        lv_obj_invalidate(lv_layer_top());
+        lv_obj_invalidate(lv_layer_sys());
+        lv_refr_now(NULL);
         lvgl_port_unlock();
     }
     /* No volvemos a tocar el brillo aqui: ya esta a 80% desde la linea de

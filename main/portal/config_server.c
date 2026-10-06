@@ -907,6 +907,9 @@ esp_err_t config_server_start(void) {
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_get);
     httpd_uri_t uri_ota_post = { .uri = "/ota", .method = HTTP_POST, .handler = handle_ota_post };
     if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_post);
+    /* Aviso previo (la pagina lo pide antes de subir el fichero) */
+    httpd_uri_t uri_ota_aviso = { .uri = "/ota_aviso", .method = HTTP_POST, .handler = ota_aviso_post };
+    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_aviso);
 
     // Register captive portal handlers BEFORE the catch-all!
     httpd_uri_t uri_generate_204 = { .uri = "/generate_204", .method = HTTP_GET, .handler = handle_captive_redirect };

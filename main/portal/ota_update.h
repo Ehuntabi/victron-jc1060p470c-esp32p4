@@ -13,6 +13,7 @@ esp_err_t ota_update_page(httpd_req_t *req);
 /* POST /ota -> recibe el firmware EN CRUDO y lo instala. Contesta al navegador
  * y reinicia 1,5 s despues. */
 esp_err_t ota_update_receive(httpd_req_t *req);
+esp_err_t ota_aviso_post(httpd_req_t *req);
 
 #ifdef __cplusplus
 }
