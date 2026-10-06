@@ -92,6 +92,11 @@ typedef struct {
     bool      grey_aligned;      /* one-shot: ancho 230V + base alineada a limpias */
     lv_timer_t *camper_tick_timer; /* refresco periodico widgets camper */
     lv_timer_t *fan_rotate_timer;  /* animacion rotacion ventilador */
+    /* Aviso de estado (Solar / DC-DC) a pantalla completa. Vive en
+     * lv_layer_top() para verse desde cualquier pantalla, asi que NO cuelga del
+     * root de la vista: si no se borra a mano al destruirla, se queda flotando
+     * encima. Se guarda aqui para poder borrarlo. */
+    lv_obj_t *info_modal;
 } ui_overview_view_t;
 
 static void overview_update(ui_device_view_t *view, const victron_data_t *data);
@@ -160,17 +165,23 @@ static const char *ov_state_help(uint8_t s)
     }
 }
 
-/* Cierra (async) el modal de info; el modal va como user_data. */
+/* Cierra (async) el modal de info; la vista va como user_data. */
 static void ov_info_modal_close_cb(lv_event_t *e)
 {
-    lv_obj_t *modal = lv_event_get_user_data(e);
-    if (modal) lv_obj_del_async(modal);
+    ui_overview_view_t *ov = (ui_overview_view_t *)lv_event_get_user_data(e);
+    if (!ov || !ov->info_modal) return;
+    lv_obj_del_async(ov->info_modal);
+    ov->info_modal = NULL;
 }
 
 /* Aviso a pantalla completa explicando en cristiano el estado actual. */
-static void ov_show_state_info(uint8_t state)
+static void ov_show_state_info(ui_overview_view_t *ov, uint8_t state)
 {
+    if (!ov) return;
+    /* Si ya habia uno abierto, fuera: asi no se apilan */
+    if (ov->info_modal) { lv_obj_del(ov->info_modal); ov->info_modal = NULL; }
     lv_obj_t *modal = lv_obj_create(lv_layer_top());
+    ov->info_modal = modal;
     lv_obj_set_size(modal, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_color(modal, UI_COLOR_BG, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_70, 0);
@@ -178,7 +189,7 @@ static void ov_show_state_info(uint8_t state)
     lv_obj_set_style_radius(modal, 0, 0);
     lv_obj_set_style_pad_all(modal, 0, 0);
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(modal, ov_info_modal_close_cb, LV_EVENT_CLICKED, modal);
+    lv_obj_add_event_cb(modal, ov_info_modal_close_cb, LV_EVENT_CLICKED, ov);
 
     lv_obj_t *dlg = lv_obj_create(modal);
     lv_obj_set_size(dlg, 600, 280);
@@ -210,7 +221,7 @@ static void ov_show_state_info(uint8_t state)
 
     lv_obj_t *btn = lv_btn_create(dlg);
     lv_obj_set_style_bg_color(btn, ov_state_color(state), 0);
-    lv_obj_add_event_cb(btn, ov_info_modal_close_cb, LV_EVENT_CLICKED, modal);
+    lv_obj_add_event_cb(btn, ov_info_modal_close_cb, LV_EVENT_CLICKED, ov);
     lv_obj_t *btn_lbl = lv_label_create(btn);
     lv_obj_set_style_text_font(btn_lbl, &lv_font_montserrat_20_es, 0);
     lv_label_set_text(btn_lbl, "Entendido");
@@ -220,12 +231,12 @@ static void ov_show_state_info(uint8_t state)
 static void ov_solar_state_pill_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = lv_event_get_user_data(e);
-    if (ov) ov_show_state_info(ov->solar.state);
+    if (ov) ov_show_state_info(ov, ov->solar.state);
 }
 static void ov_dcdc_state_pill_cb(lv_event_t *e)
 {
     ui_overview_view_t *ov = lv_event_get_user_data(e);
-    if (ov) ov_show_state_info(ov->dcdc.state);
+    if (ov) ov_show_state_info(ov, ov->dcdc.state);
 }
 
 /* Pulsar el cuerpo de una card abre su detalle a pantalla completa. Los pills
@@ -1618,6 +1629,9 @@ static void overview_destroy(ui_device_view_t *view)
     /* El temporizador de alarmas NO se borra aqui a proposito: no es de esta
      * vista, vive en alarma_estado.c y tiene que seguir evaluando (y pitando)
      * con la vista fuera. Si no, destruir la vista dejaria las alarmas mudas. */
+    /* El aviso de estado tampoco cuelga del root (va en lv_layer_top), asi que
+     * hay que borrarlo expresamente: si no, se quedaria flotando encima. */
+    if (ov->info_modal) { lv_obj_del(ov->info_modal); ov->info_modal = NULL; }
     if (view->root) { lv_obj_del(view->root); view->root = NULL; }
     free(view);
 }

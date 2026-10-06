@@ -1,3 +1,24 @@
+v4.35 — el aviso de estado (Solar / DC-DC) atado a la vista del Overview
+
+## Qué cambia
+
+- El aviso a pantalla completa que explica en cristiano el estado del regulador
+  **Solar** y del **DC/DC** (el que sale al pulsar la pastilla redonda de estado de
+  esas dos tarjetas) vive en `lv_layer_top()` **a propósito**, para verse desde
+  cualquier pantalla igual que el aviso de alarmas. Eso significa que **no cuelga
+  del árbol de la vista**, así que `overview_destroy` no se lo llevaba.
+- Ahora la vista lo recuerda en `info_modal` y lo borra al destruirse; y si se
+  pidiera abrir otro con uno ya abierto, se cierra el anterior en vez de apilarlos.
+- Es una **red de seguridad**, no un fallo vivo: hoy `ui_view_registry_ensure` crea
+  cada vista una vez y la reutiliza, y **nadie llama a `destroy`** (comprobado con
+  grep: el puntero solo se asigna, en los cinco `view_*.c`). Si algún día el gestor
+  empieza a destruir vistas, el aviso ya no se queda flotando encima.
+
+## Verificado (6-oct-2026)
+
+- Compila sin avisos nuevos en los ficheros tocados (los 32 del build son de antes y
+  de otros sitios). `AUDITORIA OK`.
+
 v4.34 — ondas dentro de cada paso de nivel, y el grifo con un glifo de verdad
 
 ## Qué cambia
