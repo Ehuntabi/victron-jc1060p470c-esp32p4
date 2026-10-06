@@ -61,6 +61,21 @@ y se restaura en TODAS las salidas. Detalle completo y referencias en `NOTAS.md`
 el panel no se reinicializa y su RAM conserva el último fotograma, así que
 `main.c` fuerza un repintado completo al arrancar.
 
+## Avisos de arranque que son NORMALES (no perseguir)
+
+Los tres salen en cada arranque y ninguno es un problema; están aquí para no
+volver a investigarlos:
+
+- `spi_flash: Detected boya flash chip but using generic driver. For optimal
+  functionality, enable SPI_FLASH_SUPPORT_BOYA_CHIP` — el driver BOYA de IDF solo
+  cambia la detección y cómo se pone el bit QE al arrancar (BOYA hereda la de GD);
+  borrados, escrituras y tiempos son el MISMO código genérico, y no añade
+  flash-suspend (el propio driver dice que no lo soporta). `flash io: qio` en el
+  log demuestra que el camino genérico acierta. Activarlo no cambia la OTA.
+- `lcd_panel: esp_lcd_panel_swap_xy(50): swap_xy is not supported by this panel` —
+  el panel JD9165 no soporta intercambiar ejes; se pide en el BSP y se ignora.
+- `gps: NO llega NADA por el UART2` — el módulo GPS no está puesto en el banco.
+
 ## Comandos habituales
 - Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.5/export.sh`
 - Compilar: `idf.py build`
