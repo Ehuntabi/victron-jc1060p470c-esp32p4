@@ -468,6 +468,14 @@ static bool init_boot_diagnostics(void)
      * 1=POWERON 2=EXT 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT 7=WDT 9=BROWNOUT 10=SDIO */
     ESP_LOGW(TAG, "### MOTIVO ULTIMO REINICIO: %d ###", (int)esp_reset_reason());
 
+    /* Que firmware corre: version (del tag) y fecha/hora de compilacion. Sin esto
+     * no habia forma de saber desde fuera que imagen esta instalada: en pantalla
+     * se ve en Ajustes -> Acerca de, pero para comprobar por log una OTA o un
+     * grabado por cable hacia falta aqui. */
+    const esp_app_desc_t *app_desc = esp_app_get_description();
+    ESP_LOGW(TAG, "### FIRMWARE: %s compilado %s %s ###",
+             app_desc->version, app_desc->date, app_desc->time);
+
     /* --- Chip info --- */
     logSection("LVGL init start");
     esp_chip_info_t chip_info;

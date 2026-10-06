@@ -25,6 +25,10 @@
 #include "watchdog.h"
 #include "camera.h"
 #include "ui.h"
+#include "esp_lvgl_port.h"
+#include "log_capture/log_capture.h"
+#include "hal/axi_icm_ll.h"  /* QoS del AXI-ICM: prioridad del DMA2D (pantalla) */
+#include "hal/mipi_dsi_brg_ll.h" /* burst del puente DSI: lecturas del framebuffer */
 
 static const char *TAG = "ota";
 
@@ -66,6 +70,19 @@ static void ota_wdt_suspend(bool suspend)
         }
     }
 
+    /* Y la tarea de LVGL: durante la OTA la pantalla se congela (se coge su lock
+     * y no se suelta hasta el final), asi que no puede latir. Sin desuscribirla,
+     * el watchdog de tareas reinicia la placa a mitad de la actualizacion: visto
+     * en la placa el 6-oct-2026, con el log guardado como log_taskwdt_*. */
+    TaskHandle_t lvgl = xTaskGetHandle("taskLVGL");
+    if (lvgl) {
+        esp_err_t err_lvgl = suspend ? esp_task_wdt_delete(lvgl) : esp_task_wdt_add(lvgl);
+        if (err_lvgl != ESP_OK) {
+            ESP_LOGW(TAG, "TWDT LVGL: no se pudo %s (%s)",
+                     suspend ? "desuscribir" : "resuscribir", esp_err_to_name(err_lvgl));
+        }
+    }
+
     TaskHandle_t cam = camera_stream_task_handle();
     if (!cam) return;
     esp_err_t err = suspend ? esp_task_wdt_delete(cam) : esp_task_wdt_add(cam);
@@ -98,6 +115,103 @@ static void ota_reboot_en(uint32_t ms)
         esp_err_t err = esp_timer_start_once(t, (uint64_t)ms * 1000);
         if (err != ESP_OK) ESP_LOGW(TAG, "timer de reinicio OTA no arranco: %s", esp_err_to_name(err));
     }
+}
+
+/* ── Congelar la pantalla mientras se graba la flash ─────────────────────────
+ * El parpadeo negro/azul del aviso "Actualizando firmware" no se puede quitar
+ * por configuracion en esta placa: el chip de flash es un BOYA y el driver de
+ * IDF dice que no soporta flash-suspend
+ * (components/spi_flash/spi_flash_chip_boya.c: "flash-suspend is not supported";
+ * el chip es mfr 0x68 dev 0x4018, visto con esptool flash_id). Sin suspend, cada
+ * borrado/programacion deja al panel sin poder leer su framebuffer.
+ *
+ * Lo que SI se puede hacer (idea del usuario, 6-oct-2026) es que, mientras se
+ * graba, NADA escriba en pantalla: se coge el lock del port LVGL y no se suelta
+ * hasta terminar. Asi la tarea de LVGL no corre, no hay redibujados ni cambios
+ * de buffer, y el aviso se queda fijo tal cual estaba: lo que se ve es un
+ * fotograma congelado, no uno que se reescribe a trozos. Ademas deja de haber
+ * reloj/timers tocando el framebuffer justo cuando la flash tiene el bus
+ * ocupado. */
+static bool s_ui_congelada = false;
+
+static void ota_ui_congelar(void)
+{
+    /* 1 s de margen: si la tarea de LVGL esta terminando un fotograma, que
+     * acabe. Si no se consigue, se sigue igual (peor, pero no se aborta). */
+    s_ui_congelada = lvgl_port_lock(1000);
+    ESP_LOGI(TAG, "pantalla congelada durante la grabacion%s",
+             s_ui_congelada ? "" : " (NO se pudo coger el lock de LVGL)");
+}
+
+static void ota_ui_descongelar(void)
+{
+    if (!s_ui_congelada) return;
+    lvgl_port_unlock();
+    s_ui_congelada = false;
+    ESP_LOGI(TAG, "pantalla descongelada");
+}
+
+/* ── Prioridad del DMA2D (el que lee el framebuffer para el MIPI-DSI) ─────────
+ * El propio driver de IDF dice donde esta el problema y como atacarlo:
+ *   esp_lcd_panel_dpi.c: "can't fetch data from external memory fast enough,
+ *   underrun happens ... a hint to the user that he should optimize the memory
+ *   bandwidth (with AXI-ICM)"  y "...the LCD display may already becomes blue".
+ * Mientras la OTA borra/escribe flash, el AXI esta ocupado y el panel se queda
+ * sin datos (underrun) -> azul/negro. Subiendo el QoS del maestro DMA2D durante
+ * la grabacion, sus lecturas de framebuffer pasan por delante y no hay underrun;
+ * el valor anterior se guarda y se restaura en todas las salidas. */
+static uint32_t s_dma2d_arqos_previo = 0;
+static bool     s_qos_tocado = false;
+
+static void ota_qos_pantalla_primero(void)
+{
+    s_dma2d_arqos_previo = AXI_ICM.mst_arqos_reg0.reg_dma2d_arqos;
+    /* Escritura: se deja como estaba; lectura (la del framebuffer): al maximo. */
+    axi_icm_ll_set_dma2d_qos_arbiter_prio(AXI_ICM.mst_awqos_reg0.reg_dma2d_awqos, 15);
+    s_qos_tocado = true;
+    ESP_LOGW(TAG, "QoS DMA2D (pantalla) a 15, estaba en %u", (unsigned)s_dma2d_arqos_previo);
+}
+
+static void ota_qos_restaurar(void)
+{
+    if (!s_qos_tocado) return;
+    axi_icm_ll_set_dma2d_qos_arbiter_prio(AXI_ICM.mst_awqos_reg0.reg_dma2d_awqos,
+                                          s_dma2d_arqos_previo);
+    s_qos_tocado = false;
+    ESP_LOGW(TAG, "QoS DMA2D restaurado a %u", (unsigned)s_dma2d_arqos_previo);
+}
+
+/* ── Rafagas mas cortas del puente DSI durante la grabacion ──────────────────
+ * El driver de IDF deja el burst en 256 palabras de 64 bits = 2 KB por rafaga
+ * (esp_lcd_panel_dpi.c: mipi_dsi_brg_ll_set_burst_len(hal->bridge, 256)). Una
+ * rafaga tan larga necesita un hueco largo y tranquilo en el PSRAM; mientras la
+ * OTA borra/escribe flash esos huecos no existen y el panel se queda sin datos
+ * (underrun = pantalla azul). Con rafagas de 64 B cada peticion es corta y cabe
+ * entre dos operaciones de flash. Es el mismo razonamiento del issue de LVGL
+ * #9590 ("(draw/ppa) cause DSI underrun under heavy load on ESP32-P4"), donde
+ * bajar el burst del PPA de 128 a 64 B quita los artefactos. Se restaura al
+ * acabar. */
+static uint32_t s_burst_previo = 0;
+static bool     s_burst_tocado = false;
+
+static void ota_burst_panel_corto(void)
+{
+    dsi_brg_dev_t *brg = MIPI_DSI_LL_GET_BRG(0);
+    if (!brg) return;
+    s_burst_previo = brg->dma_req_cfg.dma_burst_len;
+    mipi_dsi_brg_ll_set_burst_len(brg, 8);   /* 8 x 64 bits = 64 B */
+    s_burst_tocado = true;
+    ESP_LOGW(TAG, "burst del DSI a 64 B (antes %u palabras de 64 bits)",
+             (unsigned)s_burst_previo);
+}
+
+static void ota_burst_panel_restaurar(void)
+{
+    dsi_brg_dev_t *brg = MIPI_DSI_LL_GET_BRG(0);
+    if (!s_burst_tocado || !brg) return;
+    mipi_dsi_brg_ll_set_burst_len(brg, s_burst_previo);
+    s_burst_tocado = false;
+    ESP_LOGW(TAG, "burst del DSI restaurado a %u palabras", (unsigned)s_burst_previo);
 }
 
 esp_err_t ota_update_receive(httpd_req_t *req)
@@ -134,10 +248,23 @@ esp_err_t ota_update_receive(httpd_req_t *req)
      * Se oculta en TODAS las salidas de fallo de aqui en adelante; en exito
      * se deja puesto (con el texto cambiado) porque la placa reinicia sola. */
     ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
+    /* Foto fija: a partir de aqui nada redibuja hasta que se descongele al
+     * final (ver ota_ui_congelar). El aviso se queda en pantalla todo el rato. */
+    ota_ui_congelar();
+    ota_qos_pantalla_primero();
+    ota_burst_panel_corto();
+    /* Deja rastro en la SD de que esta OTA paso por aqui (el log de cada
+     * arranque se guarda en el boot; el de esta sesion, si no, se pierde). */
+    esp_err_t err_log = log_capture_autosave_now(20);
+    ESP_LOGW(TAG, "OTA: pantalla congelada y QoS del DMA2D al maximo, %d bytes (log a SD: %s)",
+             req->content_len, esp_err_to_name(err_log));
 
     esp_ota_handle_t ota = 0;
     esp_err_t err = esp_ota_begin(destino, req->content_len, &ota);
     if (err != ESP_OK) {
+        ota_ui_descongelar();
+        ota_qos_restaurar();
+        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_begin: %s", esp_err_to_name(err));
@@ -149,6 +276,9 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     char *buf = malloc(OTA_CHUNK);
     if (!buf) {
         esp_ota_abort(ota);
+        ota_ui_descongelar();
+        ota_qos_restaurar();
+        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -216,6 +346,9 @@ esp_err_t ota_update_receive(httpd_req_t *req)
 
     if (fallo) {
         esp_ota_abort(ota);
+        ota_ui_descongelar();
+        ota_qos_restaurar();
+        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -228,6 +361,9 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     /* esp_ota_end valida la imagen (cabecera y firma del binario). */
     err = esp_ota_end(ota);
     if (err != ESP_OK) {
+        ota_ui_descongelar();
+        ota_qos_restaurar();
+        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ota_wdt_suspend(false);
         ESP_LOGE(TAG, "esp_ota_end: %s", esp_err_to_name(err));
@@ -241,6 +377,9 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     err = esp_ota_set_boot_partition(destino);
     ota_wdt_suspend(false);
     if (err != ESP_OK) {
+        ota_ui_descongelar();
+        ota_qos_restaurar();
+        ota_burst_panel_restaurar();
         ui_ota_overlay_hide();
         ESP_LOGE(TAG, "esp_ota_set_boot_partition: %s", esp_err_to_name(err));
         httpd_resp_set_status(req, "500 Internal Server Error");
@@ -249,7 +388,16 @@ esp_err_t ota_update_receive(httpd_req_t *req)
     }
 
     /* Exito: se deja el overlay puesto (con el texto cambiado) hasta que
-     * reinicie sola en 1,5 s — no hace falta ocultarlo. */
+     * reinicie sola en 1,5 s — no hace falta ocultarlo. El brillo se devuelve
+     * antes, para que se lea el "Firmware instalado" (y ya no se toca la flash,
+     * asi que esa pantalla sale limpia). */
+    ota_ui_descongelar();
+    ota_qos_restaurar();
+    ota_burst_panel_restaurar();
+    /* Segundo volcado del log, ahora que la grabacion ha terminado: deja en la SD
+     * la sesion completa de la OTA (el primero se hace al empezar, para no
+     * perderla si algo sale mal). */
+    log_capture_autosave_now(20);
     ui_ota_overlay_show("Firmware instalado\n\nReiniciando...");
     ESP_LOGI(TAG, "actualizacion grabada en '%s'", destino->label);
     httpd_resp_set_type(req, "text/html; charset=utf-8");

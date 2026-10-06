@@ -10,6 +10,7 @@ idf_component_register(
         dns_server
         esp_netif
         esp_lcd              # incluye MIPI-DSI en IDF 5.3
+        hal                  # axi_icm_ll: QoS del AXI-ICM (prioridad del DMA2D)
         spi_flash
         nvs_flash
         bt
