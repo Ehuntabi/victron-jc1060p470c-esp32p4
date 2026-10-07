@@ -808,7 +808,10 @@ static void init_audio_ble(void)
      * llamada Y poner SIM_OVERVIEW_ENABLE=1 en sim_overview.h para usarlo.
      * Se activo brevemente el 07-sep-2026 en la P4 de reserva para las
      * pruebas de banco con la 35cabina; desactivado otra vez el mismo dia. */
-    /* sim_overview_start(); */
+    /* Simulacion: con SIM_OVERVIEW_ENABLE a 1 inyecta datos ficticios (banco). */
+    if (SIM_OVERVIEW_ENABLE) {
+        sim_overview_start();
+    }
 }
 
 /* Timers periodicos: traza de memoria, backup de hora, y modo nocturno

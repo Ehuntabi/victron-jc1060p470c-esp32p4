@@ -1,7 +1,10 @@
 /* sim_overview.h — Activacion del modo simulacion */
 #pragma once
 
-/* Cambia a 0 para desactivar la simulacion (modo produccion). */
+/* Cambia a 1 para activar la simulacion (solo para pruebas de banco).
+ * Se encendio el 7-oct-2026 para validar el camino de datos con la cabina nueva
+ * (los datos ficticios entran por ui_on_panel_data -> dashboard_state, o sea que
+ * salen por UDP igual que los de verdad) y se apago al terminar. */
 #define SIM_OVERVIEW_ENABLE  0
 
 #ifdef __cplusplus
