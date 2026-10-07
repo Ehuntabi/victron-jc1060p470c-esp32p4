@@ -229,6 +229,7 @@ static void tx_task(void *arg)
 
     TickType_t next = xTaskGetTickCount();
     static uint32_t last_log_ok = 0;
+    int fallos_seguidos = 0;   /* para recrear el socket solo si falla de verdad */
     for (;;) {
         mini_msg_t msg;
         build_msg(&msg);
@@ -243,7 +244,26 @@ static void tx_task(void *arg)
                 ESP_LOGW(TAG, "sendto err errno=%d (ok=%lu err=%lu)",
                          errno, (unsigned long)s_sent_ok, (unsigned long)s_sent_err);
             }
+            /* ENOTCONN (118): el socket se creo ANTES de que el AP terminara de
+             * levantarse, asi que quedo ligado a una interfaz que todavia no
+             * existia y ya no envia NUNCA (ok=0 para siempre). Visto el
+             * 7-oct-2026 en el banco: 20 minutos con "errno=118 (ok=0 err=1)" y
+             * el satelite sin recibir nada, con el AP funcionando y clientes
+             * conectados. Se recrea el socket: al crearlo ahora, la interfaz ya
+             * esta y el envio sale. Se exige un minimo de fallos seguidos para
+             * no estar cerrando y abriendo por un fallo suelto. */
+            if (errno == ENOTCONN && ++fallos_seguidos >= 3) {
+                fallos_seguidos = 0;
+                ESP_LOGW(TAG, "socket sin salida (ENOTCONN): lo recreo");
+                close(sock);
+                sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                if (sock >= 0) {
+                    int yes2 = 1;
+                    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes2, sizeof(yes2));
+                }
+            }
         }
+        if (n == (int)sizeof(msg)) fallos_seguidos = 0;
 
         if (s_sent_ok - last_log_ok >= 30) {
             ESP_LOGI(TAG, "TX ok=%lu err=%lu",
