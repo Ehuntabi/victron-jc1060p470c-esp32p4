@@ -27,6 +27,7 @@
 #include "config_server_auth.h"
 #include "contrato_app.h"    /* viaje_campos_que_faltan: probado en el CI sin placa */
 #include "camera.h"          /* camera_sd_bus_lock: serializar con el GDMA */
+#include "datalogger.h"      /* datalogger_sd_montada: reparacion del viaje al arrancar */
 #include "cJSON.h"
 #include "data/dashboard_state.h"
 #include "data/trip_computer.h"
@@ -55,6 +56,14 @@ static const char *TAG = "viaje_srv";
  * porque el cierre del viaje (op_fin) tiene que bajar a la tarjeta los puntos
  * de ruta que aun estan en RAM antes de dar el viaje por terminado. */
 static bool ruta_volcar(const char *carpeta);
+
+/* Cierra la ruta del viaje: ultimo intento de volcado y, pase lo que pase, el
+ * buffer de RAM se vacia (ver su comentario). Se declara aqui por lo mismo. */
+static void ruta_cerrar(const char *carpeta);
+
+/* Se llama al ABRIR viaje: ningun punto de un viaje anterior puede acabar en la
+ * carpeta del nuevo. */
+static void ruta_olvidar(void);
 
 /* Atado a CUERPO_MAX de ~/joint/35cabina/main/net/viaje_cola.c (896): el
  * satelite no puede mandar mas de eso, con esto sobra margen. SI ALGUN DIA SE
@@ -206,14 +215,95 @@ static void estado_set_en(nvs_handle_t h, const char *carpeta, uint32_t id)
 
 /* Envoltorio para los llamadores que solo tocan esto (op_inicio/op_fin/
  * op_descartar): abre, marca, comitea. op_registro() NO usa este -- llama a
- * estado_set_en() sobre su propio handle, junto con totales y el contador. */
-static void estado_set(const char *carpeta, uint32_t id)
+ * estado_set_en() sobre su propio handle, junto con totales y el contador.
+ *
+ * DEVUELVE el resultado (13-oct-2026): antes era void y se tiraba el del
+ * nvs_commit, asi que un fallo al cerrar el viaje dejaba al usuario creyendo
+ * que estaba cerrado mientras la P4 seguia con el abierto. */
+static esp_err_t estado_set(const char *carpeta, uint32_t id)
 {
     nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
     estado_set_en(h, carpeta, id);
-    nvs_commit(h);
+    esp_err_t e = nvs_commit(h);
     nvs_close(h);
+    return e;
+}
+
+/* ── Reparacion al arrancar (auditoria del 13-oct-2026) ───────────────────── */
+
+/* Si la NVS dice que hay un viaje abierto pero su carpeta no esta en la
+ * tarjeta, la P4 se queda en un callejon sin salida del que solo se sale
+ * borrando su NVS a mano: el fin da 507 porque no puede escribir en una carpeta
+ * que no existe, los apuntes de la cabina dan 507 y le atascan la cola entera,
+ * un viaje nuevo da 409 y ni descartar ni borrar funcionan.
+ *
+ * Se llega ahi de tres maneras: sacando la tarjeta con el viaje abierto y
+ * metiendo otra (o formateandola, o borrando la carpeta desde el PC), con un
+ * corte de corriente en el hueco de un renombrado que ya no existe (ver op_fin y
+ * op_descartar), o cambiando de tarjeta sin mas.
+ *
+ * Esto NO cierra el viaje -- sus datos no estan en esta tarjeta, y escribir un
+ * cierre inventado seria mentir --: limpia el estado para que la P4 vuelva a
+ * ser utilizable y lo deja bien claro en el log. Se llama SOLO con la SD
+ * montada: si la tarjeta no esta, su ausencia no significa nada. */
+void viaje_reparar_al_arrancar(void)
+{
+    if (!datalogger_sd_montada()) {
+        ESP_LOGW(TAG, "SD sin montar: no compruebo el viaje abierto");
+        return;
+    }
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;   /* no hay nada que reparar */
+
+    struct stat st;
+    if (stat(carpeta, &st) == 0 && S_ISDIR(st.st_mode)) return;   /* todo en su sitio */
+
+    const char *base = strrchr(carpeta, '/');
+    base = base ? base + 1 : carpeta;
+
+    /* Antes de dar el viaje por perdido: puede ser que SI se cerrara y lo unico
+     * que quedo a medias fuera borrar NVS_CARPETA. Los dos renombrados posibles
+     * son el de "apartar" (DESCARTADO_<nombre>) y el del cambio de destino
+     * (<fecha>_<destino nuevo>, misma fecha, mismo guion). */
+    char otra[RUTA_MAX];
+    snprintf(otra, sizeof(otra), VIAJES_DIR "/" MARCA_DESCARTADO "%s", base);
+    if (stat(otra, &st) == 0) {
+        ESP_LOGW(TAG, "viaje abierto en NVS pero la carpeta se aparto (%s): "
+                      "limpio el estado", otra);
+    } else {
+        /* Mismo dia, otro destino: "2026-10-11_arantzazu" -> "2026-10-11_BILBAO".
+         * Se busca por el prefijo de la fecha. */
+        char pref[16] = {0};
+        const char *guion = strchr(base, '_');
+        size_t np = guion ? (size_t)(guion - base) + 1 : 0;
+        if (np >= sizeof(pref) || np == 0) np = 0;
+        memcpy(pref, base, np);
+        pref[np] = 0;
+
+        bool hallado = false;
+        if (pref[0]) {
+            DIR *d = opendir(VIAJES_DIR);
+            if (d) {
+                struct dirent *e;
+                while ((e = readdir(d))) {
+                    if (strncmp(e->d_name, pref, np) == 0 &&
+                        strcmp(e->d_name, base) != 0) { hallado = true; break; }
+                }
+                closedir(d);
+            }
+        }
+        if (hallado)
+            ESP_LOGW(TAG, "viaje abierto en NVS (%s) pero hay una carpeta del "
+                          "mismo dia con otro nombre: el cierre se quedo a medias "
+                          "despues de renombrar. Limpio el estado", carpeta);
+        else
+            ESP_LOGE(TAG, "VIAJE ABIERTO SIN CARPETA: %s no esta en la tarjeta "
+                          "(cambiada, formateada o borrada desde el PC). Limpio "
+                          "el estado: los datos de ese viaje NO estan aqui",
+                     carpeta);
+    }
+    estado_set(NULL, 0);
 }
 
 /* ── Utilidades ───────────────────────────────────────────────────────────── */
@@ -491,13 +581,30 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * evitar, solo que aplazado hasta el intento 20 en vez del primero.
      * Detectado auditando el 08-sep-2026. */
     bool hay = (mk == 0);
-    if (hay) diario(carpeta, "inicio", destino);
+    bool inicio_ok = hay ? diario(carpeta, "inicio", destino) : false;
     camera_sd_bus_unlock();
 
     if (!hay) {
         ESP_LOGE(TAG, "no puedo crear %s (ni con sufijo numerador, colisiones agotadas)", carpeta);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "no puedo crear la carpeta");
+        return ESP_OK;
+    }
+    if (!inicio_ok) {
+        /* La carpeta se acaba de crear y esta vacia o con media cabecera: se
+         * deshace, para no dejar una carpeta huerfana que /data/viajes
+         * enseñaria como "en curso" para siempre y que nadie podria cerrar. */
+        ESP_LOGE(TAG, "no puedo escribir el inicio de %s (tarjeta llena?): "
+                      "deshago la carpeta", carpeta);
+        if (camera_sd_bus_lock(3000)) {
+            char ev[RUTA_MAX];
+            snprintf(ev, sizeof(ev), "%s/eventos.csv", carpeta);
+            remove(ev);
+            rmdir(carpeta);
+            camera_sd_bus_unlock();
+        }
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no puedo escribir el inicio del viaje");
         return ESP_OK;
     }
 
@@ -510,29 +617,53 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * la pinta de ser suya. El viaje se declara en la cabina; los contadores
      * se enteran aqui. */
     trip_computer_reset();
-    {   /* Numeracion nueva: ver el comentario de la idempotencia en el handler
-         * y el de id_ya_aplicado() -- se vacia el anillo entero, no solo se
-         * pone a 0 un maximo, para que no queden ids sueltos del viaje
-         * anterior que puedan chocar con ids bajos de este. */
-        nvs_handle_t h;
-        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
-            ids_ring_limpiar(h);
-            nvs_commit(h);
-            nvs_close(h);
-        }
-    }
-    {   /* El epoch del inicio, para contar los dias al cerrar. Se guarda en vez
+    ruta_olvidar();   /* ningun punto de un viaje anterior puede caer en este */
+
+    /* ── Dejar constancia del viaje: TODO O NADA (auditoria del 13-oct-2026) ──
+     *
+     * Antes esto eran tres bloques sueltos que no miraban un solo resultado: ni
+     * los nvs_set, ni los dos nvs_commit, ni estado_set(). Si la NVS fallaba
+     * justo aqui (particion llena o gastada), la carpeta se creaba y la cabina
+     * recibia 200 y abria el viaje... pero la P4 no quedaba enterada: TODOS los
+     * apuntes de ese viaje acababan en /sdcard/vehiculo/ con 200 porque sin
+     * viaje abierto op_registro escribe ahi, el fin contestaba 200 "no habia
+     * viaje abierto" y nadie escribia resumen.txt. El usuario bajaba su viaje y
+     * encontraba una carpeta con una linea "inicio": el viaje entero fuera de su
+     * sitio, sin un solo aviso.
+     *
+     * Ahora es UN handle y UN commit, comprobado. Si no entra, el viaje NO se da
+     * por abierto y la carpeta se deshace. */
+    nvs_handle_t h;
+    esp_err_t ne = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (ne == ESP_OK) {
+        /* Numeracion nueva en cada viaje: ver el comentario de id_ya_aplicado()
+         * -- se vacia el anillo entero, no solo se pone a 0 un maximo, para que
+         * no queden ids sueltos del viaje anterior que puedan chocar con ids
+         * bajos de este. */
+        ids_ring_limpiar(h);
+        /* El epoch del inicio, para contar los dias al cerrar. Se guarda en vez
          * de deducirlo del nombre de la carpeta: ahi solo esta la fecha, y un
          * viaje de una noche saldria como "0 dias". */
-        nvs_handle_t h;
-        if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
-            nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
-            nvs_set_u32(h, NVS_T_APLIC, 1);   /* el inicio ya cuenta */
-            nvs_commit(h);
-            nvs_close(h);
-        }
+        nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
+        nvs_set_u32(h, NVS_T_APLIC, 1);   /* el inicio ya cuenta */
+        estado_set_en(h, carpeta, id);
+        ne = nvs_commit(h);
+        nvs_close(h);
     }
-    estado_set(carpeta, id);
+    if (ne != ESP_OK) {
+        ESP_LOGE(TAG, "la NVS no acepta el viaje %s (%s): lo dejo sin abrir y "
+                      "deshago la carpeta", carpeta, esp_err_to_name(ne));
+        if (camera_sd_bus_lock(3000)) {
+            char ev[RUTA_MAX];
+            snprintf(ev, sizeof(ev), "%s/eventos.csv", carpeta);
+            remove(ev);
+            rmdir(carpeta);
+            camera_sd_bus_unlock();
+        }
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no puedo guardar el viaje en la NVS");
+        return ESP_OK;
+    }
     ESP_LOGI(TAG, "VIAJE ABIERTO: %s", carpeta);
     httpd_resp_sendstr(req, carpeta);
     return ESP_OK;
@@ -788,11 +919,26 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_sendstr(req, "tarjeta ocupada");
         return ESP_OK;
     }
+    /* La carpeta del viaje abierto puede NO ESTAR: se saco la tarjeta y se metio
+     * otra, se formateo, o se borro desde el PC. Antes esto se descubria por las
+     * malas -- diario() fallaba, salia un 507 generico y el viaje se quedaba
+     * abierto apuntando al vacio para siempre --. Se dice lo que pasa y se deja
+     * que lo arregle la reparacion de arranque (viaje_reparar_al_arrancar). */
+    struct stat st_carpeta;
+    if (stat(carpeta, &st_carpeta) != 0) {
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "el viaje abierto %s NO ESTA en la tarjeta: no puedo "
+                      "cerrarlo. Si has cambiado o formateado la tarjeta, "
+                      "reinicia la P4 y su estado se limpia solo", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "la carpeta del viaje no esta en la tarjeta");
+        return ESP_OK;
+    }
     bool escrito = diario(carpeta, "fin", "");
     /* Lo que quede de ruta en memoria, a la tarjeta ANTES de cerrar. No condiciona
      * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
      * y dejar el viaje abierto por eso seria peor que el mal que evita. */
-    if (!ruta_volcar(carpeta)) ESP_LOGW(TAG, "quedan puntos de ruta sin escribir");
+    ruta_cerrar(carpeta);
     uint32_t faltan = comprobar_completo(j, carpeta);
     escrito = escribir_resumen(carpeta) && escrito;
     if (faltan) {
@@ -806,6 +952,46 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                         MARCA_INCOMPLETO ".\n");
             fclose(rf);
         }
+    }
+
+    if (!escrito) {
+        /* El viaje NO se cierra: sin resumen no esta cerrado del todo, y
+         * cerrarlo aqui dejaria al usuario creyendo que si. 507 es 5xx, asi que
+         * el satelite reintentara el fin; mientras tanto el viaje sigue abierto
+         * en la P4 y, si se empieza otro, sale la pantalla de "la P4 tiene un
+         * viaje abierto" para decidir.
+         *
+         * EL RENOMBRADO DEL CAMBIO DE DESTINO VA DESPUES DE ESTO, no antes
+         * (auditoria del 13-oct-2026). Antes se renombraba la carpeta aqui
+         * arriba y solo despues se miraba si el cierre habia entrado: con la
+         * tarjeta llena, la P4 renombraba la carpeta, contestaba 507 y el viaje
+         * seguia ABIERTO en NVS apuntando a la ruta vieja, que ya no existia.
+         * A partir de ahi no habia salida: los reintentos del fin escribian en
+         * una carpeta inexistente (507 otra vez), los apuntes de la cabina
+         * tambien (la cola se atascaba entera), un viaje nuevo daba 409, y ni
+         * descartar ni borrar funcionaban. Solo se arreglaba borrando la NVS de
+         * la P4 a mano. */
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "NO he podido escribir el cierre de %s: la tarjeta esta "
+                      "llena o falla. El viaje sigue ABIERTO", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido escribir el cierre");
+        return ESP_OK;
+    }
+
+    /* El cierre YA ESTA en la tarjeta. El estado se limpia ANTES de renombrar:
+     * asi el nombre de la carpeta y lo que la P4 cree que hay abierto no pueden
+     * quedar desalineados, ni siquiera si se corta la corriente en medio. Si el
+     * corte llega entre el commit y el rename, el viaje queda cerrado con el
+     * nombre viejo, que es un estado perfectamente valido (los datos y el
+     * resumen estan dentro). */
+    if (estado_set(NULL, id) != ESP_OK) {
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
+                      "el viaje sigue abierto y habra que reintentar", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
+        return ESP_OK;
     }
 
     /* ── CAMBIO DE DESTINO APLAZADO AL CIERRE (12-oct-2026) ─────────────────
@@ -873,20 +1059,6 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     camera_sd_bus_unlock();
 
-    if (!escrito) {
-        /* El viaje NO se cierra: sin resumen no esta cerrado del todo, y
-         * cerrarlo aqui dejaria al usuario creyendo que si. 507 es 5xx, asi que
-         * el satelite reintentara el fin; mientras tanto el viaje sigue abierto
-         * en la P4 y, si se empieza otro, sale la pantalla de "la P4 tiene un
-         * viaje abierto" para decidir. */
-        ESP_LOGE(TAG, "NO he podido escribir el cierre de %s: la tarjeta esta "
-                      "llena o falla. El viaje sigue ABIERTO", carpeta);
-        httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido escribir el cierre");
-        return ESP_OK;
-    }
-
-    estado_set(NULL, id);
     /* La energia ya esta volcada en el resumen de arriba. Se guarda en NVS y se
      * cierra, para que los contadores no sigan sumando a cuenta de un viaje que
      * ya termino. */
@@ -1043,16 +1215,32 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
 
     diario(carpeta, "descartado", "");
     int r = rename(carpeta, destino);
-    camera_sd_bus_unlock();
 
     if (r != 0) {
+        camera_sd_bus_unlock();
         ESP_LOGE(TAG, "no puedo apartar %s -> %s", carpeta, destino);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "no puedo apartar la carpeta");
         return ESP_OK;
     }
 
-    estado_set(NULL, id);
+    /* El estado se limpia DESPUES del rename (aqui si, al contrario que en
+     * op_fin) porque un rename fallido tiene que dejar el viaje como estaba,
+     * para poder reintentarlo. Pero si el commit de la NVS falla, se DESHACE el
+     * rename: dejarlo renombrado con el viaje aun abierto es exactamente el
+     * estado sin salida de la auditoria del 13-oct-2026 (NVS apuntando a una
+     * carpeta que ya no existe). */
+    if (estado_set(NULL, id) != ESP_OK) {
+        if (rename(destino, carpeta) != 0)
+            ESP_LOGE(TAG, "no he podido deshacer el renombrado de %s", destino);
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "no puedo apartar %s: la NVS no acepta el cambio", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no puedo apartar el viaje");
+        return ESP_OK;
+    }
+    camera_sd_bus_unlock();
+
     ESP_LOGW(TAG, "VIAJE DESCARTADO: %s -> %s", carpeta, destino);
     httpd_resp_sendstr(req, destino);
     return ESP_OK;
@@ -1382,6 +1570,41 @@ static bool ruta_volcar(const char *carpeta)
     if (fclose(f) != 0) return false;      /* tarjeta llena: NO se tiran los puntos */
     s_ruta_n = 0;
     return true;
+}
+
+/* CIERRE de la ruta: ultimo intento de bajar lo que quede en RAM y, pase lo que
+ * pase, el buffer se vacia.
+ *
+ * Vaciarlo SIEMPRE es el arreglo de la auditoria del 13-oct-2026. Antes, si al
+ * cerrar la tarjeta estaba llena, los hasta 10 puntos (5 min de traza) se
+ * quedaban en RAM; el viaje se cerraba igual y, al empezar el viaje siguiente,
+ * en cuanto se llenaba el buffer otra vez, ruta_volcar() los escribia en la
+ * carpeta NUEVA: puntos con la fecha, las coordenadas y los km del viaje
+ * anterior dentro del viaje de hoy, y el mapa del nuevo arrancando donde acabo
+ * el viejo. Perder cinco minutos de traza es mucho menos malo que mezclar dos
+ * viajes. */
+static void ruta_cerrar(const char *carpeta)
+{
+    if (s_ruta_n == 0) return;
+    if (!ruta_volcar(carpeta)) {
+        ESP_LOGW(TAG, "quedan %d puntos de ruta sin escribir (tarjeta llena?): "
+                      "se descartan para no meterlos en el viaje siguiente",
+                 s_ruta_n);
+        s_ruta_n = 0;
+    }
+    /* El contador de km de fila_ruta() se re-ancla solo (km_ultimo vuelve a -1
+     * en cuanto trip_computer se pone a cero), asi que aqui no hay nada mas. */
+}
+
+/* Al abrir un viaje: a la basura lo que hubiera quedado de uno anterior. Cubre
+ * el caso que ruta_cerrar() no puede cubrir -- un viaje que no se cerro por
+ * aqui (se aparto, se cayo la P4) -- y garantiza que la carpeta nueva no pueda
+ * heredar ni un punto de la vieja. */
+static void ruta_olvidar(void)
+{
+    if (s_ruta_n) ESP_LOGW(TAG, "tiro %d puntos de ruta de un viaje anterior",
+                           s_ruta_n);
+    s_ruta_n = 0;
 }
 
 /* Anota un punto de la ruta EN MEMORIA. Vuelca cuando se llena el buffer.

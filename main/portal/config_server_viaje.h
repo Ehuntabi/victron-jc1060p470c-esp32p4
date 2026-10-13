@@ -24,5 +24,13 @@ TaskHandle_t viaje_tick_task_handle(void);
  * nombre y no hay forma de saber de cual es cada uno. */
 bool viaje_abierto_nombre(char *out, size_t n);
 
+/* Reparacion del estado del viaje al arrancar, CON LA SD YA MONTADA.
+ *
+ * Si la NVS dice que hay un viaje abierto y su carpeta no esta en la tarjeta,
+ * limpia el estado (no cierra nada: sus datos no estan) para que la P4 no se
+ * quede bloqueada sin poder cerrar ni abrir viajes. Ver el comentario largo en
+ * config_server_viaje.c. Se llama desde app_main() una sola vez. */
+void viaje_reparar_al_arrancar(void);
+
 /* GET /data/viajes — lista de viajes guardados con su estado y su enlace. */
 esp_err_t handle_data_viajes(httpd_req_t *req);

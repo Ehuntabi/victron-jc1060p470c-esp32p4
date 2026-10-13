@@ -611,6 +611,13 @@ static void init_sd_rtc_frigo(void)
      * en el caso normal (no hay .real que devolver). */
     if (sd_err == ESP_OK) sim_overview_restaurar_reales();
 
+    /* El viaje abierto que guarda la NVS tiene que existir en ESTA tarjeta. Si
+     * no existe (se cambio la tarjeta, se formateo, se borro la carpeta desde el
+     * PC, o un corte de corriente partio un renombrado), la P4 se quedaba
+     * bloqueada sin salida: ni cerraba, ni abria, ni aceptaba apuntes. Aqui se
+     * limpia ese estado. Antes que nada mas toque /sdcard/viajes. */
+    if (sd_err == ESP_OK) viaje_reparar_al_arrancar();
+
     /* Auto-save de logs a SD 30 s tras boot (con rotacion FIFO 20 archivos).
      * Stack 12 KB: fprintf bucle + opendir/readdir + bubble sort + unlink. */
     xTaskCreate(log_autosave_task, "logsave", 12288, NULL, 3, NULL);
