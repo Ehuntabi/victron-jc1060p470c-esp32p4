@@ -522,6 +522,13 @@ void viaje_reparar_al_arrancar(void)
 {
     log_estado_nvs();
     sd_hueco_medir();
+    /* Y el hueco de la tarjeta, en el log de arranque: es el otro sitio que se
+     * llena y hasta ahora solo se veia entrando a Ajustes. Una linea por
+     * arranque, y con el dato que luego usa el aviso de "queda poco sitio". */
+    if (s_sd_libre != UINT64_MAX)
+        ESP_LOGI(TAG, "SD: %llu MB libres de %llu",
+                 (unsigned long long)(s_sd_libre / (1024ULL * 1024ULL)),
+                 (unsigned long long)(s_sd_total / (1024ULL * 1024ULL)));
     if (!datalogger_sd_montada()) {
         ESP_LOGW(TAG, "SD sin montar: no compruebo el viaje abierto");
         return;
