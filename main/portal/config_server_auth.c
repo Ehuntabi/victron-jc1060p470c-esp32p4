@@ -414,7 +414,8 @@ esp_err_t config_server_set_web_credentials(const char *user, const char *pass)
  * entonces con la premisa comprobada, no supuesta.
  *
  * Nivel de ADMINISTRACION: /ota (escribir firmware), /keys y /save (las claves
- * AES de los Victron). Sin esto, quien tuviera la clave del Wi-Fi podia
+ * AES de los Victron), y /captura SOLO cuando pide las pantallas sensibles
+ * ("wifi" y "victron_keys", que enseñan las claves). Sin esto, quien tuviera la clave del Wi-Fi podia
  * REESCRIBIR EL FIRMWARE o llevarse las claves AES — o sea que prestar el Wi-Fi a
  * un invitado equivalia a darle control total.
  *

@@ -5,7 +5,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-/* POST /api/viaje — Basic Auth ESTRICTA (escribe en la tarjeta). */
+/* POST /api/viaje — Basic Auth del PORTAL (nivel abierto: es el canal de las
+ * cabinas y solo tienen esas credenciales). */
 esp_err_t handle_api_viaje(httpd_req_t *req);
 
 /* Arranca el timer que, MIENTRAS HAYA VIAJE ABIERTO, va dejando en su carpeta
@@ -44,7 +45,9 @@ uint32_t viaje_fallos_escritura(void);
  * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
  * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza
  * que estaban en RAM. */
-bool viaje_volcar_ahora(const char *motivo);   /* false = no se pudo (sin cerrojo o disco lleno) */
+/* false = no se volco: no hay viaje abierto (lo mas comun), no se pudo coger
+ * el cerrojo de la SD o la tarjeta no quiso. */
+bool viaje_volcar_ahora(const char *motivo);
 
 /* Pide un volcado SIN hacerlo: lo ejecuta la tarea del viaje en su siguiente
  * vuelta (1 s). Para quien no puede tocar la SD -- el evaluador de alarmas corre

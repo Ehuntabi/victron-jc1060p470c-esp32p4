@@ -1691,14 +1691,24 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     if (en_viaje) {
         char ahora_viaje[CARPETA_MAX];
-        if (viaje_abierto(ahora_viaje, sizeof(ahora_viaje)) &&
+        if (!viaje_abierto(ahora_viaje, sizeof(ahora_viaje)) ||
             strcmp(ahora_viaje, carpeta) != 0) {
-            camera_sd_bus_unlock();
-            ESP_LOGW(TAG, "el viaje se ha cerrado mientras llegaba el apunte: lo "
-                          "dejo para el reintento");
-            httpd_resp_set_status(req, "507 Insufficient Storage");
-            httpd_resp_sendstr(req, "el viaje acaba de cerrarse: reintenta");
-            return ESP_OK;
+            /* El viaje se cerro entre la lectura de arriba y el cerrojo (o es
+             * otro). El apunte NO se escribe en la carpeta de un viaje cerrado
+             * -- el cierre no siempre renombra, asi que la carpeta sigue ahi --
+             * ni se vuelve a apuntar el viaje como abierto en NVS: se trata como
+             * lo que es, un apunte SIN viaje abierto, y se va al historial del
+             * vehiculo, que es el camino de seguridad que ya existe.
+             *
+             * La condicion es la del tick de telemetria. La primera version de
+             * esto exigia "hay otro viaje y es distinto", y por ahi se colaba
+             * justo el caso normal: el viaje cerrado SIN otro detras (lo cazo la
+             * revision del 13-oct-2026). Y no se contesta 507: un apunte sin
+             * viaje abierto no es un error, es el caso de la red de seguridad. */
+            ESP_LOGW(TAG, "el viaje %s ya no esta abierto: el apunte va al "
+                          "historial del vehiculo", carpeta);
+            en_viaje = false;
+            snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
         }
     }
     if (!en_viaje) mkdir(VEHICULO_DIR, 0777);
@@ -2020,8 +2030,10 @@ bool viaje_volcar_ahora(const char *motivo)
         return false;
     }
     bool ok = ruta_volcar(carpeta);
-    if (!ok) ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
-    diario(carpeta, "volcado", motivo ? motivo : "volcado a peticion");
+    /* La linea del diario SOLO si de verdad se volco: con la tarjeta llena se
+     * reintenta cada 30 s y antes dejaba una linea "volcado" por intento. */
+    if (ok) diario(carpeta, "volcado", motivo ? motivo : "volcado a peticion");
+    else ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
     camera_sd_bus_unlock();
     ESP_LOGW(TAG, "viaje abierto en %s: ruta volcada (%s)", carpeta,
              motivo ? motivo : "a peticion");
@@ -2136,8 +2148,8 @@ static void tick_viaje_cb(void *arg)
         return;
     }
 
-    /* Lo pedido desde fuera va ANTES de los relojes: si la bateria se esta
-     * cayendo, no se puede esperar a que la hora sea buena. */
+    /* Lo pedido desde fuera va ANTES que el resto del tick (telemetria,
+     * contadores y ruta): si la bateria se esta cayendo, no se puede esperar. */
     if (s_hora_salto_pendiente) {
         char txt[128];
         snprintf(txt, sizeof(txt),
