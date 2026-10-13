@@ -784,16 +784,18 @@ static esp_err_t handle_settime(httpd_req_t *req)
     const long TS_MAX = 4102444800L;   /* 2100-01-01 */
     if (ts > TS_MIN && ts <= TS_MAX) {
         time_t epoch = (time_t)ts;
-        /* El epoch que envía el móvil es Unix UTC. Lo convertimos a hora LOCAL
-         * (Madrid, ya configurada en main.c) para guardarla en el RTC, de modo
-         * que coincida con cómo la leemos en arranque (mktime sobre hora local). */
-        struct tm t_local;
-        localtime_r(&epoch, &t_local);
+        /* El epoch que envía el móvil es Unix UTC, y el RTC guarda UTC desde el
+         * 14-oct-2026 (ver main.c): se escribe TAL CUAL, sin convertir a local.
+         * Antes se guardaba en local y al arrancar habia que adivinar el horario
+         * de verano con mktime(isdst=-1). */
+        struct tm t_utc;
+        gmtime_r(&epoch, &t_utc);
         if (rtc_is_ready()) {
-            rtc_set_time(&t_local);
-            ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil (local): %04d-%02d-%02d %02d:%02d:%02d",
-                     t_local.tm_year + 1900, t_local.tm_mon + 1, t_local.tm_mday,
-                     t_local.tm_hour, t_local.tm_min, t_local.tm_sec);
+            rtc_set_time(&t_utc);
+            rtc_marca_utc();
+            ESP_LOGI("CFG_SRV", "Hora sincronizada desde movil (UTC): %04d-%02d-%02d %02d:%02d:%02d",
+                     t_utc.tm_year + 1900, t_utc.tm_mon + 1, t_utc.tm_mday,
+                     t_utc.tm_hour, t_utc.tm_min, t_utc.tm_sec);
         }
         /* Sincronizar el reloj del sistema con el epoch UTC original */
         struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };

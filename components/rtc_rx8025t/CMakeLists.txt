@@ -5,4 +5,5 @@ idf_component_register(
         driver
         log
         esp_common
+        nvs_flash   # la marca de "el RTC ya guarda UTC" (14-oct-2026)
 )

@@ -107,7 +107,19 @@ _Static_assert(offsetof(mini_latido_t, crc32) == 8, "mini_latido_t: crc32 en 8")
  * 38 hasta la v5 (alarmas). */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
-    uint8_t  _pad0;               /* alignment */
+    /* DESFASE HORARIO LOCAL EN CUARTOS DE HORA (15 min), con signo (leer como
+     * int8_t): +2 h en verano = 8, +1 h en invierno = 4. 0 = UTC o sin dato.
+     *
+     * Ocupa el byte de RELLENO que ya existia (nada cambia de tamano ni de
+     * version, asi que una cabina vieja lo ignora y no hay que grabar las tres
+     * placas a la vez).
+     *
+     * PARA QUE: el 'epoch_local' de abajo es un epoch desplazado a hora local, y
+     * en el cambio de horario ese numero DA UN SALTO ATRAS de 3600 s. Las
+     * duraciones (una pernocta que cruza el cambio, o el cobro por 24 h) salian
+     * una hora cortas. Con este dato, la cabina sabe que ha cambiado el horario
+     * y corrige la duracion SIN tocar la hora de pared que enseña. */
+    uint8_t  utc_off_quince;
 
     /* Batería principal (SmartShunt / BMV) */
     int16_t  shunt_soc_deci;      /*  % * 10   ej: 782 = 78.2 %  */

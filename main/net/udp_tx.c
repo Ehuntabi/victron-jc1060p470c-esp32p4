@@ -155,8 +155,14 @@ static void build_msg(mini_msg_t *out)
                                       + tm_local.tm_hour * 3600
                                       + tm_local.tm_min * 60
                                       + tm_local.tm_sec);
+        /* El desfase, para que la cabina pueda corregir las duraciones que
+         * cruzan un cambio de horario (ver mini_proto.h). Sale de la diferencia
+         * entre el epoch local y el UTC, que aqui se tienen los dos. */
+        int32_t off = (int32_t)out->epoch_local - (int32_t)ahora;
+        out->utc_off_quince = (uint8_t)(int8_t)(off / 900);
     } else {
         out->epoch_local = 0;
+        out->utc_off_quince = 0;   /* sin hora valida no hay desfase que dar */
     }
 
     /* Estado del GPS. Los tres estados salen de gps.c: si no llegan tramas el

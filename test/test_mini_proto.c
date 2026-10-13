@@ -52,7 +52,13 @@ int main(void)
     m.epoch_local = 1789762971u;
     unsigned char *b = (unsigned char *)&m;
     COMPROBAR(b[0] == MINI_PROTO_VERSION, "el primer byte es la version");
-    COMPROBAR(b[1] == 0, "el byte 1 es relleno (0)");
+    /* El byte 1 es el DESFASE HORARIO (ver mini_proto.h): en un mensaje a
+     * cero vale 0, que es "UTC o sin dato". */
+    COMPROBAR(b[1] == 0, "el byte 1 es el desfase horario (0 = UTC o sin dato)");
+    {
+        size_t o = offsetof(mini_msg_t, utc_off_quince);
+        COMPROBAR(o == 1, "el desfase horario va en el byte 1, sin mover nada mas");
+    }
     {
         size_t o = offsetof(mini_msg_t, shunt_voltage_centi);
         COMPROBAR(b[o] == (1342 & 0xFF) && b[o + 1] == (1342 >> 8),

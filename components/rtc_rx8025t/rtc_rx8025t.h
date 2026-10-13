@@ -29,6 +29,25 @@ esp_err_t rtc_get_time(struct tm *tm_out);
  */
 esp_err_t rtc_set_time(const struct tm *tm_in);
 
+/* EL RTC GUARDA UTC desde el 14-oct-2026 (antes guardaba hora local, y al
+ * arrancar se convertia con mktime(isdst=-1), o sea adivinando el horario de
+ * verano: una placa apagada justo en el cambio de hora salia una hora desviada
+ * hasta el primer fix del GPS).
+ *
+ * rtc_marca_utc() deja constancia en NVS de que lo que hay guardado ya es UTC;
+ * rtc_es_utc() dice si esa marca existe. main.c la usa para migrar UNA vez: si
+ * no hay marca, el valor que se lea es hora local vieja y se convierte como
+ * antes (y se reescribe en UTC). */
+void    rtc_marca_utc(void);
+bool    rtc_es_utc(void);
+
+/* Epoch UTC a partir de un struct tm que YA viene en UTC.
+ *
+ * Existe porque la newlib de ESP-IDF no trae timegm(), y mktime() aplicaria el
+ * huso local: es el mismo algoritmo de dias civiles que usan gps.c y udp_tx.c
+ * (days_from_civil de Hinnant). */
+time_t  rtc_epoch_utc(const struct tm *tm_utc);
+
 /**
  * @brief Vuelve a leer y comprobar el VLF (Voltage Low Flag, pila CR1220
  * baja) AHORA, no solo en rtc_init(). Antes SOLO se comprobaba una vez al

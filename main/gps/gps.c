@@ -178,9 +178,23 @@ static void poner_en_hora(const char *hhmmss, const char *ddmmyy)
     struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
     settimeofday(&tv, NULL);
 
+    /* EL RTC GUARDA UTC (14-oct-2026).
+     *
+     * Antes guardaba hora LOCAL y al arrancar se convertia con mktime(isdst=-1),
+     * o sea ADIVINANDO el horario de verano: si la placa se apagaba justo en el
+     * cambio (madrugada del ultimo domingo de marzo u octubre), la hora leida
+     * podia salir una hora desviada hasta el primer fix del GPS. Guardando UTC
+     * no hay nada que adivinar: al arrancar se usa el valor tal cual y la hora
+     * local la calcula localtime() con la TZ, hoy y en cualquier fecha.
+     *
+     * La migracion (un RTC con hora local vieja) la hace main.c UNA vez, con la
+     * marca RTC_EN_UTC de NVS. */
+    struct tm tm_utc;
+    gmtime_r(&epoch, &tm_utc);
+    rtc_set_time(&tm_utc);
+    rtc_marca_utc();
     struct tm tm_local;
-    localtime_r(&epoch, &tm_local);           /* TZ ya puesta en main.c */
-    rtc_set_time(&tm_local);
+    localtime_r(&epoch, &tm_local);           /* solo para el log */
 
     ultima_sinc_us = ahora_us;
     s_sincs++;

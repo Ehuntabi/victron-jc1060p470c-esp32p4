@@ -1,4 +1,6 @@
 #include "rtc_rx8025t.h"
+#include <stdbool.h>
+#include "nvs.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include <string.h>
@@ -158,6 +160,48 @@ esp_err_t rtc_get_time(struct tm *tm_out)
         return ESP_ERR_INVALID_RESPONSE;
     }
     return ESP_OK;
+}
+
+
+/* ── La marca de "el RTC ya guarda UTC" (14-oct-2026) ─────────────────────── */
+#define RTC_NVS_NS   "rtc_utc"
+#define RTC_NVS_KEY  "en_utc"
+
+void rtc_marca_utc(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(RTC_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    uint8_t v = 1;
+    if (nvs_set_u8(h, RTC_NVS_KEY, v) == ESP_OK) nvs_commit(h);
+    nvs_close(h);
+}
+
+bool rtc_es_utc(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(RTC_NVS_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    uint8_t v = 0;
+    esp_err_t e = nvs_get_u8(h, RTC_NVS_KEY, &v);
+    nvs_close(h);
+    return e == ESP_OK && v == 1;
+}
+
+static long rtc_dias_desde_1970(int y, unsigned m, unsigned d)
+{
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = (unsigned)(y - era * 400);
+    const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (long)era * 146097 + (long)doe - 719468;
+}
+
+time_t rtc_epoch_utc(const struct tm *t)
+{
+    if (!t) return 0;
+    return (time_t)rtc_dias_desde_1970(t->tm_year + 1900, (unsigned)(t->tm_mon + 1),
+                                       (unsigned)t->tm_mday) * 86400
+         + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
 }
 
 esp_err_t rtc_set_time(const struct tm *tm_in)

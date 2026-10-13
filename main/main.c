@@ -640,17 +640,37 @@ static void init_sd_rtc_frigo(void)
     }
 
     esp_err_t rtc_err = rtc_init(bsp_i2c_get_handle());
-    /* El RTC almacena hora local (Madrid). mktime la interpreta con la TZ
-     * recién configurada y devuelve el epoch UTC correcto. */
+    /* EL RTC GUARDA UTC (14-oct-2026). Antes guardaba hora local y se convertia
+     * con mktime(isdst=-1), o sea ADIVINANDO el horario de verano: una placa
+     * apagada justo en el cambio de hora arrancaba una hora desviada hasta el
+     * primer fix del GPS. Con UTC no hay nada que adivinar.
+     *
+     * MIGRACION, UNA VEZ: si la marca RTC_EN_UTC no esta (placa recien
+     * actualizada), lo que hay guardado es hora local vieja: se convierte con
+     * mktime como antes y se reescribe en UTC, para no arrancar con dos horas de
+     * error justo despues de grabar. */
     struct tm t_rtc;
     if (rtc_get_time(&t_rtc) == ESP_OK && t_rtc.tm_year >= 120) {
-        t_rtc.tm_isdst = -1;   /* dejar que mktime decida DST */
-        time_t epoch = mktime(&t_rtc);
+        time_t epoch;
+        if (rtc_es_utc()) {
+            epoch = rtc_epoch_utc(&t_rtc);
+            ESP_LOGI(TAG, "Hora del RTC (UTC): %04d-%02d-%02d %02d:%02d:%02d",
+                     t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
+                     t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
+        } else {
+            t_rtc.tm_isdst = -1;   /* hora local vieja: que mktime decida DST */
+            epoch = mktime(&t_rtc);
+            ESP_LOGW(TAG, "RTC con hora local (formato viejo): la paso a UTC "
+                          "(%04d-%02d-%02d %02d:%02d:%02d local)",
+                     t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
+                     t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
+            struct tm t_utc;
+            gmtime_r(&epoch, &t_utc);
+            rtc_set_time(&t_utc);
+            rtc_marca_utc();
+        }
         struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
         settimeofday(&tv, NULL);
-        ESP_LOGI(TAG, "Hora del RTC (local): %04d-%02d-%02d %02d:%02d:%02d",
-                 t_rtc.tm_year + 1900, t_rtc.tm_mon + 1, t_rtc.tm_mday,
-                 t_rtc.tm_hour, t_rtc.tm_min, t_rtc.tm_sec);
     } else {
         /* RTC sin hora válida — restaurar desde backup NVS */
         nvs_handle_t nh;
