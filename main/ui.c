@@ -35,6 +35,7 @@
 #include "ui/views/view_overview.h"
 #include "rtc_rx8025t.h"
 #include "datalogger.h"
+#include "portal/config_server_viaje.h"   /* viaje_fallos_escritura(): el icono de la SD */
 #include "data/dashboard_state.h"
 #include "data/trip_computer.h"
 #include "data/solar_daily.h"
@@ -1415,7 +1416,13 @@ static void sd_indicator_timer_cb(lv_timer_t *t)
      * va", asi que con la tarjeta bien el icono va en verde. El 4CD964 es el mismo
      * verde del GPS con fix. */
     const datalogger_sd_estado_t est = datalogger_sd_estado();
-    if (est == DL_SD_NO_MONTADA || est == DL_SD_FALLOS) {
+    /* Y LOS FALLOS DEL VIAJE CUENTAN IGUAL (auditoria del 13-oct-2026, hallazgo
+     * 14): este icono solo miraba al datalogger, asi que podia estar en verde
+     * mientras el viaje no se escribia en la tarjeta (los apuntes dan 507 y la
+     * telemetria del viaje se queda muda). El contador lo lleva
+     * config_server_viaje.c, que es quien escribe el viaje. */
+    const bool viaje_falla = viaje_fallos_escritura() > 0;
+    if (est == DL_SD_NO_MONTADA || est == DL_SD_FALLOS || viaje_falla) {
         lv_label_set_text(ui->lbl_sd, LV_SYMBOL_WARNING);
         lv_obj_set_style_text_color(ui->lbl_sd, lv_palette_main(LV_PALETTE_RED), 0);
     } else if (est == DL_SD_SOLTADA) {

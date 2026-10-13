@@ -34,6 +34,12 @@ void viaje_flush_antes_de_reiniciar(void);
  * (lo llama gps.c cuando el GPS corrige la hora mas de 5 min). */
 void viaje_nota_hora_corregida(int64_t delta_s);
 
+/* Cuantos fallos de escritura ha tenido el viaje (apuntes, cierre, telemetria,
+ * contadores, ruta). Lo mira el icono de la SD de la barra: antes solo reflejaba
+ * los fallos del datalogger, asi que podia estar verde con el viaje sin
+ * escribirse (auditoria del 13-oct-2026, hallazgo 14). */
+uint32_t viaje_fallos_escritura(void);
+
 /* Vuelca la ruta del viaje abierto YA, dejando el motivo escrito en el diario.
  * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
  * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza

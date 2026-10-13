@@ -156,6 +156,19 @@ static bool viaje_abierto(char *out, size_t n)
     return e == ESP_OK && out[0];
 }
 
+/* ── FALLOS DE ESCRITURA DEL VIAJE (auditoria del 13-oct-2026, hallazgo 14) ──
+ *
+ * Hasta hoy, si la tarjeta fallaba con un viaje abierto, el unico rastro era una
+ * linea en el log: el icono de la SD de la barra solo mira los fallos del
+ * DATALOGGER, asi que podia estar verde mientras el viaje no se escribia. Con
+ * esto, cualquier fallo de escritura del viaje (apunte, cierre, telemetria,
+ * contadores, ruta) enciende el mismo aviso, que es lo que mira el usuario. */
+static _Atomic uint32_t s_fallos_escritura;
+
+static void anota_fallo_escritura(void) { s_fallos_escritura++; }
+
+uint32_t viaje_fallos_escritura(void) { return s_fallos_escritura; }
+
 /* Version PUBLICA: la necesitan los logs para decir A QUE VIAJE pertenecen
  * (ver log_capture.c) y el aviso de la OTA. Declarada en el .h. */
 bool viaje_abierto_nombre(char *out, size_t n)
@@ -1195,6 +1208,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
          * descartar ni borrar funcionaban. Solo se arreglaba borrando la NVS de
          * la P4 a mano. */
         camera_sd_bus_unlock();
+        anota_fallo_escritura();
         ESP_LOGE(TAG, "NO he podido escribir el cierre de %s: la tarjeta esta "
                       "llena o falla. El viaje sigue ABIERTO", carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
@@ -1615,6 +1629,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         /* 507 y no 200: es 5xx, asi que el satelite NO lo descarta y lo vuelve
          * a intentar. Tampoco se cuenta ni se suma a los totales ni se marca el
          * id como aplicado, para que el reintento entre de verdad. */
+        anota_fallo_escritura();
         ESP_LOGE(TAG, "NO he podido escribir el apunte '%s' en %s: la tarjeta "
                       "esta llena o falla. Devuelvo 507 para que lo reintente",
                  jt->valuestring, carpeta);
@@ -1719,6 +1734,7 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     if (!f) {
         /* Antes era un 'return' mudo: la telemetria del viaje se quedaba
          * congelada sin una linea en el log (auditoria del 13-oct-2026). */
+        anota_fallo_escritura();
         ESP_LOGW(TAG, "no puedo escribir %s (disco lleno?)", ruta);
         return;
     }
@@ -1765,6 +1781,7 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
         /* Antes esto era un 'return' mudo: la telemetria del viaje se congelaba
          * sin una sola linea en el log y nadie se enteraba (auditoria del
          * 13-oct-2026). */
+        anota_fallo_escritura();
         ESP_LOGW(TAG, "no puedo escribir %s (disco lleno?)", ruta);
         return;
     }
@@ -1909,6 +1926,7 @@ static void ruta_cerrar(const char *carpeta)
 {
     if (s_ruta_n == 0) return;
     if (!ruta_volcar(carpeta)) {
+        anota_fallo_escritura();
         ESP_LOGW(TAG, "quedan %d puntos de ruta sin escribir (tarjeta llena?): "
                       "se descartan para no meterlos en el viaje siguiente",
                  s_ruta_n);
@@ -1953,6 +1971,17 @@ static void fila_ruta(const char *carpeta, const struct tm *tm_l)
 
     if (s_ruta_n < RUTA_BUFFER_N) {
         ruta_punto_t *p = &s_ruta[s_ruta_n++];
+        strftime(p->cuando, sizeof(p->cuando), "%Y-%m-%d %H:%M:%S", tm_l);
+        p->lat = g.lat; p->lon = g.lon; p->alt = g.altitud_m; p->km = t.km;
+    } else {
+        /* BUFFER LLENO = la tarjeta no ha querido el volcado (llena o fallando).
+         * Antes el punto nuevo se TIRABA y el buffer se quedaba con los diez mas
+         * VIEJOS: la traza se congelaba justo donde empezo el problema. Ahora se
+         * tira el mas viejo: se pierde el principio de los ultimos 5 minutos, no
+         * el final, que es lo que hace falta para saber por donde ibas
+         * (auditoria del 13-oct-2026, hallazgo 4). */
+        memmove(&s_ruta[0], &s_ruta[1], sizeof(s_ruta[0]) * (RUTA_BUFFER_N - 1));
+        ruta_punto_t *p = &s_ruta[RUTA_BUFFER_N - 1];
         strftime(p->cuando, sizeof(p->cuando), "%Y-%m-%d %H:%M:%S", tm_l);
         p->lat = g.lat; p->lon = g.lon; p->alt = g.altitud_m; p->km = t.km;
     }
