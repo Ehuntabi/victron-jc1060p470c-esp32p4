@@ -132,6 +132,10 @@ static bool ruta_volcar(const char *carpeta);
 
 /* ── Estado del viaje abierto, en NVS para sobrevivir a reinicios ─────────── */
 
+/* Igual que viaje_abierto(), pero PUBLICO: lo necesitan los logs para decir A
+ * QUE VIAJE pertenecen (ver log_capture.c). Devuelve false si no hay viaje. */
+bool viaje_abierto_nombre(char *out, size_t n);
+
 static bool viaje_abierto(char *out, size_t n)
 {
     nvs_handle_t h;
@@ -140,6 +144,11 @@ static bool viaje_abierto(char *out, size_t n)
     esp_err_t e = nvs_get_str(h, NVS_CARPETA, out, &len);
     nvs_close(h);
     return e == ESP_OK && out[0];
+}
+
+bool viaje_abierto_nombre(char *out, size_t n)
+{
+    return viaje_abierto(out, n);
 }
 
 /* Ids aplicados recientemente, en anillo -- no solo el mayor visto.

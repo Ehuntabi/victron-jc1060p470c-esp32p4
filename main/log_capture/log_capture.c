@@ -17,6 +17,7 @@
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_log.h"
+#include "portal/config_server_viaje.h"   /* viaje_abierto_nombre() */
 #include "esp_core_dump.h"
 
 static log_capture_entry_t *s_buf = NULL;
@@ -210,6 +211,19 @@ static void log_save_task(void *arg)
             continue;
         }
 
+        /* Cabecera con el viaje y el dia. El nombre del fichero ya lo dice,
+         * pero esto va DENTRO: si el viaje se renombra al cerrarlo (ver
+         * op_fin en la P4), el fichero sigue diciendo como se llamaba cuando se
+         * escribio, que es justo lo que hace falta para entenderlo despues. */
+        {
+            char vj[40];
+            if (!viaje_abierto_nombre(vj, sizeof(vj))) snprintf(vj, sizeof(vj), "(sin viaje)");
+            time_t ahora = time(NULL);
+            struct tm tmc; localtime_r(&ahora, &tmc);
+            fprintf(f, "# viaje: %s\n# dia: %04d-%02d-%02d  guardado: %02d:%02d:%02d\n",
+                    vj, tmc.tm_year + 1900, tmc.tm_mon + 1, tmc.tm_mday,
+                    tmc.tm_hour, tmc.tm_min, tmc.tm_sec);
+        }
         for (size_t i = 0; i < req.snap_count; ++i) {
             size_t idx = (req.snap_head + LOG_CAPTURE_MAX_LINES - req.snap_count + i)
                          % LOG_CAPTURE_MAX_LINES;
@@ -488,10 +502,34 @@ esp_err_t log_capture_autosave_now(int keep)
     ensure_log_daydir(daydir);
     camera_sd_bus_unlock();
 
-    char path[96];
+    /* EL NOMBRE LLEVA EL VIAJE (13-oct-2026). El usuario: "los archivos de logs
+     * rtc deben incluir a que viaje hacen referencia, si no siempre tienen el
+     * mismo nombre". Tenia razon: el nombre solo llevaba motivo + fecha + hora,
+     * asi que dos viajes distintos -- o el mismo aparato con el reloj mal --
+     * dejaban ficheros que parecian el mismo.
+     *
+     * El viaje va DELANTE de la fecha, no detras: el que migra los logs sueltos
+     * a su carpeta de dia saca la fecha de los ULTIMOS 20 caracteres del nombre
+     * (ver log_migrar_sueltos), asi que metiendolo en medio no se rompe nada.
+     *
+     * Se sanea porque el nombre de la carpeta puede traer cualquier cosa de la
+     * P4; solo letras, numeros, guion y guion bajo. */
+    char viaje[40];
+    if (!viaje_abierto_nombre(viaje, sizeof(viaje))) viaje[0] = 0;
+    char vs[32]; size_t vj = 0;
+    for (size_t i = 0; viaje[i] && vj + 2 < sizeof(vs); i++) {
+        const char c = viaje[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_') vs[vj++] = c;
+        else if (c == ' ') vs[vj++] = '_';
+    }
+    vs[vj] = 0;
+
+    char path[160];
     snprintf(path, sizeof(path),
-             "%s/log_%s_%04d%02d%02d_%02d%02d%02d.txt", daydir,
+             "%s/log_%s%s%s_%04d%02d%02d_%02d%02d%02d.txt", daydir,
              reason,
+             vs[0] ? "_" : "", vs,
              tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
              tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
 

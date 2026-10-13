@@ -17,5 +17,12 @@ void viaje_telemetria_start(void);
  * uxTaskGetStackHighWaterMark (ver stack_watch.c) -- nadie mas la necesita. */
 TaskHandle_t viaje_tick_task_handle(void);
 
+/* Nombre de la carpeta del viaje ABIERTO, o false si no hay ninguno.
+ *
+ * Lo usan los logs (main/log_capture/log_capture.c) para dejar escrito A QUE
+ * VIAJE pertenecen: sin eso, dos viajes distintos acaban con ficheros del mismo
+ * nombre y no hay forma de saber de cual es cada uno. */
+bool viaje_abierto_nombre(char *out, size_t n);
+
 /* GET /data/viajes — lista de viajes guardados con su estado y su enlace. */
 esp_err_t handle_data_viajes(httpd_req_t *req);
