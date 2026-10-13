@@ -69,7 +69,10 @@ static bool ruta_volcar(const char *carpeta);
  * la autocaravana, no a un viaje concreto. */
 #define VEHICULO_DIR    "/sdcard/vehiculo"
 #define NVS_NS          "viaje_p4"
-#define NVS_CARPETA     "carpeta"     /* ruta del viaje abierto, ausente si no hay */
+#define NVS_CARPETA     "carpeta"
+/* Destino nuevo pedido a mitad de viaje, SIN aplicar todavia (ver op_destino).
+ * Vacio o ausente = no se ha cambiado. */
+#define NVS_DESTINO     "destino_nuevo"     /* ruta del viaje abierto, ausente si no hay */
 #define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
 #define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
 #define IDS_RING_N      64            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
@@ -438,6 +441,15 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     char carpeta[CARPETA_MAX];
     snprintf(carpeta, sizeof(carpeta), VIAJES_DIR "/%s_%s", fecha, destino);
 
+    /* El destino apuntado de un cambio era del viaje ANTERIOR: se borra para no
+     * renombrar este con el nombre del de antes. */
+    nvs_handle_t hd;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &hd) == ESP_OK) {
+        nvs_set_str(hd, NVS_DESTINO, "");
+        nvs_commit(hd);
+        nvs_close(hd);
+    }
+
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
         httpd_resp_sendstr(req, "tarjeta ocupada");
@@ -694,6 +706,61 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
     return faltan;
 }
 
+/* ── APUNTAR EL DESTINO NUEVO, SIN RENOMBRAR NADA (13-oct-2026) ──────────────
+ *
+ * POR QUE EXISTE, teniendo ya el "destino" del fin: el cambio tiene que
+ * sobrevivir a que se apague CUALQUIERA de las tres placas. Guardarlo solo en
+ * la cabina deja un hueco: si esa cabina se queda sin NVS (o se cambia por
+ * otra), el nombre nuevo se pierde y el viaje se cierra con el viejo.
+ *
+ * Asi que la cabina avisa EN CUANTO cambia el nombre y la P4 lo APUNTA. No
+ * renombra nada: la carpeta se sigue llamando igual y los ficheros que se estan
+ * escribiendo no se tocan -- el renombrado sigue siendo cosa del cierre, que es
+ * lo que se decidio el 12-oct. Esto solo deja el nombre a salvo en la P4.
+ *
+ * El fin manda el suyo si lo trae; si no, se usa este. Y al empezar un viaje se
+ * borra, porque el cambio era del viaje anterior. */
+static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
+{
+    (void)id;
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) {
+        /* Sin viaje abierto no hay a que cambiarle el nombre. 409 y no 200: la
+         * cabina lo reintenta por su cola, y si el viaje ya se cerro, el fin
+         * que venga detras lo resolvera. */
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "no hay viaje abierto");
+        return ESP_OK;
+    }
+
+    const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "destino");
+    if (!cJSON_IsString(jd)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "falta 'destino'");
+        return ESP_OK;
+    }
+    char nd[DESTINO_MAX];
+    destino_seguro(jd->valuestring, nd, sizeof(nd));
+
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "no puedo guardar el destino");
+        return ESP_OK;
+    }
+    esp_err_t e = nvs_set_str(h, NVS_DESTINO, nd);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "no puedo guardar el destino");
+        return ESP_OK;
+    }
+    ESP_LOGI(TAG, "destino nuevo APUNTADO (sin renombrar): %s -> %s", carpeta, nd);
+    httpd_resp_sendstr(req, nd);
+    return ESP_OK;
+}
+
 static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
     char carpeta[CARPETA_MAX];
@@ -747,9 +814,21 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * La FECHA del nombre se conserva: el viaje empezo ese dia, aunque el
      * destino se cambiara despues. Solo cambia lo que va detras del guion. */
     const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "destino");
+    char nd[DESTINO_MAX] = {0};
     if (cJSON_IsString(jd) && jd->valuestring[0]) {
-        char nd[DESTINO_MAX];
         destino_seguro(jd->valuestring, nd, sizeof(nd));
+    } else {
+        /* El fin no lo trae: se usa el que la cabina apunto al cambiarlo. Es el
+         * camino que cubre que la cabina se haya quedado sin su NVS. */
+        nvs_handle_t hn;
+        if (nvs_open(NVS_NS, NVS_READONLY, &hn) == ESP_OK) {
+            size_t nn = sizeof(nd);
+            if (nvs_get_str(hn, NVS_DESTINO, nd, &nn) != ESP_OK) nd[0] = 0;
+            nvs_close(hn);
+        }
+        if (nd[0]) ESP_LOGI(TAG, "fin sin destino: uso el apuntado antes (%s)", nd);
+    }
+    if (nd[0]) {
 
         char fecha[12] = {0};
         const char *base = strrchr(carpeta, '/');
@@ -1547,6 +1626,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     esp_err_t ret;
     if      (!strcmp(jop->valuestring, "inicio")) ret = op_inicio(req, j, id);
     else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, j, id);
+    else if (!strcmp(jop->valuestring, "destino")) ret = op_destino(req, j, id);
     else if (!strcmp(jop->valuestring, "registro")) ret = op_registro(req, j, id);
     else if (!strcmp(jop->valuestring, "descartar")) ret = op_descartar(req, j, id);
     else if (!strcmp(jop->valuestring, "borrar"))    ret = op_borrar(req, j, id);
