@@ -46,6 +46,10 @@ uint32_t viaje_fallos_escritura(void);
  * Ajustes -> About, que es donde se mira cuando algo no se puede escribir. */
 bool viaje_sd_hueco(uint64_t *libre_out, uint64_t *total_out);
 
+/* Fallos de NVS del viaje (no de la tarjeta): van aparte porque el icono de la
+ * SD es de la SD. Se enseñan junto a la ocupacion de la NVS en Ajustes. */
+uint32_t viaje_fallos_nvs(void);
+
 /* Vuelca la ruta del viaje abierto YA, dejando el motivo escrito en el diario.
  * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
  * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza

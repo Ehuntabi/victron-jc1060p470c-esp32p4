@@ -189,6 +189,15 @@ static void anota_escritura_ok(void) { s_fallos_escritura = 0; }
 
 uint32_t viaje_fallos_escritura(void) { return s_fallos_escritura; }
 
+/* Y LOS FALLOS DE NVS, APARTE (correccion del 14-oct-2026): meterlos en el
+ * contador de la tarjeta hacia que el icono de la SD mintiera en las dos
+ * direcciones -- rojo con la tarjeta bien (NVS llena) y verde con la NVS
+ * fallando (el siguiente apunte escrito en la tarjeta ponia el contador a cero).
+ * La NVS se mira donde se mira su ocupacion: Ajustes -> About. */
+static uint32_t s_fallos_nvs = 0;
+static void anota_fallo_nvs(void) { s_fallos_nvs++; }
+uint32_t viaje_fallos_nvs(void) { return s_fallos_nvs; }
+
 /* Version PUBLICA: la necesitan los logs para decir A QUE VIAJE pertenecen
  * (ver log_capture.c) y el aviso de la OTA. Declarada en el .h. */
 bool viaje_abierto_nombre(char *out, size_t n)
@@ -1165,7 +1174,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             rmdir(carpeta);
             camera_sd_bus_unlock();
         }
-        anota_fallo_escritura();   /* NVS, no tarjeta: pero el aviso es el mismo */
+        anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no puedo escribir el inicio del viaje en la NVS");
         return ESP_OK;
@@ -1241,7 +1250,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             rmdir(carpeta);
             camera_sd_bus_unlock();
         }
-        anota_fallo_escritura();
+        anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no puedo guardar el viaje en la NVS");
         return ESP_OK;
@@ -1394,13 +1403,6 @@ static bool escribir_resumen(const char *carpeta)
                     fprintf(f, "  OJO: la actual ya dura mas que las anteriores.\n");
             }
         }
-    }
-
-    /* El hueco de la tarjeta, de vez en cuando: en este tick (cada 5 min) sobra
-     * y asi el aviso de "queda poco sitio" sale ANTES de que falle nada. */
-    {
-        static int vueltas_hueco = 0;
-        if (++vueltas_hueco >= 1) { vueltas_hueco = 0; sd_hueco_medir(); }
     }
 
     /* Kilometros por GPS desde el 24-ago-2026 (NEO-M9N montado y con fix). Si el
@@ -1983,7 +1985,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         camera_sd_bus_unlock();
         ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
                       "el viaje sigue abierto y habra que reintentar", carpeta);
-        anota_fallo_escritura();   /* la NVS no traga: mismo aviso que la tarjeta */
+        anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
         return ESP_OK;
@@ -2226,7 +2228,7 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
             ESP_LOGE(TAG, "no he podido deshacer el renombrado de %s", destino);
         camera_sd_bus_unlock();
         ESP_LOGE(TAG, "no puedo apartar %s: la NVS no acepta el cambio", carpeta);
-        anota_fallo_escritura();
+        anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no puedo apartar el viaje");
         return ESP_OK;
@@ -2541,7 +2543,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
             marca_deshacer(ruta_tipo, marca_tipo);
             camera_sd_bus_unlock();
         }
-        anota_fallo_escritura();
+        anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no se ha podido guardar el apunte en la NVS");
         return ESP_OK;
@@ -2885,6 +2887,15 @@ void viaje_pedir_volcado(int motivo)
 static void tick_viaje_cb(void *arg)
 {
     (void)arg;
+    /* EL HUECO DE LA TARJETA SE MIDE AQUI (correccion del 14-oct-2026, lo cazo la
+     * revision adversarial): lo puse dentro de escribir_resumen(), que NO es el
+     * tick sino el cierre -- y alli el cerrojo de la SD YA esta tomado, asi que
+     * sd_hueco_medir() se autobloqueaba 1,5 s y no medía NUNCA, con un retardo de
+     * regalo en cada cierre. Aqui no hay cerrojo tomado y esto si es cada 5 min.
+     * Va ANTES del "sin viaje abierto" a proposito: la tarjeta se llena tambien
+     * con el vehiculo parado (la vigilancia), que es justo cuando no hay viaje. */
+    sd_hueco_medir();
+
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
         /* Sin viaje abierto no hay donde anotar nada: los avisos pendientes se

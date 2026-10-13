@@ -126,6 +126,15 @@ static void about_refresh_dynamic(ui_state_t *ui)
             (unsigned)(free_dma / 1024), (unsigned)(free_spi / 1024),
             nvs_pct, (unsigned)ns.used_entries, (unsigned)ns.total_entries,
             (unsigned)ns.free_entries, sd_txt);
+        /* Si la NVS ademas ha dado fallos (507), se dice: es el otro motivo por
+         * el que un apunte no se guarda, y no se ve en ningun otro sitio. */
+        if (viaje_fallos_nvs() > 0) {
+            lv_label_ins_text(ui->lbl_about_heap, LV_LABEL_POS_LAST, "\n");
+            char fallos[64];
+            snprintf(fallos, sizeof(fallos), "NVS: %u fallo(s) de escritura",
+                     (unsigned)viaje_fallos_nvs());
+            lv_label_ins_text(ui->lbl_about_heap, LV_LABEL_POS_LAST, fallos);
+        }
     }
     /* La IP NO se pinta aqui: vive en Ajustes -> Wi-Fi, en la tarjeta del punto
      * de acceso, que es donde se busca (decision del 22-sep-2026, commit e1a7ec5).
