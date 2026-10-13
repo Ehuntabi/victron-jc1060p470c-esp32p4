@@ -3141,6 +3141,35 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
  * ya estaba escrito en el codigo del tar: "el analizador del PC se traga un
  * viaje incompleto creyendo que esta entero". */
 
+/* Dias que lleva ABIERTO un viaje, sacados del NOMBRE de la carpeta
+ * ("AAAA-MM-DD_destino"). Devuelve -1 si el nombre no trae fecha legible.
+ *
+ * Del nombre y NO de NVS_T_INICIO (arbitraje del 14-oct-2026): esa clave se
+ * escribe al abrir y NO se borra al cerrar, asi que para una carpeta que no es
+ * el viaje abierto daria la fecha del ULTIMO viaje. El nombre no miente. */
+static int dias_abierto_de_nombre(const char *nombre)
+{
+    if (!nombre || strlen(nombre) < 10) return -1;
+    for (int i = 0; i < 10; i++) {
+        char c = nombre[i];
+        bool digito = (c >= '0' && c <= '9');
+        bool guion  = (i == 4 || i == 7) && c == '-';
+        if (!digito && !guion) return -1;
+    }
+    struct tm t = {0};
+    t.tm_year = (nombre[0]-'0')*1000 + (nombre[1]-'0')*100 + (nombre[2]-'0')*10 + (nombre[3]-'0') - 1900;
+    t.tm_mon  = (nombre[5]-'0')*10 + (nombre[6]-'0') - 1;
+    t.tm_mday = (nombre[8]-'0')*10 + (nombre[9]-'0');
+    if (t.tm_mon < 0 || t.tm_mon > 11 || t.tm_mday < 1 || t.tm_mday > 31) return -1;
+    time_t ahora = time(NULL);
+    if (ahora < 1000000000L) return -1;         /* sin reloj no se afirma nada */
+    struct tm hoy;
+    localtime_r(&ahora, &hoy);
+    long dias = dias_locales_de(&hoy) - dias_locales_de(&t) + 1;   /* el dia 1 es el de salida */
+    if (dias < 1 || dias > 3650) return -1;
+    return (int)dias;
+}
+
 /* V_DESCONOCIDO: no se ha podido MIRAR (la SD estaba ocupada justo en ese
  * instante). Antes eso devolvia V_EN_CURSO, que es una afirmacion: el usuario
  * leia "En curso: finalizalo en la cabina antes de bajarlo" sobre un viaje
@@ -3232,6 +3261,18 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
     DIR *d = opendir(VIAJES_DIR);
     camera_sd_bus_unlock();
     bool alguno = false;
+    /* Cual es el viaje ABIERTO, por su nombre. Hace falta para NO ofrecer el
+     * cierre en una fila que solo PARECE en curso: estado_de() devuelve V_EN_CURSO
+     * tanto para el viaje abierto como para una carpeta sin resumen ni marca (esa
+     * la marca marcar_huerfanas al arrancar, pero puede aparecer en caliente). El
+     * boton manda cerrar EL VIAJE ABIERTO, asi que en cualquier otra fila
+     * cerraria un viaje distinto -- justo el fallo que no se puede permitir. */
+    char abierto_ahora[CARPETA_MAX] = {0};
+    const char *abierto_base = NULL;
+    if (viaje_abierto(abierto_ahora, sizeof(abierto_ahora))) {
+        abierto_base = strrchr(abierto_ahora, '/');
+        abierto_base = abierto_base ? abierto_base + 1 : abierto_ahora;
+    }
     if (d) {
         struct dirent *ent;
         char linea[512];
@@ -3284,9 +3325,34 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 /* El viaje ABIERTO no se puede borrar (op_borrar lo rechaza con
                  * 409) y por eso tampoco se ofrece el boton: una accion que
                  * siempre falla es peor que no tenerla. */
-                snprintf(linea, sizeof(linea),
-                    "<li class=cur><b>%s</b><div class=e>En curso: finalizalo en la "
-                    "pantalla de la cabina antes de bajarlo</div></li>", nombre_esc);
+                /* CERRARLO DESDE AQUI (arbitraje del 14-oct-2026). Un viaje que
+                 * se queda abierto -- se rompio la pantalla, se olvido -- tiene
+                 * los datos ATRAPADOS: no se puede bajar (el .tar exige
+                 * resumen.txt) y BLOQUEA empezar otro (409/412). El boton manda
+                 * el MISMO cierre que la pantalla cuando no es su viaje
+                 * ("GUARDARLO"): op_fin con forzar y SIN contador de eventos, que
+                 * escribe el resumen y marca el viaje como SIN VERIFICAR -- no
+                 * se inventa que este entero. */
+                bool es_el_abierto = abierto_base && !strcmp(ent->d_name, abierto_base);
+                char dias_txt[64] = {0};
+                int dias = dias_abierto_de_nombre(ent->d_name);
+                if (es_el_abierto && dias >= 2)
+                    snprintf(dias_txt, sizeof(dias_txt),
+                             "<div class=e>Lleva %d dias abierto.</div>", dias);
+                if (es_el_abierto)
+                    snprintf(linea, sizeof(linea),
+                        "<li class=cur><b>%s</b>%s<div class=e>En curso. Se puede "
+                        "cerrar desde la pantalla de la cabina; si no la tienes a mano, "
+                        "cierralo aqui y quedara marcado SIN VERIFICAR.</div>"
+                        "<button onclick=\"cerrarViaje('%s')\">Cerrarlo SIN VERIFICAR</button>"
+                        "</li>", nombre_esc, dias_txt, nombre_esc);
+                else
+                    snprintf(linea, sizeof(linea),
+                        "<li class=cur><b>%s</b><div class=e>Sin cerrar y sin resumen: "
+                        "no es el viaje abierto. Se marca al arrancar la P4 (o se borra "
+                        "con el boton de al lado).</div>"
+                        "<div class=e>Si crees que es el viaje en curso, recarga.</div></li>",
+                        nombre_esc);
             }
             httpd_resp_sendstr_chunk(req, linea);
 
@@ -3345,6 +3411,24 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 "</ul>");
         }
     }
+
+    /* El cierre va por fetch a /api/viaje (mismo origen, asi que el navegador
+     * manda las credenciales del portal que ya tiene) y recarga la lista. El id
+     * lleva el byte alto 0xFF a proposito: los de las cabinas llevan su MAC ahi,
+     * asi que no puede chocar con ninguno. */
+    httpd_resp_sendstr_chunk(req,
+        "<script>\n"
+        "function cerrarViaje(nombre){\n"
+        "  if(!confirm('Cerrar el viaje ' + nombre + ' SIN VERIFICAR?\\n\\n"
+        "Se le escribe el resumen y queda marcado como NO comprobado: puede que le "
+        "falten apuntes.')) return;\n"
+        "  fetch('/api/viaje',{method:'POST',headers:{'Content-Type':'application/json'},\n"
+        "    body:JSON.stringify({op:'fin',forzar:true,carpeta:nombre,\n"
+        "      id:(0xFF000000 + (Date.now() % 16777216))>>>0})})\n"
+        "   .then(r=>r.text()).then(t=>{alert('La P4 dice: ' + t); location.reload();})\n"
+        "   .catch(e=>alert('No he podido cerrarlo: ' + e));\n"
+        "}\n"
+        "</script>\n");
 
     httpd_resp_sendstr_chunk(req,
         "<p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
