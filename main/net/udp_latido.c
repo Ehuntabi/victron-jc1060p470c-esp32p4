@@ -231,17 +231,15 @@ static void latido_task(void *arg)
                      inet_ntoa(src.sin_addr));
             continue;
         }
-        /* Y solo de la franja que usan las CABINAS cuando el DHCP no contesta:
-         * 192.168.4.200-231, la misma .200 + (mac[5] & 0x1F) que se pone
-         * udp_rx.c. No es una frontera de seguridad -- un cliente del AP puede
-         * elegir esa IP --, pero deja fuera el ruido de cualquier otro trasto y
-         * evita que ocupe un hueco de la tabla. */
-        unsigned ultimo = ntohl(origen) & 0xFFu;
-        if (ultimo < 200u || ultimo > 231u) {
-            ESP_LOGD(TAG, "latido de %s (fuera de la franja .200-.231 de las "
-                          "cabinas): lo ignoro", inet_ntoa(src.sin_addr));
-            continue;
-        }
+        /* NO se filtra por la franja .200-.231, y esto se probo en el banco el
+         * 13-oct-2026: esa franja es SOLO la IP de emergencia que se pone la
+         * cabina cuando el DHCP de la P4 no contesta (ver udp_rx.c). Con el DHCP
+         * funcionando -- que es lo normal -- la cabina tiene una concesion de
+         * .2 a .101, asi que exigir .200+ TIRABA TODOS SUS LATIDOS y la P4 se
+         * quedaba sin la unica fuente de verdad de la bajada (el sintoma:
+         * "Primer latido de una cabina" no aparecia nunca en el log). Lo que
+         * queda es el filtro de subred del AP (que descarta a cualquiera de
+         * fuera) mas el tope y la caducidad de la tabla. */
         latido_fuente_t *f = fuente_de(origen, esp_timer_get_time());
         if (!f) {
             ESP_LOGW(TAG, "latido de %s y la tabla de cabinas esta llena: lo ignoro",
