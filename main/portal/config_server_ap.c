@@ -1042,7 +1042,18 @@ esp_err_t wifi_ap_init(void)
         }
 
     } else {
-        ESP_LOGW(TAG, "no se pudo releer la config del AP");
+        /* FAIL-CLOSED TAMBIEN AQUI (auditoria del 14-oct-2026): esto era un
+         * aviso y se seguia, o sea que si la relectura fallaba el portal
+         * arrancaba SIN HABER COMPROBADO que el AP esta cifrado -- justo lo que
+         * la comprobacion de arriba existe para impedir, y el unico fail-open
+         * que quedaba en esa barrera. No poder leer la config es no poder
+         * afirmar que el AP es WPA2, y con el portal detras (claves, ajustes,
+         * OTA) eso no se asume: se para el AP, como cuando sale abierto. El
+         * C6 se puede reconfigurar desde la pantalla de la P4. */
+        ESP_LOGE(TAG, "no se pudo releer la config del AP: no puedo comprobar que "
+                      "este cifrado, asi que NO lo dejo levantado");
+        esp_wifi_stop();
+        return ESP_FAIL;
     }
 
     dhcp_set_captiveportal_url();

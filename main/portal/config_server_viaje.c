@@ -1492,6 +1492,16 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
                "llegado %lu. Se perdieron por el camino: la cola se lleno, o\n"
                "hubo un reinicio en mal momento.\n\n",
             (unsigned long)esperados, (unsigned long)aplicados);
+    /* ANTES DE DARLOS POR PERDIDOS (auditoria del 14-oct-2026): un apunte que
+     * llega DESPUES de cerrarse el viaje no se puede meter aqui -- el resumen ya
+     * esta escrito y los totales no se rehacen --, asi que la P4 lo guarda en el
+     * HISTORIAL DEL VEHICULO (carpeta 'vehiculo'). Decir solo "se perdieron por
+     * el camino" era falso y mandaba a buscar un dato que si esta. */
+    fprintf(f, "ANTES DE DARLO POR PERDIDO: un apunte que llega DESPUES de\n"
+               "cerrarse el viaje no puede entrar aqui (el resumen ya esta\n"
+               "escrito), asi que se guarda en el HISTORIAL DEL VEHICULO:\n"
+               "la carpeta 'vehiculo' de la tarjeta, o /data/viajes ->\n"
+               "Historial del vehiculo en el portal.\n\n");
     fprintf(f, "Lo demas es correcto. Este aviso esta para que no des el\n"
                "viaje por entero al analizarlo.\n");
     fflush(f);
@@ -1764,7 +1774,9 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
             fprintf(rf, "\n*** VIAJE INCOMPLETO: faltan %lu apuntes. ***\n",
                     (unsigned long)faltan);
             fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
-                        MARCA_INCOMPLETO ".\n");
+                        MARCA_INCOMPLETO ".\n"
+                        "Puede que NO se hayan perdido: mira el historial del\n"
+                        "vehiculo (carpeta 'vehiculo' de la tarjeta).\n");
             /* fsync: este añadido es lo que deja claro que faltan apuntes. */
             fflush(rf);
             fsync(fileno(rf));
@@ -2250,10 +2262,12 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
      * despues. Se manda al historial del vehiculo, que es la red de seguridad
      * que ya existe, y se contesta 200 para no atascar la cola del satelite: un
      * 409 ahi la dejaria reintentando para siempre algo que no va a cambiar. */
+    bool de_otra_pantalla = false;
     if (en_viaje && pide_otra_pantalla(j, id, false)) {
         ESP_LOGW(TAG, "apunte de OTRA pantalla con el viaje %s abierto: va al "
                       "historial del vehiculo en vez de mezclarse", carpeta);
         en_viaje = false;      /* se escribe en VEHICULO_DIR... */
+        de_otra_pantalla = true;   /* ...y la fila lo dice */
         /* ...pero el viaje ABIERTO sigue siendo el de la otra: ni se toca. */
     }
     if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
@@ -2286,9 +2300,14 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
 
     const cJSON *jr = cJSON_GetObjectItem(j, "resumen");
     char detalle[128];
-    snprintf(detalle, sizeof(detalle), "%s%s",
+    /* 'de_otra_pantalla' se sabe desde arriba: si el viaje abierto lo empezo
+     * OTRA cabina, este apunte no es suyo y se escribe en el historial del
+     * vehiculo (ver el comentario de mas arriba). Decirlo en la propia fila
+     * evita que, al leer el historial, parezca un apunte suelto sin motivo. */
+    snprintf(detalle, sizeof(detalle), "%s%s%s",
              cJSON_IsString(jr) ? jr->valuestring : "",
-             aprox ? " (hora aproximada)" : "");
+             aprox ? " (hora aproximada)" : "",
+             de_otra_pantalla ? " (de otra pantalla)" : "");
 
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");

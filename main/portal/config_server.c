@@ -831,6 +831,20 @@ static esp_err_t handle_capturas(httpd_req_t *req) {
 // Start the HTTP configuration server
 
 
+/* Registra un handler y GRITA si no cabe. Hasta ahora se tiraba el retorno
+ * (auditoria del 14-oct-2026): el servidor "pesado" tiene 24 plazas
+ * (max_uri_handlers) y ya hay 21, asi que el dia que se pase uno desaparece sin
+ * mas sintoma que un 404 dificil de explicar -- y en el puerto 80 el catch-all
+ * de los estaticos lo tapa con la allow-list, o sea peor. */
+static void registrar(httpd_handle_t srv, const httpd_uri_t *uri)
+{
+    if (!srv || !uri) return;
+    esp_err_t e = httpd_register_uri_handler(srv, uri);
+    if (e != ESP_OK)
+        ESP_LOGE(TAG, "NO he podido registrar %s (hay sitio? max_uri_handlers): %s",
+                 uri->uri, esp_err_to_name(e));
+}
+
 esp_err_t config_server_start(void) {
     /* Idempotente: si el server ya está arriba (p.ej. tras auto-off + STA
      * nuevo que lo reactiva) no hacemos nada. */
@@ -891,11 +905,10 @@ esp_err_t config_server_start(void) {
     cfg_heavy.recv_wait_timeout = 30;
     cfg_heavy.max_open_sockets = 4;
     cfg_heavy.lru_purge_enable = true;
-    /* 24 y NO 20: en este servidor hay exactamente 20 handlers registrados
-     * (contados el 2-oct-2026), asi que el margen era CERO y el siguiente que
-     * se anadiese habria fallado EN SILENCIO: el resultado de
-     * httpd_register_uri_handler no se comprueba en ningun sitio. Auditoria del
-     * 23-sep-2026. */
+    /* 24 plazas para 21 handlers (contados el 14-oct-2026; el comentario decia
+     * 20 y ya estaba obsoleto). El margen es 3: si algun dia no cabe uno, ahora
+     * se ve en el log -- registrar() comprueba el retorno -- en vez de
+     * desaparecer en silencio. */
     cfg_heavy.max_uri_handlers = 24;
     cfg_heavy.max_resp_headers = 16;
     esp_err_t herr_heavy = httpd_start(&server_heavy, &cfg_heavy);
@@ -908,53 +921,53 @@ esp_err_t config_server_start(void) {
     }
 
     httpd_uri_t uri_root = { .uri = "/",    .method = HTTP_GET,  .handler = handle_root };
-    httpd_register_uri_handler(server, &uri_root);
+    registrar(server, &uri_root);
 
     httpd_uri_t uri_snapshot = { .uri = "/snapshot", .method = HTTP_GET, .handler = handle_snapshot };
-    httpd_register_uri_handler(server, &uri_snapshot);
+    registrar(server, &uri_snapshot);
 
     httpd_uri_t uri_save = { .uri = "/save", .method = HTTP_POST, .handler = post_save };
-    httpd_register_uri_handler(server, &uri_save);
+    registrar(server, &uri_save);
 
     /* Actualizacion del firmware por Wi-Fi (ota_update.c). Con contrasena: deja
      * escribir el firmware entero, asi que no puede quedar abierta. */
     httpd_uri_t uri_ota_get = { .uri = "/ota", .method = HTTP_GET, .handler = handle_ota_page };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_get);
+    if (server_heavy) registrar(server_heavy, &uri_ota_get);
     httpd_uri_t uri_ota_post = { .uri = "/ota", .method = HTTP_POST, .handler = handle_ota_post };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_post);
+    if (server_heavy) registrar(server_heavy, &uri_ota_post);
     /* Aviso previo (la pagina lo pide antes de subir el fichero) */
     httpd_uri_t uri_ota_aviso = { .uri = "/ota_aviso", .method = HTTP_POST, .handler = ota_aviso_post };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_ota_aviso);
+    if (server_heavy) registrar(server_heavy, &uri_ota_aviso);
 
     // Register captive portal handlers BEFORE the catch-all!
     httpd_uri_t uri_generate_204 = { .uri = "/generate_204", .method = HTTP_GET, .handler = handle_captive_redirect };
-    httpd_register_uri_handler(server, &uri_generate_204);
+    registrar(server, &uri_generate_204);
 
     httpd_uri_t uri_hotspot = { .uri = "/hotspot-detect.html", .method = HTTP_GET, .handler = handle_captive_redirect };
-    httpd_register_uri_handler(server, &uri_hotspot);
+    registrar(server, &uri_hotspot);
 
     httpd_uri_t uri_ncsi = { .uri = "/ncsi.txt", .method = HTTP_GET, .handler = handle_captive_redirect };
-    httpd_register_uri_handler(server, &uri_ncsi);
+    registrar(server, &uri_ncsi);
 
     // Now register the catch-all static handler LAST
     httpd_uri_t uri_settime = { .uri = "/settime", .method = HTTP_POST, .handler = handle_settime };
-    httpd_register_uri_handler(server, &uri_settime);
+    registrar(server, &uri_settime);
     httpd_uri_t uri_settime_get = { .uri = "/settime", .method = HTTP_GET, .handler = handle_settime };
-    httpd_register_uri_handler(server, &uri_settime_get);
+    registrar(server, &uri_settime_get);
     httpd_uri_t uri_capturas = { .uri = "/capturas", .method = HTTP_GET, .handler = handle_capturas };
-    httpd_register_uri_handler(server, &uri_capturas);
+    registrar(server, &uri_capturas);
     httpd_uri_t uri_captura = { .uri = "/captura", .method = HTTP_GET, .handler = handle_captura };
-    httpd_register_uri_handler(server, &uri_captura);
+    registrar(server, &uri_captura);
     httpd_uri_t uri_dashboard = { .uri = "/dashboard", .method = HTTP_GET, .handler = handle_dashboard };
-    httpd_register_uri_handler(server, &uri_dashboard);
+    registrar(server, &uri_dashboard);
     httpd_uri_t uri_keys = { .uri = "/keys", .method = HTTP_GET, .handler = handle_keys };
-    httpd_register_uri_handler(server, &uri_keys);
+    registrar(server, &uri_keys);
     httpd_uri_t uri_api_state = { .uri = "/api/state", .method = HTTP_GET, .handler = handle_api_state };
-    httpd_register_uri_handler(server, &uri_api_state);
+    registrar(server, &uri_api_state);
     /* /mirror y /mirror.bmp eliminados — la info ya está en otras vistas
      * (Dashboard, Logs, Keys). */
     httpd_uri_t uri_data = { .uri = "/data", .method = HTTP_GET, .handler = handle_data_index };
-    httpd_register_uri_handler(server, &uri_data);
+    registrar(server, &uri_data);
     /* Las graficas y sus CSV van en la instancia PESADA (8081), como los
      * .tar: leer y parsear un CSV de ~1,5 MB en la tarea del 80 dejaba mudo
      * /api/state durante segundos, que es justo lo que la pesada vino a
@@ -962,62 +975,62 @@ esp_err_t config_server_start(void) {
      * apuntan ya a PORTAL_HEAVY_BASE; la app pide el CSV al 8081 desde la
      * 1.4.15. */
     httpd_uri_t uri_data_frigo = { .uri = "/data/frigo", .method = HTTP_GET, .handler = handle_data_frigo };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo);
+    if (server_heavy) registrar(server_heavy, &uri_data_frigo);
     httpd_uri_t uri_data_frigo_csv = { .uri = "/data/frigo.csv", .method = HTTP_GET, .handler = handle_data_frigo_csv };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo_csv);
+    if (server_heavy) registrar(server_heavy, &uri_data_frigo_csv);
     httpd_uri_t uri_data_ne185v_csv = { .uri = "/data/ne185v.csv", .method = HTTP_GET, .handler = handle_data_ne185v_csv };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_ne185v_csv);
+    if (server_heavy) registrar(server_heavy, &uri_data_ne185v_csv);
     httpd_uri_t uri_data_bat = { .uri = "/data/bateria", .method = HTTP_GET, .handler = handle_data_bateria };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_bat);
+    if (server_heavy) registrar(server_heavy, &uri_data_bat);
     httpd_uri_t uri_data_bat_csv = { .uri = "/data/bateria.csv", .method = HTTP_GET, .handler = handle_data_bateria_csv };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_bat_csv);
+    if (server_heavy) registrar(server_heavy, &uri_data_bat_csv);
     httpd_uri_t uri_data_frigo_tar = { .uri = "/data/frigo.tar", .method = HTTP_GET, .handler = handle_data_frigo_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_frigo_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_frigo_tar);
     httpd_uri_t uri_data_bat_tar = { .uri = "/data/bateria.tar", .method = HTTP_GET, .handler = handle_data_bateria_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_bat_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_bat_tar);
     httpd_uri_t uri_data_solar_tar = { .uri = "/data/solar.tar", .method = HTTP_GET, .handler = handle_data_solar_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_solar_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_solar_tar);
     httpd_uri_t uri_data_cap_tar ={ .uri = "/data/capturas.tar", .method = HTTP_GET, .handler = handle_data_capturas_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_cap_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_cap_tar);
     httpd_uri_t uri_data_vig_tar = { .uri = "/data/vigilancia.tar", .method = HTTP_GET, .handler = handle_data_vigilancia_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_vig_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_vig_tar);
     httpd_uri_t uri_data_cfg_tar = { .uri = "/data/config.tar", .method = HTTP_GET, .handler = handle_data_config_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_cfg_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_cfg_tar);
     httpd_uri_t uri_data_logs_tar = { .uri = "/data/logs.tar", .method = HTTP_GET, .handler = handle_data_logs_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_logs_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_logs_tar);
     httpd_uri_t uri_data_viaje_tar = { .uri = "/data/viaje.tar", .method = HTTP_GET, .handler = handle_data_viaje_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_data_viaje_tar);
+    if (server_heavy) registrar(server_heavy, &uri_data_viaje_tar);
     httpd_uri_t uri_vig = { .uri = "/vigilancia", .method = HTTP_GET, .handler = handle_vigilancia };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig);
+    if (server_heavy) registrar(server_heavy, &uri_vig);
     httpd_uri_t uri_vigf = { .uri = "/vigilancia/*", .method = HTTP_GET, .handler = handle_vigilancia };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vigf);
+    if (server_heavy) registrar(server_heavy, &uri_vigf);
     /* La lista en JSON para la app (mismo puerto pesado que la pagina). OJO: no
      * choca con el comodin de vigilancia, que exige la barra detras. */
     httpd_uri_t uri_vig_json = { .uri = "/vigilancia.json", .method = HTTP_GET, .handler = handle_vigilancia_json };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig_json);
+    if (server_heavy) registrar(server_heavy, &uri_vig_json);
     httpd_uri_t uri_vig_thumb = { .uri = "/vigilancia_thumb/*", .method = HTTP_GET, .handler = handle_vigilancia_thumb };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_vig_thumb);
+    if (server_heavy) registrar(server_heavy, &uri_vig_thumb);
     httpd_uri_t uri_ausente = { .uri = "/ausente", .method = HTTP_GET, .handler = handle_ausente };
-    httpd_register_uri_handler(server, &uri_ausente);
+    registrar(server, &uri_ausente);
     httpd_uri_t uri_control = { .uri = "/control", .method = HTTP_POST, .handler = handle_control };
-    httpd_register_uri_handler(server, &uri_control);
+    registrar(server, &uri_control);
     /* Apuntes del satelite 3.5" (inicio/fin de viaje y, mas adelante, los
      * registros). Ver main/portal/config_server_viaje.c. */
     httpd_uri_t uri_viaje = { .uri = "/api/viaje", .method = HTTP_POST, .handler = handle_api_viaje };
-    httpd_register_uri_handler(server, &uri_viaje);
+    registrar(server, &uri_viaje);
     /* Silenciar una alarma desde la pantalla de cabina. Va en el httpd normal
      * (puerto 80) y no en el "pesado": tiene que atenderse al instante, no
      * esperar detras de una descarga de .tar o de una OTA. */
     httpd_uri_t uri_alarma = { .uri = "/api/alarma", .method = HTTP_POST, .handler = handle_api_alarma };
-    httpd_register_uri_handler(server, &uri_alarma);
+    registrar(server, &uri_alarma);
     /* Lista de viajes con su estado, y el historico con su nombre de verdad. */
     httpd_uri_t uri_viajes = { .uri = "/data/viajes", .method = HTTP_GET, .handler = handle_data_viajes };
-    httpd_register_uri_handler(server, &uri_viajes);
+    registrar(server, &uri_viajes);
     httpd_uri_t uri_hist = { .uri = "/data/historico.tar", .method = HTTP_GET, .handler = handle_data_historico_tar };
-    if (server_heavy) httpd_register_uri_handler(server_heavy, &uri_hist);
+    if (server_heavy) registrar(server_heavy, &uri_hist);
 
     httpd_uri_t uri_static = { .uri = "/*",  .method = HTTP_GET,  .handler = handle_static };
-    httpd_register_uri_handler(server, &uri_static);
+    registrar(server, &uri_static);
 
     // 404 handler for captive portal
     httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, http_404_error_handler);
