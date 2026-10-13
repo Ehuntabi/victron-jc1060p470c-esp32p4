@@ -44,7 +44,7 @@ uint32_t viaje_fallos_escritura(void);
  * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
  * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza
  * que estaban en RAM. */
-void viaje_volcar_ahora(const char *motivo);
+bool viaje_volcar_ahora(const char *motivo);   /* false = no se pudo (sin cerrojo o disco lleno) */
 
 /* Pide un volcado SIN hacerlo: lo ejecuta la tarea del viaje en su siguiente
  * vuelta (1 s). Para quien no puede tocar la SD -- el evaluador de alarmas corre

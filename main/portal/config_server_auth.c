@@ -413,13 +413,25 @@ esp_err_t config_server_set_web_credentials(const char *user, const char *pass)
  * Si algun dia el AP va con WPA2 de verdad se puede volver a valorar -- pero
  * entonces con la premisa comprobada, no supuesta.
  *
- * Nivel estricto: /ota, /save y /keys. Sin esto, quien tuviera la clave del
- * Wi-Fi podia REESCRIBIR EL FIRMWARE (/ota) o llevarse y cambiar las claves AES
- * de los Victron (/save, /keys) — o sea que prestar el Wi-Fi a un invitado
- * equivalia a darle control total. La app NO usa ninguno de los tres (solo
- * /api/state, /control, /ausente, /snapshot, /vigilancia y las descargas de
- * /data), asi que cerrarlos no le afecta en absoluto; al navegador se le piden
- * las credenciales una vez y las recuerda. Se ven en Ajustes -> Wi-Fi.
+ * Nivel de ADMINISTRACION: /ota (escribir firmware), /keys y /save (las claves
+ * AES de los Victron). Sin esto, quien tuviera la clave del Wi-Fi podia
+ * REESCRIBIR EL FIRMWARE o llevarse las claves AES — o sea que prestar el Wi-Fi a
+ * un invitado equivalia a darle control total.
+ *
+ * OJO CON LA APP (corregido el 13-oct-2026, lo cazo la revision adversarial):
+ * esto decia que "la app NO usa ninguno de los tres". Es FALSO: la app tiene un
+ * boton de actualizar firmware que hace POST /ota. Con la clave de
+ * administracion puesta, esa actualizacion desde el movil deja de funcionar (401)
+ * y hay que hacerla desde el navegador, que es donde se teclea la clave de
+ * administracion (Ajustes -> Wi-Fi de la P4 la enseña). La app lo dice con un
+ * mensaje propio en vez de un 401 en crudo (ver victron-app). El resto de la app
+ * (estado, control, camara, descargas y los apuntes del satelite) va por el nivel
+ * abierto y no le afecta.
+ *
+ * El endpoint de los apuntes del satelite, POST /api/viaje, es NIVEL ABIERTO a
+ * proposito: las cabinas solo tienen las credenciales del portal. Se cambio el
+ * 13-oct-2026 despues de que la revision lo cazara (estaba estricto, y generar la
+ * clave de administracion dejaba a las cabinas sin poder mandar un apunte).
  *
  * Con PORTAL_REQUIRE_BASIC_AUTH a 1 se exige tambien en el nivel abierto: la
  * app de Android necesita usuario y clave (se ponen una vez en sus ajustes; se

@@ -1659,6 +1659,11 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     char carpeta[CARPETA_MAX];
     bool en_viaje = viaje_abierto(carpeta, sizeof(carpeta));
     if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
+    /* OJO: esta lectura es SIN el cerrojo (se toma mas abajo), asi que la
+     * carpeta se vuelve a comprobar con el cerrojo tomado: op_fin cierra y
+     * RENOMBRA precisamente con ese cerrojo, y escribir entonces iba a una ruta
+     * que ya no existe (mismo fallo que se arreglo en el tick de telemetria;
+     * detectado en la revision del 13-oct-2026). */
 
     /* Cuando ocurrio. */
     const cJSON *jts = cJSON_GetObjectItem(j, "ts");
@@ -1683,6 +1688,18 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_set_status(req, "503 Service Unavailable");
         httpd_resp_sendstr(req, "tarjeta ocupada");
         return ESP_OK;
+    }
+    if (en_viaje) {
+        char ahora_viaje[CARPETA_MAX];
+        if (viaje_abierto(ahora_viaje, sizeof(ahora_viaje)) &&
+            strcmp(ahora_viaje, carpeta) != 0) {
+            camera_sd_bus_unlock();
+            ESP_LOGW(TAG, "el viaje se ha cerrado mientras llegaba el apunte: lo "
+                          "dejo para el reintento");
+            httpd_resp_set_status(req, "507 Insufficient Storage");
+            httpd_resp_sendstr(req, "el viaje acaba de cerrarse: reintenta");
+            return ESP_OK;
+        }
     }
     if (!en_viaje) mkdir(VEHICULO_DIR, 0777);
     /* MARCA DE AGUA de los dos ficheros ANTES de tocarlos: si algo falla
@@ -1993,21 +2010,22 @@ void viaje_nota_hora_corregida(int64_t delta_s)
  * El reinicio por watchdog (watchdog.c) NO llama a esto a proposito: alli el
  * sistema ya viene de un cuelgue y no se puede meter I/O de tarjeta en ese
  * camino. */
-void viaje_volcar_ahora(const char *motivo)
+bool viaje_volcar_ahora(const char *motivo)
 {
     char carpeta[CARPETA_MAX];
-    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return false;
     if (!camera_sd_bus_lock(3000)) {
         ESP_LOGW(TAG, "viaje abierto y la tarjeta ocupada: no puedo volcar la "
                       "ruta antes de reiniciar");
-        return;
+        return false;
     }
-    if (!ruta_volcar(carpeta))
-        ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
+    bool ok = ruta_volcar(carpeta);
+    if (!ok) ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
     diario(carpeta, "volcado", motivo ? motivo : "volcado a peticion");
     camera_sd_bus_unlock();
     ESP_LOGW(TAG, "viaje abierto en %s: ruta volcada (%s)", carpeta,
              motivo ? motivo : "a peticion");
+    return ok;
 }
 
 /* Lo llama quien va a reiniciar la placa (ver el comentario de arriba). */
@@ -2135,17 +2153,27 @@ static void tick_viaje_cb(void *arg)
             char ahora_carpeta[CARPETA_MAX];
             if (viaje_abierto(ahora_carpeta, sizeof(ahora_carpeta)) &&
                 strcmp(ahora_carpeta, carpeta) == 0) {
-                diario(carpeta, "hora_corregida", txt);
+                /* Solo se da por escrita si diario() dice que SI (devuelve bool
+                 * desde el arreglo del 13-oct): con la tarjeta llena se perdia y
+                 * el flag se limpiaba igual. */
+                if (diario(carpeta, "hora_corregida", txt))
+                    s_hora_salto_pendiente = false;
+            } else {
+                s_hora_salto_pendiente = false;   /* ya no hay viaje donde anotarla */
             }
             camera_sd_bus_unlock();
-            s_hora_salto_pendiente = false;
         }
     }
     if (s_volcado_pedido) {
-        s_volcado_pedido = false;
-        viaje_volcar_ahora(s_volcado_motivo == 0
-                           ? "bateria baja: puede cortarse la corriente"
-                           : "volcado pedido desde la pantalla");
+        /* SE LIMPIA DESPUES, y solo si de verdad se ha volcado: antes se ponia a
+         * false antes de intentarlo, y como la peticion es de un solo uso, si el
+         * cerrojo de la SD no llegaba se perdia el volcado -- justo cuando la
+         * alarma de bateria baja lo pide porque se puede cortar la corriente
+         * (revision del 13-oct-2026). */
+        if (viaje_volcar_ahora(s_volcado_motivo == 0
+                               ? "bateria baja: puede cortarse la corriente"
+                               : "volcado pedido desde la pantalla"))
+            s_volcado_pedido = false;
     }
 
     time_t now = time(NULL);
