@@ -802,11 +802,33 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
              * cambio va aqui, en el unico camino que lee el bufer de LVGL, y no
              * en el encoder. Verificado contra dos colores conocidos:
              *   0x06080C -> (6,8,12)   y  0x37474F -> (55,71,79). 2026-07-26. */
-            for (int i = 0; i < n; ++i) {      /* 565 del framebuffer -> RGB888 real */
-                uint16_t p = rgb[i];
-                in[i*3+0] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* R real */
-                in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
-                in[i*3+2] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* B real */
+            /* ── VOLTEO HORIZONTAL (13-oct-2026) ────────────────────────────
+             *
+             * La camara va montada mirando "de frente", como la frontal de un
+             * movil, asi que la imagen salia ESPEJADA: el usuario lo describio
+             * como "las fotos salen volteadas horizontalmente" y lo concreto
+             * asi: "foto que la mano derecha salga a la derecha".
+             *
+             * SE VOLTEA AL COPIAR, no en una pasada aparte: el bucle que ya
+             * recorre los pixeles para pasarlos de 565 a RGB888 los escribe en
+             * la columna espejo. Asi no cuesta ni memoria ni un recorrido de
+             * mas -- y se hace UNA vez por foto, no por fotograma.
+             *
+             * Y VA AQUI, en el unico sitio por el que pasan TODAS las fotos que
+             * se guardan (vigilancia, galeria y /snapshot), para que salgan
+             * bien las tres a la vez y no haya que acordarse de nada.
+             *
+             * La deteccion de movimiento no se entera: trabaja con la
+             * luminosidad media, que es simetrica (ver frame_luma). */
+            for (int y = 0; y < h; ++y) {
+                const uint16_t *fila = rgb + (size_t)y * w;
+                for (int x = 0; x < w; ++x) {
+                    const uint16_t p = fila[w - 1 - x];      /* <- espejo */
+                    const int i = y * w + x;
+                    in[i*3+0] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* R real */
+                    in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
+                    in[i*3+2] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* B real */
+                }
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
