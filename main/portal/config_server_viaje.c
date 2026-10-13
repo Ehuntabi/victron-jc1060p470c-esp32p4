@@ -97,6 +97,11 @@ static bool dev_es_mac(const char *dev);
  * renombrado por terminar. */
 #define NVS_REN_DE      "v_ren_de"
 #define NVS_REN_A       "v_ren_a"
+/* Id con el que la WEB cierra un viaje (op_fin). Fijo y con el byte alto 0xFF:
+ * los ids de las cabinas llevan su MAC ahi, asi que el peor caso es una pantalla
+ * con mac[5]==0xFF y contador exactamente 16776961 (1 entre 16 millones). No
+ * pasa por el anillo de dedupe: ver el comentario de handle_data_viajes. */
+#define ID_CIERRE_WEB   0xFFFFFF01u
 #define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
 #define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
 #define IDS_RING_N      64            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
@@ -1444,7 +1449,10 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
         snprintf(ruta_ev, sizeof(ruta_ev), "%s/eventos.csv", carpeta);
         FILE *fe = fopen(ruta_ev, "r");
         if (fe) {
-            char linea[512];
+            /* 1024: el formato del viaje EN CURSO con su boton son ~250 chars mas
+             * 3 veces el nombre escapado; con 512 un nombre largo partia el
+             * <button> a media etiqueta (revision adversarial del 14-oct-2026). */
+            char linea[1024];
             bool cabecera = true;
             while (fgets(linea, sizeof(linea), fe)) {
                 bool vacia = (linea[0] == '\n' || linea[0] == '\r' || linea[0] == 0);
@@ -1701,6 +1709,28 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         ESP_LOGW(TAG, "fin sin viaje abierto: lo doy por hecho");
         httpd_resp_sendstr(req, "no habia viaje abierto");
         return ESP_OK;
+    }
+
+    /* SI VIENE 'carpeta', TIENE QUE SER LA DEL VIAJE ABIERTO (revision
+     * adversarial del 14-oct-2026). Hasta ahora este campo era decorativo: el
+     * cierre era "lo que este abierto AHORA", asi que un clic desde una pestaña
+     * vieja del portal (o entre el render de la lista y el clic, que la P4 no
+     * empuja estado) cerraba el viaje que una cabina acababa de empezar, con un
+     * 200 y sin que nadie se enterase. Las cabinas NO mandan 'carpeta' en el
+     * fin, asi que esto solo afecta a quien lo manda a proposito (la web). */
+    {
+        const cJSON *jc = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
+        if (cJSON_IsString(jc) && jc->valuestring[0]) {
+            const char *base = strrchr(carpeta, '/');
+            base = base ? base + 1 : carpeta;
+            if (strcmp(base, jc->valuestring) != 0) {
+                ESP_LOGW(TAG, "fin de '%s' pero el viaje abierto es '%s': no cierro nada",
+                         jc->valuestring, base);
+                httpd_resp_set_status(req, "409 Conflict");
+                httpd_resp_sendstr(req, "el viaje abierto ya no es ese: recarga la lista");
+                return ESP_OK;
+            }
+        }
     }
 
     /* EL CIERRE LO PIDE EL DUENO (auditoria del 14-oct-2026). 409 y no 412
@@ -3083,7 +3113,31 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * verdad no cuela igualmente -- op_inicio devuelve 409 si ya hay uno
      * abierto. Detectado auditando el 22-ago-2026. */
     bool es_inicio = !strcmp(jop->valuestring, "inicio");
-    if (!es_inicio && id != 0 && id_ya_aplicado(id)) {
+    /* CIERRE DESDE LA WEB: un 'fin' que trae 'carpeta' y NO trae 'dev'. El
+     * 'carpeta' solo lo manda la web (las cabinas mandan id+eventos+destino+dev),
+     * asi que esto los identifica sin ambiguedad. Dos cosas:
+     *  - NO pasa por el anillo de dedupe (revision adversarial del 14-oct-2026):
+     *    con un id fijo, el segundo clic se lo tragaria un "duplicado" 200 y el
+     *    usuario no sabria si cerro algo; sin dedupe llega a op_fin y contesta lo
+     *    que pasa de verdad.
+     *  - PIDE LA CLAVE DE ADMINISTRACION (mismo patron que 'borrar'): esto puede
+     *    cerrar el viaje que una cabina esta GRABANDO, y su clave esta publicada
+     *    en el historial de dos repos publicos. La cabina no manda 'carpeta', asi
+     *    que su GUARDARLO (que si es la salida de emergencia legitima, detras de
+     *    un dialogo que avisa) sigue por el nivel abierto. */
+    bool es_cierre_web = !strcmp(jop->valuestring, "fin") &&
+                         cJSON_IsString(jc) && jc->valuestring[0] &&
+                         !cJSON_IsString(cJSON_GetObjectItemCaseSensitive(j, "dev"));
+    if (es_cierre_web &&
+        check_basic_auth_strict_aviso(req,
+            "cerrar desde la web el viaje que quiza esta grabando la cabina necesita "
+            "la clave de administracion (pantalla de la P4: Ajustes -> Wi-Fi)") != ESP_OK) {
+        cJSON_Delete(j);
+        ESP_LOGW(TAG, "cierre desde la web sin credencial de administracion: rechazado");
+        return ESP_OK;
+    }
+
+    if (!es_inicio && !es_cierre_web && id != 0 && id_ya_aplicado(id)) {
         ESP_LOGI(TAG, "id %lu ya aplicado, lo descarto", (unsigned long)id);
         cJSON_Delete(j);
         httpd_resp_sendstr(req, "duplicado");
@@ -3217,6 +3271,43 @@ static estado_viaje_t estado_de(const char *nombre)
 esp_err_t handle_data_viajes(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
+
+    /* CERRAR EL VIAJE ABIERTO DESDE AQUI: /data/viajes?cerrar=<carpeta>
+     *
+     * Es una NAVEGACION normal (un enlace), no un fetch, y a proposito: el
+     * cierre pide la clave de administracion, y solo una navegacion de nivel
+     * superior hace que el navegador la pida (401 + realm admin). Con un fetch,
+     * un 403 no abre ningun dialogo y el boton quedaria muerto justo para quien
+     * tiene clave puesta.
+     *
+     * Se reutiliza op_fin -- el MISMO cierre que la pantalla cuando el viaje no
+     * es suyo ("GUARDARLO"): escribe el resumen y marca el viaje SIN VERIFICAR,
+     * sin inventarse que este entero. Y se le pasa 'carpeta', que op_fin valida
+     * contra lo que esta abierto AHORA: si la lista es vieja, no cierra nada. */
+    {
+        char q[192] = {0};
+        char cerrar[128] = {0};
+        if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK &&
+            httpd_query_key_value(q, "cerrar", cerrar, sizeof(cerrar)) == ESP_OK &&
+            cerrar[0]) {
+            if (check_basic_auth_strict(req) != ESP_OK) return ESP_OK;   /* ya contestado */
+            char cuerpo[192];
+            snprintf(cuerpo, sizeof(cuerpo),
+                     "{\"op\":\"fin\",\"forzar\":true,\"carpeta\":\"%s\","
+                     "\"id\":%lu}", cerrar, (unsigned long)ID_CIERRE_WEB);
+            cJSON *j = cJSON_Parse(cuerpo);
+            if (!j) {
+                httpd_resp_set_status(req, "500 Internal Server Error");
+                httpd_resp_sendstr(req, "no he podido montar el cierre");
+                return ESP_OK;
+            }
+            ESP_LOGW(TAG, "cierre del viaje abierto pedido desde la web: %s", cerrar);
+            esp_err_t r = op_fin(req, j, ID_CIERRE_WEB);
+            cJSON_Delete(j);
+            return r;
+        }
+    }
+
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_sendstr_chunk(req,
         "<!doctype html><meta charset=utf-8>"
@@ -3339,19 +3430,35 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 if (es_el_abierto && dias >= 2)
                     snprintf(dias_txt, sizeof(dias_txt),
                              "<div class=e>Lleva %d dias abierto.</div>", dias);
+                char dueno_txt[128] = {0};
+                if (es_el_abierto) {
+                    char dv[24];
+                    dev_abierto(dv, sizeof(dv));
+                    if (dv[0] && strcmp(dv, "desconocido") != 0)
+                        snprintf(dueno_txt, sizeof(dueno_txt),
+                                 "<div class=e>Lo empezo la pantalla %s: si esa pantalla "
+                                 "esta grabando, cierralo DESDE ELLA.</div>", dv);
+                }
                 if (es_el_abierto)
+                    /* El nombre va en un atributo data- y NO dentro del onclick: el
+                     * escape de HTML no sirve para un literal de JavaScript (una
+                     * comilla simple en el nombre rompia el boton, y con el texto
+                     * adecuado era codigo ejecutable). El atributo se escapa para
+                     * HTML y el navegador lo decodifica al leerlo. */
                     snprintf(linea, sizeof(linea),
-                        "<li class=cur><b>%s</b>%s<div class=e>En curso. Se puede "
+                        "<li class=cur><b>%s</b>%s%s<div class=e>En curso. Se puede "
                         "cerrar desde la pantalla de la cabina; si no la tienes a mano, "
                         "cierralo aqui y quedara marcado SIN VERIFICAR.</div>"
-                        "<button onclick=\"cerrarViaje('%s')\">Cerrarlo SIN VERIFICAR</button>"
-                        "</li>", nombre_esc, dias_txt, nombre_esc);
+                        "<a href=\"?cerrar=%s\" onclick=\"return confirm('Cerrar el "
+                        "viaje SIN VERIFICAR?\\n\\nSe le escribe el resumen y queda "
+                        "marcado como NO comprobado: puede que le falten apuntes.')\">"
+                        "Cerrarlo SIN VERIFICAR</a>"
+                        "</li>", nombre_esc, dias_txt, dueno_txt, nombre_esc);
                 else
                     snprintf(linea, sizeof(linea),
                         "<li class=cur><b>%s</b><div class=e>Sin cerrar y sin resumen: "
-                        "no es el viaje abierto. Se marca al arrancar la P4 (o se borra "
-                        "con el boton de al lado).</div>"
-                        "<div class=e>Si crees que es el viaje en curso, recarga.</div></li>",
+                        "no es el viaje abierto (se marca al arrancar la P4). Si crees "
+                        "que es el viaje en curso, recarga la lista.</div></li>",
                         nombre_esc);
             }
             httpd_resp_sendstr_chunk(req, linea);
@@ -3411,24 +3518,6 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 "</ul>");
         }
     }
-
-    /* El cierre va por fetch a /api/viaje (mismo origen, asi que el navegador
-     * manda las credenciales del portal que ya tiene) y recarga la lista. El id
-     * lleva el byte alto 0xFF a proposito: los de las cabinas llevan su MAC ahi,
-     * asi que no puede chocar con ninguno. */
-    httpd_resp_sendstr_chunk(req,
-        "<script>\n"
-        "function cerrarViaje(nombre){\n"
-        "  if(!confirm('Cerrar el viaje ' + nombre + ' SIN VERIFICAR?\\n\\n"
-        "Se le escribe el resumen y queda marcado como NO comprobado: puede que le "
-        "falten apuntes.')) return;\n"
-        "  fetch('/api/viaje',{method:'POST',headers:{'Content-Type':'application/json'},\n"
-        "    body:JSON.stringify({op:'fin',forzar:true,carpeta:nombre,\n"
-        "      id:(0xFF000000 + (Date.now() % 16777216))>>>0})})\n"
-        "   .then(r=>r.text()).then(t=>{alert('La P4 dice: ' + t); location.reload();})\n"
-        "   .catch(e=>alert('No he podido cerrarlo: ' + e));\n"
-        "}\n"
-        "</script>\n");
 
     httpd_resp_sendstr_chunk(req,
         "<p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
