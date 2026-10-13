@@ -729,6 +729,33 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     destino_seguro(jd->valuestring, destino, DESTINO_MAX);
     fecha_de_dias((uint32_t)jf->valuedouble, fecha, sizeof(fecha));
 
+    /* LA FECHA DE LA CARPETA LA MANDA LA CABINA, PERO SI NO CUADRA CON LA DE LA
+     * P4 SE USA LA DE LA P4 (auditoria del 13-oct-2026, hallazgo M4).
+     *
+     * 'fecha_dias' sale del reloj de la cabina, que a su vez viene de la
+     * telemetria de esta P4... pero puede ser VIEJO: si la cabina arranca
+     * cuando la P4 esta apagada, o el reloj de la P4 viene de un respaldo en
+     * NVS antes de que el GPS lo ponga en hora, el nombre de la carpeta sale con
+     * un dia que no es. Y la fecha del nombre es el IDENTIFICADOR del viaje: si
+     * miente, ordenar y buscar viajes en el PC miente. La P4 es la que tiene el
+     * GPS y el RTC, asi que ante la duda manda la suya. Mas de un dia de
+     * diferencia no es un viaje a caballo de medianoche: es un reloj mal. */
+    {
+        time_t ahora_p4 = time(NULL);
+        if (ahora_p4 > 1000000000L) {
+            struct tm tm_p4;
+            localtime_r(&ahora_p4, &tm_p4);
+            char fecha_p4[12];
+            strftime(fecha_p4, sizeof(fecha_p4), "%Y-%m-%d", &tm_p4);
+            if (strcmp(fecha_p4, fecha) != 0) {
+                ESP_LOGW(TAG, "la cabina pide el viaje con fecha %s y aqui es %s: "
+                              "uso la de la P4 (su reloj es el que tiene GPS/RTC)",
+                         fecha, fecha_p4);
+                snprintf(fecha, sizeof(fecha), "%s", fecha_p4);
+            }
+        }
+    }
+
     char carpeta[CARPETA_MAX];
     snprintf(carpeta, sizeof(carpeta), VIAJES_DIR "/%s_%s", fecha, destino);
 
