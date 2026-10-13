@@ -5,6 +5,12 @@ on:
   pull_request:
 
 # Estos jobs solo leen el repo; el token por defecto puede escribir.
+# Las acciones van FIJADAS POR SHA, no por etiqueta (auditoria de seguridad del
+# 13-oct-2026): una etiqueta la puede mover quien controle el repo de la accion
+# -- o quien se haga con el -- y el runner ejecutaria ese codigo con el token
+# del reposo (contents: read). Con el SHA, lo que corre es exactamente lo que se
+# reviso. Para actualizar: mira el SHA de la etiqueta nueva y cambialo aqui.
+
 permissions:
   contents: read
 
@@ -13,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0   # sin los tags, la version embebida sale "v?"
 
@@ -24,7 +30,7 @@ jobs:
       # local) antes de compilar, y si no aplica el CI se pone en rojo en vez de
       # publicar algo distinto. Auditoria del 23-sep-2026, punto pendiente.
       - name: esp-idf build (con los parches de patches/ aplicados)
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@9d38657f3d789ca759b2b37aaf5ceffbc42c4f0d # v1
         with:
           esp_idf_version: v5.5.5
           target: esp32p4
@@ -53,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Contrato con la app (endpoints, puertos y campos)
         run: bash test/contrato_app.sh
@@ -67,12 +73,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: victron
 
       - name: Checkout 35cabina
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/35cabina
           path: 35cabina
@@ -80,7 +86,7 @@ jobs:
       # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
       # ningun job de contrato.
       - name: Checkout cabina5
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/cabina5
           path: cabina5
@@ -100,12 +106,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: victron
 
       - name: Checkout 35cabina
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/35cabina
           path: 35cabina
@@ -113,7 +119,7 @@ jobs:
       # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
       # ningun job de contrato.
       - name: Checkout cabina5
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/cabina5
           path: cabina5
@@ -144,12 +150,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout victron
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: victron
 
       - name: Checkout 35cabina
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/35cabina
           path: 35cabina
@@ -157,7 +163,7 @@ jobs:
       # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
       # ningun job de contrato.
       - name: Checkout cabina5
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Ehuntabi/cabina5
           path: cabina5
