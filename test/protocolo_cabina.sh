@@ -75,6 +75,35 @@ done
 n_campos=$(echo "$campos" | wc -w)
 ok "$n_campos campos comprobados"
 
+# ── 3b. LOS CAMPOS DE DINERO, UNO A UNO (auditoria del 13-oct-2026) ──────────
+# La regla de arriba es ASPERSA: da por bueno un campo con que su nombre aparezca
+# en cualquier sitio de la P4 (aunque sea en un comentario o en otro contexto), y
+# no distingue de que operacion es. Con el dinero eso no vale: si alguien renombra
+# "importe" y el nombre nuevo aparece por casualidad en la P4, el resumen del
+# viaje sale con 0 EUR y el dato SI esta en los CSV -- se descubre en casa,
+# semanas despues. Aqui se exige que cada campo que mueve dinero lo LEA la P4
+# como campo de 'datos' (cJSON_GetObjectItem... "X") o con IMPORTE_DE("X").
+for c in precio coste importe litros moneda noches; do
+    if grep -rq -e "datos, \"$c\"" -e "IMPORTE_DE(\"$c\")" "$VICT/main/portal/"; then
+        ok "campo de dinero '$c': la P4 lo lee de 'datos'"
+    else
+        mal "campo de dinero '$c': la P4 NO lo lee como campo de 'datos' (¿renombrado?)"
+    fi
+done
+
+# ── 3c. El canal de alarmas (aqui se colo el fallo del 'silencio') ───────────
+# La cabina manda {"alarmas":N,"silencio":0|1}: los dos tienen que estar en el
+# handler de la P4. El TIPO no se puede comprobar desde aqui (fue justo el
+# fallo: la cabina mandaba numero y la P4 esperaba booleano), pero que el campo
+# exista si.
+for c in alarmas silencio; do
+    if grep -rq "\"$c\"" "$VICT/main/portal/config_server.c"; then
+        ok "campo de alarmas '$c' presente en el handler de la P4"
+    else
+        mal "la cabina manda '$c' a /api/alarma y la P4 no lo lee"
+    fi
+done
+
 echo
 if [ "$fallos" -eq 0 ]; then
     echo "TODO OK: la cabina y la P4 hablan el mismo idioma."

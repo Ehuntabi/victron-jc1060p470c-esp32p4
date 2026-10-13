@@ -15,5 +15,14 @@ void http_auth_init(void);
  * quedado guardadas y en vigor; ESP_ERR_INVALID_ARG si son vacias, demasiado
  * largas o llevan caracteres que rompen el Basic Auth. */
 esp_err_t config_server_set_web_credentials(const char *user, const char *pass);
+
+/* Credenciales de ADMINISTRACION: las que piden /ota, /keys y /save, aparte de
+ * las del resto del portal (auditoria de seguridad del 13-oct-2026: la misma
+ * clave para leer el estado y para reescribir el firmware es dar acceso total a
+ * quien tenga la de leer). Si no hay ninguna puesta, el nivel estricto usa las
+ * de siempre, para no dejar a nadie fuera. */
+void config_server_get_admin_credentials(char *user, size_t ulen,
+                                         char *pass, size_t plen);
+esp_err_t config_server_set_admin_credentials(const char *user, const char *pass);
 void mount_spiffs(void);
 esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri);

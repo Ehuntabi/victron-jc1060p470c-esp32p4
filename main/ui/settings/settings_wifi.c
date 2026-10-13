@@ -55,6 +55,10 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 /* Callbacks propios de esta pagina, definidos mas abajo. */
 static void portal_page_cb(lv_event_t *e);
 static void generar_clave_portal_cb(lv_event_t *e);
+static void generar_clave_admin_cb(lv_event_t *e);
+
+/* La etiqueta de la clave de ADMINISTRACION, para refrescarla al generarla. */
+static lv_obj_t *s_c4_adm_lbl;
 
 /* La etiqueta de la clave en la tarjeta de ACCESO, para poder refrescarla en
  * cuanto se genera una nueva (si no, seguiria enseñando la vieja justo cuando
@@ -466,6 +470,30 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * habido una: la clave de fabrica de las cabinas estuvo publicada en su
      * repositorio) era para siempre, porque la unica salida era borrar la NVS
      * entera, que se lleva el Wi-Fi y las claves AES de los Victron. */
+    /* ── CLAVE DE ADMINISTRACION (13-oct-2026) ────────────────────────────
+     * /ota (escribir firmware), /keys (las claves AES de los Victron) y /save
+     * pedian LA MISMA clave que el resto del portal: la que lleva la app en el
+     * movil y el satelite en su NVS. Cualquier sitio donde viva esa clave daba
+     * acceso TOTAL. Ahora esos tres piden una clave aparte, que se genera aqui;
+     * hasta que se genere, siguen valiendo las de arriba (compatibilidad). */
+    char adm_user[33] = {0}, adm_pass[33] = {0};
+    config_server_get_admin_credentials(adm_user, sizeof(adm_user),
+                                        adm_pass, sizeof(adm_pass));
+    s_c4_adm_lbl = lv_label_create(card4);
+    lv_obj_set_style_text_font(s_c4_adm_lbl, &lv_font_montserrat_20_es, 0);
+    lv_label_set_text_fmt(s_c4_adm_lbl, "Admin (Actualizar/Claves):  %s",
+                          adm_pass[0] ? adm_pass : "(las de arriba)");
+
+    lv_obj_t *c4_btn_admin = lv_btn_create(card4);
+    lv_obj_set_width(c4_btn_admin, lv_pct(100));
+    lv_obj_set_style_bg_color(c4_btn_admin, UI_COLOR_CYAN, 0);
+    lv_obj_t *c4_lbl_admin = lv_label_create(c4_btn_admin);
+    lv_obj_set_style_text_font(c4_lbl_admin, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(c4_lbl_admin, UI_COLOR_BG, 0);
+    lv_label_set_text(c4_lbl_admin, LV_SYMBOL_SETTINGS "  Clave de administracion");
+    lv_obj_center(c4_lbl_admin);
+    lv_obj_add_event_cb(c4_btn_admin, generar_clave_admin_cb, LV_EVENT_CLICKED, NULL);
+
     lv_obj_t *c4_btn_nueva = lv_btn_create(card4);
     lv_obj_set_width(c4_btn_nueva, lv_pct(100));
     lv_obj_set_style_bg_color(c4_btn_nueva, UI_COLOR_GREEN, 0);
@@ -530,6 +558,45 @@ static void clave_portal_nueva_do(void)
              "entonces sus apuntes daran error de clave.",
              user, nueva);
     ui_show_info_dialog(LV_SYMBOL_SETTINGS "  Acceso cambiado", msg);
+}
+
+/* Genera y aplica la clave de ADMINISTRACION. A partir de ahi, /ota, /keys y
+ * /save solo la aceptan a ella. */
+static void clave_admin_nueva_do(void)
+{
+    static const char abc[] = "abcdefghijkmnpqrstuvwxyz23456789";
+    char user[33] = {0}, pass[33] = {0}, nueva[17] = {0};
+    config_server_get_admin_credentials(user, sizeof(user), pass, sizeof(pass));
+    if (!user[0]) snprintf(user, sizeof(user), "admin");
+    for (int i = 0; i < 12; i++) nueva[i] = abc[esp_random() % (sizeof(abc) - 1)];
+    if (config_server_set_admin_credentials(user, nueva) != ESP_OK) {
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  No se ha podido cambiar",
+                            "La clave de administracion sigue siendo la de antes.");
+        return;
+    }
+    if (s_c4_adm_lbl)
+        lv_label_set_text_fmt(s_c4_adm_lbl, "Admin (Actualizar/Claves):  %s", nueva);
+    char msg[460];
+    snprintf(msg, sizeof(msg),
+             "Usuario:  %s\nClave de ADMINISTRACION:  %s\n\n"
+             "A partir de ahora, /ota (grabar firmware),\n"
+             "/keys (claves de los Victron) y /save solo\n"
+             "aceptan esta. El resto del portal (la app y las\n"
+             "pantallas) sigue con la clave de arriba.\n\n"
+             "Apunta la clave AHORA: se lee solo aqui.", user, nueva);
+    ui_show_info_dialog(LV_SYMBOL_SETTINGS "  Administracion aparte", msg);
+}
+
+static void generar_clave_admin_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Clave de administracion",
+        "Se genera una clave APARTE para grabar\n"
+        "firmware (/ota), las claves de los Victron\n"
+        "y /save.\n\n"
+        "La app y las pantallas siguen igual: no hay\n"
+        "que tocar nada en ellas.",
+        "Generar", clave_admin_nueva_do);
 }
 
 static void generar_clave_portal_cb(lv_event_t *e)

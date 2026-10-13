@@ -179,6 +179,32 @@ const char SETTIME_SCRIPT[] =
  * y se guarda en s_auth_header. check_basic_auth() solo compara strings. */
 static char s_auth_header[96] = "";
 
+/* NIVEL DE ADMINISTRACION: OTRO SECRETO (auditoria de seguridad del
+ * 13-oct-2026). /ota (escribir firmware), /keys (las claves AES de los Victron)
+ * y /save usaban LA MISMA clave que el resto del portal, la que lleva la app en
+ * el movil y el satelite en su NVS: cualquier sitio donde viva esa clave (un
+ * movil prestado, una cabina abierta) daba acceso TOTAL, incluido reescribir el
+ * firmware. Ahora esos tres endpoints piden un usuario y una clave APARTE.
+ *
+ * COMPATIBILIDAD: si no hay credenciales de administracion en NVS, se usa la de
+ * siempre (s_admin_header copia s_auth_header). Asi una P4 que ya esta en la
+ * autocaravana sigue funcionando igual hasta que su dueño le ponga las nuevas
+ * desde Ajustes -> Wi-Fi, que es un boton. */
+static char s_admin_header[96] = "";
+
+/* Construye "Basic <base64(user:pass)>" en 'dest'. Devuelve si lo ha logrado. */
+static bool cabecera_basic(const char *user, const char *pass, char *dest, size_t n)
+{
+    char up[68];
+    int l = snprintf(up, sizeof(up), "%s:%s", user, pass);
+    unsigned char b64[96];
+    size_t b64_len = 0;
+    if (mbedtls_base64_encode(b64, sizeof(b64), &b64_len,
+                              (const unsigned char *)up, l) != 0) return false;
+    snprintf(dest, n, "Basic %.*s", (int)b64_len, (const char *)b64);
+    return true;
+}
+
 void http_auth_init(void)
 {
     char user[33] = {0};
@@ -246,6 +272,22 @@ void http_auth_init(void)
         snprintf(s_auth_header, sizeof(s_auth_header), "Basic %.*s",
                  (int)b64_len, (const char *)b64);
     }
+
+    /* ── Credenciales de ADMINISTRACION (ver el comentario de s_admin_header) ──
+     * Si no hay, el nivel estricto se queda con las de siempre. */
+    char auser[33] = {0}, apass[33] = {0};
+    if (nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+        size_t ul = sizeof(auser), pl = sizeof(apass);
+        if (nvs_get_str(h, "adm_user", auser, &ul) != ESP_OK) auser[0] = 0;
+        if (nvs_get_str(h, "adm_pass", apass, &pl) != ESP_OK) apass[0] = 0;
+        nvs_close(h);
+    }
+    if (auser[0] && apass[0]) {
+        if (!cabecera_basic(auser, apass, s_admin_header, sizeof(s_admin_header)))
+            snprintf(s_admin_header, sizeof(s_admin_header), "%s", s_auth_header);
+    } else {
+        snprintf(s_admin_header, sizeof(s_admin_header), "%s", s_auth_header);
+    }
 }
 
 /* Getter de las credenciales del portal web (para mostrarlas en Ajustes ->
@@ -260,6 +302,45 @@ void config_server_get_web_credentials(char *user, size_t ulen,
     if (user && ulen) { size_t l = ulen; nvs_get_str(h, "http_user", user, &l); }
     if (pass && plen) { size_t l = plen; nvs_get_str(h, "http_pass", pass, &l); }
     nvs_close(h);
+}
+
+/* Getter de las credenciales de ADMINISTRACION (para verlas en Ajustes). */
+void config_server_get_admin_credentials(char *user, size_t ulen,
+                                         char *pass, size_t plen)
+{
+    if (user && ulen) user[0] = '\0';
+    if (pass && plen) pass[0] = '\0';
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return;
+    if (user && ulen) { size_t l = ulen; nvs_get_str(h, "adm_user", user, &l); }
+    if (pass && plen) { size_t l = plen; nvs_get_str(h, "adm_pass", pass, &l); }
+    nvs_close(h);
+}
+
+/* Cambia SOLO las credenciales de administracion (/ota, /keys, /save). */
+esp_err_t config_server_set_admin_credentials(const char *user, const char *pass)
+{
+    if (!user || !pass || !user[0] || !pass[0]) return ESP_ERR_INVALID_ARG;
+    if (strlen(user) > 32 || strlen(pass) > 32)  return ESP_ERR_INVALID_ARG;
+    if (strlen(pass) < 8) return ESP_ERR_INVALID_ARG;
+    if (strchr(user, ':') || strpbrk(user, "\r\n") || strpbrk(pass, "\r\n"))
+        return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
+    esp_err_t e = nvs_set_str(h, "adm_user", user);
+    if (e == ESP_OK) e = nvs_set_str(h, "adm_pass", pass);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "no he podido guardar las credenciales de administracion: %s",
+                 esp_err_to_name(e));
+        return e;
+    }
+    http_auth_init();   /* reconstruye las DOS cabeceras */
+    ESP_LOGW(TAG, "credenciales de ADMINISTRACION cambiadas (usuario '%s'): /ota, "
+                  "/keys y /save ya solo las aceptan a ellas", user);
+    return ESP_OK;
 }
 
 /* CAMBIAR las credenciales del portal desde la pantalla (13-oct-2026).
@@ -533,8 +614,11 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
-    if (err == ESP_OK && s_auth_header[0] != '\0' &&
-        auth_equal_ct(auth, s_auth_header)) {
+    /* El nivel ESTRICTO (/ota, /keys, /save) compara contra la clave de
+     * administracion; el abierto, contra la de siempre. */
+    const char *esperada = s_admin_header[0] ? s_admin_header : s_auth_header;
+    if (err == ESP_OK && esperada[0] != '\0' &&
+        auth_equal_ct(auth, esperada)) {
         s_fallos = 0;
         /* Tambien los de ESA IP: si no, seguiria contando fallos viejos y el
          * siguiente desliz la mandaria a 429 sin motivo. */
