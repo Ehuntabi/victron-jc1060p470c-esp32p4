@@ -137,7 +137,16 @@ fi
 #    Carpeta que no existe -> 404. Si sale 400 "faltan op o id", el firmware
 #    volvio a exigir 'id' a la operacion 'borrar': la app no podra borrar.
 cod=$(pide POST "$BASE/api/viaje" '{"op":"borrar","carpeta":"__prueba_humo_no_existe__"}')
-comprueba "POST /api/viaje borrar (carpeta inexistente)" "$cod" 404
+# TRES respuestas validas, y cual toca depende de la configuracion (auditoria del
+# 14-oct-2026): 404 si el viaje no existe; 403 si el usuario ha puesto clave de
+# administracion (borrar la pide: es lo unico de /api/viaje que destruye datos) y
+# esta prueba manda la del portal. Lo que NO vale es un 400: eso es el fallo del
+# 27-sep-2026 (la guarda exigia 'id' a 'borrar') y sigue siendo lo que se caza.
+comprueba "POST /api/viaje borrar (carpeta inexistente)" "$cod" 404 403
+if [ "$cod" = 403 ]; then
+    echo "         (403 = hay clave de administracion: borrar la pide desde el"
+    echo "          14-oct-2026; se hace desde la web, /data/viajes)"
+fi
 if [ "$cod" = 400 ] && grep -q "faltan op o id" /tmp/humo_cuerpo; then
     echo "         ESTE ES EL FALLO DEL 27-sep-2026: la guarda de /api/viaje"
     echo "         exige 'id' numerico tambien a 'borrar'. Actualiza el firmware."

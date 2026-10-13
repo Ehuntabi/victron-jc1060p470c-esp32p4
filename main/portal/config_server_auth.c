@@ -564,7 +564,7 @@ static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
  * endpoints abiertos pasaban a pedirla: la app daba 401 en cada pantalla y el
  * satelite no podia mandar apuntes. */
 static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
-                                const char *aviso)
+                                const char *aviso, bool es_admin, bool prohibido)
 {
     static uint32_t s_fallos = 0;
     static int64_t  s_ultimo_fallo_us = 0;
@@ -710,9 +710,21 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
                  : err != ESP_OK          ? "el cliente no manda cabecera Authorization"
                                           : "usuario o clave incorrectos");
     }
-    httpd_resp_set_status(req, "401 Unauthorized");
-    httpd_resp_set_hdr(req, "WWW-Authenticate",
-                       "Basic realm=\"Victron Display\"");
+    /* 403 Y NO 401 CUANDO EL QUE PIDE YA ESTA DENTRO (auditoria del 14-oct-2026):
+     * hay operaciones que un usuario autenticado en el nivel abierto NO puede
+     * hacer (borrar un viaje). Con un 401, el navegador vuelve a pedir
+     * credenciales que ya valen y la app las traduce a "faltan el usuario y la
+     * clave del portal" -- el usuario acaba rellenando lo que ya tenia. Un 403
+     * dice lo que pasa y el cuerpo llega tal cual. */
+    httpd_resp_set_status(req, prohibido ? "403 Forbidden" : "401 Unauthorized");
+    /* REALM PROPIO PARA EL NIVEL ESTRICTO: con el mismo, el navegador reenvia
+     * las credenciales del portal (que ya tiene cacheadas) y el usuario ve un
+     * "vuelve a pedir la clave" que no entiende. Con otro nombre, las pide
+     * aparte. */
+    if (!prohibido)
+        httpd_resp_set_hdr(req, "WWW-Authenticate",
+                           es_admin ? "Basic realm=\"Victron Display admin\""
+                                    : "Basic realm=\"Victron Display\"");
     httpd_resp_set_type(req, "text/plain");
     /* El cuerpo se puede personalizar (aviso != NULL): hay sitios -- borrar un
      * viaje -- donde "Auth required" no le dice al usuario QUE credencial falta
@@ -730,7 +742,8 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
  * /save. La clave de administracion, que si no esta puesta es la del portal. */
 esp_err_t check_basic_auth_strict(httpd_req_t *req)
 {
-    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header, NULL);
+    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header,
+                          NULL, /*es_admin=*/true, /*prohibido=*/false);
 }
 
 /* Nivel estricto con un aviso propio en el 401.
@@ -741,8 +754,10 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
  * un texto que lo explique, el usuario solo ve un 401. */
 esp_err_t check_basic_auth_strict_aviso(httpd_req_t *req, const char *aviso)
 {
+    /* 403: el que pide ya esta autenticado en el nivel abierto, lo que le falta
+     * es el permiso. Ver el comentario de auth_comprueba. */
     return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header,
-                          aviso);
+                          aviso, /*es_admin=*/true, /*prohibido=*/true);
 }
 
 /* Nivel abierto: basta con estar dentro del Wi-Fi (ver el bloque de arriba).
@@ -759,6 +774,6 @@ esp_err_t check_basic_auth(httpd_req_t *req)
 #else
     /* NIVEL ABIERTO: la clave del PORTAL (la de la app y las pantallas), NO la
      * de administracion. Ver el comentario de check_basic_auth_strict(). */
-    return auth_comprueba(req, s_auth_header, NULL);
+    return auth_comprueba(req, s_auth_header, NULL, /*es_admin=*/false, /*prohibido=*/false);
 #endif
 }

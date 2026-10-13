@@ -398,6 +398,66 @@ static bool str_is_hex(const char *s, int n) {
 }
 
 // Handler for POST /save (MAC address and AES key)
+/* PAPELERA DE VIAJES (auditoria del 14-oct-2026).
+ *
+ * `op_borrar` paso a pedir la clave de administracion -- es la unica operacion
+ * de /api/viaje que DESTRUYE datos de la tarjeta --, pero la app manda la del
+ * portal. Sin una salida en la web, borrar un viaje se quedaba sin ninguna
+ * interfaz. Esto es esa salida: mismo nivel que /ota y /keys, POST (no un GET
+ * que borra) y confirmacion en el navegador. */
+static esp_err_t post_viaje_borrar(httpd_req_t *req)
+{
+    REQUIRE_AUTH_STRICT(req);
+    if (req->content_len == 0 || req->content_len > 192) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "cuerpo invalido");
+        return ESP_FAIL;
+    }
+    char body[192];
+    int total = req->content_len < (int)sizeof(body) - 1
+              ? req->content_len : (int)sizeof(body) - 1;
+    int got = 0;
+    while (got < total) {
+        int r = httpd_req_recv(req, body + got, total - got);
+        if (r <= 0) break;
+        got += r;
+    }
+    body[got] = 0;
+
+    char *p = strstr(body, "carpeta=");
+    char nombre[128] = {0};
+    if (p) {
+        p += 8;
+        size_t k = 0;
+        for (; *p && *p != '&' && k + 1 < sizeof(nombre); p++) {
+            char c = *p;
+            bool vale = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '_' || c == '-';
+            if (vale) nombre[k++] = c;
+        }
+        nombre[k] = 0;
+    }
+    char motivo[96] = {0};
+    int cod = nombre[0] ? viaje_borrar_carpeta(nombre, motivo, sizeof(motivo)) : 400;
+
+    /* Siempre se vuelve a la lista, con el resultado en la URL: borrar no es
+     * una pantalla, es una accion. */
+    char destino[256];
+    snprintf(destino, sizeof(destino), "/data/viajes?%s=%s",
+             cod ? "error" : "borrado", cod ? "no" : "si");
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", destino);
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    if (cod) {
+        ESP_LOGW(TAG, "papelera: NO he borrado '%s' (%d %s)", nombre, cod, motivo);
+        char cuerpo[192];
+        snprintf(cuerpo, sizeof(cuerpo), "No se ha borrado: %s", motivo);
+        httpd_resp_sendstr(req, cuerpo);
+    } else {
+        httpd_resp_sendstr(req, "Viaje borrado");
+    }
+    return ESP_OK;
+}
+
 static esp_err_t post_save(httpd_req_t *req) {
     REQUIRE_AUTH_STRICT(req);   /* escribe las claves AES de los Victron */
     ESP_LOGV(TAG, "HTTP POST /save");
@@ -954,6 +1014,9 @@ esp_err_t config_server_start(void) {
     registrar(server, &uri_settime);
     httpd_uri_t uri_settime_get = { .uri = "/settime", .method = HTTP_GET, .handler = handle_settime };
     registrar(server, &uri_settime_get);
+    httpd_uri_t uri_viaje_borrar = { .uri = "/data/viaje_borrar", .method = HTTP_POST, .handler = post_viaje_borrar };
+    registrar(server, &uri_viaje_borrar);
+
     httpd_uri_t uri_capturas = { .uri = "/capturas", .method = HTTP_GET, .handler = handle_capturas };
     registrar(server, &uri_capturas);
     httpd_uri_t uri_captura = { .uri = "/captura", .method = HTTP_GET, .handler = handle_captura };

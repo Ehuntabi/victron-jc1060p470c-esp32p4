@@ -65,3 +65,8 @@ void viaje_reparar_al_arrancar(void);
 
 /* GET /data/viajes — lista de viajes guardados con su estado y su enlace. */
 esp_err_t handle_data_viajes(httpd_req_t *req);
+
+/* Borra una carpeta de viaje de la tarjeta (el nucleo de op_borrar, sin HTTP).
+ * Devuelve 0 si se borro, o un codigo HTTP con el motivo en 'motivo'. La usa la
+ * papelera de la web (config_server.c) ademas de la API de la app. */
+int viaje_borrar_carpeta(const char *nombre, char *motivo, size_t n);
