@@ -115,6 +115,16 @@ int udp_latido_fuentes_vivas(int vivo_s)
     return n;
 }
 
+bool udp_latido_alguna_callada(int callada_s)
+{
+    int64_t ahora = esp_timer_get_time();
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        if (s_fuentes[i].ip == 0) continue;
+        if ((ahora - s_fuentes[i].ultimo_us) / 1000000 > callada_s) return true;
+    }
+    return false;
+}
+
 /* true si ALGUNA cabina que sigue latiendo (esta viva, no se ha ido) dice llevar
  * >= 15 s sin recibir telemetria. Devuelve ademas cuantos segundos son, para el
  * log. Un valor NEGATIVO de seg_sin_datos se trata como mudo: el campo es int16

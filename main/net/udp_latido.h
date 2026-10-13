@@ -27,6 +27,17 @@ void udp_latido_estado(udp_latido_info_t *out);
 /* Cuantas cabinas distintas han latido en los ultimos 'vivo_s' segundos. */
 int udp_latido_fuentes_vivas(int vivo_s);
 
+/* true si ALGUNA cabina que YA habia latido lleva mas de 'callada_s' segundos sin
+ * hacerlo (su entrada sigue en la tabla, que dura 60 s).
+ *
+ * Existe por el fallo que cazo el red team del 14-oct-2026: si lo que se rompe es
+ * la SUBIDA de una cabina (no le llega el latido a la P4), su entrada se queda
+ * callada y nadie la contaba -- `udp_latido_estado()` devuelve la fuente MAS
+ * RECIENTE, asi que la otra pantalla (sana) tapaba a la muda y la P4 se creia
+ * sana y no reparaba nada. La 3,5" se quedaba sin telemetria hasta apagarla a
+ * mano, y el log decia que todo iba bien. */
+bool udp_latido_alguna_callada(int callada_s);
+
 /* true si ALGUNA cabina que sigue latiendo dice llevar >= 15 s sin recibir
  * telemetria (y cuantos segundos, si 'seg_out' no es NULL). Es la pregunta que
  * tiene que hacer el vigilante del AP: con dos pantallas, mirar solo el ultimo

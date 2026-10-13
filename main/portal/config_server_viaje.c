@@ -1000,8 +1000,29 @@ static void totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON *dato
         extras += IMPORTE_DE("precio_duchas");
         extras += IMPORTE_DE("precio_basura");
 
+        /* COBRO POR 24 H (red team del 14-oct-2026). La cabina manda
+         * "cobro":"24h" o "noche" desde el formulario de la pernocta, y aqui se
+         * IGNORABA: se cobraba siempre por noches de calendario. Un area que
+         * cobra 20 EUR/24 h y una estancia de 25 h salian a 20 EUR en vez de 40.
+         * Si el cobro es por 24 h se cuentan las fracciones de 24 h (hacia
+         * arriba) de los 'minutos' que manda la cabina; si no vinieran, se cae a
+         * las noches de siempre. */
+        double unidades = noches;
+        const cJSON *jcob = cJSON_GetObjectItemCaseSensitive(datos, "cobro");
+        if (cJSON_IsString(jcob) && strstr(jcob->valuestring, "24h")) {
+            const cJSON *jm = cJSON_GetObjectItem(datos, "minutos");
+            double min = cJSON_IsNumber(jm) ? jm->valuedouble : 0;
+            if (min > 0) {
+                long u = (long)((min + 1439.0) / 1440.0);   /* hacia arriba */
+                if (u < 1) u = 1;
+                if (u > 60) u = 60;
+                unidades = (double)u;
+                ESP_LOGI(TAG, "pernocta con cobro por 24 h: %.0f min -> %ld dia(s) "
+                              "de 24 h a %.2f", min, u, precio);
+            }
+        }
         nvs_set_d(h, NVS_T_ALOJA,
-                  nvs_get_d(h, NVS_T_ALOJA) + precio * noches + extras);
+                  nvs_get_d(h, NVS_T_ALOJA) + precio * unidades + extras);
     }
     #undef IMPORTE_DE
 }

@@ -583,12 +583,21 @@ static void dhcp_vigila_job(void)
     }
     s_mini_mudo = 0;
 
-    /* 3) SANO: o hay concesiones, o la cabina dice que recibe. */
+    /* 3) SANO: o hay concesiones, o TODAS las cabinas conocidas dicen que
+     *    reciben. UNA CALLADA NO ES SALUD (red team del 14-oct-2026): si lo que
+     *    se ha roto es la SUBIDA de una cabina, su entrada se queda callada y
+     *    antes no la contaba nadie -- la otra pantalla tapaba a la muda y la P4
+     *    no reparaba nada. Una entrada callada mas de 20 s (siguen en la tabla
+     *    60 s) manda al camino lento. */
     bool mini_recibe = latido_vivo && lat.seg_sin_datos_mini >= 0 && lat.seg_sin_datos_mini <= 5;
-    if (conc > 0 || mini_recibe || asoc == 0) {
-        /* OJO: asoc==0 cuenta como "no actuar", pero NO como prueba de salud
-         * (ver vigila_pon_a_cero): no borra el tope de reinicios de placa. */
-        vigila_pon_a_cero(conc > 0 || mini_recibe);
+    bool callada = udp_latido_alguna_callada(20);
+    if (conc > 0 || (mini_recibe && !callada) || asoc == 0) {
+        /* OJO: asoc==0 cuenta como "no actuar", pero NO como prueba de salud (ver
+         * vigila_pon_a_cero), y el tope de reinicios de placa SOLO lo borra una
+         * CONCESION de verdad: un latido es un datagrama UDP sin identificar (la
+         * IP se puede falsear desde cualquier cliente del AP) y con el se
+         * re-armaba el tope, o sea que el tope dejaba de existir. */
+        vigila_pon_a_cero(conc > 0);
         return;
     }
 
