@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# Estos jobs solo leen el repo; el token por defecto puede escribir.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -73,8 +77,18 @@ jobs:
           repository: Ehuntabi/35cabina
           path: 35cabina
 
+      # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
+      # ningun job de contrato.
+      - name: Checkout cabina5
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
       - name: Comparar mini_proto.h entre los dos proyectos
-        run: diff victron/main/net/mini_proto.h 35cabina/main/net/mini_proto.h
+        run: |
+          diff victron/main/net/mini_proto.h 35cabina/main/net/mini_proto.h
+          diff victron/main/net/mini_proto.h cabina5/main/net/mini_proto.h
 
   # El limite de cuerpo del apunte tambien se mantiene sincronizado A MANO
   # (CUERPO_MAX en el satelite tiene que caber siempre en VIAJE_BODY_MAX de
@@ -96,9 +110,22 @@ jobs:
           repository: Ehuntabi/35cabina
           path: 35cabina
 
+      # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
+      # ningun job de contrato.
+      - name: Checkout cabina5
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
       - name: Comprobar que CUERPO_MAX (satelite) cabe en VIAJE_BODY_MAX (P4)
         run: |
           cuerpo_max=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' 35cabina/main/net/viaje_cola.h)
+          cuerpo_max5=$(grep -oP '#define\s+CUERPO_MAX\s+\K[0-9]+' cabina5/main/net/viaje_cola.h)
+          if [ "$cuerpo_max" != "$cuerpo_max5" ]; then
+            echo "CUERPO_MAX distinto entre las dos cabinas ($cuerpo_max vs $cuerpo_max5)"
+            exit 1
+          fi
           body_max=$(grep -oP '#define\s+VIAJE_BODY_MAX\s+\K[0-9]+' victron/main/portal/config_server_viaje.c)
           echo "CUERPO_MAX (35cabina) = $cuerpo_max"
           echo "VIAJE_BODY_MAX (victron) = $body_max"
@@ -127,5 +154,18 @@ jobs:
           repository: Ehuntabi/35cabina
           path: 35cabina
 
+      # La 5" habla el mismo protocolo y hasta el 13-oct-2026 no la miraba
+      # ningun job de contrato.
+      - name: Checkout cabina5
+        uses: actions/checkout@v4
+        with:
+          repository: Ehuntabi/cabina5
+          path: cabina5
+
       - name: Comprobar que la cabina y la P4 hablan el mismo idioma
-        run: bash victron/test/protocolo_cabina.sh victron 35cabina
+        # Se llama DOS veces, una por cabina: el script compara victron contra
+        # UNA cabina, y asi no hay que reescribirlo (auditoria del 13-oct-2026:
+        # la 5" no estaba en ningun job de contrato).
+        run: |
+          bash victron/test/protocolo_cabina.sh victron 35cabina
+          bash victron/test/protocolo_cabina.sh victron cabina5

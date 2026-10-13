@@ -858,7 +858,13 @@ static void init_periodic_timers(void)
         .name            = "rtc_backup",
     };
     timer_err = esp_timer_create(&rtc_backup_args, &rtc_backup_timer);
-    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(rtc_backup_timer, 3600ULL * 1000000ULL);
+    /* Cada 5 MINUTOS, no cada hora (auditoria del 13-oct-2026): si el RX8025T
+     * pierde la hora (pila, o corte), este respaldo es lo que se restaura al
+     * arrancar, y con una hora de cadencia el reloj volvia hasta 1 h + lo que
+     * durara el corte atras. Con 5 min, el error es de minutos. Son 288 commits
+     * al dia en una NVS de 16 KB: el desgaste no es problema (auditoria de
+     * rendimiento) y ya hay otros cuatro escritores con esa misma cadencia. */
+    if (timer_err == ESP_OK) timer_err = esp_timer_start_periodic(rtc_backup_timer, 300ULL * 1000000ULL);
     if (timer_err != ESP_OK) ESP_LOGW(TAG, "timer rtc_backup no arranco: %s", esp_err_to_name(timer_err));
 
     /* Modo nocturno: re-evalúa cada 60 s y aplica brillo segun la hora. */

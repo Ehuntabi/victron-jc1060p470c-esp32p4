@@ -30,6 +30,10 @@ bool viaje_abierto_nombre(char *out, size_t n);
  * tarjeta porque viene de un cuelgue. Ver el comentario del .c. */
 void viaje_flush_antes_de_reiniciar(void);
 
+/* Deja anotado en el diario del viaje abierto que el reloj ha dado un salto
+ * (lo llama gps.c cuando el GPS corrige la hora mas de 5 min). */
+void viaje_nota_hora_corregida(int64_t delta_s);
+
 /* Reparacion del estado del viaje al arrancar, CON LA SD YA MONTADA.
  *
  * Si la NVS dice que hay un viaje abierto y su carpeta no esta en la tarjeta,

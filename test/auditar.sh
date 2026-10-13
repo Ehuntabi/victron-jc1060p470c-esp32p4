@@ -173,9 +173,40 @@ done
 [ "$sin_check" -eq 0 ] && ok "todas las reservas de memoria se comprueban" || printf '  AVISO %s reservas sin comprobacion cerca (revisar a mano; puede ser falso positivo)\n' "$sin_check"
 
 echo "=== 5. El portal pide clave en todos los handlers ==="
-h=$(grep -rhc "esp_err_t handle_" main/portal/*.c 2>/dev/null | awk '{s+=$1} END {print s+0}')
-a=$(grep -rhc "REQUIRE_AUTH" main/portal/*.c 2>/dev/null | awk '{s+=$1} END {print s+0}')
-[ "$a" -ge "$h" ] && ok "handlers $h · con clave $a" || mal "handlers $h pero solo $a piden clave"
+# ANTES esto contaba cadenas: "esp_err_t handle_" por un lado y "REQUIRE_AUTH"
+# por otro, y pedia que hubiera al menos tantas como handlers. Eso tiene DOS
+# puntos ciegos, y por ellos se colo /ota_aviso sin credenciales hasta la
+# auditoria del 13-oct-2026:
+#   1) un handler que no se llame handle_* (ota_aviso_post) no se contaba;
+#   2) cada REQUIRE_AUTH de mas tapaba a un handler sin ella (hoy: 41 cadenas
+#      para 37 handlers, asi que el ">=" pasaba siempre).
+# Ahora se recorren los REGISTROS de verdad: por cada httpd_register_uri_handler
+# se saca el nombre del handler y se comprueba que su cuerpo (o el de una macro
+# que lo envuelva) lleve REQUIRE_AUTH. Los del portal cautivo se excluyen a
+# proposito: romperian la deteccion de portal.
+sin_auth=""
+total=0
+for f in main/portal/*.c; do
+    # "handler = nombre" de cada registro, en el orden en que aparecen
+    grep -oP '\.handler\s*=\s*\K\w+' "$f" 2>/dev/null | while read -r h; do
+        total=$((total + 1))
+        case "$h" in
+            handle_captive_redirect|handle_static) continue ;;   # a proposito
+        esac
+        # el cuerpo del handler en CUALQUIER fichero del portal
+        if ! grep -rq -A 12 "esp_err_t $h(httpd_req_t" main/portal/*.c || \
+           ! grep -rA 12 "esp_err_t $h(httpd_req_t" main/portal/*.c | grep -q "REQUIRE_AUTH"; then
+            echo "$h"
+        fi
+    done
+done > /tmp/auditar_sin_auth.$$ 2>/dev/null
+sin_auth=$(sort -u /tmp/auditar_sin_auth.$$ | tr '\n' ' ')
+rm -f /tmp/auditar_sin_auth.$$
+if [ -z "$sin_auth" ]; then
+    ok "todos los handlers registrados piden clave (salvo los del portal cautivo)"
+else
+    mal "handlers registrados SIN clave: $sin_auth"
+fi
 
 echo "=== 6. La SD: transporte, reloj y el C6 mientras se identifica ==="
 # Cada regla existe por algo medido el 2-oct-2026:

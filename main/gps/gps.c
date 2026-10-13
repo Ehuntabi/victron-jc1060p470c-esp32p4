@@ -20,6 +20,7 @@
  * dejarlo asignado evita que otro periferico lo ocupe sin darse cuenta).
  */
 #include "gps/gps.h"
+#include "portal/config_server_viaje.h"   /* viaje_nota_hora_corregida() */
 #include "rtc_rx8025t.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
@@ -156,6 +157,19 @@ static void poner_en_hora(const char *hhmmss, const char *ddmmyy)
     bool primera = (ultima_sinc_us == 0);
     bool toca    = (ahora_us - ultima_sinc_us) > (int64_t)RESYNC_S * 1000000LL;
     if (!primera && !toca && desvio <= 2) return;
+
+    /* SALTO GRANDE = queda escrito en el viaje (auditoria del 13-oct-2026).
+     *
+     * El reloj de la P4 puede venir de un respaldo en NVS de horas antes, asi
+     * que este ajuste puede mover la hora de golpe CON EL VIAJE ABIERTO: los
+     * apuntes y la telemetria que vengan detras llevan la hora nueva, y una
+     * pernocta abierta antes del salto puede contar dias de mas (se cobra por
+     * noches). No se puede impedir -- el GPS manda --, pero que quede dicho
+     * DENTRO del viaje: si un dia sale un viaje raro, el motivo esta escrito. */
+    if (!primera && desvio > 300) {
+        ESP_LOGW(TAG, "el GPS mueve el reloj %ld s con el viaje en marcha", desvio);
+        viaje_nota_hora_corregida(desvio);
+    }
 
     struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
     settimeofday(&tv, NULL);

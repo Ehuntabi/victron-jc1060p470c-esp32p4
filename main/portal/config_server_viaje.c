@@ -248,6 +248,8 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
  * cierre inventado seria mentir --: limpia el estado para que la P4 vuelva a
  * ser utilizable y lo deja bien claro en el log. Se llama SOLO con la SD
  * montada: si la tarjeta no esta, su ausencia no significa nada. */
+static void marcar_huerfanas(const char *abierta);
+
 void viaje_reparar_al_arrancar(void)
 {
     if (!datalogger_sd_montada()) {
@@ -255,10 +257,16 @@ void viaje_reparar_al_arrancar(void)
         return;
     }
     char carpeta[CARPETA_MAX];
-    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;   /* no hay nada que reparar */
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) {
+        marcar_huerfanas(NULL);      /* no hay viaje abierto: ninguna es "la de ahora" */
+        return;
+    }
 
     struct stat st;
-    if (stat(carpeta, &st) == 0 && S_ISDIR(st.st_mode)) return;   /* todo en su sitio */
+    if (stat(carpeta, &st) == 0 && S_ISDIR(st.st_mode)) {
+        marcar_huerfanas(carpeta);
+        return;                      /* todo en su sitio */
+    }
 
     const char *base = strrchr(carpeta, '/');
     base = base ? base + 1 : carpeta;
@@ -305,6 +313,58 @@ void viaje_reparar_al_arrancar(void)
                      carpeta);
     }
     estado_set(NULL, 0);
+}
+
+/* Marca las carpetas de viaje que NO se pueden cerrar ya.
+ *
+ * Una carpeta con "inicio" en el diario pero sin viaje abierto en NVS y sin
+ * resumen.txt no es un viaje en curso: es un viaje que se quedo a medias al
+ * EMPEZAR (corte de corriente entre crear la carpeta y apuntar el viaje, o
+ * entre el diario y el commit). Nadie va a poder cerrarlo nunca, asi que
+ * /data/viajes lo enseñaba para siempre como "En curso: finalizalo en la
+ * cabina", sin enlace de descarga, y el usuario no tenia forma de bajarse unos
+ * datos que SI estan en la tarjeta (auditoria del 13-oct-2026, hallazgo B3).
+ *
+ * Se le escribe INCOMPLETO.txt, que es lo que lo convierte en descargable "de
+ * todos modos" y con el nombre gritando lo que es. NO se toca ninguna carpeta
+ * que sea el viaje abierto ni las ya marcadas o cerradas. */
+static void marcar_huerfanas(const char *abierta)
+{
+    const char *base_abierta = abierta ? strrchr(abierta, '/') : NULL;
+    base_abierta = base_abierta ? base_abierta + 1 : abierta;
+
+    if (!camera_sd_bus_lock(5000)) return;
+    DIR *d = opendir(VIAJES_DIR);
+    if (!d) { camera_sd_bus_unlock(); return; }
+    int marcadas = 0;
+    struct dirent *ent;
+    while ((ent = readdir(d))) {
+        if (ent->d_name[0] == '.') continue;
+        if (!strncmp(ent->d_name, MARCA_DESCARTADO, strlen(MARCA_DESCARTADO))) continue;
+        if (base_abierta && !strcmp(ent->d_name, base_abierta)) continue;
+        char ruta[RUTA_MAX];
+        struct stat st;
+        snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/resumen.txt", ent->d_name);
+        if (stat(ruta, &st) == 0) continue;                       /* cerrado */
+        snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, ent->d_name);
+        if (stat(ruta, &st) == 0) continue;                       /* ya marcado */
+        snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/eventos.csv", ent->d_name);
+        if (stat(ruta, &st) != 0) continue;                       /* ni empezo */
+        snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, ent->d_name);
+        FILE *f = fopen(ruta, "w");
+        if (!f) continue;
+        fprintf(f, "Este viaje NO SE CERRO y ya no se puede cerrar.\n\n"
+                   "Se quedo a medias al EMPEZAR: la carpeta llego a crearse pero la\n"
+                   "P4 no llego a apuntar el viaje (un corte de corriente en ese\n"
+                   "momento). No es el viaje abierto, asi que no hay forma de\n"
+                   "finalizarlo desde la cabina.\n\n"
+                   "Los datos que haya dentro son los que se llegaron a escribir.\n");
+        if (fclose(f) == 0) marcadas++;
+    }
+    closedir(d);
+    camera_sd_bus_unlock();
+    if (marcadas) ESP_LOGW(TAG, "%d carpeta(s) de viaje que se quedaron sin poder "
+                                "cerrarse: marcadas como INCOMPLETO", marcadas);
 }
 
 /* ── Utilidades ───────────────────────────────────────────────────────────── */
@@ -540,6 +600,14 @@ static void totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON *dato
         /* Llegar y marcharse el mismo dia son cero noches de calendario, pero
          * el area se cobra igual: por debajo de una no se baja. */
         if (noches < 1.0) noches = 1.0;
+        /* Tope de cordura, igual que en la cabina (salida_noches): un reloj que
+         * salta puede mandar decenas de "noches" y aqui se multiplica por el
+         * precio. Si llega algo absurdo, se acota y se dice. */
+        if (noches > 60.0) {
+            ESP_LOGW(TAG, "noches fuera de lo creible (%.0f): el reloj de la "
+                          "cabina ha dado un salto. Se cuentan 60", noches);
+            noches = 60.0;
+        }
 
         /* Y lo que se pago por los servicios, que en un area se cobran aparte:
          * el agua 1 euro, la luz 2. Van al mismo saco que la noche -- es lo que
@@ -1717,6 +1785,21 @@ static bool ruta_volcar(const char *carpeta)
     return true;
 }
 
+/* Deja escrito en el viaje que el reloj ha dado un salto (lo llama gps.c). */
+void viaje_nota_hora_corregida(int64_t delta_s)
+{
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+    char txt[96];
+    snprintf(txt, sizeof(txt),
+             "el reloj se ha movido %lld s (lo puso el GPS); los apuntes "
+             "anteriores llevan la hora vieja",
+             (long long)delta_s);
+    if (!camera_sd_bus_lock(3000)) return;
+    diario(carpeta, "hora_corregida", txt);
+    camera_sd_bus_unlock();
+}
+
 /* ── Volcado antes de un reinicio (auditoria del 13-oct-2026) ────────────────
  *
  * La P4 se reinicia sola por varias vias (la escalera del AP, una OTA, el boton
@@ -2069,7 +2152,13 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
  * ya estaba escrito en el codigo del tar: "el analizador del PC se traga un
  * viaje incompleto creyendo que esta entero". */
 
-typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO, V_DESCARTADO } estado_viaje_t;
+/* V_DESCONOCIDO: no se ha podido MIRAR (la SD estaba ocupada justo en ese
+ * instante). Antes eso devolvia V_EN_CURSO, que es una afirmacion: el usuario
+ * leia "En curso: finalizalo en la cabina antes de bajarlo" sobre un viaje
+ * CERRADO y sin boton de descarga, y lo unico que pasaba es que la camara
+ * tenia el bus un segundo (auditoria del 13-oct-2026). Se dice que no se sabe y
+ * que se recargue. */
+typedef enum { V_EN_CURSO, V_INCOMPLETO, V_LISTO, V_DESCARTADO, V_DESCONOCIDO } estado_viaje_t;
 
 /* Los dos stat() son I/O de SD de verdad: sin camera_sd_bus_lock aqui, un
  * listado de /data/viajes mientras la camara esta grabando arriesga la
@@ -2093,7 +2182,7 @@ static estado_viaje_t estado_de(const char *nombre)
         const char *base = strrchr(abierto, '/');
         if (base && !strcmp(base + 1, nombre)) return V_EN_CURSO;
     }
-    if (!camera_sd_bus_lock(1000)) return V_EN_CURSO;   /* se reintenta al recargar */
+    if (!camera_sd_bus_lock(1000)) return V_DESCONOCIDO;   /* no se ha podido mirar */
     char ruta[RUTA_MAX];
     struct stat st;
     snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, nombre);
@@ -2178,6 +2267,13 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                     "viaje, pero los datos se conservan.</div>"
                     "<a href='" PORTAL_HEAVY_BASE "/data/viaje.tar?v=%s'>Descargar</a></li>",
                     nombre_esc, nombre_esc);
+            } else if (e == V_DESCONOCIDO) {
+                /* No se pudo mirar: se dice, en vez de afirmar que sigue abierto.
+                 * Recargar esta pagina lo resuelve. */
+                snprintf(linea, sizeof(linea),
+                    "<li class=cur><b>%s</b><div class=e>No he podido mirarlo ahora "
+                    "mismo (la tarjeta estaba ocupada). Recarga la pagina.</div></li>",
+                    nombre_esc);
             } else {
                 snprintf(linea, sizeof(linea),
                     "<li class=cur><b>%s</b><div class=e>En curso: finalizalo en la "
