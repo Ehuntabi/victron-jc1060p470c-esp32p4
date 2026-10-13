@@ -550,6 +550,40 @@ static int ble_gap_event_handler(struct ble_gap_event *event, void *arg)
             const bool soc_sin_dato = (soc_bits >= NA_U10);
             if (soc_sin_dato) soc_bits = VICTRON_SOC_NA;
 
+            /* ── ¿ES CREIBLE ESTE REGISTRO? (13-oct-2026) ──────────────────
+             *
+             * POR QUE HACE FALTA: el usuario vio un pico de 216 A en los logs
+             * de la app que "no es real" (la bateria es de 150 A). Y el AES-CTR
+             * NO TIENE CONTROL DE INTEGRIDAD: cualquier byte que se tuerza en
+             * el aire sale como otro byte en claro, con el registro igual de
+             * bien formado. Antes de descifrar solo se comprueba UN byte de la
+             * clave (encryptKeyMatch) y el tamano, asi que un anuncio corrupto
+             * se cuela y produce un numero perfectamente valido... y falso.
+             *
+             * LO QUE **NO** SE HACE: descartar por magnitud de corriente. Un
+             * corto de verdad da corriente alta y hay que verlo -- tirarlo
+             * seria justo callarse el caso que mas importa.
+             *
+             * LO QUE SI: descartar por INCOHERENCIA del registro ENTERO. Un
+             * SmartShunt siempre manda una tension de bateria creible, asi que
+             * si la tension es absurda, el registro es basura y se tira entero
+             * (no solo la corriente). 60 V de tope cubre 12, 24 y 48 V con
+             * margen: por encima de eso no hay instalacion de autocaravana.
+             * Y el SoC, si viene, no puede pasar del 100 %. */
+            if (voltage_raw > 6000) {
+                ESP_LOGW(TAG, "registro INCOHERENTE: Vbat=%.2fV -- descartado "
+                              "(posible anuncio corrupto; Ibat=%.3fA SOC=%u)",
+                         voltage_raw / 100.0f, current_A, (unsigned)soc_bits);
+                break;
+            }
+            /* Solo el SoC que SI trae dato: 0x3FF es su centinela de "no
+             * disponible" y no significa nada. */
+            if (!soc_sin_dato && soc_bits > 1000) {
+                ESP_LOGW(TAG, "registro INCOHERENTE: SOC=%u (>100%%) -- descartado",
+                         (unsigned)soc_bits);
+                break;
+            }
+
             ESP_LOGI(TAG, "=== Battery Monitor ===");
             if (soc_sin_dato)
                 ESP_LOGI(TAG, "Vbat=%.2fV Ibat=%.3fA SOC=-- (sin dato) TTG=%u min",
