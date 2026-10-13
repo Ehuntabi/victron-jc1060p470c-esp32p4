@@ -29,6 +29,7 @@
 #include "data/trip_computer.h"
 #include "ne185_vlog.h"
 #include "portal/config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
+#include "restart_flush.h"              /* ui_flush_all_before_restart() */
 
 /* La version mostrada en About sale de esp_app_get_description()->version, que
  * ESP-IDF rellena automaticamente con `git describe` (el tag mas reciente, p.ej.
@@ -43,16 +44,18 @@ static lv_obj_t *s_lbl_wd = NULL;
 
 /* Vuelca a la tarjeta/NVS todo lo que vive en RAM, antes de un esp_restart.
  *
- * Lo comparten los DOS caminos de reinicio (el switch de Wi-Fi y el boton
- * Reiniciar) para que no puedan divergir: hasta ahora los dos volcaban solo el
- * datalogger y el historico de bateria, asi que cada reinicio se llevaba por
- * delante hasta ~5 min de contadores de viaje (van a NVS cada 5 min), el dia de
- * produccion solar en curso y hasta ~10 min del log de voltaje NE185.
+ * Lo comparten los TRES caminos de reinicio -- el switch de Wi-Fi, el boton
+ * Reiniciar y la escalera del AP (config_server_ap.c) -- para que no puedan
+ * divergir: hasta ahora cada uno volcaba lo suyo, asi que cada reinicio se
+ * llevaba por delante hasta ~5 min de contadores de viaje (van a NVS cada
+ * 5 min), el dia de produccion solar en curso y hasta ~10 min del log de
+ * voltaje NE185. Se declara en restart_flush.h, sin dependencias, para que el
+ * portal pueda llamarlo sin arrastrar la interfaz.
  *
  * OJO: esto NO salva las vistas "HOY" de las graficas. Salen de anillos en RAM
  * (battery_history y datalogger) y arrancan vacias tras cualquier reinicio; lo
  * que sobrevive son los CSV de la tarjeta, que es justo lo que se vuelca aqui. */
-static void flush_all_before_restart(void)
+void ui_flush_all_before_restart(void)
 {
     ESP_LOGI("UI", "Flushing data before restart...");
     datalogger_flush();
@@ -133,7 +136,7 @@ static void do_reboot_action(void)
     /* Este reinicio lo pide el usuario: el arranque siguiente no lo apunta como
      * "ultimo reinicio" ni lo cuenta como averia. */
     watchdog_marca_reinicio_pedido();
-    flush_all_before_restart();
+    ui_flush_all_before_restart();
     vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
 }

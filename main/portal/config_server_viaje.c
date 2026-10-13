@@ -67,8 +67,13 @@ static void ruta_cerrar(const char *carpeta);
  * carpeta del nuevo. */
 static void ruta_olvidar(void);
 
-/* Atado a CUERPO_MAX de ~/joint/35cabina/main/net/viaje_cola.c (896): el
- * satelite no puede mandar mas de eso, con esto sobra margen. SI ALGUN DIA SE
+/* Las dos viven mas abajo (la primera, con las utilidades de nombres; la
+ * segunda, con el cierre del viaje) pero se usan ya en la reparacion de
+ * arranque y en las comprobaciones de dueno. */
+static void destino_seguro(const char *in, char *out, size_t n);
+static void renombrado_pendiente_aplicar(void);
+
+/* Atado a CUERPO_MAX de ~/joint/35cabina/main/net/viaje_cola.c (896): el * satelite no puede mandar mas de eso, con esto sobra margen. SI ALGUN DIA SE
  * SUBE ALLI, HAY QUE SUBIRLO AQUI TAMBIEN -- el job de CI "viaje_body_sync"
  * (.github/workflows/build.yml) falla si el satelite llega a igualar o
  * superar esto, para que no dependa de acordarse solo. */
@@ -87,6 +92,11 @@ static void ruta_olvidar(void);
 /* Que pantalla empezo el viaje abierto: su MAC en hex. Vacio = no se sabe (una
  * cabina con firmware viejo, o un viaje empezado antes de este cambio). */
 #define NVS_DEV         "v_dev"
+/* Renombrado del cierre que se quedo a medias (ver op_fin): el nombre VIEJO y
+ * el NUEVO de la carpeta, en base (sin VIAJES_DIR). Presentes solo si hay un
+ * renombrado por terminar. */
+#define NVS_REN_DE      "v_ren_de"
+#define NVS_REN_A       "v_ren_a"
 #define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
 #define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
 #define IDS_RING_N      64            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
@@ -217,6 +227,27 @@ static void ids_ring_limpiar(nvs_handle_t h)
 
 /* Version que opera sobre un handle YA ABIERTO, sin comitear ni cerrar --
  * mismo motivo que totales_sumar_en(). */
+/* Deja el id en el anillo de dedupe SIN TOCAR de quien es el viaje abierto.
+ *
+ * Existe porque estado_set_en(h, NULL, id) BORRA el viaje abierto (escribe
+ * NVS_CARPETA=""), y eso solo vale cuando de verdad no hay ninguno: un apunte
+ * del historial del vehiculo (o de otra pantalla) pasaba por ahi y se llevaba
+ * por delante el viaje que la otra cabina tenia abierto -- sus apuntes
+ * siguientes al historial, su fin contestado "no habia viaje abierto" y su
+ * carpeta sin resumen para siempre (auditoria del 14-oct-2026). */
+static void id_anota_en(nvs_handle_t h, uint32_t id)
+{
+    uint32_t ring[IDS_RING_N] = {0};
+    size_t len = sizeof(ring);
+    nvs_get_blob(h, NVS_IDS_RING, ring, &len);
+    uint8_t cursor = 0;
+    nvs_get_u8(h, NVS_IDS_CURSOR, &cursor);
+    if (cursor >= IDS_RING_N) cursor = 0;
+    ring[cursor] = id;
+    nvs_set_blob(h, NVS_IDS_RING, ring, sizeof(ring));
+    nvs_set_u8(h, NVS_IDS_CURSOR, (uint8_t)((cursor + 1) % IDS_RING_N));
+}
+
 static void estado_set_en(nvs_handle_t h, const char *carpeta, uint32_t id)
 {
     if (carpeta) nvs_set_str(h, NVS_CARPETA, carpeta);
@@ -252,6 +283,136 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
     esp_err_t e = nvs_commit(h);
     nvs_close(h);
     return e;
+}
+
+/* ── DE QUE PANTALLA ES EL VIAJE ABIERTO (auditoria del 14-oct-2026) ─────────
+ *
+ * Hasta hoy 'dev' solo se miraba al ABRIR el viaje (op_inicio, que contesta 412
+ * si lo empezo otra pantalla). op_fin, op_descartar y op_registro no lo miraban,
+ * asi que una segunda cabina podia CERRAR o APARTAR el viaje de la primera
+ * --que seguia grabando-- y a partir de ahi todos sus apuntes se iban al
+ * historial del vehiculo con un 200, sin resumen y sin que nadie se enterase.
+ * Es el unico fallo de la lista que destruye datos de la OTRA pantalla, y en el
+ * montaje que se quiere montar (la 5" sustituyendo a la 3,5", con las dos
+ * conviviendo una temporada) se juega a diario. */
+
+/* El dueno del viaje abierto, tal y como lo apunto op_inicio. Cadena vacia si
+ * no hay viaje abierto o si lo empezo un firmware que no mandaba 'dev'. */
+static void dev_abierto(char *out, size_t n)
+{
+    out[0] = 0;
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    size_t sz = n;
+    if (nvs_get_str(h, NVS_DEV, out, &sz) != ESP_OK) out[0] = 0;
+    nvs_close(h);
+}
+
+static bool es_digito_hex(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+/* 12 digitos hex: lo que manda la cabina en 'dev' (su MAC). */
+static bool dev_es_mac(const char *dev)
+{
+    if (!dev || strlen(dev) != 12) return false;
+    for (int i = 0; i < 12; i++) if (!es_digito_hex(dev[i])) return false;
+    return true;
+}
+
+/* El byte alto del id es la MAC de la pantalla que lo genero (ver
+ * next_trip_seq() en config_storage.c de las cabinas). Devuelve -1 si no se
+ * puede saber: 0 no es un id valido, asi que un byte alto 0 es "no se sabe". */
+static int byte_de_id(uint32_t id)
+{
+    int b = (int)((id >> 24) & 0xFFu);
+    return b ? b : -1;
+}
+
+/* El ultimo byte de la MAC del 'dev' ("a1b2c3d4e5f6"). -1 si no es una MAC. */
+static int byte_de_dev(const char *dev)
+{
+    if (!dev) return -1;
+    size_t l = strlen(dev);
+    if (l < 2) return -1;
+    if (!es_digito_hex(dev[l - 2]) || !es_digito_hex(dev[l - 1])) return -1;
+    char par[3] = {dev[l - 2], dev[l - 1], 0};
+    long v = strtol(par, NULL, 16);
+    return (v >= 0 && v <= 255) ? (int)v : -1;
+}
+
+/* SI EL QUE PIDE ES OTRA PANTALLA.
+ *
+ * Ante la duda se contesta que NO es ajena (se trata como siempre): si no hay
+ * dueno apuntado -- firmware viejo, o viaje empezado antes de este cambio -- o
+ * el que pide no se identifica de ninguna forma, no se puede afirmar nada.
+ *
+ * Cuando el body trae 'dev' MANDA EL BODY (es lo que la cabina dice de si
+ * misma). Los apuntes no lo llevan, asi que ahi se usa el byte alto del id, que
+ * es la MAC de la pantalla que lo genero: por eso esto tambien protege contra
+ * una cabina con firmware viejo. */
+static bool pide_otra_pantalla(const cJSON *j, uint32_t id, bool admite_forzar)
+{
+    /* 'forzar' es la llave de la salida de emergencia: la pantalla NUEVA solo
+     * lo manda cuando el usuario ha confirmado en un dialogo que ese viaje lo
+     * empezo otra pantalla (puede estar en marcha). Una cabina con firmware
+     * viejo no lo manda, asi que se queda con el 409 y no puede destruir el
+     * viaje de la otra por accidente -- que es el fallo que esto viene a
+     * cerrar. Sin la llave, un viaje cuyo dueño ya no existe no se podria
+     * cerrar nunca (la P4 vive detras y no hay boton en ella). */
+    if (admite_forzar) {
+        /* 'true' (lo que manda la cabina) o un numero distinto de cero: un
+         * cJSON_IsTrue() a secas rechazaria un "forzar":1, y la cabina nueva se
+         * quedaria sin la salida de emergencia por un detalle de JSON. */
+        const cJSON *jf = cJSON_GetObjectItemCaseSensitive(j, "forzar");
+        if (cJSON_IsTrue(jf) || (cJSON_IsNumber(jf) && jf->valuedouble != 0))
+            return false;
+    }
+
+    char dueno[24];
+    dev_abierto(dueno, sizeof(dueno));
+    if (!dueno[0]) return false;
+
+    char pide[24] = {0};
+    const cJSON *jdev = cJSON_GetObjectItemCaseSensitive(j, "dev");
+    if (cJSON_IsString(jdev)) destino_seguro(jdev->valuestring, pide, sizeof(pide));
+    if (pide[0]) return viaje_dev_ajeno(pide, dueno) != 0;
+
+    int b = byte_de_id(id);
+    int d = byte_de_dev(dueno);
+    return (b > 0 && d >= 0 && b != d);
+}
+
+/* ¿La carpeta NO esta en la tarjeta? Solo se dice que NO cuando la FAT
+ * responde y dice que no (ENOENT) Y el directorio de viajes se puede abrir.
+ *
+ * Cualquier otro fallo de stat (EIO, EBUSY: tarjeta sacada sin desmontar, bus
+ * ocupado) NO es prueba de nada: datalogger_sd_montada() es un flag cacheado
+ * (s_card != NULL), no una prueba de que la FAT sea legible. Sin esto, un fallo
+ * transitorio cerraba el viaje vivo "sin resumen" (op_fin) o abria un viaje
+ * nuevo encima partiendo el que estaba en marcha (op_inicio) -- auditoria del
+ * 14-oct-2026. Ante la duda se dice que SI esta: el que escribe despues dara su
+ * 507, que es reintentable y no pierde nada. */
+static bool carpeta_fuera_de_la_tarjeta(const char *carpeta)
+{
+    struct stat st;
+    if (stat(carpeta, &st) == 0) return !S_ISDIR(st.st_mode);
+    if (errno != ENOENT) {
+        ESP_LOGW(TAG, "no puedo mirar si %s esta en la tarjeta (%s): no saco "
+                      "conclusiones", carpeta, strerror(errno));
+        return false;
+    }
+    DIR *d = opendir(VIAJES_DIR);
+    if (!d) {
+        ESP_LOGW(TAG, "el directorio de viajes no se puede abrir (%s): no saco "
+                      "conclusiones", strerror(errno));
+        return false;
+    }
+    closedir(d);
+    return true;
 }
 
 /* ── Reparacion al arrancar (auditoria del 13-oct-2026) ───────────────────── */
@@ -298,6 +459,13 @@ void viaje_reparar_al_arrancar(void)
     }
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
+        /* Un renombrado del destino que se quedo a medias se termina ahora, que
+         * es justo el caso del corte de corriente entre el commit del cierre y
+         * el rename (ver renombrado_pendiente_marcar). */
+        if (camera_sd_bus_lock(3000)) {
+            renombrado_pendiente_aplicar();
+            camera_sd_bus_unlock();
+        }
         marcar_huerfanas(NULL);      /* no hay viaje abierto: ninguna es "la de ahora" */
         return;
     }
@@ -352,7 +520,13 @@ void viaje_reparar_al_arrancar(void)
                           "el estado: los datos de ese viaje NO estan aqui",
                      carpeta);
     }
-    estado_set(NULL, 0);
+    /* El retorno SI importa (auditoria del 14-oct-2026): si la NVS no acepta el
+     * borrado, el viaje sigue abierto apuntando a una carpeta que no existe y
+     * la P4 se queda igual de atascada. Antes se tiraba sin decir nada. */
+    if (estado_set(NULL, 0) != ESP_OK)
+        ESP_LOGE(TAG, "NO he podido limpiar el viaje abierto de la NVS: la P4 "
+                      "sigue con %s abierto y sin carpeta. Habra que "
+                      "reintentarlo en el proximo arranque", carpeta);
     /* Ya no hay viaje abierto: las demas carpetas sin cierre que haya en ESTA
      * tarjeta tampoco se podran cerrar nunca, asi que se marcan ahora (antes
      * esta rama se volvia sin mirarlas y se quedaban "En curso" hasta el
@@ -394,16 +568,28 @@ static void marcar_huerfanas(const char *abierta)
         snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, ent->d_name);
         if (stat(ruta, &st) == 0) continue;                       /* ya marcado */
         snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/eventos.csv", ent->d_name);
-        if (stat(ruta, &st) != 0) continue;                       /* ni empezo */
+        /* Sin eventos.csv la carpeta se quedo a medias ANTES del diario (corte
+         * entre el mkdir y el apunte del inicio). Antes se saltaba ("ni
+         * empezo") y esa carpeta se quedaba "En curso" para siempre, sin poder
+         * cerrarla ni bajarla (auditoria del 14-oct-2026). Se marca igual: es
+         * lo que la hace descargable y con el nombre diciendo lo que es. */
+        bool con_diario = (stat(ruta, &st) == 0);
         snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/" MARCA_INCOMPLETO, ent->d_name);
         FILE *f = fopen(ruta, "w");
         if (!f) continue;
-        fprintf(f, "Este viaje NO SE CERRO y ya no se puede cerrar.\n\n"
-                   "Se quedo a medias al EMPEZAR: la carpeta llego a crearse pero la\n"
-                   "P4 no llego a apuntar el viaje (un corte de corriente en ese\n"
-                   "momento). No es el viaje abierto, asi que no hay forma de\n"
-                   "finalizarlo desde la cabina.\n\n"
-                   "Los datos que haya dentro son los que se llegaron a escribir.\n");
+        if (con_diario)
+            fprintf(f, "Este viaje NO SE CERRO y ya no se puede cerrar.\n\n"
+                       "Se quedo a medias al EMPEZAR: la carpeta llego a crearse pero la\n"
+                       "P4 no llego a apuntar el viaje (un corte de corriente en ese\n"
+                       "momento). No es el viaje abierto, asi que no hay forma de\n"
+                       "finalizarlo desde la cabina.\n\n"
+                       "Los datos que haya dentro son los que se llegaron a escribir.\n");
+        else
+            fprintf(f, "Esta carpeta de viaje se quedo VACIA.\n\n"
+                       "La P4 llego a crearla y no llego a escribir ni el apunte del\n"
+                       "inicio: un corte de corriente justo en ese momento. Aqui no hay\n"
+                       "ningun dato -- lo que se hubiera anotado despues no existe.\n");
+        fflush(f);
         fsync(fileno(f));   /* es una marca: no puede quedarse en la cache */
         if (fclose(f) == 0) marcadas++;
     }
@@ -533,6 +719,11 @@ static bool diario_en(const char *carpeta, const char *cuando,
      * perderse con un corte de corriente DESPUES de haberle contestado 200 al
      * satelite, que para entonces ya lo ha borrado de su cola. No habia ni un
      * fsync en todo el firmware. */
+    /* fflush ANTES del fsync (auditoria del 14-oct-2026): fsync va sobre el
+     * descriptor, no sobre el buffer de stdio del FILE*, asi que sin esto el
+     * dato seguia en RAM y el fsync no aseguraba nada -- el volcado real
+     * ocurria en el fclose, ya sin fsync detras. */
+    fflush(f);
     if (fsync(fileno(f)) != 0) {
         ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
         fclose(f);
@@ -566,6 +757,24 @@ static double nvs_get_d(nvs_handle_t h, const char *k)
     if (nvs_get_u64(h, k, &raw) != ESP_OK) return 0.0;
     double v; memcpy(&v, &raw, sizeof(v));
     return v;
+}
+
+/* Igual, pero DICE si la lectura fallo de verdad. Que una clave no este es
+ * normal (un viaje sin peajes no tiene NVS_T_PEAJE): eso es 0. Un error de NVS
+ * -- particion ilegible, entrada corrupta -- no lo es, y con nvs_get_d solo se
+ * convertia en un 0 indistinguible de "no hubo gasto ninguno" (auditoria del
+ * 14-oct-2026). */
+static bool nvs_get_d_verificado(nvs_handle_t h, const char *k, double *out)
+{
+    uint64_t raw = 0;
+    esp_err_t e = nvs_get_u64(h, k, &raw);
+    if (e == ESP_ERR_NVS_NOT_FOUND) { *out = 0.0; return true; }
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo leer %s de la NVS (%s)", k, esp_err_to_name(e));
+        return false;
+    }
+    memcpy(out, &raw, sizeof(*out));
+    return true;
 }
 
 static void nvs_set_d(nvs_handle_t h, const char *k, double v)
@@ -722,7 +931,27 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
 
     char abierto[CARPETA_MAX];
-    if (viaje_abierto(abierto, sizeof(abierto))) {
+    bool hay_abierto = viaje_abierto(abierto, sizeof(abierto));
+    /* Si el viaje abierto apunta a una carpeta que YA NO ESTA (sacaron la
+     * tarjeta, la formatearon o se borro desde el PC) esto era un 409 para
+     * siempre: ni se podia empezar un viaje nuevo, ni cerrar el viejo, ni
+     * apartarlo, y la unica salida era reiniciar la P4 -- que vive en la parte
+     * de atras (auditoria del 14-oct-2026). Con la SD MONTADA, que la carpeta no
+     * exista es un hecho: los datos de ese viaje no estan en esta tarjeta, asi
+     * que se limpia el estado y se sigue. Si la SD no esta montada, la ausencia
+     * no significa nada y se mantiene el 409 de siempre. */
+    if (hay_abierto && datalogger_sd_montada() && camera_sd_bus_lock(3000)) {
+        /* CON EL CERROJO: esto es I/O de tarjeta, igual que el resto. */
+        bool fuera = carpeta_fuera_de_la_tarjeta(abierto);
+        camera_sd_bus_unlock();
+        if (fuera) {
+            ESP_LOGE(TAG, "el viaje abierto %s no esta en la tarjeta montada: "
+                          "limpio el estado y sigo con el viaje nuevo", abierto);
+            estado_set(NULL, 0);
+            hay_abierto = false;
+        }
+    }
+    if (hay_abierto) {
         /* No se pisa un viaje abierto: seria perder la carpeta anterior sin que
          * nadie se enterara. El satelite tiene que cerrarlo primero.
          *
@@ -925,6 +1154,16 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             const cJSON *jd2 = cJSON_GetObjectItemCaseSensitive(j, "dev");
             char dev[24] = {0};
             if (cJSON_IsString(jd2)) destino_seguro(jd2->valuestring, dev, sizeof(dev));
+            /* SOLO SI ES UNA MAC (12 hex). La cabina manda "desconocido" cuando
+             * esp_wifi_get_mac() falla; guardado tal cual, ese viaje quedaba con
+             * un dueño que no volveria a coincidir nunca y la propia pantalla se
+             * llevaria un 409 al intentar cerrarlo (auditoria del 14-oct-2026).
+             * Sin dueño apuntado se trata como siempre. */
+            if (!dev_es_mac(dev)) {
+                if (dev[0]) ESP_LOGW(TAG, "dev '%s' no es una MAC: el viaje se "
+                                          "queda SIN dueño apuntado", dev);
+                dev[0] = 0;
+            }
             nvs_set_str(h, NVS_DEV, dev);
         }
         estado_set_en(h, carpeta, id);
@@ -957,27 +1196,48 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
  * cuentas -- y sin enterarse hasta que lo descargue meses despues. */
 static bool escribir_resumen(const char *carpeta)
 {
-    nvs_handle_t h;
     double litros = 0, combus = 0, peaje = 0, bombona = 0, manten = 0, agua = 0;
     double aloja = 0;
     uint32_t paradas = 0;
     uint64_t inicio = 0;
     uint8_t varias = 0;
     char moneda[8] = "EUR";
-    if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
-        litros  = nvs_get_d(h, NVS_T_LITROS);
-        combus  = nvs_get_d(h, NVS_T_COMBUS);
-        peaje   = nvs_get_d(h, NVS_T_PEAJE);
-        bombona = nvs_get_d(h, NVS_T_BOMBONA);
-        manten  = nvs_get_d(h, NVS_T_MANTEN);
-        agua    = nvs_get_d(h, NVS_T_AGUA);
-        aloja   = nvs_get_d(h, NVS_T_ALOJA);
-        nvs_get_u32(h, NVS_T_PARADAS, &paradas);
-        nvs_get_u64(h, NVS_T_INICIO, &inicio);
-        nvs_get_u8(h, NVS_T_VARIAS, &varias);
+    /* SI LA NVS NO SE PUEDE LEER, NO SE ESCRIBE EL RESUMEN (auditoria del
+     * 14-oct-2026): antes cualquier fallo de lectura se convertia en un 0 y el
+     * resumen salia con TODOS los totales a cero, el viaje se cerraba con 200 y
+     * quedaba "Listo" con unas cuentas que mienten. Devolviendo false el viaje
+     * sigue abierto y el fin se reintenta. */
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo abrir la NVS para el resumen de %s: no escribo "
+                      "unas cuentas a cero", carpeta);
+        return false;
+    }
+    bool lecturas_ok = true;
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_LITROS, &litros);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_COMBUS, &combus);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_PEAJE, &peaje);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_BOMBONA, &bombona);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_MANTEN, &manten);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_AGUA, &agua);
+    lecturas_ok &= nvs_get_d_verificado(h, NVS_T_ALOJA, &aloja);
+    {
+        esp_err_t e = nvs_get_u32(h, NVS_T_PARADAS, &paradas);
+        if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
+        e = nvs_get_u64(h, NVS_T_INICIO, &inicio);
+        if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
+        e = nvs_get_u8(h, NVS_T_VARIAS, &varias);
+        if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
         size_t n = sizeof(moneda);
-        nvs_get_str(h, NVS_T_MONEDA, moneda, &n);
-        nvs_close(h);
+        e = nvs_get_str(h, NVS_T_MONEDA, moneda, &n);
+        if (e == ESP_ERR_NVS_NOT_FOUND) snprintf(moneda, sizeof(moneda), "EUR");
+        else if (e != ESP_OK) lecturas_ok = false;
+    }
+    nvs_close(h);
+    if (!lecturas_ok) {
+        ESP_LOGE(TAG, "la NVS no me da los totales de %s: no escribo el resumen "
+                      "(el viaje sigue abierto y se reintenta)", carpeta);
+        return false;
     }
 
     char ruta[RUTA_MAX];
@@ -1091,7 +1351,9 @@ static bool escribir_resumen(const char *carpeta)
      * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. Y
      * fsync antes: este es EL fichero que dice si un viaje esta cerrado, y no
      * puede quedarse en la cache de la tarjeta despues de haber contestado que
-     * si (auditoria del 13-oct-2026). */
+     * si (auditoria del 13-oct-2026). Y fflush antes del fsync: fsync va sobre
+     * el descriptor, no sobre el buffer de stdio del FILE* (14-oct-2026). */
+    fflush(f);
     if (fsync(fileno(f)) != 0) {
         ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
         fclose(f);
@@ -1106,12 +1368,18 @@ static bool escribir_resumen(const char *carpeta)
  * estar entero y el analizador del PC se lo tragaria como bueno. Es justo el
  * fallo que mas cuesta detectar despues: no falta el fichero, falta UNA LINEA.
  *
- * Devuelve cuantos faltan (0 = entero). */
-static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
+ * DEVUELVE si se ha podido DEJAR DICHO lo que pasa (no si el viaje esta
+ * completo), y deja en *faltan_out cuantos apuntes faltan. Si hay que escribir
+ * la marca y no se puede -- tarjeta llena justo ahi -- devuelve false: cerrar
+ * entonces seria descargar el viaje como verificado sin serlo, que es justo lo
+ * que la marca existe para evitar (auditoria del 14-oct-2026: antes el fopen
+ * fallido no se miraba, no se escribia nada, y el viaje salia "Listo"). */
+static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *faltan_out)
 {
     const cJSON *je = cJSON_GetObjectItem(j, "eventos");
     char ruta[RUTA_MAX];
     snprintf(ruta, sizeof(ruta), "%s/" MARCA_INCOMPLETO, carpeta);
+    *faltan_out = 0;
 
     if (!cJSON_IsNumber(je)) {
         /* SIN 'eventos' NO SE PUEDE SABER, y decir "no falta nada" es mentir
@@ -1124,22 +1392,28 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
          * Ahora se deja dicho que no se pudo comprobar: no es lo mismo un viaje
          * verificado que uno sin verificar. */
         FILE *f = fopen(ruta, "w");
-        if (f) {
-            fprintf(f, "Este viaje se cerro SIN PODER COMPROBARLO.\n\n"
-                       "El cierre lo mando una pantalla que no llevaba la cuenta de\n"
-                       "los apuntes generados (se cambiaria la cabina, o se le borro\n"
-                       "la memoria a mitad de viaje), asi que la P4 no puede saber si\n"
-                       "falta algo.\n\n"
-                       "Es probable que este entero, pero NO esta verificado: comparalo\n"
-                       "con lo que recuerdes antes de darlo por bueno.\n");
-            if (fsync(fileno(f)) != 0)
-                ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
-            if (fclose(f) != 0)
-                ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+        if (!f) {
+            ESP_LOGE(TAG, "no puedo escribir %s (disco lleno?): el cierre SIN "
+                          "VERIFICAR no quedaria marcado", ruta);
+            return false;
+        }
+        fprintf(f, "Este viaje se cerro SIN PODER COMPROBARLO.\n\n"
+                   "El cierre lo mando una pantalla que no llevaba la cuenta de\n"
+                   "los apuntes generados (se cambiaria la cabina, o se le borro\n"
+                   "la memoria a mitad de viaje), asi que la P4 no puede saber si\n"
+                   "falta algo.\n\n"
+                   "Es probable que este entero, pero NO esta verificado: comparalo\n"
+                   "con lo que recuerdes antes de darlo por bueno.\n");
+        fflush(f);
+        int e_sync = fsync(fileno(f));
+        int e_close = fclose(f);
+        if (e_sync != 0 || e_close != 0) {
+            ESP_LOGE(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+            return false;
         }
         ESP_LOGW(TAG, "cierre SIN VERIFICAR de %s: el fin no traia contador de "
                       "eventos", carpeta);
-        return 0;                            /* no se puede afirmar que falten */
+        return true;                         /* no se puede afirmar que falten */
     }
 
     uint32_t esperados = (uint32_t)je->valuedouble;
@@ -1151,26 +1425,80 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
     }
     aplicados++;                            /* este mismo fin */
 
-    if (aplicados >= esperados) return 0;
-    uint32_t faltan = esperados - aplicados;
-
-    FILE *f = fopen(ruta, "w");
-    if (f) {
-        fprintf(f, "A este viaje le faltan %lu apunte%s.\n\n",
-                (unsigned long)faltan, faltan == 1 ? "" : "s");
-        fprintf(f, "La pantalla de la cabina dice haber generado %lu y aqui han\n"
-                   "llegado %lu. Se perdieron por el camino: la cola se lleno, o\n"
-                   "hubo un reinicio en mal momento.\n\n",
-                (unsigned long)esperados, (unsigned long)aplicados);
-        fprintf(f, "Lo demas es correcto. Este aviso esta para que no des el\n"
-                   "viaje por entero al analizarlo.\n");
-        if (fclose(f) != 0) {
-            ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+    /* ADEMAS DE LOS CONTADORES, LAS FILAS (auditoria del 14-oct-2026): los
+     * totales van por NVS, asi que una fila que se quedo a medias por un corte
+     * -- el fsync llega al final del fichero, no en cada linea -- no se notaba
+     * de ninguna forma. Se cuentan las lineas CON DATOS de eventos.csv (menos
+     * la cabecera) y, si hay MENOS que apuntes aplicados, es que se perdio
+     * alguna. Solo en ese sentido: filas de mas las hay legitimas (la nota de
+     * hora corregida, los volcados, un fin reintentado), y contarlas como
+     * sobrantes marcaria INCOMPLETO un viaje entero. */
+    uint32_t filas = 0;
+    {
+        char ruta_ev[RUTA_MAX];
+        snprintf(ruta_ev, sizeof(ruta_ev), "%s/eventos.csv", carpeta);
+        FILE *fe = fopen(ruta_ev, "r");
+        if (fe) {
+            char linea[512];
+            bool cabecera = true;
+            while (fgets(linea, sizeof(linea), fe)) {
+                bool vacia = (linea[0] == '\n' || linea[0] == '\r' || linea[0] == 0);
+                if (cabecera) { cabecera = false; continue; }
+                if (!vacia) filas++;
+            }
+            fclose(fe);
         }
     }
-    ESP_LOGW(TAG, "viaje INCOMPLETO: esperados %lu, aplicados %lu",
-             (unsigned long)esperados, (unsigned long)aplicados);
-    return faltan;
+    if (filas > 0 && filas < aplicados) {
+        uint32_t por_filas = aplicados - filas;
+        ESP_LOGW(TAG, "en %s hay %lu filas y %lu apuntes aplicados: faltan %lu "
+                      "lineas en el diario", carpeta, (unsigned long)filas,
+                 (unsigned long)aplicados, (unsigned long)por_filas);
+        if (por_filas > *faltan_out) *faltan_out = por_filas;
+    }
+
+    if (aplicados < esperados) {
+        uint32_t faltan = esperados - aplicados;
+        if (faltan > *faltan_out) *faltan_out = faltan;
+    }
+    if (*faltan_out == 0) {
+        /* Y SI YA NO FALTA NADA, LA MARCA SE RETIRA (auditoria del 14-oct-2026).
+         * La marca se escribe antes del resumen: si el resumen falla (507, sin
+         * sitio), el viaje sigue abierto CON la marca puesta; al reintentar con
+         * sitio los apuntes que faltaban ya han llegado (la cabina los reintenta
+         * cada 15 s) y sin este remove() el viaje se cerraba marcado INCOMPLETO
+         * para siempre: estado_de() mira la marca ANTES que el resumen, asi que
+         * la descarga quedaba en "de todos modos" y el nombre gritando. */
+        if (remove(ruta) == 0) ESP_LOGI(TAG, "retirada la marca INCOMPLETO de %s", carpeta);
+        return true;
+    }
+
+    uint32_t faltan = *faltan_out;
+    FILE *f = fopen(ruta, "w");
+    if (!f) {
+        ESP_LOGE(TAG, "no puedo escribir %s (disco lleno?): el viaje quedaria "
+                      "como verificado faltandole %lu apuntes", ruta,
+                 (unsigned long)faltan);
+        return false;
+    }
+    fprintf(f, "A este viaje le faltan %lu apunte%s.\n\n",
+            (unsigned long)faltan, faltan == 1 ? "" : "s");
+    fprintf(f, "La pantalla de la cabina dice haber generado %lu y aqui han\n"
+               "llegado %lu. Se perdieron por el camino: la cola se lleno, o\n"
+               "hubo un reinicio en mal momento.\n\n",
+            (unsigned long)esperados, (unsigned long)aplicados);
+    fprintf(f, "Lo demas es correcto. Este aviso esta para que no des el\n"
+               "viaje por entero al analizarlo.\n");
+    fflush(f);
+    int e_sync = fsync(fileno(f));
+    int e_close = fclose(f);
+    if (e_sync != 0 || e_close != 0) {
+        ESP_LOGE(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+        return false;
+    }
+    ESP_LOGW(TAG, "viaje INCOMPLETO: esperados %lu, aplicados %lu, filas %lu",
+             (unsigned long)esperados, (unsigned long)aplicados, (unsigned long)filas);
+    return true;
 }
 
 /* ── APUNTAR EL DESTINO NUEVO, SIN RENOMBRAR NADA (13-oct-2026) ──────────────
@@ -1189,14 +1517,28 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
  * borra, porque el cambio era del viaje anterior. */
 static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
-    (void)id;
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
-        /* Sin viaje abierto no hay a que cambiarle el nombre. 409 y no 200: la
-         * cabina lo reintenta por su cola, y si el viaje ya se cerro, el fin
-         * que venga detras lo resolvera. */
-        httpd_resp_set_status(req, "409 Conflict");
-        httpd_resp_sendstr(req, "no hay viaje abierto");
+        /* Sin viaje abierto no hay a que cambiarle el nombre. 200 y no 409
+         * (auditoria del 14-oct-2026): el destino es ACCESORIO -- el fin lo
+         * lleva, y la cabina lo tiene en su NVS -- y con 409 la cola del
+         * satelite se queda reintentando para siempre este mensaje, con todo lo
+         * de detras (incluido el fin) atascado detras. */
+        ESP_LOGW(TAG, "destino sin viaje abierto: lo doy por hecho");
+        httpd_resp_sendstr(req, "no hay viaje abierto: destino ignorado");
+        return ESP_OK;
+    }
+
+    /* Y SI EL VIAJE ES DE OTRA PANTALLA, ESTE AVISO NO SE APUNTA (auditoria del
+     * 14-oct-2026): esto es lo unico que escribe NVS_DESTINO, y op_fin lo usa
+     * como respaldo cuando su fin no trae destino. Un aviso de la pantalla B
+     * entregado tarde (con el viaje de A abierto) hacia que el FIN DE A
+     * renombrase su carpeta con el destino de B. 200 igualmente: es un aviso
+     * accesorio y un error atascaria la cola. */
+    if (pide_otra_pantalla(j, id, false)) {
+        ESP_LOGW(TAG, "destino de OTRA pantalla con el viaje %s abierto: lo ignoro",
+                 carpeta);
+        httpd_resp_sendstr(req, "ese viaje no es de esta pantalla: destino ignorado");
         return ESP_OK;
     }
 
@@ -1228,8 +1570,113 @@ static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
     return ESP_OK;
 }
 
+/* Renombrado del cierre que se quedo a medias.
+ *
+ * op_fin limpia el estado en NVS y DESPUES renombra la carpeta (a proposito: al
+ * reves la NVS podia quedar apuntando a una carpeta que ya no existe). Si se
+ * corta la corriente entre las dos cosas, o si el rename falla -- destino
+ * ocupado, tarjeta llena --, el viaje queda cerrado con el nombre VIEJO. El
+ * reintento del fin caia entonces en "no habia viaje abierto" y el renombrado
+ * no se hacia NUNCA, en silencio: el usuario habia cambiado el destino a mitad
+ * de viaje, la pantalla se lo enseno toda la ruta, y la carpeta se quedaba con
+ * el nombre de antes para siempre (auditoria del 14-oct-2026).
+ *
+ * Se apunta lo que hay que renombrar ANTES de limpiar el estado, y lo termina
+ * el siguiente fin (el reintento de la cabina, o el cierre de otro viaje). */
+static void renombrado_pendiente_marcar(const char *de, const char *a)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_set_str(h, NVS_REN_DE, de) == ESP_OK &&
+        nvs_set_str(h, NVS_REN_A, a) == ESP_OK)
+        nvs_commit(h);
+    else
+        ESP_LOGW(TAG, "no he podido apuntar el renombrado pendiente %s -> %s", de, a);
+    nvs_close(h);
+}
+
+static void renombrado_pendiente_olvidar(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_erase_key(h, NVS_REN_DE);
+    nvs_erase_key(h, NVS_REN_A);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+/* Aplica el renombrado pendiente, si lo hay. Se llama con la SD YA bloqueada. */
+static void renombrado_pendiente_aplicar(void)
+{
+    char de[64] = {0}, a[64] = {0};
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    size_t nd = sizeof(de), na = sizeof(a);
+    if (nvs_get_str(h, NVS_REN_DE, de, &nd) != ESP_OK) de[0] = 0;
+    if (nvs_get_str(h, NVS_REN_A, a, &na) != ESP_OK) a[0] = 0;
+    nvs_close(h);
+    if (!de[0] || !a[0]) return;
+
+    char viejo[RUTA_MAX], nuevo[RUTA_MAX];
+    snprintf(viejo, sizeof(viejo), VIAJES_DIR "/%s", de);
+    snprintf(nuevo, sizeof(nuevo), VIAJES_DIR "/%s", a);
+
+    /* NO SE TOCA EL VIAJE ABIERTO (auditoria del 14-oct-2026). La marca se
+     * apunta ANTES de limpiar el estado, asi que si el cierre no llego a
+     * completarse (507 del resumen, fallo de NVS) el viaje SIGUE ABIERTO con la
+     * marca puesta: sin este guard, el reintento del fin renombraba la carpeta
+     * VIVA y luego el stat de op_fin fallaba -> estado limpio y 200 "sin
+     * resumen", con la telemetria y los apuntes escribiendo a una ruta que ya no
+     * existe. */
+    char abierto[CARPETA_MAX];
+    if (viaje_abierto(abierto, sizeof(abierto))) {
+        const char *base = strrchr(abierto, '/');
+        base = base ? base + 1 : abierto;
+        if (!strcmp(base, de)) {
+            ESP_LOGW(TAG, "renombrado pendiente %s: es el viaje ABIERTO, no lo toco", de);
+            return;
+        }
+    }
+    struct stat st;
+    /* Y solo se renombra lo que esta CERRADO: un cierre siempre deja
+     * resumen.txt (op_fin no cierra sin el). */
+    snprintf(viejo, sizeof(viejo), VIAJES_DIR "/%s/resumen.txt", de);
+    if (stat(viejo, &st) != 0) {
+        ESP_LOGW(TAG, "renombrado pendiente %s: no tiene resumen.txt, no lo toco", de);
+        return;
+    }
+    snprintf(viejo, sizeof(viejo), VIAJES_DIR "/%s", de);
+    if (stat(viejo, &st) != 0) {
+        /* Ya esta hecho (o la carpeta se fue): no hay nada que hacer. */
+        ESP_LOGI(TAG, "renombrado pendiente %s: la carpeta vieja no esta, lo doy por hecho", de);
+        renombrado_pendiente_olvidar();
+        return;
+    }
+    if (stat(nuevo, &st) == 0) {
+        /* El destino ya existe: no se pisa. Se deja el nombre viejo, que es un
+         * estado valido (los datos y el resumen estan dentro). */
+        ESP_LOGW(TAG, "renombrado pendiente %s -> %s: el destino ya existe, no lo toco", de, a);
+        renombrado_pendiente_olvidar();
+        return;
+    }
+    if (rename(viejo, nuevo) == 0) {
+        ESP_LOGI(TAG, "renombrado pendiente TERMINADO: %s -> %s", viejo, nuevo);
+        renombrado_pendiente_olvidar();
+    } else {
+        ESP_LOGW(TAG, "renombrado pendiente %s -> %s: sigue sin poder hacerse", viejo, nuevo);
+    }
+}
+
 static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
+    /* Si un cierre anterior dejo el renombrado del destino a medias, se termina
+     * aqui: este es el primer momento en que se vuelve a tocar la tarjeta con
+     * calma (ver renombrado_pendiente_marcar). */
+    if (camera_sd_bus_lock(3000)) {
+        renombrado_pendiente_aplicar();
+        camera_sd_bus_unlock();
+    }
+
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
         /* Sin viaje abierto el fin ya no tiene nada que cerrar. Se responde OK
@@ -1241,22 +1688,46 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
+    /* EL CIERRE LO PIDE EL DUENO (auditoria del 14-oct-2026). 409 y no 412
+     * porque esto llega por la COLA de la cabina: el 409 es el codigo que ya
+     * sabe leer y enseñar, y el 412 solo lo entiende la pantalla que lo pide al
+     * empezar. Sin esto, "GUARDARLO" desde la otra pantalla cerraba -- y le
+     * ponia resumen -- al viaje que la primera seguia grabando. */
+    if (pide_otra_pantalla(j, id, true)) {
+        ESP_LOGW(TAG, "fin de %s RECHAZADO: lo pide otra pantalla", carpeta);
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "ese viaje lo empezo otra pantalla: cierralo desde ella");
+        return ESP_OK;
+    }
+
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
         httpd_resp_sendstr(req, "tarjeta ocupada");
         return ESP_OK;
     }
     /* La carpeta del viaje abierto puede NO ESTAR: se saco la tarjeta y se metio
-     * otra, se formateo, o se borro desde el PC. Antes esto se descubria por las
-     * malas -- diario() fallaba, salia un 507 generico y el viaje se quedaba
-     * abierto apuntando al vacio para siempre --. Se dice lo que pasa y se deja
-     * que lo arregle la reparacion de arranque (viaje_reparar_al_arrancar). */
-    struct stat st_carpeta;
-    if (stat(carpeta, &st_carpeta) != 0) {
+     * otra, se formateo, o se borro desde el PC. Antes esto era un 507 para
+     * SIEMPRE: la unica salida era reiniciar la P4 con la tarjeta puesta, y la
+     * P4 vive en la parte de atras (auditoria del 14-oct-2026). Si la SD ESTA
+     * MONTADA, que la carpeta no exista es un hecho consumado: sus datos no
+     * estan en esta tarjeta, asi que se limpia el estado y se dice. El 507 se
+     * queda para cuando la SD NO esta montada, porque ahi su ausencia no
+     * significa nada (puede volver a ponerse). */
+    if (datalogger_sd_montada() && carpeta_fuera_de_la_tarjeta(carpeta)) {
         camera_sd_bus_unlock();
-        ESP_LOGE(TAG, "el viaje abierto %s NO ESTA en la tarjeta: no puedo "
-                      "cerrarlo. Si has cambiado o formateado la tarjeta, "
-                      "reinicia la P4 y su estado se limpia solo", carpeta);
+        {
+            ESP_LOGE(TAG, "el viaje abierto %s NO ESTA en la tarjeta montada "
+                          "(cambiada, formateada o borrada desde el PC): limpio "
+                          "el estado. Los datos de ese viaje no estan aqui",
+                     carpeta);
+            estado_set(NULL, id);
+            httpd_resp_sendstr(req, "la carpeta del viaje ya no estaba: "
+                                    "estado limpiado, sin resumen");
+            return ESP_OK;
+        }
+        ESP_LOGE(TAG, "el viaje abierto %s NO ESTA donde la tarjeta dice (y la "
+                      "SD no esta montada, o el fallo no es un ENOENT claro): no "
+                      "puedo cerrarlo", carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "la carpeta del viaje no esta en la tarjeta");
         return ESP_OK;
@@ -1266,7 +1737,19 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
      * y dejar el viaje abierto por eso seria peor que el mal que evita. */
     ruta_cerrar(carpeta);
-    uint32_t faltan = comprobar_completo(j, carpeta);
+    uint32_t faltan = 0;
+    if (!comprobar_completo(j, carpeta, &faltan)) {
+        /* No se ha podido DEJAR DICHO que falta algo (o que no se pudo
+         * verificar). Cerrar asi seria bajarlo como verificado sin serlo: el
+         * viaje sigue abierto y el fin se reintenta cuando se pueda escribir. */
+        camera_sd_bus_unlock();
+        anota_fallo_escritura();
+        ESP_LOGE(TAG, "no he podido marcar %s como INCOMPLETO/SIN VERIFICAR: el "
+                      "viaje NO se cierra", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido marcar el viaje: sigue abierto");
+        return ESP_OK;
+    }
     escrito = escribir_resumen(carpeta) && escrito;
     if (faltan) {
         FILE *rf; char rr[RUTA_MAX];
@@ -1278,8 +1761,16 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
             fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
                         MARCA_INCOMPLETO ".\n");
             /* fsync: este añadido es lo que deja claro que faltan apuntes. */
+            fflush(rf);
             fsync(fileno(rf));
             fclose(rf);
+        } else {
+            /* La marca INCOMPLETO.txt YA esta escrita (es la que manda para el
+             * estado y para el nombre), asi que esto es solo el resumen: se
+             * deja constancia y se sigue, que el cierre no depende de ello. */
+            ESP_LOGW(TAG, "no he podido anotar en resumen.txt que faltan %lu "
+                          "apuntes (la marca INCOMPLETO.txt si esta)",
+                     (unsigned long)faltan);
         }
     }
 
@@ -1309,21 +1800,6 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
-    /* El cierre YA ESTA en la tarjeta. El estado se limpia ANTES de renombrar:
-     * asi el nombre de la carpeta y lo que la P4 cree que hay abierto no pueden
-     * quedar desalineados, ni siquiera si se corta la corriente en medio. Si el
-     * corte llega entre el commit y el rename, el viaje queda cerrado con el
-     * nombre viejo, que es un estado perfectamente valido (los datos y el
-     * resumen estan dentro). */
-    if (estado_set(NULL, id) != ESP_OK) {
-        camera_sd_bus_unlock();
-        ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
-                      "el viaje sigue abierto y habra que reintentar", carpeta);
-        httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
-        return ESP_OK;
-    }
-
     /* ── CAMBIO DE DESTINO APLAZADO AL CIERRE (12-oct-2026) ─────────────────
      *
      * El satelite deja cambiar el destino a mitad de viaje, pero NO renombra
@@ -1331,13 +1807,19 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * Es a proposito y esta razonado en cabina5/docs/RELEVO_2026-10-12.md:
      * mientras el viaje esta abierto hay ficheros escribiendose (ruta,
      * telemetria) y renombrar la carpeta por debajo obligaria a cerrarlos,
-     * renombrar y reabrirlos, dependiendo ademas de que la P4 contestara en ese
-     * momento. Al cerrar, los ficheros ya se cierran de todas formas y el
+     * renombrarlos y reabrirlos, dependiendo ademas de que la P4 contestara en
+     * ese momento. Al cerrar, los ficheros ya se cierran de todas formas y el
      * resumen ya esta escrito: renombrar aqui es un solo rename() y no hay
      * nada dentro de la carpeta que apunte a su nombre (todo va por fecha_hora).
      *
      * La FECHA del nombre se conserva: el viaje empezo ese dia, aunque el
-     * destino se cambiara despues. Solo cambia lo que va detras del guion. */
+     * destino se cambiara despues. Solo cambia lo que va detras del guion.
+     *
+     * SE CALCULA ANTES DE LIMPIAR EL ESTADO (auditoria del 14-oct-2026): si el
+     * nombre nuevo se decide despues y el rename no llega a hacerse (corte de
+     * corriente, destino ocupado), el reintento del fin ya no tiene de donde
+     * sacarlo y el renombrado no se hacia nunca. Se apunta en NVS antes del
+     * commit y lo termina renombrado_pendiente_aplicar(). */
     const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "destino");
     char nd[DESTINO_MAX] = {0};
     if (cJSON_IsString(jd) && jd->valuestring[0]) {
@@ -1353,38 +1835,65 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
         if (nd[0]) ESP_LOGI(TAG, "fin sin destino: uso el apuntado antes (%s)", nd);
     }
-    if (nd[0]) {
-
-        char fecha[12] = {0};
+    char nueva[RUTA_MAX] = {0};
+    bool hay_renombrado = false;
+    {
         const char *base = strrchr(carpeta, '/');
         base = base ? base + 1 : carpeta;          /* "2026-10-11_arantzazu" */
-        const char *guion = strchr(base, '_');
-        size_t nf = guion ? (size_t)(guion - base) : 0;
-        if (nf >= sizeof(fecha)) nf = sizeof(fecha) - 1;
-        memcpy(fecha, base, nf);
-        fecha[nf] = 0;
+        if (nd[0]) {
+            char fecha[12] = {0};
+            const char *guion = strchr(base, '_');
+            size_t nf = guion ? (size_t)(guion - base) : 0;
+            if (nf >= sizeof(fecha)) nf = sizeof(fecha) - 1;
+            memcpy(fecha, base, nf);
+            fecha[nf] = 0;
 
-        char nueva[RUTA_MAX];
-        int nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s", fecha, nd);
-        /* Si el destino no ha cambiado de verdad, no se toca nada. */
-        if (nn > 0 && nn < (int)sizeof(nueva) && strcmp(nueva, carpeta) != 0) {
-            /* rename() falla si el destino ya existe: se numera, igual que al
-             * apartar un viaje (op_borrar). */
-            struct stat st;
-            for (int k = 2; k < 100 && stat(nueva, &st) == 0; k++) {
-                nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s_%d",
-                              fecha, nd, k);
-                if (nn < 0 || nn >= (int)sizeof(nueva)) break;
+            int nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s", fecha, nd);
+            /* Si el destino no ha cambiado de verdad, no se toca nada. */
+            if (nn > 0 && nn < (int)sizeof(nueva) && strcmp(nueva, carpeta) != 0) {
+                /* rename() falla si el destino ya existe: se numera, igual que al
+                 * apartar un viaje. */
+                struct stat st;
+                for (int k = 2; k < 100 && stat(nueva, &st) == 0; k++) {
+                    nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s_%d",
+                                  fecha, nd, k);
+                    if (nn < 0 || nn >= (int)sizeof(nueva)) break;
+                }
+                hay_renombrado = true;
+                char a[64];
+                snprintf(a, sizeof(a), "%s", nueva + strlen(VIAJES_DIR) + 1);
+                renombrado_pendiente_marcar(base, a);
             }
-            if (rename(carpeta, nueva) == 0) {
-                ESP_LOGI(TAG, "DESTINO CAMBIADO: %s -> %s", carpeta, nueva);
-            } else {
-                /* El viaje se cierra igual: el resumen y los datos estan bien,
-                 * solo se queda con el nombre viejo. Perder el cierre por no
-                 * poder renombrar seria mucho peor. */
-                ESP_LOGW(TAG, "no he podido renombrar %s a %s: se queda con el "
-                              "nombre viejo", carpeta, nueva);
-            }
+        }
+    }
+
+    /* El cierre YA ESTA en la tarjeta. El estado se limpia ANTES de renombrar:
+     * asi el nombre de la carpeta y lo que la P4 cree que hay abierto no pueden
+     * quedar desalineados, ni siquiera si se corta la corriente en medio. Si el
+     * corte llega entre el commit y el rename, el viaje queda cerrado con el
+     * nombre viejo -- estado valido: los datos y el resumen estan dentro -- y el
+     * renombrado lo termina el siguiente fin (ver renombrado_pendiente_*). */
+    if (estado_set(NULL, id) != ESP_OK) {
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
+                      "el viaje sigue abierto y habra que reintentar", carpeta);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
+        return ESP_OK;
+    }
+
+    if (hay_renombrado) {
+        if (rename(carpeta, nueva) == 0) {
+            ESP_LOGI(TAG, "DESTINO CAMBIADO: %s -> %s", carpeta, nueva);
+            renombrado_pendiente_olvidar();
+        } else {
+            /* El viaje se cierra igual: el resumen y los datos estan bien, solo
+             * se queda con el nombre viejo. Perder el cierre por no poder
+             * renombrar seria mucho peor. La marquita queda apuntada para
+             * intentarlo en el proximo fin. */
+            ESP_LOGW(TAG, "no he podido renombrar %s a %s: se queda con el "
+                          "nombre viejo (reintentare al proximo cierre)",
+                     carpeta, nueva);
         }
     }
     camera_sd_bus_unlock();
@@ -1502,13 +2011,26 @@ static esp_err_t op_borrar(httpd_req_t *req, const cJSON *j, uint32_t id)
 
 static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
-    (void)j;
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) {
         /* Mismo criterio que op_fin: casi siempre es un reintento de algo que
          * ya se aplico, y un error dejaria al satelite atascado. */
         ESP_LOGW(TAG, "descartar sin viaje abierto: lo doy por hecho");
         httpd_resp_sendstr(req, "no habia viaje abierto");
+        return ESP_OK;
+    }
+
+    /* APARTAR TAMPOCO LO PUEDE HACER CUALQUIERA (auditoria del 14-oct-2026).
+     * Esto empieza por "(void)j;" y era el agujero mas gordo de todos: la
+     * segunda pantalla recibia 412 al empezar, tenia delante el boton "apartarlo
+     * (era una prueba)" y con el renombraba a DESCARTADO_ la carpeta del viaje
+     * REAL de la primera, que seguia grabando. Sus apuntes se iban al historial
+     * del vehiculo con un 200 y su fin se daba por hecho: el viaje entero
+     * perdido como viaje, en silencio. */
+    if (pide_otra_pantalla(j, id, true)) {
+        ESP_LOGW(TAG, "descartar %s RECHAZADO: lo pide otra pantalla", carpeta);
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "ese viaje lo empezo otra pantalla: apartalo desde ella");
         return ESP_OK;
     }
 
@@ -1541,6 +2063,17 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
         n_dst = snprintf(destino, sizeof(destino),
                          VIAJES_DIR "/" MARCA_DESCARTADO "%s_%d", nombre, k);
         if (n_dst < 0 || n_dst >= (int)sizeof(destino)) break;
+    }
+    /* El bucle comprobaba el candidato ANTES de asignarlo, asi que el ultimo
+     * ("..._99") no se llegaba a mirar y el rename fallaba con un 500 opaco.
+     * Con dos pruebas del mismo dia no se llega ni de lejos, pero el error
+     * tiene que decir lo que pasa (auditoria del 14-oct-2026). */
+    if (stat(destino, &st) == 0) {
+        camera_sd_bus_unlock();
+        ESP_LOGE(TAG, "no hay nombre libre para apartar %s", carpeta);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "no hay nombre libre para apartarlo");
+        return ESP_OK;
     }
 
     diario(carpeta, "descartado", "");
@@ -1632,6 +2165,7 @@ static bool csv_por_tipo(const char *carpeta, const char *tipo,
      * disco lleno, los fprintf de arriba solo llenan un buffer. Y fsync antes,
      * para que no se quede en la cache de la tarjeta despues de haberle dicho
      * al satelite que estaba guardado. */
+    fflush(f);   /* ver la nota de diario_en(): fsync no vacia el buffer de stdio */
     if (fsync(fileno(f)) != 0) {
         ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
         fclose(f);
@@ -1655,6 +2189,28 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_sendstr(req, "falta tipo");
         return ESP_OK;
     }
+    /* El 'tipo' va al NOMBRE DE UN FICHERO ("<tipo>s.csv"), asi que se filtra
+     * antes de usarlo: un tipo con "/" o ".." escribiria fuera de la carpeta
+     * del viaje (auditoria del 14-oct-2026). No es alcanzable desde la pantalla
+     * -- los tipos los pone el firmware -- pero esto es una API HTTP. */
+    char tipo[24];
+    {
+        size_t k = 0;
+        for (size_t i = 0; jt->valuestring[i] && k + 1 < sizeof(tipo); i++) {
+            char c = jt->valuestring[i];
+            bool vale = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '_' || c == '-';
+            if (vale) tipo[k++] = c;
+        }
+        tipo[k] = 0;
+    }
+    if (!tipo[0]) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "tipo invalido");
+        return ESP_OK;
+    }
+    if (strcmp(tipo, jt->valuestring) != 0)
+        ESP_LOGW(TAG, "tipo con caracteres raros: '%s' -> '%s'", jt->valuestring, tipo);
 
     /* Sin viaje abierto el apunte NO se rechaza: se apunta al historial del
      * vehiculo en vez de perderse.
@@ -1675,6 +2231,26 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
      * el destino habitual de las puntuales. */
     char carpeta[CARPETA_MAX];
     bool en_viaje = viaje_abierto(carpeta, sizeof(carpeta));
+    /* 'en_viaje' dice DONDE SE ESCRIBE el apunte; 'viaje_en_nvs' dice si la NVS
+     * apunta a ese viaje abierto. Son dos cosas distintas desde que existe el
+     * desvio a /sdcard/vehiculo: desviar el apunte NO puede borrar el viaje
+     * abierto de la NVS (ver id_anota_en). */
+    bool viaje_en_nvs = en_viaje;
+
+    /* UN APUNTE DE OTRA PANTALLA NO SE MEZCLA CON ESTE VIAJE (auditoria del
+     * 14-oct-2026): si el viaje abierto lo empezo otra cabina, este apunte no es
+     * suyo -- la segunda pantalla puede estar grabando su propia salida sin
+     * saber que la P4 ya tenia una abierta -- y meterlo en la misma carpeta
+     * dejaba los dos viajes revueltos en los mismos CSV, sin forma de separarlos
+     * despues. Se manda al historial del vehiculo, que es la red de seguridad
+     * que ya existe, y se contesta 200 para no atascar la cola del satelite: un
+     * 409 ahi la dejaria reintentando para siempre algo que no va a cambiar. */
+    if (en_viaje && pide_otra_pantalla(j, id, false)) {
+        ESP_LOGW(TAG, "apunte de OTRA pantalla con el viaje %s abierto: va al "
+                      "historial del vehiculo en vez de mezclarse", carpeta);
+        en_viaje = false;      /* se escribe en VEHICULO_DIR... */
+        /* ...pero el viaje ABIERTO sigue siendo el de la otra: ni se toca. */
+    }
     if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
     /* OJO: esta lectura es SIN el cerrojo (se toma mas abajo), asi que la
      * carpeta se vuelve a comprobar con el cerrojo tomado: op_fin cierra y
@@ -1685,15 +2261,23 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     /* Cuando ocurrio. */
     const cJSON *jts = cJSON_GetObjectItem(j, "ts");
     const cJSON *ja  = cJSON_GetObjectItem(j, "aprox");
-    bool aprox = cJSON_IsTrue(ja) || !cJSON_IsNumber(jts) || jts->valuedouble < 1e9;
-    time_t t = aprox ? time(NULL) : (time_t)jts->valuedouble;
+    /* EL ts TIENE COTA POR ARRIBA (auditoria del 14-oct-2026): venia de la
+     * cabina sin comprobar nada, y un valor absurdo hacia que strftime
+     * devolviera 0 dejando 'cuando' SIN INICIALIZAR, que acababa tal cual en el
+     * CSV. Fuera de [2001, 2100) no es una hora: se trata como aproximada y se
+     * pone la de recepcion, que es lo honesto. */
+    double ts_crudo = cJSON_IsNumber(jts) ? jts->valuedouble : 0.0;
+    bool aprox = cJSON_IsTrue(ja) || !cJSON_IsNumber(jts) ||
+                 ts_crudo < 1000000000.0 || ts_crudo > 4102444800.0;
+    time_t t = aprox ? time(NULL) : (time_t)ts_crudo;
     struct tm tm_l;
     /* El ts del satelite ya viene en hora LOCAL (deriva de epoch_local), asi
      * que gmtime; la hora de recepcion, en cambio, es un epoch de verdad y
      * necesita localtime. Mezclarlos correria una de las dos dos horas. */
-    if (aprox) localtime_r(&t, &tm_l); else gmtime_r(&t, &tm_l);
-    char cuando[20];
-    strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", &tm_l);
+    char cuando[20] = {0};
+    if ((aprox ? localtime_r(&t, &tm_l) : gmtime_r(&t, &tm_l)) == NULL ||
+        strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", &tm_l) == 0)
+        snprintf(cuando, sizeof(cuando), "fecha desconocida");
 
     const cJSON *jr = cJSON_GetObjectItem(j, "resumen");
     char detalle[128];
@@ -1725,6 +2309,10 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
             ESP_LOGW(TAG, "el viaje %s ya no esta abierto: el apunte va al "
                           "historial del vehiculo", carpeta);
             en_viaje = false;
+            /* Y la NVS no se toca: si lo que hay ahora abierto es OTRO viaje
+             * (se cerro el nuestro y se abrio uno nuevo entre las dos
+             * lecturas), borrar NVS_CARPETA se llevaba por delante ese otro. */
+            viaje_en_nvs = false;
             snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
         }
     }
@@ -1736,11 +2324,11 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
      * analizador suma filas, no ids). */
     char ruta_ev[RUTA_MAX], ruta_tipo[RUTA_MAX];
     snprintf(ruta_ev, sizeof(ruta_ev), "%s/eventos.csv", carpeta);
-    snprintf(ruta_tipo, sizeof(ruta_tipo), "%s/%ss.csv", carpeta, jt->valuestring);
+    snprintf(ruta_tipo, sizeof(ruta_tipo), "%s/%ss.csv", carpeta, tipo);
     off_t marca_ev = marca_de(ruta_ev), marca_tipo = marca_de(ruta_tipo);
 
-    bool escrito = diario_en(carpeta, cuando, jt->valuestring, detalle);
-    escrito = csv_por_tipo(carpeta, jt->valuestring, jd, cuando) && escrito;
+    bool escrito = diario_en(carpeta, cuando, tipo, detalle);
+    escrito = csv_por_tipo(carpeta, tipo, jd, cuando) && escrito;
     if (!escrito) {
         marca_deshacer(ruta_ev, marca_ev);
         marca_deshacer(ruta_tipo, marca_tipo);
@@ -1754,7 +2342,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         anota_fallo_escritura();
         ESP_LOGE(TAG, "NO he podido escribir el apunte '%s' en %s: la tarjeta "
                       "esta llena o falla. Devuelvo 507 para que lo reintente",
-                 jt->valuestring, carpeta);
+                 tipo, carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no se ha podido escribir en la tarjeta");
         return ESP_OK;
@@ -1782,16 +2370,17 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
          * y sumarlo al contador haria que el viaje siguiente pareciese
          * completo con un apunte de menos. */
         if (en_viaje) {
-            totales_sumar_en(h, jt->valuestring, jd);
+            totales_sumar_en(h, tipo, jd);
             uint32_t n = 0;
             nvs_get_u32(h, NVS_T_APLIC, &n);
             nvs_set_u32(h, NVS_T_APLIC, n + 1);
         }
-        /* NULL y no 'carpeta' si no hay viaje: esto guarda cual es el
-         * viaje ABIERTO, y el historial del vehiculo no lo es. Pasarlo
-         * abriria un viaje fantasma en /sdcard/vehiculo. El id si se
-         * guarda siempre: es la idempotencia. */
-        estado_set_en(h, en_viaje ? carpeta : NULL, id);
+        /* 'viaje_en_nvs' y NO 'en_viaje': el apunte del historial (o de otra
+         * pantalla) no puede ni abrir un viaje fantasma en /sdcard/vehiculo ni
+         * BORRAR el que la otra cabina tenga abierto. El id se guarda siempre:
+         * es la idempotencia. */
+        if (viaje_en_nvs) estado_set_en(h, carpeta, id);
+        else              id_anota_en(h, id);
         commit_err = nvs_commit(h);
         nvs_close(h);
     }
@@ -1810,7 +2399,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         ESP_LOGE(TAG, "nvs_commit fallo para totales/contador/dedupe de '%s' "
                       "(%s): deshago la fila de la SD y devuelvo 507 para que "
                       "el reintento lo aplique ENTERO",
-                 jt->valuestring, esp_err_to_name(commit_err));
+                 tipo, esp_err_to_name(commit_err));
         if (camera_sd_bus_lock(3000)) {
             marca_deshacer(ruta_ev, marca_ev);
             marca_deshacer(ruta_tipo, marca_tipo);
@@ -1820,7 +2409,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_sendstr(req, "no se ha podido guardar el apunte en la NVS");
         return ESP_OK;
     }
-    ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
+    ESP_LOGI(TAG, "apunte '%s' guardado en %s", tipo, carpeta);
     httpd_resp_sendstr(req, "ok");
     return ESP_OK;
 }
@@ -1889,6 +2478,7 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     /* El aviso solo se borra si la fila HA LLEGADO ENTERA: con el fsync fallido
      * y el fclose bien, antes se ponia a cero y el icono quedaba verde con la
      * tarjeta fallando (revision del 13-oct-2026). */
+    fflush(f);   /* ver la nota de diario_en(): fsync no vacia el buffer de stdio */
     bool ok = (fsync(fileno(f)) == 0);
     if (!ok) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) {
@@ -1935,6 +2525,7 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     /* fsync antes de fclose: sin el, un corte de corriente en los segundos
      * siguientes deja la fila en la cache de la tarjeta (auditoria del
      * 13-oct-2026: no habia ni un fsync en el firmware). */
+    fflush(f);   /* ver la nota de diario_en(): fsync no vacia el buffer de stdio */
     bool ok = (fsync(fileno(f)) == 0);
     if (!ok) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) {
@@ -1991,6 +2582,7 @@ static bool ruta_volcar(const char *carpeta)
         fprintf(f, "%s,%.6f,%.6f,%.0f,%.2f\n", s_ruta[i].cuando,
                 s_ruta[i].lat, s_ruta[i].lon, (double)s_ruta[i].alt, s_ruta[i].km);
     }
+    fflush(f);   /* ver la nota de diario_en(): fsync no vacia el buffer de stdio */
     if (fsync(fileno(f)) != 0) {           /* disco lleno */
         anota_fallo_escritura();
         fclose(f);

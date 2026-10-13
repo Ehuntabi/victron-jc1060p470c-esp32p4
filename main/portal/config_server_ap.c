@@ -9,6 +9,7 @@
 #include "config_server.h"
 #include "config_server_internal.h"
 #include "config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
+#include "ui/settings/restart_flush.h"   /* ui_flush_all_before_restart() */
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -502,9 +503,11 @@ static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc
         ESP_LOGE(TAG, "AP: %s ni reiniciando el AP. Reinicio la placa entera "
                       "(vez %d de %d)", motivo, s_reinicios_ap, REINICIOS_AP_MAX);
         /* Con un viaje abierto, esto se llevaba por delante hasta 5 min de
-         * ruta.csv (auditoria del 13-oct-2026): la escalera del AP puede
-         * reiniciar la placa sola, en silencio y a mitad de viaje. */
-        viaje_flush_antes_de_reiniciar();
+         * ruta.csv (auditoria del 13-oct-2026), y ademas los contadores del
+         * viaje, el dia de solar y el log NE185: solo se volcaba la ruta
+         * (auditoria del 14-oct-2026). Se vuelca TODO lo que vive en RAM, con
+         * la MISMA funcion que los reinicios a mano, para que no divergan. */
+        ui_flush_all_before_restart();
         esp_restart();
     } else {
         ESP_LOGE(TAG, "AP: %s, ya me he reiniciado %d veces en este encendido y sigue "
@@ -513,15 +516,28 @@ static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc
     }
 }
 
-/* La escalera vuelve a cero cuando el enlace esta sano de verdad. */
-static void vigila_pon_a_cero(void)
+/* La escalera vuelve a cero cuando el enlace esta sano de verdad.
+ *
+ * Y "de verdad" NO es que no haya nadie asociado (auditoria del 14-oct-2026).
+ * Despues de un reinicio por software la cabina tarda en asociarse, y al ver
+ * asoc==0 se ponia el tope de reinicios de placa a CERO otra vez. Con el DHCP
+ * atascado -- justo el fallo que esta escalera existe para curar, y que un
+ * reinicio de placa puede no arreglar, porque el propio reinicio es lo que lo
+ * provoca -- la secuencia quedaba: asoc==0 -> tope a cero -> la cabina se asocia
+ * (con IP fija, sin concesion) -> camino lento -> reinicio de placa -> asoc==0
+ * -> ... y otro reinicio ~140 s despues, indefinidamente, con la placa en la
+ * parte de atras y el vehiculo en marcha. */
+static void vigila_pon_a_cero(bool placa_ok)
 {
     s_dhcp_sin_concesion = 0;
     s_dhcp_intentos = 0;
     s_vueltas_tras_ap = 0;
     s_mini_mudo = 0;
     s_ap_reiniciado = false;
-    s_reinicios_ap = 0;
+    /* El tope de reinicios SOLO se olvida con prueba de que el enlace va: una
+     * concesion de verdad, o el latido de una cabina diciendo que recibe. Que no
+     * haya nadie asociado no prueba nada. */
+    if (placa_ok) s_reinicios_ap = 0;
 }
 
 /* Esto SI corre en la tarea de trabajos, donde bloquearse no rompe nada. */
@@ -570,16 +586,31 @@ static void dhcp_vigila_job(void)
     /* 3) SANO: o hay concesiones, o la cabina dice que recibe. */
     bool mini_recibe = latido_vivo && lat.seg_sin_datos_mini >= 0 && lat.seg_sin_datos_mini <= 5;
     if (conc > 0 || mini_recibe || asoc == 0) {
-        vigila_pon_a_cero();
+        /* OJO: asoc==0 cuenta como "no actuar", pero NO como prueba de salud
+         * (ver vigila_pon_a_cero): no borra el tope de reinicios de placa. */
+        vigila_pon_a_cero(conc > 0 || mini_recibe);
         return;
     }
 
     /* 4) CAMINO LENTO: hay asociados, ninguna concesion y el mini no nos dice
      *    nada (firmware viejo, o se ha quedado callado del todo). Se actua por
-     *    la tabla del DHCP, que es lo unico que queda. */
+     *    la tabla del DHCP, que es lo unico que queda.
+     *
+     *    EL REINICIO DE PLACA, SOLO SI NO LATE NADIE (auditoria del 14-oct-2026).
+     *    Con una cabina latiendo, la subida funciona: lo que falla es la bajada
+     *    o la concesion, y reiniciar la placa a mitad de viaje no arregla ni una
+     *    cosa ni la otra. Ademas, la cabina se pone IP FIJA
+     *    (192.168.4.200+mac&0x1F, ver udp_rx.c) cuando el DHCP no le responde,
+     *    asi que "asociada y sin concesion" es su estado NORMAL tras un reinicio
+     *    con el DHCP atascado: sin este filtro, un fallo del DHCP se cobraba un
+     *    reinicio de la placa cada ~140 s. */
+    int latiendo = udp_latido_fuentes_vivas(15);
     if (++s_dhcp_sin_concesion < DHCP_SIN_CONCESION) return;
     s_dhcp_sin_concesion = 0;
-    vigila_sube_escalon(false, "hay asociados y ninguna concesion", asoc, conc, true);
+    vigila_sube_escalon(false, latiendo ? "hay asociados, ninguna concesion y "
+                                          "una cabina latiendo"
+                                        : "hay asociados y ninguna concesion",
+                        asoc, conc, /*permitir_reinicio_placa=*/latiendo == 0);
 }
 
 static void dhcp_vigila_ensure(void)
