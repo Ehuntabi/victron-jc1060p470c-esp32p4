@@ -3302,6 +3302,14 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 return ESP_OK;
             }
             ESP_LOGW(TAG, "cierre del viaje abierto pedido desde la web: %s", cerrar);
+            /* 302 ANTES de llamar a op_fin: en el camino bueno, op_fin NO toca el
+             * estado de la respuesta (solo manda el nombre de la carpeta), asi
+             * que este 302 se mantiene y el navegador vuelve a la lista. En los
+             * caminos de error op_fin SI pone su estado (409, 507...) y entonces
+             * el usuario ve el motivo en vez de una redireccion. Asi el enlace
+             * funciona como una accion de la web y no como una pagina de texto. */
+            httpd_resp_set_status(req, "302 Found");
+            httpd_resp_set_hdr(req, "Location", "/data/viajes?cerrado=si");
             esp_err_t r = op_fin(req, j, ID_CIERRE_WEB);
             cJSON_Delete(j);
             return r;
@@ -3333,6 +3341,12 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                 httpd_resp_sendstr_chunk(req,
                     "<p style='color:#FFA726'>No se ha podido borrar (el viaje en "
                     "curso no se puede: cierralo antes).</p>");
+            else if (httpd_query_key_value(q, "cerrado", v, sizeof(v)) == ESP_OK &&
+                     !strcmp(v, "si"))
+                httpd_resp_sendstr_chunk(req,
+                    "<p style='color:#66BB6A'>Viaje cerrado y marcado SIN VERIFICAR: "
+                    "ya se puede descargar (con el aviso dentro) y la P4 vuelve a "
+                    "admitir un viaje nuevo.</p>");
         }
     }
     httpd_resp_sendstr_chunk(req, "<ul>");
