@@ -474,6 +474,17 @@ static void log_estado_nvs(void)
 bool viaje_sd_hueco(uint64_t *libre_out, uint64_t *total_out);
 static void sd_hueco_medir(void);
 
+/* Como responde_con_hueco, pero para los 507 QUE NO SON DE LA TARJETA (la NVS
+ * del viaje: no poder guardar el inicio, el cierre, el apunte...). Decir ahi
+ * "le quedan 29000 MB" seria desinformar: el que mira tiene que saber que lo que
+ * se ha llenado es la memoria interna, no la SD. */
+static void responde_sin_sitio_nvs(httpd_req_t *req, const char *texto)
+{
+    char cuerpo[192];
+    snprintf(cuerpo, sizeof(cuerpo), "%s sin_sitio=nvs", texto);
+    httpd_resp_sendstr(req, cuerpo);
+}
+
 /* CONTESTA Y DICE CUANTO QUEDA EN LA TARJETA (14-oct-2026).
  *
  * El satelite ya recibe este cuerpo y lo tira (`p4_api.c`, drena la respuesta
@@ -1211,7 +1222,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
         anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_con_hueco(req, "no puedo escribir el inicio del viaje en la NVS");
+        responde_sin_sitio_nvs(req, "no puedo escribir el inicio del viaje en la NVS");
         return ESP_OK;
     }
 
@@ -1287,7 +1298,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
         anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_con_hueco(req, "no puedo guardar el viaje en la NVS");
+        responde_sin_sitio_nvs(req, "no puedo guardar el viaje en la NVS");
         return ESP_OK;
     }
     ESP_LOGI(TAG, "VIAJE ABIERTO: %s", carpeta);
@@ -1644,7 +1655,7 @@ static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
          * satelite se queda reintentando para siempre este mensaje, con todo lo
          * de detras (incluido el fin) atascado detras. */
         ESP_LOGW(TAG, "destino sin viaje abierto: lo doy por hecho");
-        httpd_resp_sendstr(req, "no hay viaje abierto: destino ignorado");
+        responde_con_hueco(req, "no hay viaje abierto: destino ignorado");
         return ESP_OK;
     }
 
@@ -1657,14 +1668,14 @@ static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
     if (pide_otra_pantalla(j, id, false)) {
         ESP_LOGW(TAG, "destino de OTRA pantalla con el viaje %s abierto: lo ignoro",
                  carpeta);
-        httpd_resp_sendstr(req, "ese viaje no es de esta pantalla: destino ignorado");
+        responde_con_hueco(req, "ese viaje no es de esta pantalla: destino ignorado");
         return ESP_OK;
     }
 
     const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "destino");
     if (!cJSON_IsString(jd)) {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "falta 'destino'");
+        responde_con_hueco(req, "falta 'destino'");
         return ESP_OK;
     }
     char nd[DESTINO_MAX];
@@ -1673,7 +1684,7 @@ static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
         httpd_resp_set_status(req, "500 Internal Server Error");
-        httpd_resp_sendstr(req, "no puedo guardar el destino");
+        responde_con_hueco(req, "no puedo guardar el destino");
         return ESP_OK;
     }
     esp_err_t e = nvs_set_str(h, NVS_DESTINO, nd);
@@ -1681,11 +1692,11 @@ static esp_err_t op_destino(httpd_req_t *req, const cJSON *j, uint32_t id)
     nvs_close(h);
     if (e != ESP_OK) {
         httpd_resp_set_status(req, "500 Internal Server Error");
-        httpd_resp_sendstr(req, "no puedo guardar el destino");
+        responde_con_hueco(req, "no puedo guardar el destino");
         return ESP_OK;
     }
     ESP_LOGI(TAG, "destino nuevo APUNTADO (sin renombrar): %s -> %s", carpeta, nd);
-    httpd_resp_sendstr(req, nd);
+    responde_con_hueco(req, nd);
     return ESP_OK;
 }
 
@@ -1803,7 +1814,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
          * aplico, y devolver error dejaria al satelite atascado reintentando
          * algo que ya esta hecho. */
         ESP_LOGW(TAG, "fin sin viaje abierto: lo doy por hecho");
-        httpd_resp_sendstr(req, "no habia viaje abierto");
+        responde_con_hueco(req, "no habia viaje abierto");
         return ESP_OK;
     }
 
@@ -1823,7 +1834,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                 ESP_LOGW(TAG, "fin de '%s' pero el viaje abierto es '%s': no cierro nada",
                          jc->valuestring, base);
                 httpd_resp_set_status(req, "409 Conflict");
-                httpd_resp_sendstr(req, "el viaje abierto ya no es ese: recarga la lista");
+                responde_con_hueco(req, "el viaje abierto ya no es ese: recarga la lista");
                 return ESP_OK;
             }
         }
@@ -1837,13 +1848,13 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     if (pide_otra_pantalla(j, id, true)) {
         ESP_LOGW(TAG, "fin de %s RECHAZADO: lo pide otra pantalla", carpeta);
         httpd_resp_set_status(req, "409 Conflict");
-        httpd_resp_sendstr(req, "ese viaje lo empezo otra pantalla: cierralo desde ella");
+        responde_con_hueco(req, "ese viaje lo empezo otra pantalla: cierralo desde ella");
         return ESP_OK;
     }
 
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
-        httpd_resp_sendstr(req, "tarjeta ocupada");
+        responde_con_hueco(req, "tarjeta ocupada");
         return ESP_OK;
     }
     /* La carpeta del viaje abierto puede NO ESTAR: se saco la tarjeta y se metio
@@ -1862,7 +1873,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                           "el estado. Los datos de ese viaje no estan aqui",
                      carpeta);
             estado_set(NULL, id);
-            httpd_resp_sendstr(req, "la carpeta del viaje ya no estaba: "
+            responde_con_hueco(req, "la carpeta del viaje ya no estaba: "
                                     "estado limpiado, sin resumen");
             return ESP_OK;
         }
@@ -1870,7 +1881,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                       "SD no esta montada, o el fallo no es un ENOENT claro): no "
                       "puedo cerrarlo", carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "la carpeta del viaje no esta en la tarjeta");
+        responde_con_hueco(req, "la carpeta del viaje no esta en la tarjeta");
         return ESP_OK;
     }
     bool escrito = diario(carpeta, "fin", "");
@@ -1888,7 +1899,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         ESP_LOGE(TAG, "no he podido marcar %s como INCOMPLETO/SIN VERIFICAR: el "
                       "viaje NO se cierra", carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido marcar el viaje: sigue abierto");
+        responde_con_hueco(req, "no se ha podido marcar el viaje: sigue abierto");
         return ESP_OK;
     }
     escrito = escribir_resumen(carpeta) && escrito;
@@ -1939,7 +1950,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         ESP_LOGE(TAG, "NO he podido escribir el cierre de %s: la tarjeta esta "
                       "llena o falla. El viaje sigue ABIERTO", carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido escribir el cierre");
+        responde_con_hueco(req, "no se ha podido escribir el cierre");
         return ESP_OK;
     }
 
@@ -2022,7 +2033,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                       "el viaje sigue abierto y habra que reintentar", carpeta);
         anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
+        responde_sin_sitio_nvs(req, "no se ha podido cerrar el viaje en la NVS");
         return ESP_OK;
     }
 
@@ -2047,7 +2058,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * ya termino. */
     trip_computer_end();
     ESP_LOGI(TAG, "VIAJE CERRADO: %s", carpeta);
-    httpd_resp_sendstr(req, carpeta);
+    responde_con_hueco(req, carpeta);
     return ESP_OK;
 }
 
@@ -2154,7 +2165,7 @@ static esp_err_t op_borrar(httpd_req_t *req, const cJSON *j, uint32_t id)
     const cJSON *jc = cJSON_GetObjectItemCaseSensitive(j, "carpeta");
     if (!cJSON_IsString(jc) || !jc->valuestring[0]) {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "falta 'carpeta'");
+        responde_con_hueco(req, "falta 'carpeta'");
         return ESP_OK;
     }
     char motivo[96] = {0};
@@ -2167,10 +2178,10 @@ static esp_err_t op_borrar(httpd_req_t *req, const cJSON *j, uint32_t id)
                               : cod == 409 ? "409 Conflict"
                               : cod == 503 ? "503 Service Unavailable"
                                            : "500 Internal Server Error");
-        httpd_resp_sendstr(req, motivo);
+        responde_con_hueco(req, motivo);
         return ESP_OK;
     }
-    httpd_resp_sendstr(req, "viaje borrado");
+    responde_con_hueco(req, "viaje borrado");
     return ESP_OK;
 }
 
@@ -2265,7 +2276,7 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
         ESP_LOGE(TAG, "no puedo apartar %s: la NVS no acepta el cambio", carpeta);
         anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_con_hueco(req, "no puedo apartar el viaje");
+        responde_sin_sitio_nvs(req, "no puedo apartar el viaje");
         return ESP_OK;
     }
     camera_sd_bus_unlock();
@@ -2352,7 +2363,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     const cJSON *jd = cJSON_GetObjectItem(j, "datos");
     if (!cJSON_IsString(jt)) {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "falta tipo");
+        responde_con_hueco(req, "falta tipo");
         return ESP_OK;
     }
     /* El 'tipo' va al NOMBRE DE UN FICHERO ("<tipo>s.csv"), asi que se filtra
@@ -2372,7 +2383,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     if (!tipo[0]) {
         httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_sendstr(req, "tipo invalido");
+        responde_con_hueco(req, "tipo invalido");
         return ESP_OK;
     }
     if (strcmp(tipo, jt->valuestring) != 0)
@@ -2460,7 +2471,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
 
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
-        httpd_resp_sendstr(req, "tarjeta ocupada");
+        responde_con_hueco(req, "tarjeta ocupada");
         return ESP_OK;
     }
     if (en_viaje) {
@@ -2517,7 +2528,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
                       "esta llena o falla. Devuelvo 507 para que lo reintente",
                  tipo, carpeta);
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido escribir en la tarjeta");
+        responde_con_hueco(req, "no se ha podido escribir en la tarjeta");
         return ESP_OK;
     }
 
@@ -2580,11 +2591,11 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
         anota_fallo_nvs();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no se ha podido guardar el apunte en la NVS");
+        responde_sin_sitio_nvs(req, "no se ha podido guardar el apunte en la NVS");
         return ESP_OK;
     }
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", tipo, carpeta);
-    httpd_resp_sendstr(req, "ok");
+    responde_con_hueco(req, "ok");
     return ESP_OK;
 }
 

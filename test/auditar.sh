@@ -487,5 +487,34 @@ else
     mal "$LETRA usos de letter_space: las etiquetas van como las demas (UI_FONT_SMALL + TEXT_SOFT)"
 fi
 
+echo "=== 13. Las respuestas del viaje dicen cuanto queda (o que es la NVS) ==="
+CS="main/portal/config_server_viaje.c"
+# Las cinco ops que usa la cabina responden SIEMPRE por responde_con_hueco() o
+# responde_sin_sitio_nvs(): la pantalla lee el cuerpo para saber el hueco de la
+# tarjeta, y una respuesta suelta se quedaria sin el dato (paso el 14-oct-2026:
+# el sufijo se puso solo en inicio y descartar, y justo faltaba en los 507 de
+# registro y fin, que son los que importan).
+sueltas=$(awk '
+  /^static esp_err_t op_(inicio|destino|fin|descartar|registro)\(/ { dentro=1 }
+  dentro && /httpd_resp_sendstr\(req,/ { n++ }
+  /^\}/ { dentro=0 }
+  END { print n+0 }
+' "$CS")
+if [ "$sueltas" -eq 0 ]; then
+    ok "las cinco ops usan responde_con_hueco()/responde_sin_sitio_nvs()"
+else
+    mal "hay $sueltas respuesta(s) de las ops del viaje que se saltan los helpers (la pantalla se queda sin el hueco)"
+fi
+if grep -q 'responde_sin_sitio_nvs(req,' "$CS"; then
+    ok "los 507 de NVS se distinguen de los de la tarjeta"
+else
+    mal "los 507 de NVS no se distinguen: la pantalla diria que queda sitio cuando lo que falla es la NVS"
+fi
+
 echo
-if [ "$fallos" -eq 0 ]; then echo "AUDITORIA OK"; exit 0; else echo "AUDITORIA: $fallos FALLOS"; exit 1; fi
+if [ "$fallos" -eq 0 ]; then
+    echo "AUDITORIA OK"
+else
+    echo "AUDITORIA CON FALLOS: $fallos"
+    exit 1
+fi
