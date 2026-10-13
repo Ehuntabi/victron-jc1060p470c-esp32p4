@@ -372,9 +372,17 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
               (*p >= '0' && *p <= '9') || *p == '-' || *p == '_')) { *p = '_'; }
     }
     bool con_fallos = (httpd_query_key_value(q, "incompleto", inc, sizeof inc) == ESP_OK);
+    /* HISTORIAL DEL VEHICULO: /data/viaje.tar?v=vehiculo&hist=1
+     *
+     * No es un viaje (no tiene resumen.txt ni estado), asi que no puede pasar
+     * por las comprobaciones de "cerrado"/"en curso". Son los apuntes que no son
+     * de ningun viaje y, desde el 14-oct-2026, los de OTRA pantalla cuando el
+     * viaje abierto no era suyo: hasta ahora eso no salia en ninguna lista. */
+    bool hist = (httpd_query_key_value(q, "hist", inc, sizeof inc) == ESP_OK);
 
     char dir[160], nombre[128];
-    snprintf(dir, sizeof(dir), "/sdcard/viajes/%s", v);
+    if (hist) snprintf(dir, sizeof(dir), VEHICULO_DIR);
+    else      snprintf(dir, sizeof(dir), "/sdcard/viajes/%s", v);
 
     /* Los tres stat de aqui tocan la tarjeta, asi que van BAJO EL CERROJO como
      * todo lo demas de este fichero. Estaban sueltos (24-ago-2026): si la camara
@@ -412,24 +420,25 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
      * curso... finalizalo en la cabina") sobre algo que ya no se puede
      * finalizar. El propio nombre de carpeta ya lleva la marca. Detectado
      * por el usuario el 09-sep-2026. */
-    bool descartado = !strncmp(v, "DESCARTADO_", 11);
+    bool descartado = !hist && !strncmp(v, "DESCARTADO_", 11);
 
-    if (!cerrado && !descartado) {
+    if (!hist && !cerrado && !descartado) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_sendstr(req, "Ese viaje sigue en curso. Finalizalo en la pantalla "
                                 "de la cabina antes de bajarlo.");
         return ESP_OK;
     }
-    if (incompleto && !con_fallos) {
+    if (!hist && incompleto && !con_fallos) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_sendstr(req, "A ese viaje le faltan apuntes. Bajalo desde "
                                 "/data/viajes, que avisa de lo que falta.");
         return ESP_OK;
     }
 
-    snprintf(nombre, sizeof(nombre), "%s%s.tar", v, incompleto ? "_INCOMPLETO" : "");
+    if (hist) snprintf(nombre, sizeof(nombre), "vehiculo.tar");
+    else      snprintf(nombre, sizeof(nombre), "%s%s.tar", v, incompleto ? "_INCOMPLETO" : "");
     const char *dirs[1]     = { dir };
-    const char *prefixes[1] = { v };
+    const char *prefixes[1] = { hist ? "vehiculo" : v };
     return tar_send_dirs(req, nombre, dirs, prefixes, 1);
 }
 

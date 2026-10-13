@@ -37,6 +37,14 @@ void cfg_dns_stop(void);
  * config_server_vigilancia.c) -- si no, el navegador los pide al puerto
  * 80 de siempre, donde ya no existen. Detectado por el usuario el
  * 09-sep-2026. */
+/* Donde van los apuntes que NO son de un viaje: el historial del vehiculo
+ * (un repostaje de camino al taller, la ITV, una bombona). Y desde el
+ * 14-oct-2026 tambien los apuntes de OTRA pantalla cuando la P4 tiene abierto un
+ * viaje que no es suyo: se desvian aqui en vez de mezclarse en los CSV ajenos.
+ * Compartido con data_export_tar.c, que ahora deja bajarlo: antes era una fosa
+ * comun invisible (no salia en ninguna lista). */
+#define VEHICULO_DIR "/sdcard/vehiculo"
+
 #define PORTAL_HEAVY_PORT 8081
 #define PORTAL_HEAVY_BASE "http://192.168.4.1:8081"
 

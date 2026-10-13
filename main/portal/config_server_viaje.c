@@ -82,10 +82,8 @@ static bool dev_es_mac(const char *dev);
 #define VIAJE_BODY_MAX  1024
 
 #define VIAJES_DIR      "/sdcard/viajes"
-/* Donde van los apuntes que NO son de un viaje: el historial del vehiculo.
- * Repostajes de camino al taller, la ITV, una bombona... cosas que le pasan a
- * la autocaravana, no a un viaje concreto. */
-#define VEHICULO_DIR    "/sdcard/vehiculo"
+/* VEHICULO_DIR (el historial del vehiculo) vive en config_server_internal.h:
+ * lo comparte data_export_tar.c, que ahora deja bajarlo. */
 #define NVS_NS          "viaje_p4"
 #define NVS_CARPETA     "carpeta"
 /* Destino nuevo pedido a mitad de viaje, SIN aplicar todavia (ver op_destino).
@@ -3218,8 +3216,38 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
         if (got_lock) camera_sd_bus_unlock();
     }
     if (!alguno) httpd_resp_sendstr_chunk(req, "<li>Todavia no hay ningun viaje.</li>");
+    httpd_resp_sendstr_chunk(req, "</ul>");
+
+    /* Y EL HISTORIAL DEL VEHICULO, aparte y visible (auditoria del 14-oct-2026).
+     *
+     * Ahi van los apuntes que no son de un viaje (repostar de camino al taller,
+     * la ITV, una bombona) y -- desde el arreglo del dueño del viaje -- los que
+     * manda OTRA pantalla mientras la P4 tiene abierto un viaje que no es suyo.
+     * Sin esto, eso era una fosa comun: se guardaba (que es lo correcto, mejor
+     * que perderlo o mezclarlo) pero no salia en NINGUNA lista y solo se veia
+     * pinchando la tarjeta en un PC. */
+    {
+        char ruta_ev[RUTA_MAX];
+        struct stat stv;
+        snprintf(ruta_ev, sizeof(ruta_ev), VEHICULO_DIR "/eventos.csv");
+        bool hay = false;
+        if (camera_sd_bus_lock(1000)) {
+            hay = (stat(ruta_ev, &stv) == 0);
+            camera_sd_bus_unlock();
+        }
+        if (hay) {
+            httpd_resp_sendstr_chunk(req,
+                "<h1>Historial del vehiculo</h1><ul>"
+                "<li class=ok><b>vehiculo</b><div class=e>Apuntes que no son de un "
+                "viaje (repostar, la ITV, una bombona) y los de otra pantalla cuando "
+                "el viaje abierto no era suyo.</div>"
+                "<a href='" PORTAL_HEAVY_BASE "/data/viaje.tar?v=vehiculo&hist=1'>Descargar</a></li>"
+                "</ul>");
+        }
+    }
+
     httpd_resp_sendstr_chunk(req,
-        "</ul><p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
+        "<p class=e>El paquete de siempre (bateria, solar y frigo de TODOS "
         "los dias) esta en <a href='" PORTAL_HEAVY_BASE "/data/historico.tar'>historico.tar</a>.</p>"
         "<p><a href='/data'>Volver</a></p>");
     httpd_resp_sendstr_chunk(req, NULL);
