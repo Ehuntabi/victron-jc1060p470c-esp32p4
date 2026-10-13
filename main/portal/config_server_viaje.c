@@ -49,8 +49,8 @@
 #include <errno.h>
 #include <dirent.h>
 #include <unistd.h>   /* rmdir: borrar la carpeta de un viaje; fsync, ftruncate */
-#include <fcntl.h>
-#include <stdatomic.h>    /* open(): deshacer una escritura a medias en un CSV */
+#include <fcntl.h>    /* open(): deshacer una escritura a medias en un CSV */
+#include <stdatomic.h>   /* _Atomic: la peticion de volcado desde otra tarea */
 
 static const char *TAG = "viaje_srv";
 
@@ -143,10 +143,6 @@ static void ruta_olvidar(void);
 
 /* ── Estado del viaje abierto, en NVS para sobrevivir a reinicios ─────────── */
 
-/* Igual que viaje_abierto(), pero PUBLICO: lo necesitan los logs para decir A
- * QUE VIAJE pertenecen (ver log_capture.c). Devuelve false si no hay viaje. */
-bool viaje_abierto_nombre(char *out, size_t n);
-
 static bool viaje_abierto(char *out, size_t n)
 {
     nvs_handle_t h;
@@ -157,6 +153,8 @@ static bool viaje_abierto(char *out, size_t n)
     return e == ESP_OK && out[0];
 }
 
+/* Version PUBLICA: la necesitan los logs para decir A QUE VIAJE pertenecen
+ * (ver log_capture.c) y el aviso de la OTA. Declarada en el .h. */
 bool viaje_abierto_nombre(char *out, size_t n)
 {
     return viaje_abierto(out, n);
@@ -314,6 +312,11 @@ void viaje_reparar_al_arrancar(void)
                      carpeta);
     }
     estado_set(NULL, 0);
+    /* Ya no hay viaje abierto: las demas carpetas sin cierre que haya en ESTA
+     * tarjeta tampoco se podran cerrar nunca, asi que se marcan ahora (antes
+     * esta rama se volvia sin mirarlas y se quedaban "En curso" hasta el
+     * siguiente arranque). */
+    marcar_huerfanas(NULL);
 }
 
 /* Marca las carpetas de viaje que NO se pueden cerrar ya.
@@ -983,6 +986,8 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
                        "falta algo.\n\n"
                        "Es probable que este entero, pero NO esta verificado: comparalo\n"
                        "con lo que recuerdes antes de darlo por bueno.\n");
+            if (fsync(fileno(f)) != 0)
+                ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
             if (fclose(f) != 0)
                 ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
         }
@@ -2137,6 +2142,20 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         return ESP_OK;
     }
     uint32_t id = cJSON_IsNumber(jid) ? (uint32_t)jid->valuedouble : 0;
+
+    /* ID 0 = NO HAY ID (revision del 13-oct-2026). La cabina puede llegar aqui
+     * con 0 si su NVS falla al repartir el numero (ver next_trip_seq), y con id
+     * 0 la comprobacion de duplicados de mas abajo NO se aplica (mira solo ids
+     * != 0): si se perdia el 200, el reintento se aplicaba otra vez y el importe
+     * se sumaba DOS veces. Los ids de verdad empiezan en 1, asi que se rechaza
+     * con 400 y el satelite lo dice en pantalla ("la P4 rechaza el apunte").
+     * 'borrar' (la app) no lleva id a proposito: esa se deja pasar. */
+    if (id == 0 && strcmp(jop->valuestring, "borrar") != 0) {
+        cJSON_Delete(j);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_sendstr(req, "id invalido (0)");
+        return ESP_OK;
+    }
 
     /* IDEMPOTENCIA. Con reintentos lo mismo puede llegar dos veces (se entrego
      * pero se perdio la respuesta). Se responde OK igualmente para que el

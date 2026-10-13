@@ -55,6 +55,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
 /* Callbacks propios de esta pagina, definidos mas abajo. */
 static void portal_page_cb(lv_event_t *e);
 static void generar_clave_portal_cb(lv_event_t *e);
+
+/* La etiqueta de la clave en la tarjeta de ACCESO, para poder refrescarla en
+ * cuanto se genera una nueva (si no, seguiria enseñando la vieja justo cuando
+ * mas se mira). */
+static lv_obj_t *s_c4_pass_lbl;
 static void reactivate_portal_cb(lv_event_t *e);
 static void ap_switch_cb(lv_event_t *e);
 static void wifi_pintar_ip_ap(ui_state_t *ui);
@@ -421,7 +426,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_label_set_text_fmt(c4_user, "Usuario:  %s",
                           web_user[0] ? web_user : "victron");
 
-    lv_obj_t *c4_pass = lv_label_create(card4);
+    /* Se guardan para poder ACTUALIZARLAS al generar una clave nueva: si no,
+     * la tarjeta seguiria enseñando la vieja justo despues de cambiarla, que es
+     * cuando mas se mira. */
+    s_c4_pass_lbl = lv_label_create(card4);
+    lv_obj_t *c4_pass = s_c4_pass_lbl;
     lv_obj_set_style_text_font(c4_pass, &lv_font_montserrat_20_es, 0);
     lv_label_set_text_fmt(c4_pass, "Clave:  %s",
                           web_pass[0] ? web_pass : "(sin definir)");
@@ -507,6 +516,10 @@ static void clave_portal_nueva_do(void)
                             "La clave del portal sigue siendo la de antes.");
         return;
     }
+    /* La tarjeta se queda con la clave NUEVA a la vista (es la unica forma de
+     * volver a leerla: no se guarda en ningun sitio legible salvo aqui y en la
+     * NVS de la P4). */
+    if (s_c4_pass_lbl) lv_label_set_text_fmt(s_c4_pass_lbl, "Clave:  %s", nueva);
     char msg[420];
     snprintf(msg, sizeof(msg),
              "Usuario:  %s\nClave nueva:  %s\n\n"

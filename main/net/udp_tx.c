@@ -256,6 +256,12 @@ static void tx_task(void *arg)
                 fallos_seguidos = 0;
                 ESP_LOGW(TAG, "socket sin salida (ENOTCONN): lo recreo");
                 close(sock);
+                /* A -1: sin esto el while de abajo no se ejecuta NUNCA (sock
+                 * sigue valiendo el fd ya cerrado), no se llama a socket(), el
+                 * setsockopt va a un descriptor cerrado y se loggea "socket
+                 * recreado" para nada. Lo cazo la revision del 13-oct-2026: el
+                 * arreglo, tal cual, era un no-op. */
+                sock = -1;
                 /* CON REINTENTO (auditoria del 13-oct-2026): si socket() falla
                  * aqui (sin descriptores, sin memoria) el anterior quedaba
                  * cerrado y el nuevo en -1, asi que el sendto siguiente fallaba

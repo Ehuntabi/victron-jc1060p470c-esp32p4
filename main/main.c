@@ -615,7 +615,11 @@ static void init_sd_rtc_frigo(void)
      * no existe (se cambio la tarjeta, se formateo, se borro la carpeta desde el
      * PC, o un corte de corriente partio un renombrado), la P4 se quedaba
      * bloqueada sin salida: ni cerraba, ni abria, ni aceptaba apuntes. Aqui se
-     * limpia ese estado. Antes que nada mas toque /sdcard/viajes. */
+     * limpia ese estado. Antes que nada mas toque /sdcard/viajes.
+     * OJO: sd_err == ESP_OK NO quiere decir que la tarjeta este montada
+     * (datalogger_init devuelve OK aunque el montaje falle), asi que la
+     * comprobacion de verdad la hace dentro viaje_reparar_al_arrancar() con
+     * datalogger_sd_montada(). */
     if (sd_err == ESP_OK) viaje_reparar_al_arrancar();
 
     /* Auto-save de logs a SD 30 s tras boot (con rotacion FIFO 20 archivos).

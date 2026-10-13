@@ -280,6 +280,7 @@ esp_err_t config_server_set_web_credentials(const char *user, const char *pass)
 {
     if (!user || !pass || !user[0] || !pass[0]) return ESP_ERR_INVALID_ARG;
     if (strlen(user) > 32 || strlen(pass) > 32)  return ESP_ERR_INVALID_ARG;
+    if (strlen(pass) < 8) return ESP_ERR_INVALID_ARG;   /* menos, no es una clave */
     /* Dos puntos en el usuario rompen el esquema Basic ("usuario:clave"), y un
      * salto de linea en cualquiera de los dos romperia la cabecera HTTP. */
     if (strchr(user, ':') || strpbrk(user, "\r\n") || strpbrk(pass, "\r\n"))
@@ -382,11 +383,32 @@ static bool auth_equal_ct(const char *a, const char *b)
 #define AUTH_INACTIVIDAD_US  (300LL * 1000000LL)
 #define AUTH_IP_MAX          4
 
-static struct {
+/* Una entrada por cliente que ha fallado credenciales. El tipo va con NOMBRE
+ * (y no anonimo) porque auth_ip_slot() lo devuelve. */
+struct auth_ip_s {
     uint32_t ip;
     uint32_t fallos;
     int64_t  ultimo_us;
-} s_auth_ips[AUTH_IP_MAX];
+};
+static struct auth_ip_s s_auth_ips[AUTH_IP_MAX];
+
+/* Cierra la sesion de una peticion RECHAZADA (401/403/429).
+ *
+ * POR QUE CERRAR Y NO DRENAR EL CUERPO: el drenado que habia antes recorria
+ * `req->content_len`, pero httpd_req_recv() NO lo decrementa -- lleva la cuenta
+ * en un campo interno (`remaining_len`, ver httpd_txrx.c de la IDF) --, asi que
+ * el bucle no terminaba nunca por esa condicion: se quedaba bloqueado hasta el
+ * tope de 8 s (o hasta que el propio recv diera timeout) en CADA peticion
+ * rechazada con cuerpo. Como el httpd es de UNA sola tarea, eso dejaba el
+ * portal mudo 5-8 s por intento: justo lo que el drenado queria evitar. La
+ * respuesta ya esta enviada cuando se llama a esto, y cerrar la sesion es lo
+ * que el codigo hacia igualmente al final ("cliente lento"). Detectado en la
+ * revision del 13-oct-2026. */
+static void auth_cerrar_sesion(httpd_req_t *req, const char *motivo)
+{
+    ESP_LOGW(TAG, "%s: cierro la sesion", motivo);
+    httpd_sess_trigger_close(req->handle, httpd_req_to_sockfd(req));
+}
 
 /* IP del cliente (0 si no se puede saber: entonces no se le aplica el freno por
  * IP, solo el global de siempre). */
@@ -400,14 +422,23 @@ static uint32_t auth_ip_cliente(httpd_req_t *req)
     return sa.sin_addr.s_addr;
 }
 
-/* Entrada de esa IP, creando una si hay hueco. */
-static void *auth_ip_slot(uint32_t ip)
+/* Entrada de esa IP, creando una si hay hueco.
+ *
+ * OJO: la primera version de esto devolvia el hueco pero NUNCA escribia la IP en
+ * la tabla, asi que todas las IPs acababan compartiendo la entrada 0 (el array
+ * esta a cero y siempre parecia libre): el freno "por IP" era el contador global
+ * de antes. Lo cazo la revision adversarial del 13-oct-2026. La IP se escribe
+ * aqui, y tambien se CADUCA la entrada (si no, con el tiempo la tabla se llena
+ * de IPs que ya no existen y una cabina nueva se queda sin hueco). */
+static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
 {
     if (ip == 0) return NULL;
-    void *libre = NULL;
+    struct auth_ip_s *libre = NULL;
     for (int i = 0; i < AUTH_IP_MAX; i++) {
         if (s_auth_ips[i].ip == ip) return &s_auth_ips[i];
-        if (s_auth_ips[i].ip == 0 && !libre) libre = &s_auth_ips[i];
+        bool caducada = (s_auth_ips[i].ip != 0) &&
+                        (ahora_us - s_auth_ips[i].ultimo_us > AUTH_INACTIVIDAD_US);
+        if ((s_auth_ips[i].ip == 0 || caducada) && !libre) libre = &s_auth_ips[i];
     }
     if (!libre) {
         /* Tabla llena: se recicla la entrada mas vieja, que es la que menos
@@ -417,6 +448,9 @@ static void *auth_ip_slot(uint32_t ip)
             if (s_auth_ips[i].ultimo_us < s_auth_ips[viejo].ultimo_us) viejo = i;
         libre = &s_auth_ips[viejo];
     }
+    libre->ip = ip;
+    libre->fallos = 0;
+    libre->ultimo_us = 0;
     return libre;
 }
 
@@ -441,17 +475,57 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
      * curl) no mandan ninguno de los dos y siguen pasando igual: esto no
      * cambia el protocolo, solo cierra la puerta del navegador ajeno. */
     {
-        char org[128] = {0}, ref[128] = {0};
-        bool tiene_org = (httpd_req_get_hdr_value_str(req, "Origin", org, sizeof(org)) == ESP_OK);
-        bool tiene_ref = (httpd_req_get_hdr_value_str(req, "Referer", ref, sizeof(ref)) == ESP_OK);
-        const char *cual = tiene_org ? org : (tiene_ref ? ref : NULL);
-        if (cual && cual[0] && !strstr(cual, "192.168.4.1") &&
-            !strstr(cual, "victronconfig")) {
+        char org[192] = {0}, ref[192] = {0}, host[64] = {0};
+        esp_err_t eo = httpd_req_get_hdr_value_str(req, "Origin", org, sizeof(org));
+        esp_err_t er = httpd_req_get_hdr_value_str(req, "Referer", ref, sizeof(ref));
+        httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host));
+        const char *cual = (eo == ESP_OK) ? org : ((er == ESP_OK) ? ref : NULL);
+        bool fuera = false;
+        if (cual) {
+            /* SE COMPARA EL HOST, POR IGUALDAD (la primera version miraba
+             * "contiene 192.168.4.1", y "http://192.168.4.1.malicioso.com"
+             * tambien lo contiene: lo cazo la revision del 13-oct-2026). */
+            const char *p = strstr(cual, "://");
+            const char *h = p ? p + 3 : cual;
+            char host_de[96] = {0};
+            size_t n = 0;
+            for (; h[n] && h[n] != '/' && h[n] != '?' && h[n] != '#' && n < sizeof(host_de) - 1; n++)
+                host_de[n] = (h[n] >= 'A' && h[n] <= 'Z') ? (char)(h[n] + 32) : h[n];
+            host_de[n] = 0;
+            /* Sin puerto, que el navegador lo pone (o no) segun como se entre. */
+            char *dp = strchr(host_de, ':');
+            if (dp) *dp = 0;
+            char host_req[64] = {0};
+            size_t hn = 0;
+            for (; host[hn] && host[hn] != ':' && hn < sizeof(host_req) - 1; hn++)
+                host_req[hn] = (host[hn] >= 'A' && host[hn] <= 'Z') ? (char)(host[hn] + 32) : host[hn];
+            host_req[hn] = 0;
+            /* 'null' es un origen opaco (pagina local, sandbox): tampoco vale. */
+            fuera = (host_de[0] == 0) || !strcmp(host_de, "null") ||
+                    (host_req[0] && strcmp(host_de, host_req));
+        } else {
+            /* SIN Origin NI Referer. Aqui entra un <img referrerpolicy=no-referrer>
+             * con las credenciales Basic cacheadas del navegador (los GET
+             * /ausente y /settime TIENEN efecto), asi que se mira Sec-Fetch-Site:
+             * los navegadores modernos lo mandan SIEMPRE y para una peticion
+             * cruzada vale "cross-site". Los clientes que no son navegadores (la
+             * app, el satelite, curl) no lo mandan y no les afecta. */
+            char sfs[32] = {0};
+            if (httpd_req_get_hdr_value_str(req, "Sec-Fetch-Site", sfs, sizeof(sfs)) == ESP_OK) {
+                if (strcmp(sfs, "cross-site") == 0 || strcmp(sfs, "same-site") == 0) fuera = true;
+            }
+        }
+        /* Cabecera DEMASIADO LARGA: httpd devuelve ESP_ERR_HTTPD_INVALID_REQ y la
+         * damos por sospechosa (antes se trataba como ausente y pasaba). */
+        if (eo == ESP_ERR_HTTPD_INVALID_REQ || er == ESP_ERR_HTTPD_INVALID_REQ) fuera = true;
+        if (fuera) {
             ESP_LOGW(TAG, "peticion con Origin/Referer de fuera (%s): la rechazo "
-                          "(posible CSRF)", cual);
+                          "(posible CSRF)", cual ? cual : "(sin cabeceras)");
             httpd_resp_set_status(req, "403 Forbidden");
             httpd_resp_set_type(req, "text/plain");
             httpd_resp_sendstr(req, "Origen no permitido");
+            /* Igual que en el 401: no se drena (no funcionaba) y se cierra. */
+            auth_cerrar_sesion(req, "403 por origen");
             return ESP_FAIL;
         }
     }
@@ -462,6 +536,10 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     if (err == ESP_OK && s_auth_header[0] != '\0' &&
         auth_equal_ct(auth, s_auth_header)) {
         s_fallos = 0;
+        /* Tambien los de ESA IP: si no, seguiria contando fallos viejos y el
+         * siguiente desliz la mandaria a 429 sin motivo. */
+        struct auth_ip_s *ok_ip = auth_ip_slot(auth_ip_cliente(req), esp_timer_get_time());
+        if (ok_ip) ok_ip->fallos = 0;
         ap_off_timer_kick();   /* peticion valida -> mantener el HTTP server vivo */
         return ESP_OK;
     }
@@ -472,10 +550,7 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     /* Freno POR IP, sin dormir la tarea del servidor. */
     uint32_t ip = auth_ip_cliente(req);
     if (ip != 0) {
-        /* Declarado como void* para no sacar el tipo de la tabla a la cabecera;
-         * se rehace el molde aqui (mismo layout). */
-        struct { uint32_t ip; uint32_t fallos; int64_t ultimo_us; } *f =
-            (void *)auth_ip_slot(ip);
+        struct auth_ip_s *f = auth_ip_slot(ip, now_us);
         if (f) {
             if (now_us - f->ultimo_us > AUTH_INACTIVIDAD_US) f->fallos = 0;
             if (f->fallos > AUTH_FALLOS_LIBRES) {
@@ -490,6 +565,7 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
                     httpd_resp_set_hdr(req, "Retry-After", ra);
                     httpd_resp_set_type(req, "text/plain");
                     httpd_resp_sendstr(req, "Demasiados intentos: espera un momento");
+                    auth_cerrar_sesion(req, "429 por fuerza bruta");
                     return ESP_FAIL;
                 }
             }
@@ -520,29 +596,10 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "Auth required");
 
-    /* Drenar el body que quede por leer, con tope TOTAL de 8 s (esp_timer).
-     * El porqué: un cliente sin credenciales que anuncia un Content-Length
-     * enorme y gotea el cuerpo poco a poco (slowloris) dejaba al purge de la
-     * sesion del framework esperando ese body para siempre -- esp_http_server
-     * es de UNA sola tarea, asi que la instancia httpd entera quedaba muda
-     * para todos. Si al caducar el plazo sigue quedando body, se cierra la
-     * sesion para que el purge no se quede colgado.
-     * El 401 solo se envia cuando faltan credenciales, asi que el flujo OTA
-     * con credenciales correctas no pasa por aqui y no cambia nada. */
-    if (req->content_len > 0) {
-        char drena[256];
-        int64_t tope_us = esp_timer_get_time() + 8 * 1000000;   /* 8 s */
-        while (req->content_len > 0 && esp_timer_get_time() < tope_us) {
-            size_t quiero = sizeof(drena);
-            if (req->content_len < quiero) quiero = req->content_len;
-            int r = httpd_req_recv(req, drena, quiero);
-            if (r <= 0) break;
-        }
-        if (req->content_len > 0) {
-            ESP_LOGW(TAG, "401 con body sin drenar (cliente lento): cierro la sesion");
-            httpd_sess_trigger_close(req->handle, httpd_req_to_sockfd(req));
-        }
-    }
+    /* El cuerpo que quede por leer NO se drena: se cierra la sesion (ver el
+     * comentario de auth_cerrar_sesion: el bucle de drenado no terminaba nunca
+     * porque content_len no baja, y bloqueaba la unica tarea del httpd). */
+    auth_cerrar_sesion(req, "401 sin credenciales validas");
     return ESP_FAIL;
 }
 

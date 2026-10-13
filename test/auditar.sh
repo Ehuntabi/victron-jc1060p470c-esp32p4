@@ -184,28 +184,35 @@ echo "=== 5. El portal pide clave en todos los handlers ==="
 # se saca el nombre del handler y se comprueba que su cuerpo (o el de una macro
 # que lo envuelva) lleve REQUIRE_AUTH. Los del portal cautivo se excluyen a
 # proposito: romperian la deteccion de portal.
+# OJO CON LA VENTANA: antes se miraban "las 12 lineas siguientes al prototipo" y
+# eso da FALSO NEGATIVO cuando el handler es corto -- la ventana se solapa con el
+# handler siguiente y caza SU REQUIRE_AUTH. Demostrado en la revision del
+# 13-oct-2026: quitando el de handle_data_frigo_tar (que esta a 3 lineas del de
+# bateria) la regla seguia diciendo OK. Ahora se delimita el CUERPO de verdad,
+# con awk, desde la firma hasta la llave que la cierra.
 sin_auth=""
-total=0
-for f in main/portal/*.c; do
-    # "handler = nombre" de cada registro, en el orden en que aparecen
-    grep -oP '\.handler\s*=\s*\K\w+' "$f" 2>/dev/null | while read -r h; do
-        total=$((total + 1))
-        case "$h" in
-            handle_captive_redirect|handle_static) continue ;;   # a proposito
-        esac
-        # el cuerpo del handler en CUALQUIER fichero del portal
-        if ! grep -rq -A 12 "esp_err_t $h(httpd_req_t" main/portal/*.c || \
-           ! grep -rA 12 "esp_err_t $h(httpd_req_t" main/portal/*.c | grep -q "REQUIRE_AUTH"; then
-            echo "$h"
-        fi
-    done
-done > /tmp/auditar_sin_auth.$$ 2>/dev/null
-sin_auth=$(sort -u /tmp/auditar_sin_auth.$$ | tr '\n' ' ')
-rm -f /tmp/auditar_sin_auth.$$
+for h in $(grep -rhoE '\.handler[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*' main/portal/*.c \
+           | sed 's/.*=[[:space:]]*//' | sort -u); do
+    case "$h" in
+        handle_captive_redirect) continue ;;   # portal cautivo: a proposito
+    esac
+    if ! awk -v fn="$h" '
+        index($0, "esp_err_t " fn "(httpd_req_t") > 0 { dentro = 1 }
+        dentro {
+            if (index($0, "REQUIRE_AUTH") > 0) { encontrado = 1 }
+            n = gsub(/\{/, "{"); m = gsub(/\}/, "}")
+            llaves += n - m
+            if (llaves <= 0 && index($0, "}") > 0) { dentro = 0 }
+        }
+        END { exit encontrado ? 0 : 1 }
+    ' main/portal/*.c; then
+        sin_auth="$sin_auth $h"
+    fi
+done
 if [ -z "$sin_auth" ]; then
-    ok "todos los handlers registrados piden clave (salvo los del portal cautivo)"
+    ok "todos los handlers registrados piden clave (salvo el del portal cautivo)"
 else
-    mal "handlers registrados SIN clave: $sin_auth"
+    mal "handlers registrados SIN clave:$sin_auth"
 fi
 
 echo "=== 6. La SD: transporte, reloj y el C6 mientras se identifica ==="

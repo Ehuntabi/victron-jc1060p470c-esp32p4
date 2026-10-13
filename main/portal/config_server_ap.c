@@ -343,15 +343,36 @@ static int s_vueltas_tras_ap = 0;   /* vueltas desde el ultimo reinicio del AP *
 static bool s_ap_reiniciado = false; /* el AP ya se reinicio en este arranque */
 static int s_mini_mudo = 0;         /* vueltas seguidas con la cabina diciendo "no recibo" */
 
+/* Cuantas concesiones DHCP vivas hay.
+ *
+ * OJO, ESTO ESTABA MAL Y NO SE NOTABA (revision del 13-oct-2026): en
+ * esp_netif_dhcps_get_clients_by_mac() las MAC son ENTRADA y las IP SALIDA
+ * (ver esp_netif.h: "MAC are inputs, IP outputs"), asi que pasando un array sin
+ * inicializar no se preguntaba por nadie: las IP se quedaban como estuvieran
+ * (con el relleno 0xA5 de FreeRTOS, casi siempre distintas de cero) y esto
+ * devolvia 8 con la mesa vacia. Como el vigilante da el enlace por SANO en
+ * cuanto hay concesiones, la escalera del DHCP -> AP -> placa no se ejecutaba
+ * NUNCA, y el log "(N concesiones)" mentia. Ahora se pregunta por las MAC de
+ * verdad, las de los clientes asociados. */
 static int ap_concesiones_vivas(void)
 {
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (!netif) return -1;
+
+    wifi_sta_list_t asociados;
+    memset(&asociados, 0, sizeof(asociados));
+    if (esp_wifi_ap_get_sta_list(&asociados) != ESP_OK) return -1;
+    if (asociados.num == 0) return 0;              /* nadie asociado: sin concesiones */
+
     esp_netif_pair_mac_ip_t pares[8];
-    esp_err_t err = esp_netif_dhcps_get_clients_by_mac(netif, 8, pares);
+    memset(pares, 0, sizeof(pares));               /* y a cero, por si acaso */
+    int cuantos = asociados.num < 8 ? asociados.num : 8;
+    for (int i = 0; i < cuantos; i++) memcpy(pares[i].mac, asociados.sta[i].mac, 6);
+
+    esp_err_t err = esp_netif_dhcps_get_clients_by_mac(netif, cuantos, pares);
     if (err != ESP_OK) return -1;
     int n = 0;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < cuantos; ++i) {
         if (pares[i].ip.addr != 0) n++;
     }
     return n;

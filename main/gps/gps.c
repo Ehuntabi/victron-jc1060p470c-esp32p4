@@ -166,7 +166,11 @@ static void poner_en_hora(const char *hhmmss, const char *ddmmyy)
      * pernocta abierta antes del salto puede contar dias de mas (se cobra por
      * noches). No se puede impedir -- el GPS manda --, pero que quede dicho
      * DENTRO del viaje: si un dia sale un viaje raro, el motivo esta escrito. */
-    if (!primera && desvio > 300) {
+    /* Tambien la PRIMERA sincronizacion: si el reloj venia de un respaldo en NVS
+     * con horas de error, ese es el salto mas grande de todos, y la placa se
+     * reinicia sola a mitad de viaje (escalera del AP, OTA). Antes se excluia
+     * con !primera y ese caso no dejaba rastro (revision del 13-oct-2026). */
+    if (desvio > 300) {
         ESP_LOGW(TAG, "el GPS mueve el reloj %ld s con el viaje en marcha", desvio);
         viaje_nota_hora_corregida(desvio);
     }

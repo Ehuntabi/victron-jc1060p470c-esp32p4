@@ -15,8 +15,11 @@
  * Con eso el vigilante decide en SEGUNDOS en vez de en minutos, y la cabina no
  * tiene que adivinar nada ni ponerse a reconectar por su cuenta.
  *
- * Aqui solo se escucha y se guarda el estado: no se actua. Delicateza: la tarea
- * solo escribe cuatro variables volatiles y no llama a ninguna API del Wi-Fi. */
+ * Aqui solo se escucha y se guarda el estado: no se actua. La tarea mantiene una
+ * tabla de fuentes (una por cabina), llama a esp_netif_* por paquete para
+ * comprobar de que red viene y la comparte con el vigilante del AP sin cerrojo:
+ * son enteros y punteros alineados, y lo peor que puede pasar es leer un dato de
+ * una vuelta anterior. */
 #include "udp_latido.h"
 #include "mini_proto.h"
 #include "esp_log.h"
@@ -27,7 +30,6 @@
 #include "freertos/task.h"
 #include "lwip/sockets.h"
 #include "esp_netif.h"
-#include "esp_timer.h"
 #include <string.h>
 #include <errno.h>
 
@@ -54,12 +56,25 @@ static latido_fuente_t s_fuentes[LATIDO_MAX_FUENTES];
 /* Coge (o crea) la entrada de esa IP. Devuelve NULL si la tabla esta llena: con
  * cuatro huecos y dos cabinas de sobra, pero si un desconocido los llena, lo que
  * NO se hace es pisar a una cabina conocida. */
-static latido_fuente_t *fuente_de(uint32_t ip)
+static latido_fuente_t *fuente_de(uint32_t ip, int64_t ahora_us)
 {
     latido_fuente_t *libre = NULL;
     for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
         if (s_fuentes[i].ip == ip) return &s_fuentes[i];
-        if (s_fuentes[i].ip == 0 && !libre) libre = &s_fuentes[i];
+        /* CADUCA: una cabina que cambia de IP (el DHCP le da otra tras
+         * reiniciar el AP), una pantalla sustituida o un invitado dejan su
+         * hueco ocupado para siempre; con cuatro huecos, la tabla se llenaba y
+         * una cabina nueva se quedaba fuera ("tabla llena: lo ignoro") con la
+         * deteccion por cabina apagada hasta el siguiente reinicio. Revision del
+         * 13-oct-2026. */
+        bool caducada = (s_fuentes[i].ip != 0) &&
+                        ((ahora_us - s_fuentes[i].ultimo_us) > 60LL * 1000000LL);
+        if ((s_fuentes[i].ip == 0 || caducada) && !libre) libre = &s_fuentes[i];
+    }
+    if (libre && libre->ip != 0) {
+        ESP_LOGI(TAG, "hueco de latido reciclado (la cabina %08lx llevaba >60 s callada)",
+                 (unsigned long)libre->ip);
+        libre->ip = 0;
     }
     return libre;
 }
@@ -194,21 +209,40 @@ static void latido_task(void *arg)
          * son de una cabina conocida o hay hueco para conocerla; lo que llegue
          * de la puerta (la propia P4) o de fuera de la subred se tira. */
         uint32_t origen = src.sin_addr.s_addr;
-        uint32_t red_ap = 0;
+        uint32_t red_ap = 0, mascara_ap = 0;
         {
             esp_netif_ip_info_t ip;
             esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-            if (ap && esp_netif_get_ip_info(ap, &ip) == ESP_OK) red_ap = ip.ip.addr;
-        }
-        if (red_ap != 0) {
-            uint32_t mascara = htonl(0xFFFFFF00u);
-            if ((origen & mascara) != (red_ap & mascara) || origen == red_ap) {
-                ESP_LOGW(TAG, "latido de fuera del AP (%s): lo ignoro",
-                         inet_ntoa(src.sin_addr));
-                continue;
+            if (ap && esp_netif_get_ip_info(ap, &ip) == ESP_OK) {
+                red_ap = ip.ip.addr;
+                mascara_ap = ip.netmask.addr;   /* la de verdad, no un /24 a mano */
             }
         }
-        latido_fuente_t *f = fuente_de(origen);
+        /* FAIL-CLOSED: si no se puede saber cual es la red del AP, el latido se
+         * tira. Antes se saltaba la comprobacion entera (se aceptaba cualquier
+         * origen) justo cuando el netif esta raro, que es cuando mas importa. */
+        if (red_ap == 0 || mascara_ap == 0) {
+            ESP_LOGW(TAG, "no puedo leer la IP del AP: ignoro el latido de %s",
+                     inet_ntoa(src.sin_addr));
+            continue;
+        }
+        if ((origen & mascara_ap) != (red_ap & mascara_ap) || origen == red_ap) {
+            ESP_LOGW(TAG, "latido de fuera del AP (%s): lo ignoro",
+                     inet_ntoa(src.sin_addr));
+            continue;
+        }
+        /* Y solo de la franja que usan las CABINAS cuando el DHCP no contesta:
+         * 192.168.4.200-231, la misma .200 + (mac[5] & 0x1F) que se pone
+         * udp_rx.c. No es una frontera de seguridad -- un cliente del AP puede
+         * elegir esa IP --, pero deja fuera el ruido de cualquier otro trasto y
+         * evita que ocupe un hueco de la tabla. */
+        unsigned ultimo = ntohl(origen) & 0xFFu;
+        if (ultimo < 200u || ultimo > 231u) {
+            ESP_LOGD(TAG, "latido de %s (fuera de la franja .200-.231 de las "
+                          "cabinas): lo ignoro", inet_ntoa(src.sin_addr));
+            continue;
+        }
+        latido_fuente_t *f = fuente_de(origen, esp_timer_get_time());
         if (!f) {
             ESP_LOGW(TAG, "latido de %s y la tabla de cabinas esta llena: lo ignoro",
                      inet_ntoa(src.sin_addr));

@@ -117,7 +117,6 @@ static void evaluar(const alarma_tipo_t t, const bool condicion, const uint32_t 
         if (estaba_activa) {
             audio_cancel_playback();
         }
-        (void)0;
         a->activa     = false;
         a->silenciada = false;
         /* OJO: aqui NO se toca a->desde_ms. Es el reloj del REBOTE y lo lleva

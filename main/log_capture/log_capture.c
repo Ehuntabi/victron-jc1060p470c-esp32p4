@@ -173,7 +173,12 @@ static portMUX_TYPE  s_busy_mux  = portMUX_INITIALIZER_UNLOCKED;
  * peticion (no bloquea), y esta task hace el fprintf real (lento, ~1-3s)
  * en background. Evita Task Watchdog del LVGL task. */
 typedef struct {
-    char path[80];
+    /* 192, no 80: el nombre lleva motivo + viaje + fecha + hora y con el buffer
+     * viejo se RECORTABA a 79 caracteres, o sea que perdia el ".txt" -- y
+     * rotate_files() exige ese sufijo, asi que esos ficheros no entraban nunca
+     * en la rotacion FIFO y se acumulaban. Lo cazo la revision del
+     * 13-oct-2026, dos commits despues de meter el viaje en el nombre. */
+    char path[192];
     log_capture_entry_t *snap;
     size_t snap_count;
     size_t snap_head;
@@ -216,7 +221,7 @@ static void log_save_task(void *arg)
          * op_fin en la P4), el fichero sigue diciendo como se llamaba cuando se
          * escribio, que es justo lo que hace falta para entenderlo despues. */
         {
-            char vj[40];
+            char vj[64];   /* CARPETA_MAX: con 40 no cabia la ruta de NVS */
             if (!viaje_abierto_nombre(vj, sizeof(vj))) snprintf(vj, sizeof(vj), "(sin viaje)");
             time_t ahora = time(NULL);
             struct tm tmc; localtime_r(&ahora, &tmc);
@@ -510,28 +515,44 @@ esp_err_t log_capture_autosave_now(int keep)
      *
      * El viaje va DELANTE de la fecha, no detras: el que migra los logs sueltos
      * a su carpeta de dia saca la fecha de los ULTIMOS 20 caracteres del nombre
-     * (ver log_migrar_sueltos), asi que metiendolo en medio no se rompe nada.
+     * (ver log_capture_migrate_legacy_flat_files), asi que metiendolo en medio no se rompe nada.
      *
      * Se sanea porque el nombre de la carpeta puede traer cualquier cosa de la
      * P4; solo letras, numeros, guion y guion bajo. */
-    char viaje[40];
+    /* 64 = CARPETA_MAX (la ruta guardada en NVS es "/sdcard/viajes/<fecha>_<dest>",
+     * hasta ~53 caracteres): con 40, nvs_get_str devolvia INVALID_LENGTH y la
+     * cabecera salia diciendo "(sin viaje)" justo cuando SI habia viaje. */
+    char viaje[64];
     if (!viaje_abierto_nombre(viaje, sizeof(viaje))) viaje[0] = 0;
+    /* Se sanea SOLO el nombre de la carpeta, no la ruta entera: si no, los
+     * separadores se tiraban y el nombre quedaba como "sdcardviajes2026-10-13". */
+    const char *base = strrchr(viaje, '/');
+    base = base ? base + 1 : viaje;
     char vs[32]; size_t vj = 0;
-    for (size_t i = 0; viaje[i] && vj + 2 < sizeof(vs); i++) {
-        const char c = viaje[i];
+    for (size_t i = 0; base[i] && vj + 2 < sizeof(vs); i++) {
+        const char c = base[i];
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
             (c >= '0' && c <= '9') || c == '-' || c == '_') vs[vj++] = c;
         else if (c == ' ') vs[vj++] = '_';
     }
     vs[vj] = 0;
 
-    char path[160];
-    snprintf(path, sizeof(path),
+    char path[192];
+    int pl = snprintf(path, sizeof(path),
              "%s/log_%s%s%s_%04d%02d%02d_%02d%02d%02d.txt", daydir,
              reason,
              vs[0] ? "_" : "", vs,
              tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
              tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    if (pl < 0 || pl >= (int)sizeof(path)) {
+        /* Nunca recortar en silencio: un nombre sin ".txt" no lo rota nadie. */
+        ESP_LOGE("log_capture", "nombre de log demasiado largo (%d): lo guardo "
+                                "sin el viaje", pl);
+        snprintf(path, sizeof(path),
+                 "%s/log_%s_%04d%02d%02d_%02d%02d%02d.txt", daydir, reason,
+                 tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+                 tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    }
 
     esp_err_t err = log_capture_save_to_file(path);
     if (err == ESP_OK && keep > 0) {

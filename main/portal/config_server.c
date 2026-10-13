@@ -323,7 +323,14 @@ static esp_err_t handle_api_alarma(httpd_req_t *req) {
      * los dos sentidos y volver a encender el sonido no hacia NADA, dejando el
      * icono mintiendo (auditoria del 13-oct-2026). */
     const cJSON *js = cJSON_GetObjectItem(j, "silencio");
-    bool quiere_callar = cJSON_IsBool(js) ? cJSON_IsTrue(js) : true;
+    /* Y SE ACEPTAN LAS DOS FORMAS: numero (lo que manda la cabina: 1/0) y
+     * booleano. La primera version de esto solo miraba cJSON_IsBool y la cabina
+     * manda un NUMERO, asi que "silencio":0 (volver a sonar) se leia como
+     * CALLAR: el boton del altavoz seguia sin hacer nada y el icono mintiendo.
+     * Lo cazo la revision adversarial del mismo dia. */
+    bool quiere_callar = cJSON_IsBool(js)   ? cJSON_IsTrue(js)
+                       : cJSON_IsNumber(js) ? (js->valueint != 0)
+                       : true;   /* sin el campo: callar, como siempre */
     cJSON_Delete(j);
 
     /* El bitmask lo interpreta alarma_estado.c, que es quien tiene el estado. */
