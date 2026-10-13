@@ -55,8 +55,12 @@ comprueba_registro() {   # comprueba_registro <ruta> <servidor>
     fi
     # Una ruta puede tener varias variantes (GET y POST); vale que CUALQUIERA
     # este registrada en el servidor que usa la app.
+    #
+    # Se aceptan las DOS formas de registrar: la llamada directa y el envoltorio
+    # registrar() que comprueba el retorno (14-oct-2026: el servidor pesado tiene
+    # 24 plazas y 21 handlers, asi que uno que no quepa desaparecia en silencio).
     for v in $vars; do
-        if grep -qE "httpd_register_uri_handler\([[:space:]]*$servidor[[:space:]]*,[[:space:]]*&$v[[:space:]]*\)" "$CS"; then
+        if grep -qE "(httpd_register_uri_handler|registrar)\([[:space:]]*$servidor[[:space:]]*,[[:space:]]*&$v[[:space:]]*\)" "$CS"; then
             printf '  [ok]   %-22s en %s (%s)\n' "$ruta" "$servidor" "$v"
             return
         fi
