@@ -84,6 +84,9 @@ static void ruta_olvidar(void);
 /* Destino nuevo pedido a mitad de viaje, SIN aplicar todavia (ver op_destino).
  * Vacio o ausente = no se ha cambiado. */
 #define NVS_DESTINO     "destino_nuevo"     /* ruta del viaje abierto, ausente si no hay */
+/* Que pantalla empezo el viaje abierto: su MAC en hex. Vacio = no se sabe (una
+ * cabina con firmware viejo, o un viaje empezado antes de este cambio). */
+#define NVS_DEV         "v_dev"
 #define NVS_IDS_RING    "ids_ring"    /* anillo de ids aplicados recientemente (idempotencia) */
 #define NVS_IDS_CURSOR  "ids_cur"     /* proxima posicion libre del anillo */
 #define IDS_RING_N      64            /* margen amplio sobre SALIDA_EVENTOS_MAX (4 en el
@@ -224,6 +227,10 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
+    /* Al CERRAR (carpeta == NULL) se borra tambien de que pantalla era: si no,
+     * el siguiente viaje heredaria el dueno del anterior y una cabina distinta
+     * se llevaria un 412 en vez del 409 de siempre. */
+    if (!carpeta) nvs_erase_key(h, NVS_DEV);
     estado_set_en(h, carpeta, id);
     esp_err_t e = nvs_commit(h);
     nvs_close(h);
@@ -662,9 +669,35 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     char abierto[CARPETA_MAX];
     if (viaje_abierto(abierto, sizeof(abierto))) {
         /* No se pisa un viaje abierto: seria perder la carpeta anterior sin que
-         * nadie se enterara. El satelite tiene que cerrarlo primero. */
-        ESP_LOGW(TAG, "inicio con viaje ya abierto en %s", abierto);
-        httpd_resp_set_status(req, "409 Conflict");
+         * nadie se enterara. El satelite tiene que cerrarlo primero.
+         *
+         * Y SI EL VIAJE ABIERTO LO EMPEZO OTRA PANTALLA SE DICE APARTE (412, no
+         * 409): es el caso que la auditoria de comunicacion del 13-oct-2026 vio
+         * peligroso -- la segunda pantalla ofrece "apartarlo (era una prueba)" y
+         * acaba renombrando la carpeta del viaje REAL de la primera, que sigue
+         * grabando, y sus apuntes se van a /sdcard/vehiculo. Con un codigo
+         * distinto, la cabina avisa de eso SIN leer el cuerpo de la respuesta
+         * (que hoy no llega a la pantalla).
+         *
+         * 'dev' es la MAC de la cabina en hex. Si no viene (firmware viejo) o no
+         * hay ninguna apuntada, se contesta 409 como siempre: no se puede
+         * afirmar que sea de otra. */
+        const cJSON *jdev = cJSON_GetObjectItemCaseSensitive(j, "dev");
+        char dev_pide[24] = {0};
+        if (cJSON_IsString(jdev)) destino_seguro(jdev->valuestring, dev_pide, sizeof(dev_pide));
+        char dev_abierto[24] = {0};
+        {
+            nvs_handle_t hd;
+            if (nvs_open(NVS_NS, NVS_READONLY, &hd) == ESP_OK) {
+                size_t n = sizeof(dev_abierto);
+                if (nvs_get_str(hd, NVS_DEV, dev_abierto, &n) != ESP_OK) dev_abierto[0] = 0;
+                nvs_close(hd);
+            }
+        }
+        bool ajena = viaje_dev_ajeno(dev_pide, dev_abierto) != 0;
+        ESP_LOGW(TAG, "inicio con viaje ya abierto en %s (%s)", abierto,
+                 ajena ? "lo empezo OTRA pantalla" : "misma pantalla o no se sabe");
+        httpd_resp_set_status(req, ajena ? "412 Precondition Failed" : "409 Conflict");
         /* CON EL NOMBRE DEL VIAJE ABIERTO (auditoria del 13-oct-2026). La
          * pantalla de cabina no podia decir CUAL era, y con dos pantallas (o con
          * el cierre del viaje anterior todavia en la cola) el usuario no tenia
@@ -672,8 +705,9 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * un resto de una prueba -- y la salida que se le ofrecia, "apartarlo",
          * renombra la carpeta del viaje de verdad. Una cabina antigua lo ignora
          * (solo mira el codigo); las nuevas lo enseñan. */
-        char resp[128];
-        snprintf(resp, sizeof(resp), "ya hay un viaje abierto: %s", abierto);
+        char resp[192];
+        snprintf(resp, sizeof(resp), "ya hay un viaje abierto: %s%s", abierto,
+                 ajena ? " (lo empezo otra pantalla)" : "");
         httpd_resp_sendstr(req, resp);
         return ESP_OK;
     }
@@ -791,6 +825,14 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * viaje de una noche saldria como "0 dias". */
         nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
         nvs_set_u32(h, NVS_T_APLIC, 1);   /* el inicio ya cuenta */
+        /* Que pantalla empieza el viaje, en el MISMO commit que el resto del
+         * estado: si no, un corte entre los dos deja un viaje sin dueno. */
+        {
+            const cJSON *jd2 = cJSON_GetObjectItemCaseSensitive(j, "dev");
+            char dev[24] = {0};
+            if (cJSON_IsString(jd2)) destino_seguro(jd2->valuestring, dev, sizeof(dev));
+            nvs_set_str(h, NVS_DEV, dev);
+        }
         estado_set_en(h, carpeta, id);
         ne = nvs_commit(h);
         nvs_close(h);

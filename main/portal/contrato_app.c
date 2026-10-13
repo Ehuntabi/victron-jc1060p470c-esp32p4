@@ -51,3 +51,12 @@ int ausente_json(char *out, size_t n, bool activo, const char *motivo,
                     activo ? "true" : "false", mot, sal, avi, fotos,
                     rotando ? "true" : "false");
 }
+
+/* Ver el comentario en contrato_app.h. Comparacion de cadenas EXACTA, sin
+ * acentos ni espacios: el id es la MAC en hex (ver p4_api.c de las cabinas). */
+int viaje_dev_ajeno(const char *dev_pide, const char *dev_abierto)
+{
+    if (!dev_pide || !dev_abierto) return 0;
+    if (!dev_pide[0] || !dev_abierto[0]) return 0;   /* no se sabe: trato de siempre */
+    return strcmp(dev_pide, dev_abierto) ? 1 : 0;
+}

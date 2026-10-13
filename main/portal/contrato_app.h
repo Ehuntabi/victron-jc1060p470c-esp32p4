@@ -20,6 +20,22 @@
  * "falta 'carpeta'", "faltan op o id"), que es lo que contesta el handler. */
 const char *viaje_campos_que_faltan(const char *op, bool hay_carpeta, bool hay_id);
 
+/* ¿Quien pide empezar un viaje es la MISMA pantalla que empezo el que ya esta
+ * abierto, o es OTRA?
+ *
+ * Devuelve 0 si es la misma (o si no se sabe: alguna de las dos viene vacia,
+ * como en una cabina con firmware viejo), y 1 si es otra. El handler usa eso
+ * para elegir el codigo: 409 "ya hay un viaje abierto" (es tuyo: lo mas
+ * probable es que tengas el cierre sin entregar en tu propia cola) o 412
+ * "ese viaje lo empezo otra pantalla". Con el 412, la cabina puede avisar SIN
+ * necesitar leer el cuerpo de la respuesta.
+ *
+ * Por que existe (auditoria de comunicacion del 13-oct-2026): con dos
+ * pantallas, la que llega segunda y recibe 409 ofrecia "apartarlo (era una
+ * prueba)" y podia renombrar la carpeta del viaje REAL de la otra, que seguia
+ * grabando: sus apuntes acababan en /sdcard/vehiculo. */
+int viaje_dev_ajeno(const char *dev_pide, const char *dev_abierto);
+
 /* Construye el JSON de GET /ausente (estado del modo vigilancia) y devuelve lo
  * que ocupa, como snprintf. Los textos se escapan (comillas, barras y saltos).
  * Lo publica el portal y lo lee la pantalla "Camara" de la app. */

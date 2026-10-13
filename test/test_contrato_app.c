@@ -102,11 +102,30 @@ static void prueba_ausente(void)
     ok("con textos larguisimos no desborda (trunca)", n > 0 && (size_t)n < sizeof(js) + 1);
 }
 
+/* La decision de "¿el viaje abierto lo empezo otra pantalla?" (13-oct-2026). */
+static void prueba_dev(void)
+{
+    printf("\n-- De quien es el viaje abierto --\n");
+    ok("misma pantalla -> 0", viaje_dev_ajeno("aabbccddeeff", "aabbccddeeff") == 0);
+    ok("otra pantalla -> 1",  viaje_dev_ajeno("aabbccddeeff", "112233445566") == 1);
+    ok("sin dev en el que pide -> 0 (no se puede afirmar)",
+       viaje_dev_ajeno("", "aabbccddeeff") == 0);
+    ok("sin dev apuntado -> 0", viaje_dev_ajeno("aabbccddeeff", "") == 0);
+    ok("los dos vacios -> 0",  viaje_dev_ajeno("", "") == 0);
+    ok("NULL -> 0",            viaje_dev_ajeno(NULL, "x") == 0 &&
+                               viaje_dev_ajeno("x", NULL) == 0);
+    /* Que no cuele por prefijo: "aabb" no es "aabbcc". */
+    ok("no vale el prefijo",   viaje_dev_ajeno("aabb", "aabbcc") == 1);
+    ok("mayusculas distintas cuentan como otra",
+       viaje_dev_ajeno("AABB", "aabb") == 1);
+}
+
 int main(void)
 {
     printf("Contrato P4 <-> app del movil\n");
     prueba_viaje();
     prueba_ausente();
+    prueba_dev();
     printf("\n%d comprobaciones, %d fallos\n", pruebas, fallos);
     if (fallos == 0) printf("TODO BIEN\n");
     return fallos == 0 ? 0 : 1;
