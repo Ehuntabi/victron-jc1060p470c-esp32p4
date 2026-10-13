@@ -3069,6 +3069,29 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         return ESP_OK;
     }
 
+    /* BORRAR UN VIAJE PIDE LA CLAVE DE ADMINISTRACION (auditoria del 14-oct-2026).
+     *
+     * Es la unica operacion de esta API que DESTRUYE datos de la tarjeta
+     * (op_borrar borra la carpeta entera) y estaba en el nivel ABIERTO: bastaba
+     * la clave del portal, que en esta unidad esta publicada en el historial de
+     * dos repos publicos. Las demas ops siguen abiertas A PROPOSITO: las usan
+     * las cabinas, que no tienen ni deben tener la clave de administracion.
+     *
+     * Si el usuario no ha puesto clave de administracion, el nivel estricto cae
+     * al abierto (config_server_auth.c) y esto no le cambia nada: la app sigue
+     * borrando como antes. El dia que la ponga, borrar pedira esa clave -- y se
+     * le dice en el cuerpo, que la app lo enseña. */
+    if (!strcmp(jop->valuestring, "borrar") &&
+        check_basic_auth_strict_aviso(req,
+            "borrar un viaje necesita la clave de administracion (pantalla de la "
+            "P4: Ajustes -> Wi-Fi)") != ESP_OK) {
+        /* La respuesta 401 ya la ha mandado auth_comprueba; esto solo añade el
+         * motivo, que si no se queda en un 401 pelado. */
+        cJSON_Delete(j);
+        ESP_LOGW(TAG, "borrar sin credencial de administracion: rechazado");
+        return ESP_OK;
+    }
+
     esp_err_t ret;
     if      (!strcmp(jop->valuestring, "inicio")) ret = op_inicio(req, j, id);
     else if (!strcmp(jop->valuestring, "fin"))    ret = op_fin(req, j, id);

@@ -563,7 +563,8 @@ static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
  * estricta, asi que en cuanto se generaba la clave de administracion TODOS los
  * endpoints abiertos pasaban a pedirla: la app daba 401 en cada pantalla y el
  * satelite no podia mandar apuntes. */
-static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab)
+static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
+                                const char *aviso)
 {
     static uint32_t s_fallos = 0;
     static int64_t  s_ultimo_fallo_us = 0;
@@ -713,7 +714,10 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab)
     httpd_resp_set_hdr(req, "WWW-Authenticate",
                        "Basic realm=\"Victron Display\"");
     httpd_resp_set_type(req, "text/plain");
-    httpd_resp_sendstr(req, "Auth required");
+    /* El cuerpo se puede personalizar (aviso != NULL): hay sitios -- borrar un
+     * viaje -- donde "Auth required" no le dice al usuario QUE credencial falta
+     * ni donde se pone. Lo enseña la app (manda el cuerpo en el mensaje). */
+    httpd_resp_sendstr(req, aviso && aviso[0] ? aviso : "Auth required");
 
     /* El cuerpo que quede por leer NO se drena: se cierra la sesion (ver el
      * comentario de auth_cerrar_sesion: el bucle de drenado no terminaba nunca
@@ -726,7 +730,19 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab)
  * /save. La clave de administracion, que si no esta puesta es la del portal. */
 esp_err_t check_basic_auth_strict(httpd_req_t *req)
 {
-    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header);
+    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header, NULL);
+}
+
+/* Nivel estricto con un aviso propio en el 401.
+ *
+ * Existe por BORRAR UN VIAJE (auditoria del 14-oct-2026): es la unica operacion
+ * de /api/viaje que destruye datos de la tarjeta y paso a pedir la clave de
+ * administracion, pero el cliente que la usa (la app) manda la del portal: sin
+ * un texto que lo explique, el usuario solo ve un 401. */
+esp_err_t check_basic_auth_strict_aviso(httpd_req_t *req, const char *aviso)
+{
+    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header,
+                          aviso);
 }
 
 /* Nivel abierto: basta con estar dentro del Wi-Fi (ver el bloque de arriba).
@@ -743,6 +759,6 @@ esp_err_t check_basic_auth(httpd_req_t *req)
 #else
     /* NIVEL ABIERTO: la clave del PORTAL (la de la app y las pantallas), NO la
      * de administracion. Ver el comentario de check_basic_auth_strict(). */
-    return auth_comprueba(req, s_auth_header);
+    return auth_comprueba(req, s_auth_header, NULL);
 #endif
 }

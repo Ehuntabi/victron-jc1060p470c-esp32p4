@@ -9,6 +9,10 @@
 /* Definidas en config_server_auth.c. */
 esp_err_t check_basic_auth(httpd_req_t *req);
 esp_err_t check_basic_auth_strict(httpd_req_t *req);
+
+/* Como check_basic_auth_strict, pero el 401 lleva un aviso propio (que la app
+ * enseña) en vez de "Auth required". */
+esp_err_t check_basic_auth_strict_aviso(httpd_req_t *req, const char *aviso);
 extern const char SETTIME_SCRIPT[];
 
 /* Definida en config_server_ap.c (ciclo de vida del AP/portal). La necesita
