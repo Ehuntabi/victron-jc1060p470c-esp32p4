@@ -160,6 +160,18 @@ static void build_msg(mini_msg_t *out)
          * entre el epoch local y el UTC, que aqui se tienen los dos. */
         int32_t off = (int32_t)out->epoch_local - (int32_t)ahora;
         out->utc_off_quince = (uint8_t)(int8_t)(off / 900);
+        /* Una linea, la primera vez: la hora local que se esta mandando y con
+         * que desfase. Es lo que se mira cuando "la hora va rara" (14-oct-2026),
+         * y de paso deja en el log que el desfase horario viaja de verdad. */
+        static bool avisado = false;
+        if (!avisado) {
+            avisado = true;
+            ESP_LOGI(TAG, "hora local: %04d-%02d-%02d %02d:%02d:%02d (UTC%+ld h) "
+                          "-> a la cabina con desfase %d cuartos",
+                     tm_local.tm_year + 1900, tm_local.tm_mon + 1, tm_local.tm_mday,
+                     tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec,
+                     (long)(off / 3600), out->utc_off_quince);
+        }
     } else {
         out->epoch_local = 0;
         out->utc_off_quince = 0;   /* sin hora valida no hay desfase que dar */
