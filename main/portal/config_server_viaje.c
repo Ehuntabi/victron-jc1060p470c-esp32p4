@@ -680,6 +680,20 @@ static void totales_borrar(void)
 
 /* ── Las operaciones ──────────────────────────────────────────────────────── */
 
+/* Dias desde 1970 de una fecha LOCAL, sin tm_gmtoff (la newlib de ESP-IDF no
+ * lo trae). Es la misma cuenta que hace udp_tx.c para armar epoch_local, que es
+ * de donde sale el 'fecha_dias' que manda la cabina: asi los dos numeros son
+ * comparables. Vale de sobra para 1970-2100. */
+static long dias_locales_de(const struct tm *t)
+{
+    static const int fin_mes[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
+    long y = t->tm_year + 1900;
+    long d = (y - 1970) * 365 + (y - 1969) / 4 - (y - 1901) / 100 + (y - 1601) / 400;
+    d += fin_mes[t->tm_mon] + t->tm_mday - 1;
+    if (t->tm_mon >= 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) d++;
+    return d;
+}
+
 static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
 {
     const cJSON *jd = cJSON_GetObjectItem(j, "destino");
@@ -762,15 +776,12 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
              * comentario): un viaje que empieza a las 23:59 y la P4 que ya esta
              * en el dia siguiente es normal y se respeta la fecha que pide la
              * cabina (revision del 13-oct-2026). */
-            /* Dias LOCALES (newlib no da tm_gmtoff en struct tm): la medianoche
-             * local de hoy partida por 86400 es el numero de dia local, que es
-             * la misma cuenta que hace la cabina con epoch_local. */
-            time_t local = ahora_p4;
-            struct tm t_local;
-            localtime_r(&local, &t_local);
-            long dias_p4 = (long)((local - (t_local.tm_hour * 3600 +
-                                            t_local.tm_min * 60 +
-                                            t_local.tm_sec)) / 86400);
+            /* Dias LOCALES (ver dias_locales_de): antes esto partia la
+             * medianoche local por 86400, que da el dia UTC de esa medianoche --
+             * en Madrid salia SIEMPRE uno menos que el de la cabina, asi que el
+             * umbral real era de 3 dias atras y 1 adelante en vez de +/-2
+             * (revision del 13-oct-2026). */
+            long dias_p4  = dias_locales_de(&tm_p4);
             long dias_cab = (long)jf->valuedouble;
             long dif = dias_p4 - dias_cab; if (dif < 0) dif = -dif;
             if (dif >= 2) {
@@ -1831,16 +1842,16 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     /* fsync antes de fclose: sin el, un corte de corriente en los segundos
      * siguientes deja la fila en la cache de la tarjeta (auditoria del
      * 13-oct-2026: no habia ni un fsync en el firmware). */
-    if (fsync(fileno(f)) != 0) {
-        anota_fallo_escritura();
-        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
-    }
+    /* El aviso solo se borra si la fila HA LLEGADO ENTERA: con el fsync fallido
+     * y el fclose bien, antes se ponia a cero y el icono quedaba verde con la
+     * tarjeta fallando (revision del 13-oct-2026). */
+    bool ok = (fsync(fileno(f)) == 0);
+    if (!ok) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) {
-        anota_fallo_escritura();
+        ok = false;
         ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
-    } else {
-        anota_escritura_ok();   /* la telemetria entro: se borra el aviso */
     }
+    if (ok) anota_escritura_ok(); else anota_fallo_escritura();
 }
 
 static void fila_contadores(const char *carpeta, const struct tm *tm_l)
@@ -1880,16 +1891,13 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     /* fsync antes de fclose: sin el, un corte de corriente en los segundos
      * siguientes deja la fila en la cache de la tarjeta (auditoria del
      * 13-oct-2026: no habia ni un fsync en el firmware). */
-    if (fsync(fileno(f)) != 0) {
-        anota_fallo_escritura();
-        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
-    }
+    bool ok = (fsync(fileno(f)) == 0);
+    if (!ok) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) {
-        anota_fallo_escritura();
+        ok = false;
         ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
-    } else {
-        anota_escritura_ok();
     }
+    if (ok) anota_escritura_ok(); else anota_fallo_escritura();
 }
 
 /* Los puntos de la ruta se juntan en RAM y bajan a la tarjeta de golpe.
@@ -1929,16 +1937,27 @@ static bool ruta_volcar(const char *carpeta)
     bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
 
     FILE *f = fopen(ruta, "a");
-    if (!f) return false;                  /* se reintenta en el siguiente tick */
+    if (!f) {                              /* se reintenta en el siguiente tick */
+        anota_fallo_escritura();
+        return false;
+    }
     if (nuevo) fprintf(f, "fecha_hora,latitud,longitud,altitud_m,km\n");
     for (int i = 0; i < s_ruta_n; i++) {
         /* Seis decimales son ~11 cm: de sobra, y no engorda el fichero. */
         fprintf(f, "%s,%.6f,%.6f,%.0f,%.2f\n", s_ruta[i].cuando,
                 s_ruta[i].lat, s_ruta[i].lon, (double)s_ruta[i].alt, s_ruta[i].km);
     }
-    if (fsync(fileno(f)) != 0) { fclose(f); return false; }   /* disco lleno */
-    if (fclose(f) != 0) return false;      /* tarjeta llena: NO se tiran los puntos */
+    if (fsync(fileno(f)) != 0) {           /* disco lleno */
+        anota_fallo_escritura();
+        fclose(f);
+        return false;
+    }
+    if (fclose(f) != 0) {                  /* tarjeta llena: NO se tiran los puntos */
+        anota_fallo_escritura();
+        return false;
+    }
     s_ruta_n = 0;
+    anota_escritura_ok();
     return true;
 }
 
@@ -2091,20 +2110,35 @@ static void tick_viaje_cb(void *arg)
 {
     (void)arg;
     char carpeta[CARPETA_MAX];
-    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) {
+        /* Sin viaje abierto no hay donde anotar nada: los avisos pendientes se
+         * tiran, que si no se escriben (mintiendo) en el viaje siguiente. */
+        s_hora_salto_pendiente = false;
+        s_volcado_pedido = false;
+        return;
+    }
 
     /* Lo pedido desde fuera va ANTES de los relojes: si la bateria se esta
      * cayendo, no se puede esperar a que la hora sea buena. */
     if (s_hora_salto_pendiente) {
-        s_hora_salto_pendiente = false;
         char txt[128];
         snprintf(txt, sizeof(txt),
                  "el reloj se ha movido %lld s (lo puso el GPS); los apuntes "
                  "anteriores llevan la hora vieja",
                  (long long)s_hora_salto_s);
+        /* EL FLAG SE LIMPIA DESPUES DE ESCRIBIR, no antes: si se limpiaba antes
+         * y el cerrojo de la SD no llegaba, la nota se perdia (revision del
+         * 13-oct-2026). Y si sigue sin haber viaje abierto cuando llegue aqui,
+         * se tira: es la nota de un viaje que ya no esta, y guardarla la
+         * escribiria en el viaje SIGUIENTE diciendo una mentira. */
         if (camera_sd_bus_lock(3000)) {
-            diario(carpeta, "hora_corregida", txt);
+            char ahora_carpeta[CARPETA_MAX];
+            if (viaje_abierto(ahora_carpeta, sizeof(ahora_carpeta)) &&
+                strcmp(ahora_carpeta, carpeta) == 0) {
+                diario(carpeta, "hora_corregida", txt);
+            }
             camera_sd_bus_unlock();
+            s_hora_salto_pendiente = false;
         }
     }
     if (s_volcado_pedido) {
@@ -2231,7 +2265,20 @@ void viaje_telemetria_start(void)
 
 esp_err_t handle_api_viaje(httpd_req_t *req)
 {
-    REQUIRE_AUTH_STRICT(req);
+    /* NIVEL ABIERTO (la clave del PORTAL), no el de administracion, y esto es
+     * importante: este endpoint es EL CANAL DE LAS CABINAS (POST /api/viaje:
+     * inicio, registro, fin, descartar). Las cabinas solo tienen las
+     * credenciales del portal (ver p4_creds.c), asi que con REQUIRE_AUTH_STRICT
+     * en cuanto se generaba la clave de administracion se quedaban fuera: 401 en
+     * cada apunte, la cola atascada y el viaje sin poder cerrarse -- justo lo que
+     * se estaba intentando arreglar. Lo cazo la revision adversarial del
+     * 13-oct-2026.
+     *
+     * Sigue exigiendo credenciales (PORTAL_REQUIRE_BASIC_AUTH esta a 1); lo que
+     * NO pide es la clave de administracion, que es para lo que de verdad puede
+     * dejar el cacharro inservible: escribir firmware (/ota), leer o cambiar las
+     * claves AES de los Victron (/keys, /save) y las capturas de pantalla. */
+    REQUIRE_AUTH(req);
 
     /* 1 KB (VIAJE_BODY_MAX, definida arriba). El comentario de antes decia
      * "unos 90 bytes, cuatro numeros": eso era la fase 1. Hoy el cuerpo mas
