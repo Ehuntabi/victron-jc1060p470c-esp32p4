@@ -42,7 +42,12 @@ else
 fi
 
 echo "== 2. Las operaciones que manda la cabina las conoce la P4 =="
-ops=$(grep -rho '\\"op\\": *\\"[a-z_]*\\"' "$CAB/main" 2>/dev/null |
+# SE SALTA p4_test.c A PROPOSITO (13-oct-2026): ese fichero es el AUTO-TEST de
+# diagnostico y sus cuerpos son de mentira a proposito -- uno manda una op que
+# la P4 no conoce PARA COMPROBAR que contesta 4xx, y otro va con credenciales
+# malas para comprobar el 401. No son parte del contrato entre las dos placas:
+# meterlos aqui daba cinco fallos que no eran fallos, y tapaban los de verdad.
+ops=$(grep -rho --exclude=p4_test.c '\\"op\\": *\\"[a-z_]*\\"' "$CAB/main" 2>/dev/null |
       grep -o '[a-z_]*\\"$' | tr -d '\\"' | sort -u)
 [ -n "$ops" ] || mal "no he sabido sacar ninguna operacion de la cabina (¿cambio el formato?)"
 for op in $ops; do
@@ -56,7 +61,7 @@ done
 echo "== 3. Los campos del JSON que manda la cabina existen en la P4 =="
 # Se excluyen los que son del protocolo o del sobre, no del contenido.
 excluir="op ts id alarmas"
-campos=$(grep -rho '\\"[a-z_]\{2,\}\\"' "$CAB/main/net" "$CAB/main" 2>/dev/null |
+campos=$(grep -rho --exclude=p4_test.c '\\"[a-z_]\{2,\}\\"' "$CAB/main/net" "$CAB/main" 2>/dev/null |
          tr -d '\\"' | sort -u)
 [ -n "$campos" ] || mal "no he sabido sacar ningun campo de la cabina"
 for c in $campos; do
