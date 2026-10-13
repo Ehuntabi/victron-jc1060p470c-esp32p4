@@ -103,13 +103,29 @@ static void about_refresh_dynamic(ui_state_t *ui)
         unsigned nvs_pct = 0;
         if (nvs_get_stats(NULL, &ns) == ESP_OK && ns.total_entries)
             nvs_pct = (unsigned)((ns.used_entries * 100) / ns.total_entries);
+        /* Y EL HUECO DE LA TARJETA, que es lo otro que se llena (auditoria del
+         * 14-oct-2026): hasta ahora no se medía en ningún sitio y el usuario se
+         * enteraba de que estaba llena cuando los apuntes ya daban 507. Se mide
+         * en el tick de telemetría (cada 5 min). */
+        uint64_t sd_libre = 0, sd_total = 0;
+        char sd_txt[96] = "SD: sin tarjeta";
+        if (viaje_sd_hueco(&sd_libre, &sd_total)) {
+            if (sd_libre < 20ULL * 1024ULL * 1024ULL)
+                snprintf(sd_txt, sizeof(sd_txt), "SD: %llu MB LIBRES de %llu (poco)",
+                         (unsigned long long)(sd_libre / (1024ULL * 1024ULL)),
+                         (unsigned long long)(sd_total / (1024ULL * 1024ULL)));
+            else
+                snprintf(sd_txt, sizeof(sd_txt), "SD: %llu MB libres de %llu",
+                         (unsigned long long)(sd_libre / (1024ULL * 1024ULL)),
+                         (unsigned long long)(sd_total / (1024ULL * 1024ULL)));
+        }
         lv_label_set_text_fmt(ui->lbl_about_heap,
             "RAM int %u KB (min %u)  |  DMA %u KB  |  PSRAM %u KB\n"
-            "NVS %u%% (%u/%u entradas, %u libres)",
+            "NVS %u%% (%u/%u entradas, %u libres)\n%s",
             (unsigned)(free_int / 1024), (unsigned)(min_int / 1024),
             (unsigned)(free_dma / 1024), (unsigned)(free_spi / 1024),
             nvs_pct, (unsigned)ns.used_entries, (unsigned)ns.total_entries,
-            (unsigned)ns.free_entries);
+            (unsigned)ns.free_entries, sd_txt);
     }
     /* La IP NO se pinta aqui: vive en Ajustes -> Wi-Fi, en la tarjeta del punto
      * de acceso, que es donde se busca (decision del 22-sep-2026, commit e1a7ec5).

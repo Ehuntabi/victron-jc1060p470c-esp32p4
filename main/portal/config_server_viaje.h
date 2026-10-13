@@ -41,6 +41,11 @@ void viaje_nota_hora_corregida(int64_t delta_s);
  * escribirse (auditoria del 13-oct-2026, hallazgo 14). */
 uint32_t viaje_fallos_escritura(void);
 
+/* Hueco libre y total de la tarjeta, medidos por el modulo del viaje (el tick de
+ * telemetria los refresca cada 5 min). false si no se ha podido medir. Lo pinta
+ * Ajustes -> About, que es donde se mira cuando algo no se puede escribir. */
+bool viaje_sd_hueco(uint64_t *libre_out, uint64_t *total_out);
+
 /* Vuelca la ruta del viaje abierto YA, dejando el motivo escrito en el diario.
  * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
  * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza

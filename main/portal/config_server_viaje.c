@@ -51,6 +51,7 @@
 #include <unistd.h>   /* rmdir: borrar la carpeta de un viaje; fsync, ftruncate */
 #include <fcntl.h>    /* open(): deshacer una escritura a medias en un CSV */
 #include <stdatomic.h>   /* _Atomic: la peticion de volcado desde otra tarea */
+#include "esp_vfs_fat.h"   /* esp_vfs_fat_info: el hueco libre de la tarjeta */
 
 static const char *TAG = "viaje_srv";
 
@@ -460,9 +461,58 @@ static void log_estado_nvs(void)
                  (unsigned)ns.free_entries);
 }
 
+/* ── HUECO LIBRE EN LA TARJETA (auditoria del 14-oct-2026) ──────────────────
+ *
+ * Hasta ahora NO se medía en ningún sitio: se escribía y se fallaba con un 507,
+ * así que el usuario se enteraba de que la tarjeta estaba llena cuando ya no se
+ * podía anotar (y la pantalla de la cabina sólo dice "la P4 no puede escribir",
+ * que es un síntoma, no un diagnóstico). Se mide y se dice.
+ *
+ * Se refresca en el tick de telemetría (cada 5 min) y tras cada 507, que son los
+ * dos momentos en que el dato importa. `esp_vfs_fat_info` lee la FAT: va con el
+ * cerrojo de la SD, como todo lo que la toca. */
+static uint64_t s_sd_libre   = UINT64_MAX;   /* UINT64_MAX = no se ha podido medir */
+static uint64_t s_sd_total   = 0;
+static int64_t  s_sd_medido_us = 0;
+
+#define SD_LIBRE_AVISO_BYTES  (20ULL * 1024ULL * 1024ULL)   /* 20 MB */
+
+static void sd_hueco_medir(void)
+{
+    if (!datalogger_sd_montada()) { s_sd_libre = UINT64_MAX; s_sd_total = 0; return; }
+    if (!camera_sd_bus_lock(1500)) return;      /* ocupada: se deja el valor anterior */
+    uint64_t total = 0, libre = 0;
+    esp_err_t e = esp_vfs_fat_info("/sdcard", &total, &libre);
+    camera_sd_bus_unlock();
+    if (e != ESP_OK) {
+        ESP_LOGW(TAG, "no he podido medir el hueco de la tarjeta (%s)", esp_err_to_name(e));
+        return;
+    }
+    s_sd_total = total;
+    s_sd_libre = libre;
+    s_sd_medido_us = esp_timer_get_time();
+    if (libre < SD_LIBRE_AVISO_BYTES)
+        ESP_LOGW(TAG, "QUEDA POCO SITIO en la tarjeta: %llu MB libres de %llu MB. "
+                      "Si se llena, los apuntes dan 507 y el viaje no se puede cerrar "
+                      "hasta hacer sitio",
+                 (unsigned long long)(libre / (1024ULL * 1024ULL)),
+                 (unsigned long long)(total / (1024ULL * 1024ULL)));
+}
+
+/* Para la pantalla de Ajustes -> About. Devuelve false si no se ha podido medir
+ * (sin tarjeta, o el montaje falló). */
+bool viaje_sd_hueco(uint64_t *libre_out, uint64_t *total_out)
+{
+    if (s_sd_libre == UINT64_MAX) return false;
+    if (libre_out) *libre_out = s_sd_libre;
+    if (total_out) *total_out = s_sd_total;
+    return true;
+}
+
 void viaje_reparar_al_arrancar(void)
 {
     log_estado_nvs();
+    sd_hueco_medir();
     if (!datalogger_sd_montada()) {
         ESP_LOGW(TAG, "SD sin montar: no compruebo el viaje abierto");
         return;
@@ -1115,8 +1165,9 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             rmdir(carpeta);
             camera_sd_bus_unlock();
         }
+        anota_fallo_escritura();   /* NVS, no tarjeta: pero el aviso es el mismo */
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        httpd_resp_sendstr(req, "no puedo escribir el inicio del viaje");
+        httpd_resp_sendstr(req, "no puedo escribir el inicio del viaje en la NVS");
         return ESP_OK;
     }
 
@@ -1190,6 +1241,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             rmdir(carpeta);
             camera_sd_bus_unlock();
         }
+        anota_fallo_escritura();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no puedo guardar el viaje en la NVS");
         return ESP_OK;
@@ -1342,6 +1394,13 @@ static bool escribir_resumen(const char *carpeta)
                     fprintf(f, "  OJO: la actual ya dura mas que las anteriores.\n");
             }
         }
+    }
+
+    /* El hueco de la tarjeta, de vez en cuando: en este tick (cada 5 min) sobra
+     * y asi el aviso de "queda poco sitio" sale ANTES de que falle nada. */
+    {
+        static int vueltas_hueco = 0;
+        if (++vueltas_hueco >= 1) { vueltas_hueco = 0; sd_hueco_medir(); }
     }
 
     /* Kilometros por GPS desde el 24-ago-2026 (NEO-M9N montado y con fix). Si el
@@ -1924,6 +1983,7 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         camera_sd_bus_unlock();
         ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
                       "el viaje sigue abierto y habra que reintentar", carpeta);
+        anota_fallo_escritura();   /* la NVS no traga: mismo aviso que la tarjeta */
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no se ha podido cerrar el viaje en la NVS");
         return ESP_OK;
@@ -2166,6 +2226,7 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
             ESP_LOGE(TAG, "no he podido deshacer el renombrado de %s", destino);
         camera_sd_bus_unlock();
         ESP_LOGE(TAG, "no puedo apartar %s: la NVS no acepta el cambio", carpeta);
+        anota_fallo_escritura();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no puedo apartar el viaje");
         return ESP_OK;
@@ -2480,6 +2541,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
             marca_deshacer(ruta_tipo, marca_tipo);
             camera_sd_bus_unlock();
         }
+        anota_fallo_escritura();
         httpd_resp_set_status(req, "507 Insufficient Storage");
         httpd_resp_sendstr(req, "no se ha podido guardar el apunte en la NVS");
         return ESP_OK;
