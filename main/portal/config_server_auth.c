@@ -427,6 +427,35 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     static uint32_t s_fallos = 0;
     static int64_t  s_ultimo_fallo_us = 0;
 
+    /* CSRF (auditoria de seguridad del 13-oct-2026).
+     *
+     * El navegador manda la cabecera Basic GUARDADA sin preguntar, asi que una
+     * pagina abierta en el movil del dueño (los datos moviles siguen activos
+     * aunque el Wi-Fi no tenga internet) podia lanzar peticiones a la P4 -- GET
+     * /ausente, POST /control, /settime -- y el navegador las firmaba con sus
+     * credenciales: encender luces o la bomba, armar la vigilancia o cambiar la
+     * hora sin que el usuario se enterara.
+     *
+     * Se exige que Origin (o, si no viene, Referer), CUANDO VIENE, sea de la
+     * propia P4. Los clientes que no son navegadores (la app, el satelite,
+     * curl) no mandan ninguno de los dos y siguen pasando igual: esto no
+     * cambia el protocolo, solo cierra la puerta del navegador ajeno. */
+    {
+        char org[128] = {0}, ref[128] = {0};
+        bool tiene_org = (httpd_req_get_hdr_value_str(req, "Origin", org, sizeof(org)) == ESP_OK);
+        bool tiene_ref = (httpd_req_get_hdr_value_str(req, "Referer", ref, sizeof(ref)) == ESP_OK);
+        const char *cual = tiene_org ? org : (tiene_ref ? ref : NULL);
+        if (cual && cual[0] && !strstr(cual, "192.168.4.1") &&
+            !strstr(cual, "victronconfig")) {
+            ESP_LOGW(TAG, "peticion con Origin/Referer de fuera (%s): la rechazo "
+                          "(posible CSRF)", cual);
+            httpd_resp_set_status(req, "403 Forbidden");
+            httpd_resp_set_type(req, "text/plain");
+            httpd_resp_sendstr(req, "Origen no permitido");
+            return ESP_FAIL;
+        }
+    }
+
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));

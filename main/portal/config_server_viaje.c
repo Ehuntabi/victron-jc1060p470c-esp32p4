@@ -49,7 +49,8 @@
 #include <errno.h>
 #include <dirent.h>
 #include <unistd.h>   /* rmdir: borrar la carpeta de un viaje; fsync, ftruncate */
-#include <fcntl.h>    /* open(): deshacer una escritura a medias en un CSV */
+#include <fcntl.h>
+#include <stdatomic.h>    /* open(): deshacer una escritura a medias en un CSV */
 
 static const char *TAG = "viaje_srv";
 
@@ -661,7 +662,16 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * nadie se enterara. El satelite tiene que cerrarlo primero. */
         ESP_LOGW(TAG, "inicio con viaje ya abierto en %s", abierto);
         httpd_resp_set_status(req, "409 Conflict");
-        httpd_resp_sendstr(req, "ya hay un viaje abierto");
+        /* CON EL NOMBRE DEL VIAJE ABIERTO (auditoria del 13-oct-2026). La
+         * pantalla de cabina no podia decir CUAL era, y con dos pantallas (o con
+         * el cierre del viaje anterior todavia en la cola) el usuario no tenia
+         * forma de saber si ese "viaje abierto" era suyo, de la otra cabina, o
+         * un resto de una prueba -- y la salida que se le ofrecia, "apartarlo",
+         * renombra la carpeta del viaje de verdad. Una cabina antigua lo ignora
+         * (solo mira el codigo); las nuevas lo enseñan. */
+        char resp[128];
+        snprintf(resp, sizeof(resp), "ya hay un viaje abierto: %s", abierto);
+        httpd_resp_sendstr(req, resp);
         return ESP_OK;
     }
 
@@ -1815,7 +1825,7 @@ void viaje_nota_hora_corregida(int64_t delta_s)
  * El reinicio por watchdog (watchdog.c) NO llama a esto a proposito: alli el
  * sistema ya viene de un cuelgue y no se puede meter I/O de tarjeta en ese
  * camino. */
-void viaje_flush_antes_de_reiniciar(void)
+void viaje_volcar_ahora(const char *motivo)
 {
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
@@ -1826,9 +1836,16 @@ void viaje_flush_antes_de_reiniciar(void)
     }
     if (!ruta_volcar(carpeta))
         ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
-    diario(carpeta, "reinicio", "la P4 se reinicia con el viaje abierto");
+    diario(carpeta, "volcado", motivo ? motivo : "volcado a peticion");
     camera_sd_bus_unlock();
-    ESP_LOGW(TAG, "viaje abierto en %s: ruta volcada antes de reiniciar", carpeta);
+    ESP_LOGW(TAG, "viaje abierto en %s: ruta volcada (%s)", carpeta,
+             motivo ? motivo : "a peticion");
+}
+
+/* Lo llama quien va a reiniciar la placa (ver el comentario de arriba). */
+void viaje_flush_antes_de_reiniciar(void)
+{
+    viaje_volcar_ahora("la P4 se reinicia con el viaje abierto");
 }
 
 /* CIERRE de la ruta: ultimo intento de bajar lo que quede en RAM y, pase lo que
@@ -1895,6 +1912,18 @@ static void fila_ruta(const char *carpeta, const struct tm *tm_l)
     if (s_ruta_n >= RUTA_BUFFER_N) ruta_volcar(carpeta);
 }
 
+/* Volcado PEDIDO desde fuera, para no meter I/O de tarjeta en la tarea de quien
+ * lo pide. Lo usa la alarma de bateria baja: su evaluador corre en un lv_timer
+ * (tarea de LVGL) y ahi un camera_sd_bus_lock(3000) congelaria la pantalla. */
+static _Atomic bool s_volcado_pedido;
+static _Atomic int  s_volcado_motivo;   /* 0 = bateria, 1 = otro */
+
+void viaje_pedir_volcado(int motivo)
+{
+    s_volcado_motivo = motivo;
+    s_volcado_pedido = true;
+}
+
 /* Corre desde un esp_timer, no desde la tarea del portal: la telemetria tiene
  * que seguir cayendo aunque nadie toque el portal en todo el viaje. */
 static void tick_viaje_cb(void *arg)
@@ -1902,6 +1931,15 @@ static void tick_viaje_cb(void *arg)
     (void)arg;
     char carpeta[CARPETA_MAX];
     if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+
+    /* Lo pedido desde fuera va ANTES de los relojes: si la bateria se esta
+     * cayendo, no se puede esperar a que la hora sea buena. */
+    if (s_volcado_pedido) {
+        s_volcado_pedido = false;
+        viaje_volcar_ahora(s_volcado_motivo == 0
+                           ? "bateria baja: puede cortarse la corriente"
+                           : "volcado pedido desde la pantalla");
+    }
 
     time_t now = time(NULL);
     if (now < 1000000000L) return;          /* sin hora buena no se apunta nada */

@@ -34,6 +34,18 @@ void viaje_flush_antes_de_reiniciar(void);
  * (lo llama gps.c cuando el GPS corrige la hora mas de 5 min). */
 void viaje_nota_hora_corregida(int64_t delta_s);
 
+/* Vuelca la ruta del viaje abierto YA, dejando el motivo escrito en el diario.
+ * Lo usan los reinicios (viaje_flush_antes_de_reiniciar) y los avisos graves,
+ * como la alarma de bateria baja: al corte brusco se iban hasta 5 min de traza
+ * que estaban en RAM. */
+void viaje_volcar_ahora(const char *motivo);
+
+/* Pide un volcado SIN hacerlo: lo ejecuta la tarea del viaje en su siguiente
+ * vuelta (1 s). Para quien no puede tocar la SD -- el evaluador de alarmas corre
+ * en un lv_timer, o sea en la tarea de LVGL, y ahi un cerrojo de la SD de hasta
+ * 3 s congela la pantalla. 'motivo': 0 = bateria baja, otro = volcado a mano. */
+void viaje_pedir_volcado(int motivo);
+
 /* Reparacion del estado del viaje al arrancar, CON LA SD YA MONTADA.
  *
  * Si la NVS dice que hay un viaje abierto y su carpeta no esta en la tarjeta,

@@ -14,6 +14,7 @@
 #include "alerts.h"
 #include "ne185/ne185.h"
 #include "esp_log.h"
+#include "portal/config_server_viaje.h"   /* viaje_pedir_volcado() */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -116,6 +117,7 @@ static void evaluar(const alarma_tipo_t t, const bool condicion, const uint32_t 
         if (estaba_activa) {
             audio_cancel_playback();
         }
+        (void)0;
         a->activa     = false;
         a->silenciada = false;
         /* OJO: aqui NO se toca a->desde_ms. Es el reloj del REBOTE y lo lleva
@@ -139,6 +141,12 @@ static void evaluar(const alarma_tipo_t t, const bool condicion, const uint32_t 
          * decide quien llame, con su propio tiempo. */
         a->activa = true;
         ESP_LOGW(TAG, "alarma de %s activa", s_nombre[t]);
+        /* BATERIA BAJA: se pide volcar la ruta del viaje. Al corte brusco se
+         * iban hasta 5 min de traza que solo estaban en RAM, y este es el aviso
+         * que da tiempo a salvarlos (auditoria del 13-oct-2026). Se PIDE y no se
+         * hace: aqui estamos en la tarea de LVGL y el volcado coge el cerrojo de
+         * la SD. Lo ejecuta la tarea del viaje en su siguiente vuelta. */
+        if (t == ALARMA_BATERIA) viaje_pedir_volcado(0);
     }
 
     if (!a->silenciada && s_cola_pitido) {

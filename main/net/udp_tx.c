@@ -256,11 +256,25 @@ static void tx_task(void *arg)
                 fallos_seguidos = 0;
                 ESP_LOGW(TAG, "socket sin salida (ENOTCONN): lo recreo");
                 close(sock);
-                sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-                if (sock >= 0) {
-                    int yes2 = 1;
-                    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes2, sizeof(yes2));
+                /* CON REINTENTO (auditoria del 13-oct-2026): si socket() falla
+                 * aqui (sin descriptores, sin memoria) el anterior quedaba
+                 * cerrado y el nuevo en -1, asi que el sendto siguiente fallaba
+                 * con EBADF -- que NO es ENOTCONN y por tanto no volvia a
+                 * entrar por aqui: la telemetria se quedaba muerta hasta el
+                 * siguiente reinicio, con un unico warning cada 10 fallos. Se
+                 * reintenta en bucle, como en el arranque (ver udp_tx_start). */
+                while (sock < 0) {
+                    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                    if (sock < 0) {
+                        ESP_LOGE(TAG, "no puedo recrear el socket (errno=%d): "
+                                      "reintento en 5 s", errno);
+                        watchdog_heartbeat(WD_TASK_UDP_TX);
+                        vTaskDelay(pdMS_TO_TICKS(5000));
+                    }
                 }
+                int yes2 = 1;
+                setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes2, sizeof(yes2));
+                ESP_LOGW(TAG, "socket recreado");
             }
         }
         if (n == (int)sizeof(msg)) fallos_seguidos = 0;
