@@ -376,6 +376,31 @@ bool ui_overview_alarm_active(void)
     return alarma_estado_bits() != 0;
 }
 
+/* PONE el silencio que se pida, en los dos sentidos (13-oct-2026).
+ *
+ * alarma_silenciar_mask() solo puede CALLAR: salta las que ya estaban
+ * silenciadas y no hay forma de des-silenciar desde fuera. La pantalla de
+ * cabina tiene un boton de altavoz que se enciende y se apaga, y al apagarlo
+ * mandaba la misma mascara... que no hacia nada: el icono decia "sonido puesto"
+ * y la P4 seguia callada. Y tras un reinicio con la alarma activa ya no habia
+ * manera de resincronizar el estado. Esta es la version que obedece. */
+int alarma_silencio_poner(uint8_t mask, bool silenciar)
+{
+    int n = 0;
+    for (int i = 0; i < ALARMA_CUANTAS; i++) {
+        if (!(mask & s_bit[i])) continue;
+        if (!s_al[i].activa) continue;
+        if (silenciar) {
+            if (!s_al[i].silenciada) { alarma_silenciar((alarma_tipo_t)i); n++; }
+        } else {
+            if (s_al[i].silenciada)  { alarma_alternar_silencio((alarma_tipo_t)i); n++; }
+        }
+    }
+    ESP_LOGI(TAG, "orden de %s mask=0x%02x: %d alarma(s); activas ahora 0x%02x",
+             silenciar ? "silencio" : "VOLVER A SONAR", mask, n, alarma_estado_bits());
+    return n;
+}
+
 int alarma_silenciar_mask(uint8_t mask)
 {
     int n = 0;

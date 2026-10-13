@@ -10,5 +10,10 @@
 #include <stddef.h>
 
 void http_auth_init(void);
+
+/* Cambia usuario y clave del portal (Ajustes -> Wi-Fi). Devuelve ESP_OK si han
+ * quedado guardadas y en vigor; ESP_ERR_INVALID_ARG si son vacias, demasiado
+ * largas o llevan caracteres que rompen el Basic Auth. */
+esp_err_t config_server_set_web_credentials(const char *user, const char *pass);
 void mount_spiffs(void);
 esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri);

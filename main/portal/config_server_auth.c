@@ -262,6 +262,46 @@ void config_server_get_web_credentials(char *user, size_t ulen,
     nvs_close(h);
 }
 
+/* CAMBIAR las credenciales del portal desde la pantalla (13-oct-2026).
+ *
+ * POR QUE HACIA FALTA (auditoria de seguridad): las credenciales se crean
+ * aleatorias la primera vez que arranca con la NVS vacia, pero NO habia forma
+ * de cambiarlas desde ningun sitio. Eso convierte cualquier filtracion -- y ha
+ * habido una: la clave de fabrica de las cabinas estuvo publicada en su
+ * repositorio -- en permanente: la unica salida era borrar la NVS entera de la
+ * P4, que se lleva por delante el Wi-Fi, las claves AES de los Victron y todo lo
+ * demas. Con esto, rotar la clave es un boton en Ajustes -> Wi-Fi.
+ *
+ * Se guarda en NVS y se RECONSTRUYE la cabecera Basic en el acto: s_auth_header
+ * se calcula una sola vez en http_auth_init(), asi que sin volver a llamarla el
+ * cambio no surtiria efecto hasta el siguiente reinicio (y el usuario se
+ * quedaria fuera con la clave nueva en la mano). */
+esp_err_t config_server_set_web_credentials(const char *user, const char *pass)
+{
+    if (!user || !pass || !user[0] || !pass[0]) return ESP_ERR_INVALID_ARG;
+    if (strlen(user) > 32 || strlen(pass) > 32)  return ESP_ERR_INVALID_ARG;
+    /* Dos puntos en el usuario rompen el esquema Basic ("usuario:clave"), y un
+     * salto de linea en cualquiera de los dos romperia la cabecera HTTP. */
+    if (strchr(user, ':') || strpbrk(user, "\r\n") || strpbrk(pass, "\r\n"))
+        return ESP_ERR_INVALID_ARG;
+
+    nvs_handle_t h;
+    if (nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
+    esp_err_t e = nvs_set_str(h, "http_user", user);
+    if (e == ESP_OK) e = nvs_set_str(h, "http_pass", pass);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "no he podido guardar las credenciales del portal: %s",
+                 esp_err_to_name(e));
+        return e;
+    }
+    http_auth_init();
+    ESP_LOGW(TAG, "credenciales del portal CAMBIADAS desde la pantalla (usuario '%s')",
+             user);
+    return ESP_OK;
+}
+
 /* Basic auth del portal: DOS NIVELES (2026-08-07).
  *
  * Nivel abierto (la mayoria de endpoints). Estuvo ABIERTO de verdad hasta el

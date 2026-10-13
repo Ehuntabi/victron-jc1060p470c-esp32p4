@@ -87,6 +87,12 @@ uint8_t alarma_estado_bits(void);
  * silenciar". */
 int alarma_silenciar_mask(uint8_t mask);
 
+/* Pone el silencio que se pida: true calla las alarmas de la mascara, false las
+ * vuelve a dejar sonar. alarma_silenciar_mask() solo sabe callar, y con el boton
+ * de altavoz de la cabina (que se enciende Y se apaga) eso dejaba el icono
+ * mintiendo. Devuelve cuantas cambiaron. */
+int alarma_silencio_poner(uint8_t mask, bool silenciar);
+
 #ifdef __cplusplus
 }
 #endif

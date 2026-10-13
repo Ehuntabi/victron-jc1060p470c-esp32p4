@@ -316,10 +316,18 @@ static esp_err_t handle_api_alarma(httpd_req_t *req) {
         return ESP_OK;
     }
     int mask = jm->valueint;
+    /* 'silencio' es OPCIONAL y dice si se quiere callar (1) o volver a sonar
+     * (0). Sin el, se calla: es lo que mandaba la cabina antes del 13-oct-2026
+     * y lo que sigue mandando el auto-test. Con el, el boton de altavoz de la
+     * cabina puede des-silenciar de verdad -- antes mandaba la misma mascara en
+     * los dos sentidos y volver a encender el sonido no hacia NADA, dejando el
+     * icono mintiendo (auditoria del 13-oct-2026). */
+    const cJSON *js = cJSON_GetObjectItem(j, "silencio");
+    bool quiere_callar = cJSON_IsBool(js) ? cJSON_IsTrue(js) : true;
     cJSON_Delete(j);
 
     /* El bitmask lo interpreta alarma_estado.c, que es quien tiene el estado. */
-    int n = alarma_silenciar_mask((uint8_t)(mask & MINI_ALARM_TODAS));
+    int n = alarma_silencio_poner((uint8_t)(mask & MINI_ALARM_TODAS), quiere_callar);
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"ok\":true,\"silenciadas\":%d}", n);
     httpd_resp_sendstr(req, resp);

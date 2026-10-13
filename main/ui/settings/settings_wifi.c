@@ -20,6 +20,8 @@
 #include <lvgl.h>
 #include "config_storage.h"
 #include "portal/config_server.h"
+#include "portal/config_server_auth.h"   /* cambiar la clave del portal */
+#include "esp_random.h"
 #include "victron_ble.h"
 #include "display.h"
 #include "esp_log.h"
@@ -52,6 +54,7 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
                                uint8_t ap_enabled);
 /* Callbacks propios de esta pagina, definidos mas abajo. */
 static void portal_page_cb(lv_event_t *e);
+static void generar_clave_portal_cb(lv_event_t *e);
 static void reactivate_portal_cb(lv_event_t *e);
 static void ap_switch_cb(lv_event_t *e);
 static void wifi_pintar_ip_ap(ui_state_t *ui);
@@ -448,6 +451,22 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
      * Ahora dice la verdad, y si algun dia se vuelve a abrir el nivel abierto
      * (poniendo PORTAL_REQUIRE_BASIC_AUTH a 0) hay que cambiar ESTE texto a la
      * vez: son la misma decision contada en dos sitios. */
+    /* ── CAMBIAR LA CLAVE DEL PORTAL (13-oct-2026) ────────────────────────
+     * Antes estas credenciales NO se podian cambiar desde ningun sitio: se
+     * creaban aleatorias la primera vez y ahi se quedaban. Una filtracion (y ha
+     * habido una: la clave de fabrica de las cabinas estuvo publicada en su
+     * repositorio) era para siempre, porque la unica salida era borrar la NVS
+     * entera, que se lleva el Wi-Fi y las claves AES de los Victron. */
+    lv_obj_t *c4_btn_nueva = lv_btn_create(card4);
+    lv_obj_set_width(c4_btn_nueva, lv_pct(100));
+    lv_obj_set_style_bg_color(c4_btn_nueva, UI_COLOR_GREEN, 0);
+    lv_obj_t *c4_lbl_nueva = lv_label_create(c4_btn_nueva);
+    lv_obj_set_style_text_font(c4_lbl_nueva, &lv_font_montserrat_20_es, 0);
+    lv_obj_set_style_text_color(c4_lbl_nueva, UI_COLOR_BG, 0);
+    lv_label_set_text(c4_lbl_nueva, LV_SYMBOL_REFRESH "  Generar clave nueva");
+    lv_obj_center(c4_lbl_nueva);
+    lv_obj_add_event_cb(c4_btn_nueva, generar_clave_portal_cb, LV_EVENT_CLICKED, NULL);
+
     lv_label_set_text(c4_hint,
                       "La web, la app del movil y Actualizar (/ota) piden este usuario y "
                       "clave, y se leen aqui. Ojo: la web va por HTTP sin cifrar, "
@@ -467,6 +486,48 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     if (h_ap > lv_obj_get_height(card4)) {
         lv_obj_set_height(card4, h_ap);
     }
+}
+
+/* Genera y APLICA una clave nueva del portal. Se avisa de que hay que
+ * cambiarla tambien en el movil y en las pantallas de cabina: en cuanto se
+ * aplique, la clave vieja deja de valer y sus apuntes darian 401 (que la cabina
+ * ya sabe decir: "CLAVE MAL, AJUSTES"). */
+static void clave_portal_nueva_do(void)
+{
+    /* Alfabeto sin caracteres que se confunden al copiarlos a mano (0/O, 1/l/I),
+     * que esto se lee de la pantalla y se teclea en el movil. */
+    static const char abc[] = "abcdefghijkmnpqrstuvwxyz23456789";
+    char user[33] = {0}, pass[33] = {0}, nueva[17] = {0};
+    config_server_get_web_credentials(user, sizeof(user), pass, sizeof(pass));
+    if (!user[0]) snprintf(user, sizeof(user), "victron");
+    for (int i = 0; i < 12; i++) nueva[i] = abc[esp_random() % (sizeof(abc) - 1)];
+    esp_err_t e = config_server_set_web_credentials(user, nueva);
+    if (e != ESP_OK) {
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  No se ha podido cambiar",
+                            "La clave del portal sigue siendo la de antes.");
+        return;
+    }
+    char msg[420];
+    snprintf(msg, sizeof(msg),
+             "Usuario:  %s\nClave nueva:  %s\n\n"
+             "Apunta la clave AHORA: no se puede volver a\n"
+             "leer en ningun otro sitio.\n\n"
+             "Hay que ponerla tambien en el movil y en las\n"
+             "pantallas de cabina (Ajustes -> WiFi); hasta\n"
+             "entonces sus apuntes daran error de clave.",
+             user, nueva);
+    ui_show_info_dialog(LV_SYMBOL_SETTINGS "  Acceso cambiado", msg);
+}
+
+static void generar_clave_portal_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_show_confirm_dialog(LV_SYMBOL_WARNING "  Cambiar el acceso",
+        "Se genera una clave NUEVA para la web, la app\n"
+        "y las pantallas de cabina.\n\n"
+        "La de ahora deja de valer en el acto: hay que\n"
+        "poner la nueva en el movil y en las cabinas.",
+        "Generar", clave_portal_nueva_do);
 }
 
 static void reactivate_portal_cb(lv_event_t *e)
