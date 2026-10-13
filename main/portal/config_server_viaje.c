@@ -273,8 +273,25 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
  * montada: si la tarjeta no esta, su ausencia no significa nada. */
 static void marcar_huerfanas(const char *abierta);
 
+/* Deja en el log cuanto ocupa la NVS. La de esta P4 son 16 KB (hallazgo M8 de
+ * la auditoria del 13-oct-2026) y, si se llena, el viaje deja de poder abrirse:
+ * mas vale enterarse por un numero que por un 507 en la carretera. */
+static void log_estado_nvs(void)
+{
+    nvs_stats_t ns = {0};
+    if (nvs_get_stats(NULL, &ns) != ESP_OK) return;
+    ESP_LOGI(TAG, "NVS: %u/%u entradas usadas (%u libres), %u namespace(s)",
+             (unsigned)ns.used_entries, (unsigned)ns.total_entries,
+             (unsigned)ns.free_entries, (unsigned)ns.namespace_count);
+    if (ns.free_entries < 40)
+        ESP_LOGW(TAG, "NVS casi llena: %u entradas libres. Si se llena, no se "
+                      "podra abrir viaje (507) -- hay que ampliar la particion",
+                 (unsigned)ns.free_entries);
+}
+
 void viaje_reparar_al_arrancar(void)
 {
+    log_estado_nvs();
     if (!datalogger_sd_montada()) {
         ESP_LOGW(TAG, "SD sin montar: no compruebo el viaje abierto");
         return;

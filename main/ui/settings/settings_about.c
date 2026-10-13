@@ -21,6 +21,7 @@
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "nvs.h"   /* nvs_get_stats: la NVS se puede llenar */
 #include "watchdog.h"
 #include "datalogger.h"
 #include "battery_history.h"
@@ -91,10 +92,21 @@ static void about_refresh_dynamic(ui_state_t *ui)
          * momento desde que arranco (camara + galeria + portal a la vez).
          * La DMA es la que necesitan la tarjeta SD y la camara para mover datos:
          * cuando se agota es cuando falla la lectura de la tarjeta (v3.5). */
+        /* Y LA NVS, que es la que se puede LLENAR (la particion de la P4 son
+         * 16 KB, ver el hallazgo M8 de la auditoria del 13-oct-2026): si se
+         * llena, el viaje deja de poder abrirse y los apuntes dan 507. Aqui se
+         * ve cuanto queda antes de que pase. */
+        nvs_stats_t ns = {0};
+        unsigned nvs_pct = 0;
+        if (nvs_get_stats(NULL, &ns) == ESP_OK && ns.total_entries)
+            nvs_pct = (unsigned)((ns.used_entries * 100) / ns.total_entries);
         lv_label_set_text_fmt(ui->lbl_about_heap,
-            "RAM int %u KB (min %u)  |  DMA %u KB  |  PSRAM %u KB",
+            "RAM int %u KB (min %u)  |  DMA %u KB  |  PSRAM %u KB\n"
+            "NVS %u%% (%u/%u entradas, %u libres)",
             (unsigned)(free_int / 1024), (unsigned)(min_int / 1024),
-            (unsigned)(free_dma / 1024), (unsigned)(free_spi / 1024));
+            (unsigned)(free_dma / 1024), (unsigned)(free_spi / 1024),
+            nvs_pct, (unsigned)ns.used_entries, (unsigned)ns.total_entries,
+            (unsigned)ns.free_entries);
     }
     /* La IP NO se pinta aqui: vive en Ajustes -> Wi-Fi, en la tarjeta del punto
      * de acceso, que es donde se busca (decision del 22-sep-2026, commit e1a7ec5).
