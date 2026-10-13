@@ -731,6 +731,58 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
             fclose(rf);
         }
     }
+
+    /* ── CAMBIO DE DESTINO APLAZADO AL CIERRE (12-oct-2026) ─────────────────
+     *
+     * El satelite deja cambiar el destino a mitad de viaje, pero NO renombra
+     * nada mientras corre: guarda el destino nuevo y lo manda AQUI, al cerrar.
+     * Es a proposito y esta razonado en cabina5/docs/RELEVO_2026-10-12.md:
+     * mientras el viaje esta abierto hay ficheros escribiendose (ruta,
+     * telemetria) y renombrar la carpeta por debajo obligaria a cerrarlos,
+     * renombrar y reabrirlos, dependiendo ademas de que la P4 contestara en ese
+     * momento. Al cerrar, los ficheros ya se cierran de todas formas y el
+     * resumen ya esta escrito: renombrar aqui es un solo rename() y no hay
+     * nada dentro de la carpeta que apunte a su nombre (todo va por fecha_hora).
+     *
+     * La FECHA del nombre se conserva: el viaje empezo ese dia, aunque el
+     * destino se cambiara despues. Solo cambia lo que va detras del guion. */
+    const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "destino");
+    if (cJSON_IsString(jd) && jd->valuestring[0]) {
+        char nd[DESTINO_MAX];
+        destino_seguro(jd->valuestring, nd, sizeof(nd));
+
+        char fecha[12] = {0};
+        const char *base = strrchr(carpeta, '/');
+        base = base ? base + 1 : carpeta;          /* "2026-10-11_arantzazu" */
+        const char *guion = strchr(base, '_');
+        size_t nf = guion ? (size_t)(guion - base) : 0;
+        if (nf >= sizeof(fecha)) nf = sizeof(fecha) - 1;
+        memcpy(fecha, base, nf);
+        fecha[nf] = 0;
+
+        char nueva[RUTA_MAX];
+        int nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s", fecha, nd);
+        /* Si el destino no ha cambiado de verdad, no se toca nada. */
+        if (nn > 0 && nn < (int)sizeof(nueva) && strcmp(nueva, carpeta) != 0) {
+            /* rename() falla si el destino ya existe: se numera, igual que al
+             * apartar un viaje (op_borrar). */
+            struct stat st;
+            for (int k = 2; k < 100 && stat(nueva, &st) == 0; k++) {
+                nn = snprintf(nueva, sizeof(nueva), VIAJES_DIR "/%s_%s_%d",
+                              fecha, nd, k);
+                if (nn < 0 || nn >= (int)sizeof(nueva)) break;
+            }
+            if (rename(carpeta, nueva) == 0) {
+                ESP_LOGI(TAG, "DESTINO CAMBIADO: %s -> %s", carpeta, nueva);
+            } else {
+                /* El viaje se cierra igual: el resumen y los datos estan bien,
+                 * solo se queda con el nombre viejo. Perder el cierre por no
+                 * poder renombrar seria mucho peor. */
+                ESP_LOGW(TAG, "no he podido renombrar %s a %s: se queda con el "
+                              "nombre viejo", carpeta, nueva);
+            }
+        }
+    }
     camera_sd_bus_unlock();
 
     if (!escrito) {
