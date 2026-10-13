@@ -26,26 +26,102 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
+#include "esp_netif.h"
+#include "esp_timer.h"
 #include <string.h>
 #include <errno.h>
 
 static const char *TAG = "udp_latido";
 
-static volatile int64_t s_ultimo_latido_us = 0;
-static volatile int     s_seg_sin_datos_mini = -1;
-static volatile bool    s_ip_fija_mini = false;
-static volatile uint32_t s_ip_mini = 0;      /* de donde vino el ultimo latido */
+/* ── UNA ENTRADA POR CABINA, no un unico estado (auditoria del 13-oct-2026) ──
+ *
+ * Antes esto eran cuatro variables sueltas: el ULTIMO latido que llegara pisaba
+ * al anterior. Con dos pantallas eso es un fallo de verdad: si la 3,5" esta
+ * asociada pero muda y la 5" esta sana, el estado bueno de la 5" tapaba a la
+ * muda y la P4 no reparaba nada -- la 3,5" se quedaba sin telemetria hasta que
+ * alguien la reiniciaba a mano. Ahora hay una entrada por IP de origen. */
+#define LATIDO_MAX_FUENTES 4
+
+typedef struct {
+    uint32_t ip;                 /* 0 = entrada libre */
+    int64_t  ultimo_us;
+    int      seg_sin_datos;
+    bool     ip_fija;
+} latido_fuente_t;
+
+static latido_fuente_t s_fuentes[LATIDO_MAX_FUENTES];
+
+/* Coge (o crea) la entrada de esa IP. Devuelve NULL si la tabla esta llena: con
+ * cuatro huecos y dos cabinas de sobra, pero si un desconocido los llena, lo que
+ * NO se hace es pisar a una cabina conocida. */
+static latido_fuente_t *fuente_de(uint32_t ip)
+{
+    latido_fuente_t *libre = NULL;
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        if (s_fuentes[i].ip == ip) return &s_fuentes[i];
+        if (s_fuentes[i].ip == 0 && !libre) libre = &s_fuentes[i];
+    }
+    return libre;
+}
+
+/* La ultima fuente que hablo, que es lo que enseñan la pantalla y los logs. */
+static latido_fuente_t *fuente_mas_reciente(void)
+{
+    latido_fuente_t *mejor = NULL;
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        if (s_fuentes[i].ip == 0) continue;
+        if (!mejor || s_fuentes[i].ultimo_us > mejor->ultimo_us) mejor = &s_fuentes[i];
+    }
+    return mejor;
+}
 
 void udp_latido_estado(udp_latido_info_t *out)
 {
     if (!out) return;
     memset(out, 0, sizeof(*out));
-    int64_t t = s_ultimo_latido_us;
-    out->seg_desde_latido = (t == 0) ? -1 : (int)((esp_timer_get_time() - t) / 1000000);
-    out->seg_sin_datos_mini = s_seg_sin_datos_mini;
-    out->ip_fija_mini = s_ip_fija_mini;
-    out->hay_datos = (t != 0);
-    out->ip_mini = s_ip_mini;
+    latido_fuente_t *f = fuente_mas_reciente();
+    if (!f) { out->seg_desde_latido = -1; out->seg_sin_datos_mini = -1; return; }
+    out->seg_desde_latido = (int)((esp_timer_get_time() - f->ultimo_us) / 1000000);
+    out->seg_sin_datos_mini = f->seg_sin_datos;
+    out->ip_fija_mini = f->ip_fija;
+    out->hay_datos = true;
+    out->ip_mini = f->ip;
+}
+
+/* Cuantas cabinas conocidas han latido en los ultimos 'vivo_s' segundos. */
+int udp_latido_fuentes_vivas(int vivo_s)
+{
+    int64_t ahora = esp_timer_get_time();
+    int n = 0;
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        if (s_fuentes[i].ip == 0) continue;
+        if ((ahora - s_fuentes[i].ultimo_us) / 1000000 <= vivo_s) n++;
+    }
+    return n;
+}
+
+/* true si ALGUNA cabina que sigue latiendo (esta viva, no se ha ido) dice llevar
+ * >= 15 s sin recibir telemetria. Devuelve ademas cuantos segundos son, para el
+ * log. Un valor NEGATIVO de seg_sin_datos se trata como mudo: el campo es int16
+ * y a las 9 h de silencio da la vuelta (lo satura la cabina desde el
+ * 13-oct-2026, pero una cabina con firmware viejo puede mandarlo negativo). */
+bool udp_latido_alguno_mudo(int *seg_out)
+{
+    int64_t ahora = esp_timer_get_time();
+    int peor = -1;
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        latido_fuente_t *f = &s_fuentes[i];
+        if (f->ip == 0) continue;
+        if ((ahora - f->ultimo_us) / 1000000 >= 15) continue;   /* esta no late: no es fuente */
+        int s = f->seg_sin_datos;
+        if (s < 0 || s >= 15) {
+            if (s < 0) s = 32767;                                /* negativo = mudo */
+            if (s > peor) peor = s;
+        }
+    }
+    if (peor < 0) return false;
+    if (seg_out) *seg_out = peor;
+    return true;
 }
 
 static void latido_task(void *arg)
@@ -111,13 +187,41 @@ static void latido_task(void *arg)
             ESP_LOGW(TAG, "latido con CRC malo");
             continue;
         }
-        bool primera = (s_ultimo_latido_us == 0);
-        s_ultimo_latido_us = esp_timer_get_time();
-        s_seg_sin_datos_mini = l->seg_sin_datos;
-        s_ip_fija_mini = (l->ip_fija != 0);
-        s_ip_mini = src.sin_addr.s_addr;
+        /* DE DONDE VIENE (auditoria de seguridad del 13-oct-2026): antes valia
+         * cualquier origen, y con un latido falso se podia hacer que la P4
+         * reiniciara su AP en bucle -- y hasta la placa --. El CRC32 no
+         * autentica nada. Ahora solo se aceptan las IP del propio AP y solo si
+         * son de una cabina conocida o hay hueco para conocerla; lo que llegue
+         * de la puerta (la propia P4) o de fuera de la subred se tira. */
+        uint32_t origen = src.sin_addr.s_addr;
+        uint32_t red_ap = 0;
+        {
+            esp_netif_ip_info_t ip;
+            esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+            if (ap && esp_netif_get_ip_info(ap, &ip) == ESP_OK) red_ap = ip.ip.addr;
+        }
+        if (red_ap != 0) {
+            uint32_t mascara = htonl(0xFFFFFF00u);
+            if ((origen & mascara) != (red_ap & mascara) || origen == red_ap) {
+                ESP_LOGW(TAG, "latido de fuera del AP (%s): lo ignoro",
+                         inet_ntoa(src.sin_addr));
+                continue;
+            }
+        }
+        latido_fuente_t *f = fuente_de(origen);
+        if (!f) {
+            ESP_LOGW(TAG, "latido de %s y la tabla de cabinas esta llena: lo ignoro",
+                     inet_ntoa(src.sin_addr));
+            continue;
+        }
+        bool primera = (f->ip == 0);
+        f->ip = origen;
+        f->ultimo_us = esp_timer_get_time();
+        /* El campo es int16 en el protocolo: saturado a lo que quepa. */
+        f->seg_sin_datos = (l->seg_sin_datos > 32000) ? 32000 : (int)l->seg_sin_datos;
+        f->ip_fija = (l->ip_fija != 0);
         if (primera) {
-            ESP_LOGI(TAG, "Primer latido de la cabina (%s): lleva %d s sin datos%s",
+            ESP_LOGI(TAG, "Primer latido de una cabina (%s): lleva %d s sin datos%s",
                      inet_ntoa(src.sin_addr), (int)l->seg_sin_datos,
                      l->ip_fija ? ", con IP fija" : "");
         }

@@ -24,6 +24,15 @@ typedef struct {
 void udp_latido_start(void);
 void udp_latido_estado(udp_latido_info_t *out);
 
+/* Cuantas cabinas distintas han latido en los ultimos 'vivo_s' segundos. */
+int udp_latido_fuentes_vivas(int vivo_s);
+
+/* true si ALGUNA cabina que sigue latiendo dice llevar >= 15 s sin recibir
+ * telemetria (y cuantos segundos, si 'seg_out' no es NULL). Es la pregunta que
+ * tiene que hacer el vigilante del AP: con dos pantallas, mirar solo el ultimo
+ * latido dejaba que la sana tapara a la muda (auditoria del 13-oct-2026). */
+bool udp_latido_alguno_mudo(int *seg_out);
+
 #ifdef __cplusplus
 }
 #endif

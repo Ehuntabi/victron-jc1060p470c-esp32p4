@@ -11,6 +11,7 @@
 #include "esp_wifi.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "lwip/sockets.h"   /* getpeername: freno de auth por IP */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -320,19 +321,64 @@ static bool auth_equal_ct(const char *a, const char *b)
 }
 
 /* Freno ante intentos repetidos de credenciales. Sin esto, un atacante en el
- * Wi-Fi (ver el bloque de arriba: el AP no tiene clave de verdad) podia
- * probar usuario/clave tan rapido como el httpd aguantase peticiones -- nada
- * lo frenaba salvo el propio rendimiento del chip. Cada fallo suma; tras
- * FALLOS_LIBRES seguidos, se espera un poco ANTES de contestar 401 (crece con
- * cada fallo, tope 4s) para que la fuerza bruta se vuelva impracticable sin
- * bloquear a alguien que se equivoca alguna vez. Un acierto lo resetea a
- * cero; 5 min de inactividad tambien (para no arrastrar fallos viejos de
- * hace dias). No es por IP -- un solo cliente en el AP a la vez es el caso
- * normal, y llevar una tabla por IP en RAM no compensa aqui. */
+ * Wi-Fi probaba usuario/clave tan rapido como el httpd aguantase peticiones:
+ * nada lo frenaba salvo el rendimiento del chip.
+ *
+ * ── REHECHO EL 13-oct-2026 (auditoria de seguridad) ────────────────────────
+ *
+ * Antes el freno era un vTaskDelay() de hasta 4 s DENTRO del unico worker del
+ * httpd (esp_http_server es de UNA sola tarea). Eso convertia el freno en el
+ * ataque: cualquiera mandando credenciales malas en bucle dejaba el portal
+ * entero mudo -- /api/state para la app del dueño, y los POST de los apuntes,
+ * que caducan a los 8 s y hacen fallar el INICIO DE VIAJE sin motivo aparente.
+ *
+ * Ahora no se duerme NUNCA: se contesta 429 Too Many Requests con Retry-After y
+ * se sigue atendiendo a los demas. Y es POR IP (tabla de los ultimos clientes
+ * que fallaron), no global: el que se equivoca con su clave no le cierra la
+ * puerta a los demas. */
 #define AUTH_FALLOS_LIBRES   3
 #define AUTH_ESPERA_PASO_MS  500
 #define AUTH_ESPERA_TOPE_MS  4000
 #define AUTH_INACTIVIDAD_US  (300LL * 1000000LL)
+#define AUTH_IP_MAX          4
+
+static struct {
+    uint32_t ip;
+    uint32_t fallos;
+    int64_t  ultimo_us;
+} s_auth_ips[AUTH_IP_MAX];
+
+/* IP del cliente (0 si no se puede saber: entonces no se le aplica el freno por
+ * IP, solo el global de siempre). */
+static uint32_t auth_ip_cliente(httpd_req_t *req)
+{
+    int fd = httpd_req_to_sockfd(req);
+    if (fd < 0) return 0;
+    struct sockaddr_in sa;
+    socklen_t sl = sizeof(sa);
+    if (getpeername(fd, (struct sockaddr *)&sa, &sl) != 0) return 0;
+    return sa.sin_addr.s_addr;
+}
+
+/* Entrada de esa IP, creando una si hay hueco. */
+static void *auth_ip_slot(uint32_t ip)
+{
+    if (ip == 0) return NULL;
+    void *libre = NULL;
+    for (int i = 0; i < AUTH_IP_MAX; i++) {
+        if (s_auth_ips[i].ip == ip) return &s_auth_ips[i];
+        if (s_auth_ips[i].ip == 0 && !libre) libre = &s_auth_ips[i];
+    }
+    if (!libre) {
+        /* Tabla llena: se recicla la entrada mas vieja, que es la que menos
+         * probablemente este atacando ahora mismo. */
+        int viejo = 0;
+        for (int i = 1; i < AUTH_IP_MAX; i++)
+            if (s_auth_ips[i].ultimo_us < s_auth_ips[viejo].ultimo_us) viejo = i;
+        libre = &s_auth_ips[viejo];
+    }
+    return libre;
+}
 
 /* Comprobacion REAL de credenciales. La usan siempre los endpoints peligrosos.
  * No-static: declarada en config_server_internal.h. */
@@ -353,13 +399,37 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
 
     int64_t now_us = esp_timer_get_time();
     if (now_us - s_ultimo_fallo_us > AUTH_INACTIVIDAD_US) s_fallos = 0;
+
+    /* Freno POR IP, sin dormir la tarea del servidor. */
+    uint32_t ip = auth_ip_cliente(req);
+    if (ip != 0) {
+        /* Declarado como void* para no sacar el tipo de la tabla a la cabecera;
+         * se rehace el molde aqui (mismo layout). */
+        struct { uint32_t ip; uint32_t fallos; int64_t ultimo_us; } *f =
+            (void *)auth_ip_slot(ip);
+        if (f) {
+            if (now_us - f->ultimo_us > AUTH_INACTIVIDAD_US) f->fallos = 0;
+            if (f->fallos > AUTH_FALLOS_LIBRES) {
+                uint32_t espera_ms = (f->fallos - AUTH_FALLOS_LIBRES) * AUTH_ESPERA_PASO_MS;
+                if (espera_ms > AUTH_ESPERA_TOPE_MS) espera_ms = AUTH_ESPERA_TOPE_MS;
+                int64_t desde_ms = (now_us - f->ultimo_us) / 1000;
+                if (desde_ms < (int64_t)espera_ms) {
+                    char ra[12];
+                    snprintf(ra, sizeof(ra), "%u",
+                             (unsigned)((espera_ms - (uint32_t)desde_ms + 999) / 1000));
+                    httpd_resp_set_status(req, "429 Too Many Requests");
+                    httpd_resp_set_hdr(req, "Retry-After", ra);
+                    httpd_resp_set_type(req, "text/plain");
+                    httpd_resp_sendstr(req, "Demasiados intentos: espera un momento");
+                    return ESP_FAIL;
+                }
+            }
+            f->fallos++;
+            f->ultimo_us = now_us;
+        }
+    }
     s_ultimo_fallo_us = now_us;
     s_fallos++;
-    if (s_fallos > AUTH_FALLOS_LIBRES) {
-        uint32_t espera = (s_fallos - AUTH_FALLOS_LIBRES) * AUTH_ESPERA_PASO_MS;
-        if (espera > AUTH_ESPERA_TOPE_MS) espera = AUTH_ESPERA_TOPE_MS;
-        vTaskDelay(pdMS_TO_TICKS(espera));
-    }
 
     /* Dejar rastro del 401: sin esto un cliente que no manda credenciales (la
      * app con usuario/clave sin configurar, p.ej.) es INVISIBLE en el log —

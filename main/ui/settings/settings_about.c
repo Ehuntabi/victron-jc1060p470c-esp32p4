@@ -27,6 +27,7 @@
 #include "data/solar_daily.h"
 #include "data/trip_computer.h"
 #include "ne185_vlog.h"
+#include "portal/config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
 
 /* La version mostrada en About sale de esp_app_get_description()->version, que
  * ESP-IDF rellena automaticamente con `git describe` (el tag mas reciente, p.ej.
@@ -58,6 +59,10 @@ static void flush_all_before_restart(void)
     solar_daily_flush();
     trip_computer_flush();
     ne185_vlog_flush();
+    /* Y el VIAJE, que es lo unico que no estaba: hasta 5 min de ruta.csv se
+     * quedaban en RAM y este reinicio se los llevaba (auditoria del
+     * 13-oct-2026). Va el ultimo porque toca la SD y quiere el cerrojo libre. */
+    viaje_flush_antes_de_reiniciar();
 }
 
 static void about_refresh_dynamic(ui_state_t *ui)

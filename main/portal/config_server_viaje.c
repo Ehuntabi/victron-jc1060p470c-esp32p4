@@ -48,7 +48,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <dirent.h>
-#include <unistd.h>   /* rmdir: borrar la carpeta de un viaje */
+#include <unistd.h>   /* rmdir: borrar la carpeta de un viaje; fsync, ftruncate */
+#include <fcntl.h>    /* open(): deshacer una escritura a medias en un CSV */
 
 static const char *TAG = "viaje_srv";
 
@@ -337,6 +338,55 @@ static void destino_seguro(const char *in, char *out, size_t n)
     if (!j) snprintf(out, n, "viaje");   /* nunca una carpeta sin nombre */
 }
 
+/* Un valor de TEXTO al CSV, con las comas y las comillas sustituidas.
+ *
+ * POR QUE SE SUSTITUYEN Y NO SE ENTRECOMILLA (auditoria del 13-oct-2026): el
+ * texto libre de verdad lo teclea el usuario ("Cambio de filtro, aceite y
+ * correa"), y una coma sin escapar mete una columna de mas: la fila entera se
+ * desplaza y la hoja de calculo o el analizador del PC leen mal ese apunte. La
+ * solucion "correcta" seria entrecomillar y doblar las comillas interiores
+ * (RFC 4180), pero el analizador que ya existe en el PC parte eventos.csv a
+ * mano por las dos primeras comas (ver read_eventos en la app de viajes): con
+ * comillas, el usuario veria las comillas dentro del texto. Sustituir deja
+ * TODOS los lectores actuales correctos, que es lo que hace falta aqui; lo que
+ * se pierde es una coma tecleada, y el texto con comas sigue entero en
+ * resumen.txt, que es donde se lee. */
+static void csv_texto(FILE *f, const char *v)
+{
+    for (const char *p = v; *p; p++) {
+        if      (*p == ',') fputc(';', f);
+        else if (*p == '"') fputc('\'', f);
+        else if (*p == '\n' || *p == '\r') fputc(' ', f);   /* una fila = una linea */
+        else                fputc(*p, f);
+    }
+}
+
+/* Tamano de un fichero, o 0 si no existe: la "marca de agua" para poder
+ * deshacer una escritura que no ha llegado a cuajar. */
+static off_t marca_de(const char *ruta)
+{
+    struct stat st;
+    return (stat(ruta, &st) == 0) ? st.st_size : 0;
+}
+
+/* Deshace un append: deja el fichero como estaba antes de la marca.
+ *
+ * POR QUE (auditoria del 13-oct-2026): un apunte se escribe en DOS ficheros (el
+ * diario y el CSV de su tipo) y despues se comitea en NVS. Si falla cualquiera
+ * de las tres cosas, el satelite NO lo descarta: se le contesta 507 y lo
+ * reintenta. El reintento volvia a escribir lo que YA habia entrado, asi que
+ * quedaban lineas duplicadas en el diario y en el CSV -- y como el analizador
+ * suma filas y no ids, esas dos lineas cuentan como dos repostajes. Con la
+ * marca, lo que no cuaja se deshace y el reintento entra limpio. */
+static void marca_deshacer(const char *ruta, off_t marca)
+{
+    int fd = open(ruta, O_WRONLY);
+    if (fd < 0) return;                      /* ni se creo: nada que deshacer */
+    if (ftruncate(fd, marca) != 0)
+        ESP_LOGW(TAG, "no he podido deshacer la escritura en %s", ruta);
+    close(fd);
+}
+
 /* Una linea al diario del viaje. eventos.csv es el que se lee para saber QUE
  * paso; los csv por tipo (fase 3) son para hacer cuentas. */
 /* Devuelve si la linea ha llegado a la tarjeta. Antes no devolvia nada y el
@@ -357,11 +407,25 @@ static bool diario_en(const char *carpeta, const char *cuando,
     if (!f) { ESP_LOGW(TAG, "no puedo escribir %s", ruta); return false; }
     if (nuevo) fprintf(f, "fecha_hora,evento,detalle\n");
 
-    fprintf(f, "%s,%s,%s\n", cuando, que, detalle ? detalle : "");
+    fprintf(f, "%s,", cuando);
+    csv_texto(f, que);
+    fputc(',', f);
+    csv_texto(f, detalle ? detalle : "");
+    fputc('\n', f);
     /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
      * hasta aqui todo eran fprintf a un buffer que puede no haber bajado.
      * Mismo motivo que escribir_resumen() -- antes solo se comprobaba el
      * fopen, y un disco lleno a mitad de escritura devolvia 200 igual. */
+    /* Y fsync ANTES de fclose (auditoria del 13-oct-2026): fclose vacia a la
+     * VFS, pero el dato puede quedarse en la cache interna de la tarjeta y
+     * perderse con un corte de corriente DESPUES de haberle contestado 200 al
+     * satelite, que para entonces ya lo ha borrado de su cola. No habia ni un
+     * fsync en todo el firmware. */
+    if (fsync(fileno(f)) != 0) {
+        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
+        fclose(f);
+        return false;
+    }
     return fclose(f) == 0;
 }
 
@@ -797,7 +861,15 @@ static bool escribir_resumen(const char *carpeta)
                    "posicion durante el viaje (antena tapada o pantalla apagada).\n");
     }
     /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
-     * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. */
+     * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. Y
+     * fsync antes: este es EL fichero que dice si un viaje esta cerrado, y no
+     * puede quedarse en la cache de la tarjeta despues de haber contestado que
+     * si (auditoria del 13-oct-2026). */
+    if (fsync(fileno(f)) != 0) {
+        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
+        fclose(f);
+        return false;
+    }
     return fclose(f) == 0;
 }
 
@@ -811,7 +883,35 @@ static bool escribir_resumen(const char *carpeta)
 static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
 {
     const cJSON *je = cJSON_GetObjectItem(j, "eventos");
-    if (!cJSON_IsNumber(je)) return 0;      /* satelite viejo: no se puede saber */
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/" MARCA_INCOMPLETO, carpeta);
+
+    if (!cJSON_IsNumber(je)) {
+        /* SIN 'eventos' NO SE PUEDE SABER, y decir "no falta nada" es mentir
+         * (auditoria del 13-oct-2026). Este es el camino del cierre "ajeno":
+         * una cabina nueva, o con la NVS borrada, cierra un viaje que no
+         * empezo ella (pantalla "VIAJE EN LA P4" -> "GUARDARLO") y su fin no
+         * lleva contador. Antes se devolvia 0 = "completo", asi que el viaje
+         * salia Listo, sin marca y descargable aunque le faltaran apuntes que
+         * SI se generaron -- justo lo que INCOMPLETO.txt existe para evitar.
+         * Ahora se deja dicho que no se pudo comprobar: no es lo mismo un viaje
+         * verificado que uno sin verificar. */
+        FILE *f = fopen(ruta, "w");
+        if (f) {
+            fprintf(f, "Este viaje se cerro SIN PODER COMPROBARLO.\n\n"
+                       "El cierre lo mando una pantalla que no llevaba la cuenta de\n"
+                       "los apuntes generados (se cambiaria la cabina, o se le borro\n"
+                       "la memoria a mitad de viaje), asi que la P4 no puede saber si\n"
+                       "falta algo.\n\n"
+                       "Es probable que este entero, pero NO esta verificado: comparalo\n"
+                       "con lo que recuerdes antes de darlo por bueno.\n");
+            if (fclose(f) != 0)
+                ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+        }
+        ESP_LOGW(TAG, "cierre SIN VERIFICAR de %s: el fin no traia contador de "
+                      "eventos", carpeta);
+        return 0;                            /* no se puede afirmar que falten */
+    }
 
     uint32_t esperados = (uint32_t)je->valuedouble;
     uint32_t aplicados = 0;
@@ -825,8 +925,6 @@ static uint32_t comprobar_completo(const cJSON *j, const char *carpeta)
     if (aplicados >= esperados) return 0;
     uint32_t faltan = esperados - aplicados;
 
-    char ruta[RUTA_MAX];
-    snprintf(ruta, sizeof(ruta), "%s/" MARCA_INCOMPLETO, carpeta);
     FILE *f = fopen(ruta, "w");
     if (f) {
         fprintf(f, "A este viaje le faltan %lu apunte%s.\n\n",
@@ -1290,13 +1388,23 @@ static bool csv_por_tipo(const char *carpeta, const char *tipo,
 
     fprintf(f, "%s", cuando);
     for (const cJSON *it = datos ? datos->child : NULL; it; it = it->next) {
-        if (cJSON_IsString(it))      fprintf(f, ",%s", it->valuestring);
-        else if (cJSON_IsNumber(it)) fprintf(f, ",%g", it->valuedouble);
-        else                         fprintf(f, ",");
+        fputc(',', f);
+        /* El texto pasa por csv_texto(): una coma en el campo libre "otros" del
+         * mantenimiento metia una columna de mas y desplazaba la fila entera
+         * (auditoria del 13-oct-2026). */
+        if      (cJSON_IsString(it)) csv_texto(f, it->valuestring);
+        else if (cJSON_IsNumber(it)) fprintf(f, "%g", it->valuedouble);
     }
-    fprintf(f, "\n");
+    fputc('\n', f);
     /* Mismo motivo que diario_en(): fclose es quien de verdad delata un
-     * disco lleno, los fprintf de arriba solo llenan un buffer. */
+     * disco lleno, los fprintf de arriba solo llenan un buffer. Y fsync antes,
+     * para que no se quede en la cache de la tarjeta despues de haberle dicho
+     * al satelite que estaba guardado. */
+    if (fsync(fileno(f)) != 0) {
+        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
+        fclose(f);
+        return false;
+    }
     return fclose(f) == 0;
 }
 
@@ -1360,16 +1468,28 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
     if (!en_viaje) mkdir(VEHICULO_DIR, 0777);
+    /* MARCA DE AGUA de los dos ficheros ANTES de tocarlos: si algo falla
+     * despues (la tarjeta o la NVS), se deshace lo escrito y el reintento del
+     * satelite entra limpio, sin duplicar la linea (auditoria del 13-oct-2026:
+     * antes el reintento volvia a escribir lo que ya habia entrado, y el
+     * analizador suma filas, no ids). */
+    char ruta_ev[RUTA_MAX], ruta_tipo[RUTA_MAX];
+    snprintf(ruta_ev, sizeof(ruta_ev), "%s/eventos.csv", carpeta);
+    snprintf(ruta_tipo, sizeof(ruta_tipo), "%s/%ss.csv", carpeta, jt->valuestring);
+    off_t marca_ev = marca_de(ruta_ev), marca_tipo = marca_de(ruta_tipo);
+
     bool escrito = diario_en(carpeta, cuando, jt->valuestring, detalle);
     escrito = csv_por_tipo(carpeta, jt->valuestring, jd, cuando) && escrito;
+    if (!escrito) {
+        marca_deshacer(ruta_ev, marca_ev);
+        marca_deshacer(ruta_tipo, marca_tipo);
+    }
     camera_sd_bus_unlock();
 
     if (!escrito) {
         /* 507 y no 200: es 5xx, asi que el satelite NO lo descarta y lo vuelve
          * a intentar. Tampoco se cuenta ni se suma a los totales ni se marca el
-         * id como aplicado, para que el reintento entre de verdad. Puede
-         * repetir una linea en el diario si una de las dos escrituras si entro;
-         * repetir una linea es mucho menos grave que perder el apunte. */
+         * id como aplicado, para que el reintento entre de verdad. */
         ESP_LOGE(TAG, "NO he podido escribir el apunte '%s' en %s: la tarjeta "
                       "esta llena o falla. Devuelvo 507 para que lo reintente",
                  jt->valuestring, carpeta);
@@ -1393,6 +1513,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
      * nada -- todo o nada, no "unos si y el id no". Detectado el
      * 09-sep-2026 (mismo criterio que salida/trip_blob en el satelite). */
     nvs_handle_t h;
+    esp_err_t commit_err = ESP_FAIL;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         /* Los totales y el contador son DEL VIAJE: un repostaje del
          * historial del vehiculo no cuenta en el resumen de ningun viaje,
@@ -1409,29 +1530,33 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
          * abriria un viaje fantasma en /sdcard/vehiculo. El id si se
          * guarda siempre: es la idempotencia. */
         estado_set_en(h, en_viaje ? carpeta : NULL, id);
-        esp_err_t commit_err = nvs_commit(h);
-        if (commit_err != ESP_OK) {
-            /* Mismo caso que el nvs_open() que falla ahi abajo: la fila de
-             * la SD ya esta escrita, asi que un reintento del satelite no
-             * duplica nada (el id nunca llego a quedar en el anillo) -- se
-             * sigue respondiendo "ok" con el mismo razonamiento. La
-             * diferencia es que ANTES este fallo pasaba en silencio, sin
-             * rastro en el log: si algun dia empieza a fallar de verdad
-             * (flash gastada, NVS casi lleno) no habia forma de saberlo
-             * salvo por el sintoma indirecto (duplicados esporadicos).
-             * Detectado por el usuario el 09-sep-2026. */
-            ESP_LOGE(TAG, "nvs_commit fallo para totales/contador/dedupe de "
-                          "'%s' (%s): nada de eso ha quedado guardado, el "
-                          "reintento repetira la fila de la SD pero no "
-                          "duplicara importes",
-                     jt->valuestring, esp_err_to_name(commit_err));
-        }
+        commit_err = nvs_commit(h);
         nvs_close(h);
-    } else {
-        ESP_LOGE(TAG, "no se pudo abrir NVS para totales/contador/dedupe de "
-                      "'%s': nada de eso queda guardado, el reintento repetira "
-                      "la fila de la SD pero no duplicara importes",
-                 jt->valuestring);
+    }
+
+    if (commit_err != ESP_OK) {
+        /* ANTES ESTO CONTESTABA 200 (auditoria del 13-oct-2026). La fila ya
+         * estaba en la tarjeta, asi que el satelite la daba por entregada y la
+         * borraba de su cola... pero los totales del resumen, el contador de
+         * aplicados y el anillo de dedupe NO habian quedado guardados: el
+         * resumen salia por debajo de lo que dicen los CSV y, encima,
+         * comprobar_completo() marcaba el viaje INCOMPLETO culpando a "apuntes
+         * perdidos por el camino", cuando el dato estaba en la tarjeta.
+         *
+         * Ahora se DESHACE la fila (marca_deshacer) y se contesta 507: el
+         * satelite lo reintenta y entra entero, una sola vez. */
+        ESP_LOGE(TAG, "nvs_commit fallo para totales/contador/dedupe de '%s' "
+                      "(%s): deshago la fila de la SD y devuelvo 507 para que "
+                      "el reintento lo aplique ENTERO",
+                 jt->valuestring, esp_err_to_name(commit_err));
+        if (camera_sd_bus_lock(3000)) {
+            marca_deshacer(ruta_ev, marca_ev);
+            marca_deshacer(ruta_tipo, marca_tipo);
+            camera_sd_bus_unlock();
+        }
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_sendstr(req, "no se ha podido guardar el apunte en la NVS");
+        return ESP_OK;
     }
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", jt->valuestring, carpeta);
     httpd_resp_sendstr(req, "ok");
@@ -1466,7 +1591,12 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
 
     FILE *f = fopen(ruta, "a");
-    if (!f) return;
+    if (!f) {
+        /* Antes era un 'return' mudo: la telemetria del viaje se quedaba
+         * congelada sin una linea en el log (auditoria del 13-oct-2026). */
+        ESP_LOGW(TAG, "no puedo escribir %s (disco lleno?)", ruta);
+        return;
+    }
     if (nuevo) fprintf(f, "hora,soc,bateria_v,solar_w,frigo_c,exterior_c,fan_pct,agua_limpia,agua_grises\n");
 
     dashboard_snapshot_t d;
@@ -1490,6 +1620,10 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     if (d.solar_fresh) fprintf(f, "%u,", d.pv_w); else fprintf(f, ",");
     fprintf(f, "%.1f,%.1f,%u,", fr.T_Congelador, fr.T_Exterior, fr.fan_percent);
     if (ne.fresh) fprintf(f, "%u,%u\n", ne.s1, ne.r1); else fprintf(f, ",\n");
+    /* fsync antes de fclose: sin el, un corte de corriente en los segundos
+     * siguientes deja la fila en la cache de la tarjeta (auditoria del
+     * 13-oct-2026: no habia ni un fsync en el firmware). */
+    if (fsync(fileno(f)) != 0) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
 }
 
@@ -1502,7 +1636,13 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     bool nuevo = !(stat(ruta, &st) == 0 && st.st_size > 0);
 
     FILE *f = fopen(ruta, "a");
-    if (!f) return;
+    if (!f) {
+        /* Antes esto era un 'return' mudo: la telemetria del viaje se congelaba
+         * sin una sola linea en el log y nadie se enteraba (auditoria del
+         * 13-oct-2026). */
+        ESP_LOGW(TAG, "no puedo escribir %s (disco lleno?)", ruta);
+        return;
+    }
     /* "km" va LA ULTIMA, como dejo dicho la version anterior: asi los ficheros
      * de viajes ya cerrados se siguen leyendo igual y quien tenga un analizador
      * hecho no tiene que tocarlo.
@@ -1520,6 +1660,10 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     fprintf(f, "%s,%.2f,%.0f,%.0f,%.0f,%.2f,%.1f\n", cuando,
             (double)t.seconds_running / 3600.0, t.wh_charged, t.wh_discharged,
             t.wh_solar, (double)t.solar_seconds / 3600.0, t.km);
+    /* fsync antes de fclose: sin el, un corte de corriente en los segundos
+     * siguientes deja la fila en la cache de la tarjeta (auditoria del
+     * 13-oct-2026: no habia ni un fsync en el firmware). */
+    if (fsync(fileno(f)) != 0) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
     if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
 }
 
@@ -1567,14 +1711,45 @@ static bool ruta_volcar(const char *carpeta)
         fprintf(f, "%s,%.6f,%.6f,%.0f,%.2f\n", s_ruta[i].cuando,
                 s_ruta[i].lat, s_ruta[i].lon, (double)s_ruta[i].alt, s_ruta[i].km);
     }
+    if (fsync(fileno(f)) != 0) { fclose(f); return false; }   /* disco lleno */
     if (fclose(f) != 0) return false;      /* tarjeta llena: NO se tiran los puntos */
     s_ruta_n = 0;
     return true;
 }
 
+/* ── Volcado antes de un reinicio (auditoria del 13-oct-2026) ────────────────
+ *
+ * La P4 se reinicia sola por varias vias (la escalera del AP, una OTA, el boton
+ * de Ajustes, y el reinicio por watchdog). En todas, lo que hubiera en RAM se
+ * pierde: hasta 5 minutos de ruta.csv (10 puntos) y lo que no haya caido de la
+ * telemetria. El viaje sobrevive en NVS y sigue donde estaba, asi que lo unico
+ * que hay que hacer antes de reiniciar es BAJAR LA RUTA.
+ *
+ * NO se escribe resumen.txt: eso marcaria el viaje como cerrado en /data/viajes
+ * (estado_de() lo da por Listo en cuanto existe) cuando en realidad sigue
+ * abierto. Aqui solo se vuelca y se deja constancia en el diario.
+ *
+ * El reinicio por watchdog (watchdog.c) NO llama a esto a proposito: alli el
+ * sistema ya viene de un cuelgue y no se puede meter I/O de tarjeta en ese
+ * camino. */
+void viaje_flush_antes_de_reiniciar(void)
+{
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
+    if (!camera_sd_bus_lock(3000)) {
+        ESP_LOGW(TAG, "viaje abierto y la tarjeta ocupada: no puedo volcar la "
+                      "ruta antes de reiniciar");
+        return;
+    }
+    if (!ruta_volcar(carpeta))
+        ESP_LOGW(TAG, "quedaban puntos de ruta y no se han podido escribir");
+    diario(carpeta, "reinicio", "la P4 se reinicia con el viaje abierto");
+    camera_sd_bus_unlock();
+    ESP_LOGW(TAG, "viaje abierto en %s: ruta volcada antes de reiniciar", carpeta);
+}
+
 /* CIERRE de la ruta: ultimo intento de bajar lo que quede en RAM y, pase lo que
  * pase, el buffer se vacia.
- *
  * Vaciarlo SIEMPRE es el arreglo de la auditoria del 13-oct-2026. Antes, si al
  * cerrar la tarjeta estaba llena, los hasta 10 puntos (5 min de traza) se
  * quedaban en RAM; el viaje se cerraba igual y, al empezar el viaje siguiente,
@@ -1659,6 +1834,17 @@ static void tick_viaje_cb(void *arg)
     if (!toca_tel && !toca_cont && !toca_ruta) return;
 
     if (!camera_sd_bus_lock(3000)) return;   /* ya se apuntara al siguiente */
+    /* La carpeta se vuelve a leer YA CON EL CERROJO (auditoria del 13-oct-2026):
+     * op_fin cierra y RENOMBRA la carpeta precisamente con este cerrojo, asi
+     * que entre la lectura de arriba y esta linea el viaje puede haberse
+     * cerrado. Escribir entonces iba a una ruta que ya no existia y el fopen
+     * fallaba en silencio: se perdia una fila de telemetria sin dejar rastro. */
+    char carpeta_ahora[CARPETA_MAX];
+    if (!viaje_abierto(carpeta_ahora, sizeof(carpeta_ahora)) ||
+        strcmp(carpeta_ahora, carpeta) != 0) {
+        camera_sd_bus_unlock();
+        return;
+    }
     if (toca_tel)  { fila_telemetria(carpeta, &tm_l); ultima_tel  = ahora_us; }
     if (toca_cont) { fila_contadores(carpeta, &tm_l); ultimo_cont = ahora_us; }
     /* El reloj de la ruta se adelanta toque o no: si estas parado, fila_ruta no

@@ -24,6 +24,12 @@ TaskHandle_t viaje_tick_task_handle(void);
  * nombre y no hay forma de saber de cual es cada uno. */
 bool viaje_abierto_nombre(char *out, size_t n);
 
+/* Vuelca a la SD lo unico que vive en RAM y se perderia en un reinicio: los
+ * puntos de ruta del viaje abierto (hasta 5 min de traza). Se llama desde TODOS
+ * los caminos de reinicio menos el del watchdog, que no puede hacer I/O de
+ * tarjeta porque viene de un cuelgue. Ver el comentario del .c. */
+void viaje_flush_antes_de_reiniciar(void);
+
 /* Reparacion del estado del viaje al arrancar, CON LA SD YA MONTADA.
  *
  * Si la NVS dice que hay un viaje abierto y su carpeta no esta en la tarjeta,

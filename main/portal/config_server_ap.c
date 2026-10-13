@@ -8,6 +8,7 @@
  */
 #include "config_server.h"
 #include "config_server_internal.h"
+#include "config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -418,7 +419,8 @@ static bool ap_asegura_netif_vivo(void)
 /* Sube un escalon de la escalera. `directo_al_ap` se usa cuando YA sabemos que
  * el DHCP no tiene nada que ver (la cabina nos ha dicho que no le llega la
  * telemetria), y entonces no se pierde el tiempo reiniciandolo. */
-static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc, int conc)
+static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc, int conc,
+                                bool permitir_reinicio_placa)
 {
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     const char *estado_netif = netif ? (esp_netif_is_netif_up(netif) ? "up" : "DOWN") : "?";
@@ -460,11 +462,28 @@ static void vigila_sube_escalon(bool directo_al_ap, const char *motivo, int asoc
                       "reiniciar la placa", motivo);
         return;
     }
+    if (!permitir_reinicio_placa) {
+        /* Un latido NO puede reiniciar la placa (auditoria de seguridad del
+         * 13-oct-2026): el latido no esta autenticado, asi que quien lo mande
+         * -- con IP falsificada o desde un AP abierto -- no debe poder dejar la
+         * P4 reiniciandose en bucle (y con ella, sin sonar las alarmas). Se ha
+         * reiniciado el AP, que es la reparacion de verdad; si con eso no
+         * basta, se dice y se espera a la siguiente vuelta. */
+        s_vueltas_tras_ap = 0;
+        ESP_LOGE(TAG, "AP: %s, y reiniciar el AP no ha bastado. No reinicio la "
+                      "placa por un latido (no esta autenticado): si sigue igual, "
+                      "habra que mirarlo a mano", motivo);
+        return;
+    }
     if (s_reinicios_ap < 0 || s_reinicios_ap > 10) s_reinicios_ap = 0;  /* RTC sin inicializar */
     if (s_reinicios_ap < REINICIOS_AP_MAX) {
         s_reinicios_ap++;
         ESP_LOGE(TAG, "AP: %s ni reiniciando el AP. Reinicio la placa entera "
                       "(vez %d de %d)", motivo, s_reinicios_ap, REINICIOS_AP_MAX);
+        /* Con un viaje abierto, esto se llevaba por delante hasta 5 min de
+         * ruta.csv (auditoria del 13-oct-2026): la escalera del AP puede
+         * reiniciar la placa sola, en silencio y a mitad de viaje. */
+        viaje_flush_antes_de_reiniciar();
         esp_restart();
     } else {
         ESP_LOGE(TAG, "AP: %s, ya me he reiniciado %d veces en este encendido y sigue "
@@ -503,7 +522,10 @@ static void dhcp_vigila_job(void)
     udp_latido_info_t lat;
     udp_latido_estado(&lat);
     bool latido_vivo = lat.hay_datos && lat.seg_desde_latido >= 0 && lat.seg_desde_latido < 15;
-    bool mini_mudo   = (asoc >= 1) && latido_vivo && lat.seg_sin_datos_mini >= 15;
+    /* ALGUNA cabina muda, no "la ultima que hablo": con dos pantallas, la sana
+     * tapaba a la muda (auditoria del 13-oct-2026). */
+    int mudo_seg = -1;
+    bool mini_mudo   = (asoc >= 1) && udp_latido_alguno_mudo(&mudo_seg);
 
     if (mini_mudo) {
         /* Camino RAPIDO: la cabina nos esta diciendo, con su latido llegando,
@@ -512,13 +534,14 @@ static void dhcp_vigila_job(void)
          * no disparar por un corte de un segundo. */
         s_dhcp_sin_concesion = 0;
         if (++s_mini_mudo < 2) {
-            ESP_LOGW(TAG, "AP: la cabina dice que lleva %d s sin datos (su latido llega "
-                          "hace %d s): vigilo una vuelta mas antes de tocar el AP",
-                     lat.seg_sin_datos_mini, lat.seg_desde_latido);
+            ESP_LOGW(TAG, "AP: una cabina dice que lleva %d s sin datos (hay %d "
+                          "latiendo): vigilo una vuelta mas antes de tocar el AP",
+                     mudo_seg, udp_latido_fuentes_vivas(15));
             return;
         }
         s_mini_mudo = 0;
-        vigila_sube_escalon(true, "la cabina no recibe telemetria", asoc, conc);
+        vigila_sube_escalon(true, "una cabina no recibe telemetria", asoc, conc,
+                            /*permitir_reinicio_placa=*/false);
         return;
     }
     s_mini_mudo = 0;
@@ -535,7 +558,7 @@ static void dhcp_vigila_job(void)
      *    la tabla del DHCP, que es lo unico que queda. */
     if (++s_dhcp_sin_concesion < DHCP_SIN_CONCESION) return;
     s_dhcp_sin_concesion = 0;
-    vigila_sube_escalon(false, "hay asociados y ninguna concesion", asoc, conc);
+    vigila_sube_escalon(false, "hay asociados y ninguna concesion", asoc, conc, true);
 }
 
 static void dhcp_vigila_ensure(void)

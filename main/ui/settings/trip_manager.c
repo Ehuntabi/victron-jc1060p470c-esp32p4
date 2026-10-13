@@ -33,6 +33,7 @@
 #include "data/solar_daily.h"
 #include "ne185_vlog.h"
 #include "datalogger.h"
+#include "portal/config_server_viaje.h"   /* viaje_abierto_nombre(): no soltar la tarjeta con viaje abierto */
 
 /* ── Reset del viaje y soltar tarjeta ──────────────────────────────── */
 static void do_trip_reset_action(void)
@@ -82,6 +83,25 @@ static void do_soltar_tarjeta_action(void)
 static void trip_finish_btn_cb(lv_event_t *e)
 {
     (void)e;
+    /* CON UN VIAJE ABIERTO LA TARJETA NO SE SUELTA (auditoria del 13-oct-2026).
+     * Desmontarla con el viaje abierto dejaba a la P4 sin sitio donde escribir:
+     * el cierre daba 507 para siempre, los apuntes de la cabina tambien (su cola
+     * se atascaba entera), no se podia descartar el viaje ni empezar otro, y del
+     * apagon solo se salia reiniciando con la tarjeta puesta. El viaje lo cierra
+     * la pantalla de la cabina, asi que aqui solo se explica. */
+    char viaje[64];
+    if (viaje_abierto_nombre(viaje, sizeof(viaje))) {
+        char cuerpo[320];
+        snprintf(cuerpo, sizeof(cuerpo),
+                 "Hay un viaje ABIERTO (%s).\n\n"
+                 "Si sacas la tarjeta ahora, la P4 no puede\n"
+                 "cerrarlo ni guardar nada mas, y habria que\n"
+                 "reiniciarla con la tarjeta puesta.\n\n"
+                 "Termina el viaje en la pantalla de la\n"
+                 "cabina y vuelve a intentarlo.", viaje);
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  Viaje abierto", cuerpo);
+        return;
+    }
     ui_show_confirm_dialog(LV_SYMBOL_SD_CARD "  Soltar tarjeta",
         "Se guarda todo y se suelta la tarjeta\npara poder sacarla.\n\n"
         "Despues no se registra nada mas\nhasta reiniciar la pantalla.",

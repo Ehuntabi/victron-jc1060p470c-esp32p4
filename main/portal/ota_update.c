@@ -28,7 +28,8 @@
 #include "esp_lvgl_port.h"
 #include "log_capture/log_capture.h"
 #include "display.h"   /* bsp_display_brightness_set/get */
-#include "config_server_internal.h"   /* REQUIRE_AUTH(req) */
+#include "config_server_internal.h"
+#include "config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
 
 static const char *TAG = "ota";
 
@@ -102,6 +103,9 @@ static void ota_reboot_cb(void *arg)
     /* Que el arranque siguiente sepa que este reinicio lo pedia una
      * actualizacion: no es una averia y no se apunta como ultimo reinicio. */
     watchdog_marca_reinicio_pedido();
+    /* Con un viaje abierto, hasta 5 min de ruta vivian en RAM y este reinicio
+     * se los llevaba (auditoria del 13-oct-2026). */
+    viaje_flush_antes_de_reiniciar();
     esp_restart();
 }
 
@@ -243,7 +247,23 @@ esp_err_t ota_aviso_post(httpd_req_t *req)
     REQUIRE_AUTH(req);
     ota_pantalla_aviso();
     ui_notify_user_activity();   /* por si el salvapantallas lo tenia atenuado */
-    ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
+    /* Si hay un viaje abierto se dice EN LA PANTALLA, no solo en el log
+     * (auditoria del 13-oct-2026: una OTA a mitad de viaje reiniciaba la placa
+     * sin avisar de nada). La ruta en RAM se vuelca antes de reiniciar (ver
+     * viaje_flush_antes_de_reiniciar), pero el viaje se queda abierto y hay que
+     * saberlo: quien tiene que cerrarlo es el cuaderno de la cabina. */
+    char vj[64];   /* CARPETA_MAX de config_server_viaje.c es privado */
+    if (viaje_abierto_nombre(vj, sizeof(vj))) {
+        ESP_LOGW(TAG, "OTA con el viaje %s ABIERTO: se volcara la ruta antes de "
+                      "reiniciar, pero el viaje sigue sin cerrar", vj);
+        ui_ota_overlay_show("Actualizando firmware\n\n"
+                            "OJO: hay un viaje abierto.\n"
+                            "Se guarda la ruta, pero el viaje\n"
+                            "seguira sin cerrar al reiniciar.\n\n"
+                            "No apagues la pantalla");
+    } else {
+        ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
+    }
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_sendstr(req, "ok");
     return ESP_OK;
