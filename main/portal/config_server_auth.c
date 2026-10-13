@@ -258,6 +258,10 @@ void http_auth_init(void)
      * defecto: sin credenciales, no se entra. 2026-07-26. */
     if (user[0] == '\0' || pass[0] == '\0') {
         s_auth_header[0] = '\0';
+        /* Y la de administracion TAMBIEN: si no, se quedaba con el valor de la
+         * vuelta anterior en RAM y el nivel estricto la seguia aceptando hasta
+         * el reinicio (revision del 13-oct-2026). */
+        s_admin_header[0] = '\0';
         ESP_LOGE(TAG, "sin credenciales (NVS no disponible): el portal web queda cerrado");
         return;
     }
@@ -535,9 +539,18 @@ static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
     return libre;
 }
 
-/* Comprobacion REAL de credenciales. La usan siempre los endpoints peligrosos.
- * No-static: declarada en config_server_internal.h. */
-esp_err_t check_basic_auth_strict(httpd_req_t *req)
+/* Comprobacion de credenciales CONTRA UNA CABECERA DADA, con las mismas
+ * defensas para las dos (CSRF, freno por IP, log del 401 y cierre de sesion).
+ * Las dos entradas publicas -- check_basic_auth y check_basic_auth_strict, que
+ * siguen declaradas en config_server_internal.h -- son envoltorios de esto:
+ * una compara contra la clave del portal y la otra contra la de administracion.
+ *
+ * POR QUE ESTA SEPARADO (revision adversarial del 13-oct-2026): cuando se
+ * separaron las dos claves, el nivel abierto se dejo delegando en la funcion
+ * estricta, asi que en cuanto se generaba la clave de administracion TODOS los
+ * endpoints abiertos pasaban a pedirla: la app daba 401 en cada pantalla y el
+ * satelite no podia mandar apuntes. */
+static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab)
 {
     static uint32_t s_fallos = 0;
     static int64_t  s_ultimo_fallo_us = 0;
@@ -614,10 +627,19 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     char auth[96] = {0};
     esp_err_t err = httpd_req_get_hdr_value_str(req, "Authorization",
                                                   auth, sizeof(auth));
-    /* El nivel ESTRICTO (/ota, /keys, /save) compara contra la clave de
-     * administracion; el abierto, contra la de siempre. */
-    const char *esperada = s_admin_header[0] ? s_admin_header : s_auth_header;
-    if (err == ESP_OK && esperada[0] != '\0' &&
+    /* OJO: esta funcion es el nivel ESTRICTO (/ota, /keys, /save), asi que
+     * compara contra la clave de ADMINISTRACION. El nivel abierto (la app, la
+     * web, el satelite) NO pasa por aqui: tiene su propia comprobacion en
+     * check_basic_auth(), contra s_auth_header.
+     *
+     * Y esto se arreglo el 13-oct-2026 despues de que la revision adversarial lo
+     * cazara: al principio de separar las dos claves, el nivel abierto delegaba
+     * en esta funcion, asi que en cuanto se generaba la clave de administracion
+     * TODOS los endpoints abiertos pasaban a pedirla -- la app daba 401 en cada
+     * pantalla y la cabina no podia mandar apuntes. Justo lo contrario de lo que
+     * promete el boton. */
+    const char *esperada = esperada_cab;
+    if (err == ESP_OK && esperada && esperada[0] != '\0' &&
         auth_equal_ct(auth, esperada)) {
         s_fallos = 0;
         /* Tambien los de ESA IP: si no, seguiria contando fallos viejos y el
@@ -687,6 +709,13 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req)
     return ESP_FAIL;
 }
 
+/* NIVEL ESTRICTO: /ota (grabar firmware), /keys (claves AES de los Victron) y
+ * /save. La clave de administracion, que si no esta puesta es la del portal. */
+esp_err_t check_basic_auth_strict(httpd_req_t *req)
+{
+    return auth_comprueba(req, s_admin_header[0] ? s_admin_header : s_auth_header);
+}
+
 /* Nivel abierto: basta con estar dentro del Wi-Fi (ver el bloque de arriba).
  * No-static: declarada en config_server_internal.h para charts_svg.c y
  * data_export_tar.c (via las macros REQUIRE_AUTH/REQUIRE_AUTH_STRICT). */
@@ -699,6 +728,8 @@ esp_err_t check_basic_auth(httpd_req_t *req)
     ap_off_timer_kick();
     return ESP_OK;
 #else
-    return check_basic_auth_strict(req);
+    /* NIVEL ABIERTO: la clave del PORTAL (la de la app y las pantallas), NO la
+     * de administracion. Ver el comentario de check_basic_auth_strict(). */
+    return auth_comprueba(req, s_auth_header);
 #endif
 }

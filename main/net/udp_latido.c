@@ -129,8 +129,15 @@ bool udp_latido_alguno_mudo(int *seg_out)
         if (f->ip == 0) continue;
         if ((ahora - f->ultimo_us) / 1000000 >= 15) continue;   /* esta no late: no es fuente */
         int s = f->seg_sin_datos;
+        /* -1 es "nunca he recibido nada" (lo que manda una cabina que acaba de
+         * arrancar y no ha visto un solo paquete): NO es "llevo mucho sin
+         * datos". Tratarlo como mudo hacia que una cabina recien encendida
+         * disparara la reparacion del AP en cada arranque (revision del
+         * 13-oct-2026). Cualquier OTRO negativo si es mudo: son los valores que
+         * daba la vuelta con el int16 antes de saturar. */
+        if (s == -1) continue;
         if (s < 0 || s >= 15) {
-            if (s < 0) s = 32767;                                /* negativo = mudo */
+            if (s < 0) s = 32767;
             if (s > peor) peor = s;
         }
     }

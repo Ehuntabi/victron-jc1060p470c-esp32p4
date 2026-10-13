@@ -166,6 +166,10 @@ static bool viaje_abierto(char *out, size_t n)
 static _Atomic uint32_t s_fallos_escritura;
 
 static void anota_fallo_escritura(void) { s_fallos_escritura++; }
+/* Y al REVES: una escritura buena borra el aviso. Antes el contador solo subia,
+ * asi que un fallo puntual (un 507 que el reintento resolvio) dejaba el icono de
+ * la SD en rojo hasta el siguiente reinicio (revision del 13-oct-2026). */
+static void anota_escritura_ok(void) { s_fallos_escritura = 0; }
 
 uint32_t viaje_fallos_escritura(void) { return s_fallos_escritura; }
 
@@ -383,6 +387,7 @@ static void marcar_huerfanas(const char *abierta)
                    "momento). No es el viaje abierto, asi que no hay forma de\n"
                    "finalizarlo desde la cabina.\n\n"
                    "Los datos que haya dentro son los que se llegaron a escribir.\n");
+        fsync(fileno(f));   /* es una marca: no puede quedarse en la cache */
         if (fclose(f) == 0) marcadas++;
     }
     closedir(d);
@@ -450,7 +455,12 @@ static void csv_texto(FILE *f, const char *v)
 static off_t marca_de(const char *ruta)
 {
     struct stat st;
-    return (stat(ruta, &st) == 0) ? st.st_size : 0;
+    if (stat(ruta, &st) == 0) return st.st_size;
+    /* Si el fichero NO existe, la marca es 0 (correcto: se acaba de crear). Si
+     * el stat falla por otra cosa, es -1 y NO se deshace nada: devolver 0 en ese
+     * caso podia VACIAR el fichero entero al "deshacer" (revision del
+     * 13-oct-2026). */
+    return (errno == ENOENT) ? 0 : -1;
 }
 
 /* Deshace un append: deja el fichero como estaba antes de la marca.
@@ -464,6 +474,7 @@ static off_t marca_de(const char *ruta)
  * marca, lo que no cuaja se deshace y el reintento entra limpio. */
 static void marca_deshacer(const char *ruta, off_t marca)
 {
+    if (marca < 0) return;                   /* no se pudo medir: no se toca nada */
     int fd = open(ruta, O_WRONLY);
     if (fd < 0) return;                      /* ni se creo: nada que deshacer */
     if (ftruncate(fd, marca) != 0)
@@ -747,7 +758,22 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             localtime_r(&ahora_p4, &tm_p4);
             char fecha_p4[12];
             strftime(fecha_p4, sizeof(fecha_p4), "%Y-%m-%d", &tm_p4);
-            if (strcmp(fecha_p4, fecha) != 0) {
+            /* Solo si la diferencia es de MAS DE UN DIA (como dice el
+             * comentario): un viaje que empieza a las 23:59 y la P4 que ya esta
+             * en el dia siguiente es normal y se respeta la fecha que pide la
+             * cabina (revision del 13-oct-2026). */
+            /* Dias LOCALES (newlib no da tm_gmtoff en struct tm): la medianoche
+             * local de hoy partida por 86400 es el numero de dia local, que es
+             * la misma cuenta que hace la cabina con epoch_local. */
+            time_t local = ahora_p4;
+            struct tm t_local;
+            localtime_r(&local, &t_local);
+            long dias_p4 = (long)((local - (t_local.tm_hour * 3600 +
+                                            t_local.tm_min * 60 +
+                                            t_local.tm_sec)) / 86400);
+            long dias_cab = (long)jf->valuedouble;
+            long dif = dias_p4 - dias_cab; if (dif < 0) dif = -dif;
+            if (dif >= 2) {
                 ESP_LOGW(TAG, "la cabina pide el viaje con fecha %s y aqui es %s: "
                               "uso la de la P4 (su reloj es el que tiene GPS/RTC)",
                          fecha, fecha_p4);
@@ -944,7 +970,17 @@ static bool escribir_resumen(const char *carpeta)
         /* Dias de calendario, no periodos de 24 h: salir un viernes y volver el
          * domingo son tres dias de viaje, aunque no sean 72 horas. */
         long dias = (long)((now / 86400) - ((time_t)inicio / 86400)) + 1;
-        fprintf(f, "Duracion: %ld dia%s\n", dias, dias == 1 ? "" : "s");
+        /* ACOTADA: 'inicio' es un epoch guardado en NVS, y si el reloj ha dado
+         * un salto (el GPS corrige una hora que venia de un respaldo) la resta
+         * sale inflada -- o negativa si el reloj fue hacia atras --. Un viaje de
+         * mas de 90 dias no existe en esta autocaravana: si sale eso, es el
+         * reloj, y se dice (revision del 13-oct-2026, hallazgo M4). */
+        if (dias < 1 || dias > 90) {
+            fprintf(f, "Duracion: no se puede calcular (el reloj de la P4 dio un\n"
+                       "  salto durante el viaje: %ld dias de diferencia)\n", dias);
+        } else {
+            fprintf(f, "Duracion: %ld dia%s\n", dias, dias == 1 ? "" : "s");
+        }
     }
     fprintf(f, "\nGASTOS (%s)\n", moneda);
     fprintf(f, "  Combustible ... %8.2f   (%.1f litros)\n", combus, litros);
@@ -1213,6 +1249,8 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
                     (unsigned long)faltan);
             fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
                         MARCA_INCOMPLETO ".\n");
+            /* fsync: este añadido es lo que deja claro que faltan apuntes. */
+            fsync(fileno(rf));
             fclose(rf);
         }
     }
@@ -1571,7 +1609,9 @@ static bool csv_por_tipo(const char *carpeta, const char *tipo,
         fclose(f);
         return false;
     }
-    return fclose(f) == 0;
+    bool csv_ok = (fclose(f) == 0);
+    if (csv_ok) anota_escritura_ok();
+    return csv_ok;
 }
 
 /* El sello de tiempo lo pone el SATELITE, en el momento en que ocurrio, y no
@@ -1791,8 +1831,16 @@ static void fila_telemetria(const char *carpeta, const struct tm *tm_l)
     /* fsync antes de fclose: sin el, un corte de corriente en los segundos
      * siguientes deja la fila en la cache de la tarjeta (auditoria del
      * 13-oct-2026: no habia ni un fsync en el firmware). */
-    if (fsync(fileno(f)) != 0) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
-    if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+    if (fsync(fileno(f)) != 0) {
+        anota_fallo_escritura();
+        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
+    }
+    if (fclose(f) != 0) {
+        anota_fallo_escritura();
+        ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+    } else {
+        anota_escritura_ok();   /* la telemetria entro: se borra el aviso */
+    }
 }
 
 static void fila_contadores(const char *carpeta, const struct tm *tm_l)
@@ -1832,8 +1880,16 @@ static void fila_contadores(const char *carpeta, const struct tm *tm_l)
     /* fsync antes de fclose: sin el, un corte de corriente en los segundos
      * siguientes deja la fila en la cache de la tarjeta (auditoria del
      * 13-oct-2026: no habia ni un fsync en el firmware). */
-    if (fsync(fileno(f)) != 0) ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
-    if (fclose(f) != 0) ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+    if (fsync(fileno(f)) != 0) {
+        anota_fallo_escritura();
+        ESP_LOGW(TAG, "fsync fallo en %s (disco lleno?)", ruta);
+    }
+    if (fclose(f) != 0) {
+        anota_fallo_escritura();
+        ESP_LOGW(TAG, "%s no se escribio bien (disco lleno?)", ruta);
+    } else {
+        anota_escritura_ok();
+    }
 }
 
 /* Los puntos de la ruta se juntan en RAM y bajan a la tarjeta de golpe.
@@ -1886,19 +1942,21 @@ static bool ruta_volcar(const char *carpeta)
     return true;
 }
 
+/* Salto de reloj avisado por el GPS, para que lo anote la tarea del viaje (ver
+ * viaje_nota_hora_corregida). */
+static _Atomic bool     s_hora_salto_pendiente;
+static _Atomic int64_t  s_hora_salto_s;
+
 /* Deja escrito en el viaje que el reloj ha dado un salto (lo llama gps.c). */
 void viaje_nota_hora_corregida(int64_t delta_s)
 {
-    char carpeta[CARPETA_MAX];
-    if (!viaje_abierto(carpeta, sizeof(carpeta))) return;
-    char txt[96];
-    snprintf(txt, sizeof(txt),
-             "el reloj se ha movido %lld s (lo puso el GPS); los apuntes "
-             "anteriores llevan la hora vieja",
-             (long long)delta_s);
-    if (!camera_sd_bus_lock(3000)) return;
-    diario(carpeta, "hora_corregida", txt);
-    camera_sd_bus_unlock();
+    /* SE PIDE, no se escribe aqui: esto lo llama la tarea del GPS, que tiene
+     * 4096 de pila y no esta en stack_watch, y el resto de escritores de SD del
+     * proyecto usan 6144 o mas. Hacer un fopen+fsync con un cerrojo de hasta 3 s
+     * en esa tarea es pedir un desbordamiento de pila (revision del
+     * 13-oct-2026). Lo escribe la tarea del viaje en su siguiente vuelta. */
+    s_hora_salto_s = delta_s;
+    s_hora_salto_pendiente = true;
 }
 
 /* ── Volcado antes de un reinicio (auditoria del 13-oct-2026) ────────────────
@@ -2037,6 +2095,18 @@ static void tick_viaje_cb(void *arg)
 
     /* Lo pedido desde fuera va ANTES de los relojes: si la bateria se esta
      * cayendo, no se puede esperar a que la hora sea buena. */
+    if (s_hora_salto_pendiente) {
+        s_hora_salto_pendiente = false;
+        char txt[128];
+        snprintf(txt, sizeof(txt),
+                 "el reloj se ha movido %lld s (lo puso el GPS); los apuntes "
+                 "anteriores llevan la hora vieja",
+                 (long long)s_hora_salto_s);
+        if (camera_sd_bus_lock(3000)) {
+            diario(carpeta, "hora_corregida", txt);
+            camera_sd_bus_unlock();
+        }
+    }
     if (s_volcado_pedido) {
         s_volcado_pedido = false;
         viaje_volcar_ahora(s_volcado_motivo == 0
