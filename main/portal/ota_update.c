@@ -28,6 +28,7 @@
 #include "esp_lvgl_port.h"
 #include "log_capture/log_capture.h"
 #include "display.h"   /* bsp_display_brightness_set/get */
+#include "config_server_internal.h"   /* REQUIRE_AUTH(req) */
 
 static const char *TAG = "ota";
 
@@ -231,6 +232,15 @@ static void ota_pantalla_aviso(void)
  * se vuelve a encender hasta el "Firmware instalado" del final. */
 esp_err_t ota_aviso_post(httpd_req_t *req)
 {
+    /* CON CONTRASENA, y antes NO la tenia (auditoria de seguridad del
+     * 13-oct-2026): este endpoint no escribe nada, pero pinta en la pantalla un
+     * "Actualizando firmware, no apagues" y enciende el aviso de OTA. Sin auth,
+     * cualquiera dentro del Wi-Fi podia dejar la pantalla del salón enseñando
+     * una actualizacion que no existe, todas las veces que quisiera. El /ota de
+     * verdad ya la pedia; esto es la misma puerta. La pagina del portal la
+     * manda despues de autenticarse, asi que el navegador trae la cabecera
+     * igual que para el resto de la pagina. */
+    REQUIRE_AUTH(req);
     ota_pantalla_aviso();
     ui_notify_user_activity();   /* por si el salvapantallas lo tenia atenuado */
     ui_ota_overlay_show("Actualizando firmware\n\nNo apagues la pantalla");
