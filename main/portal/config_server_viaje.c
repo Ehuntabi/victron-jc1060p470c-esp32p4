@@ -24,6 +24,10 @@
  * atras de la autocaravana y no se conduce desde alli.
  */
 #include "config_server_internal.h"
+#include "config_server.h"   /* config_server_get_web_credentials: la clave de la firma */
+#include "mbedtls/md.h"        /* HMAC-SHA256: la firma de la respuesta */
+#include "mbedtls/sha256.h"    /* sha256 del cuerpo de la peticion */
+#include "esp_random.h"
 #include "config_server_auth.h"
 #include "contrato_app.h"    /* viaje_campos_que_faltan: probado en el CI sin placa */
 #include "camera.h"          /* camera_sd_bus_lock: serializar con el GDMA */
@@ -474,15 +478,66 @@ static void log_estado_nvs(void)
 bool viaje_sd_hueco(uint64_t *libre_out, uint64_t *total_out);
 static void sd_hueco_medir(void);
 
-/* Como responde_con_hueco, pero para los 507 QUE NO SON DE LA TARJETA (la NVS
- * del viaje: no poder guardar el inicio, el cierre, el apunte...). Decir ahi
- * "le quedan 29000 MB" seria desinformar: el que mira tiene que saber que lo que
- * se ha llenado es la memoria interna, no la SD. */
-static void responde_sin_sitio_nvs(httpd_req_t *req, const char *texto)
+/* ── FIRMA DE LA RESPUESTA (14-oct-2026) ───────────────────────────────────
+ *
+ * El agujero que cierra: la pantalla BORRA el apunte de su cola en cuanto la P4
+ * contesta 2xx, y la respuesta NO va autenticada de ninguna forma. Un AP
+ * impostor con el mismo SSID y la misma clave (que no es ningun secreto para
+ * quien haya asociado un movil) puede contestar 200 y el apunte se destruye sin
+ * un solo error.
+ *
+ * Ahora la P4 firma: HMAC-SHA256 con la CLAVE DEL PORTAL (que las dos partes ya
+ * comparten) sobre "<codigo>\n<cuerpo>\n<sha256 del cuerpo de la PETICION>". El
+ * hash de la peticion es lo que ata la respuesta a ESA peticion: sin el, valdria
+ * reenviar una respuesta buena de otra peticion, o cambiar el codigo.
+ *
+ * Va en la cabecera X-Firma, asi que una P4 vieja no la manda (la pantalla lo
+ * dice y sigue funcionando) y una pantalla vieja la ignora. Es el paso 1 de los
+ * dos: cuando las tres placas la manden, la pantalla podra EXIGIRLA.
+ *
+ * El httpd de este proyecto es de UNA sola tarea (esta dicho en varios sitios),
+ * asi que el estado de la respuesta en curso puede ir en un static. */
+static _Atomic int s_resp_codigo = 200;
+static char s_req_hash[65];      /* sha256 hex del cuerpo de la peticion en curso */
+
+static void resp_set_status(httpd_req_t *req, const char *estado)
 {
-    char cuerpo[192];
-    snprintf(cuerpo, sizeof(cuerpo), "%s sin_sitio=nvs", texto);
-    httpd_resp_sendstr(req, cuerpo);
+    int c = atoi(estado);
+    if (c >= 100 && c < 600) s_resp_codigo = c;
+    httpd_resp_set_status(req, estado);
+}
+
+/* Se llama UNA vez al principio del handler, con el cuerpo crudo de la peticion
+ * (vacio si no hay). */
+static void firma_preparar(const char *peticion)
+{
+    unsigned char h[32];
+    if (mbedtls_sha256((const unsigned char *)(peticion ? peticion : ""),
+                       strlen(peticion ? peticion : ""), h, 0) != 0) {
+        s_req_hash[0] = 0;
+        return;
+    }
+    for (int i = 0; i < 32; i++) snprintf(s_req_hash + i * 2, 3, "%02x", h[i]);
+}
+
+/* Pone la cabecera, si hay clave con la que firmar. */
+static void firma_pone(httpd_req_t *req, const char *cuerpo)
+{
+    char user[33], pass[65];
+    config_server_get_web_credentials(user, sizeof(user), pass, sizeof(pass));
+    if (!pass[0] || !s_req_hash[0]) return;      /* portal cerrado: no hay clave */
+
+    char texto[320];
+    snprintf(texto, sizeof(texto), "%d\n%s\n%s", s_resp_codigo, cuerpo, s_req_hash);
+
+    unsigned char mac[32];
+    const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (!md || mbedtls_md_hmac(md, (const unsigned char *)pass, strlen(pass),
+                               (const unsigned char *)texto, strlen(texto), mac) != 0)
+        return;
+    char hex[65];
+    for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", mac[i]);
+    httpd_resp_set_hdr(req, "X-Firma", hex);
 }
 
 /* CONTESTA Y DICE CUANTO QUEDA EN LA TARJETA (14-oct-2026).
@@ -497,6 +552,18 @@ static void responde_sin_sitio_nvs(httpd_req_t *req, const char *texto)
  * El sufijo es texto sin autenticar (como el 507): la pantalla lo usa para
  * INFORMAR, nunca para decidir si un apunte se guardo. Si no viene (P4 vieja) o
  * viene raro, el que lo lee se queda como estaba. */
+/* Como responde_con_hueco, pero para los 507 QUE NO SON DE LA TARJETA (la NVS
+ * del viaje: no poder guardar el inicio, el cierre, el apunte...). Decir ahi
+ * "le quedan 29000 MB" seria desinformar: el que mira tiene que saber que lo que
+ * se ha llenado es la memoria interna, no la SD. */
+static void responde_sin_sitio_nvs(httpd_req_t *req, const char *texto)
+{
+    char cuerpo[192];
+    snprintf(cuerpo, sizeof(cuerpo), "%s sin_sitio=nvs", texto);
+    firma_pone(req, cuerpo);
+    httpd_resp_sendstr(req, cuerpo);
+}
+
 static void responde_con_hueco(httpd_req_t *req, const char *texto)
 {
     char cuerpo[192];
@@ -506,6 +573,7 @@ static void responde_con_hueco(httpd_req_t *req, const char *texto)
                  (unsigned long long)(libre / (1024ULL * 1024ULL)));
     else
         snprintf(cuerpo, sizeof(cuerpo), "%s", texto);
+    firma_pone(req, cuerpo);
     httpd_resp_sendstr(req, cuerpo);
 }
 
@@ -3138,7 +3206,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     if ((int)req->content_len >= (int)sizeof(body)) {
         ESP_LOGE(TAG, "apunte de %d bytes: NO CABE en %d, se rechaza entero",
                  (int)req->content_len, (int)sizeof(body));
-        httpd_resp_set_status(req, "413 Payload Too Large");
+        resp_set_status(req, "413 Payload Too Large");
         httpd_resp_sendstr(req, "apunte demasiado largo");
         return ESP_OK;
     }
@@ -3172,10 +3240,13 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     body[got] = 0;
 
     httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    /* El hash del cuerpo de ESTA peticion: es lo que ata la firma de la respuesta
+     * a esta peticion y no a otra. */
+    firma_preparar(body);
 
     cJSON *j = cJSON_Parse(body);
     if (!j) {
-        httpd_resp_set_status(req, "400 Bad Request");
+        resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "json invalido");
         return ESP_OK;
     }
@@ -3195,7 +3266,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         cJSON_IsNumber(jid));
     if (falta) {
         cJSON_Delete(j);
-        httpd_resp_set_status(req, "400 Bad Request");
+        resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, falta);
         return ESP_OK;
     }
@@ -3210,7 +3281,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * 'borrar' (la app) no lleva id a proposito: esa se deja pasar. */
     if (id == 0 && strcmp(jop->valuestring, "borrar") != 0) {
         cJSON_Delete(j);
-        httpd_resp_set_status(req, "400 Bad Request");
+        resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "id invalido (0)");
         return ESP_OK;
     }
@@ -3294,7 +3365,7 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
     else if (!strcmp(jop->valuestring, "descartar")) ret = op_descartar(req, j, id);
     else if (!strcmp(jop->valuestring, "borrar"))    ret = op_borrar(req, j, id);
     else {
-        httpd_resp_set_status(req, "400 Bad Request");
+        resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "op? (inicio|fin|registro|descartar|borrar)");
         ret = ESP_OK;
     }
@@ -3416,7 +3487,7 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                      "\"id\":%lu}", cerrar, (unsigned long)ID_CIERRE_WEB);
             cJSON *j = cJSON_Parse(cuerpo);
             if (!j) {
-                httpd_resp_set_status(req, "500 Internal Server Error");
+                resp_set_status(req, "500 Internal Server Error");
                 httpd_resp_sendstr(req, "no he podido montar el cierre");
                 return ESP_OK;
             }
