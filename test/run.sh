@@ -5,3 +5,5 @@ cd "$(dirname "$0")/.."
 echo "=== test del protocolo mini_proto ==="
 gcc -std=gnu11 -Wall -Wextra -I. -o /tmp/test_mini_proto test/test_mini_proto.c
 /tmp/test_mini_proto
+echo "=== test de la propiedad del viaje (dueno de las operaciones) ==="
+bash test/test_viaje_dueno.sh

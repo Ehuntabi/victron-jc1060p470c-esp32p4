@@ -72,6 +72,8 @@ static void ruta_olvidar(void);
  * arranque y en las comprobaciones de dueno. */
 static void destino_seguro(const char *in, char *out, size_t n);
 static void renombrado_pendiente_aplicar(void);
+static bool es_digito_hex(char c);
+static bool dev_es_mac(const char *dev);
 
 /* Atado a CUERPO_MAX de ~/joint/35cabina/main/net/viaje_cola.c (896): el * satelite no puede mandar mas de eso, con esto sobra margen. SI ALGUN DIA SE
  * SUBE ALLI, HAY QUE SUBIRLO AQUI TAMBIEN -- el job de CI "viaje_body_sync"
@@ -308,6 +310,11 @@ static void dev_abierto(char *out, size_t n)
     size_t sz = n;
     if (nvs_get_str(h, NVS_DEV, out, &sz) != ESP_OK) out[0] = 0;
     nvs_close(h);
+    /* Un dueno que no es una MAC (aqui se guardo "desconocido" en versiones
+     * anteriores a la auditoria del 14-oct-2026) vale lo mismo que no tener
+     * dueno: si no, esa pantalla se llevaria un 409 al cerrar SU PROPIO viaje
+     * -- porque "desconocido" nunca va a coincidir con su MAC. */
+    if (!dev_es_mac(out)) out[0] = 0;
 }
 
 static bool es_digito_hex(char c)
