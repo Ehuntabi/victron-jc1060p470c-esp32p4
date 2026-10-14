@@ -17,6 +17,12 @@ typedef struct {
     double ah_solar;          /* carga aportada por la placa solar (A*h) */
     int64_t solar_seconds;    /* tiempo con la placa cargando (corriente > 0) */
     int64_t seconds_running;  /* tiempo "activo" (con sample en intervalo) */
+    /* Tiempo CONDUCIENDO: suma de los intervalos del GPS con el vehiculo en
+     * movimiento (velocidad por encima de VEL_CONDUCIENDO_KMH, ver el .c). No
+     * es lo mismo que seconds_running: ese cuenta todo el viaje abierto, las
+     * noches paradas incluidas. Es lo que la pantalla de 5" enseña como "horas
+     * de conduccion" del viaje en curso y lo que sale en el resumen.txt. */
+    int64_t seconds_driving;
     double  km;               /* distancia recorrida segun el GPS */
     bool    active;           /* hay un viaje en curso */
 } trip_computer_t;
@@ -41,8 +47,15 @@ void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi);
  *    una noche de camping sumaria kilometros que nadie ha recorrido;
  *  - saltos imposibles y reenganches tras perder la senal: se re-ancla en el
  *    punto nuevo SIN contar la linea recta, que no es por donde se fue.
- * Por eso el total peca por defecto: prefiere quedarse corto a inventar. */
-void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon);
+ * Por eso el total peca por defecto: prefiere quedarse corto a inventar.
+ *
+ * 'vel_kmh' es la velocidad sobre el suelo que da el RMC del modulo (campo 7,
+ * en nudos, ya convertida): es lo que permite contar el tiempo CONDUCIENDO, que
+ * se acumula aparte del odometro (un atasco a 6 km/h no llega a los 15 m por
+ * muestra y sin embargo se esta conduciendo). Con fix falso o pocos satelites
+ * no se cuenta tiempo: el mismo criterio que la distancia. */
+void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
+                          double vel_kmh);
 
 /* Guarda los contadores en NVS ahora mismo (normalmente se hace cada 5 min).
  * Antes de sacar la tarjeta o apagar. */

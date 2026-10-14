@@ -136,6 +136,10 @@ static bool dev_es_mac(const char *dev);
 #define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
 #define NVS_T_INICIO    "t_inicio"    /* epoch del inicio, para contar los dias */
 #define NVS_T_APLIC     "t_aplic"     /* apuntes APLICADOS de este viaje */
+/* Cuentakilometros del vehiculo que el usuario teclea AL EMPEZAR el viaje (16-
+ * oct-2026). 0 = no lo apunto (o el viaje se empezo desde una pantalla que no
+ * lo pide). Es un dato del viaje, asi que se borra con los totales. */
+#define NVS_T_KM_CUADRO "t_kmcuadro"
 
 /* Marca de que al viaje le faltan apuntes. Un fichero y no una linea dentro de
  * otro: la lista de descargas tiene que decidir el estado de cada viaje con un
@@ -1036,6 +1040,10 @@ static void totales_borrar(void)
     nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
     nvs_erase_key(h, NVS_T_AGUA);   nvs_erase_key(h, NVS_T_ALOJA);
     nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
+    /* El cuentakilometros del viaje ANTERIOR, fuera: si este viaje no trae
+     * lectura (lo empezo la 3,5", que no la pide), el resumen tiene que decir
+     * que no la hay, no repetir la del viaje de la semana pasada. */
+    nvs_erase_key(h, NVS_T_KM_CUADRO);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -1285,6 +1293,22 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * viaje de una noche saldria como "0 dias". */
         nvs_set_u64(h, NVS_T_INICIO, (uint64_t)time(NULL));
         nvs_set_u32(h, NVS_T_APLIC, 1);   /* el inicio ya cuenta */
+        /* Cuentakilometros que marca la autocaravana al salir (16-oct-2026): lo
+         * teclea el usuario en la pantalla al empezar el viaje y es OPCIONAL --
+         * una cabina que no lo pida (o un viaje empezado antes de esto) manda 0,
+         * que es "no apuntado". Se acota a 6 cifras, que es lo que admite el
+         * teclado de la cabina y lo que cabe en cualquier cuadro real. */
+        {
+            const cJSON *jk = cJSON_GetObjectItem(j, "km_cuadro");
+            uint32_t kmc = 0;
+            if (cJSON_IsNumber(jk) && jk->valuedouble > 0) {
+                double d = jk->valuedouble;
+                if (d > 999999.0) d = 999999.0;
+                kmc = (uint32_t)(d + 0.5);
+            }
+            nvs_set_u32(h, NVS_T_KM_CUADRO, kmc);
+            if (kmc) ESP_LOGI(TAG, "cuadro al salir: %lu km", (unsigned long)kmc);
+        }
         /* Que pantalla empieza el viaje, en el MISMO commit que el resto del
          * estado: si no, un corte entre los dos deja un viaje sin dueno. */
         {
@@ -1339,6 +1363,7 @@ static bool escribir_resumen(const char *carpeta)
     uint32_t paradas = 0;
     uint64_t inicio = 0;
     uint8_t varias = 0;
+    uint32_t km_cuadro = 0;   /* cuentakilometros que tecleo el usuario al salir */
     char moneda[8] = "EUR";
     /* SI LA NVS NO SE PUEDE LEER, NO SE ESCRIBE EL RESUMEN (auditoria del
      * 14-oct-2026): antes cualquier fallo de lectura se convertia en un 0 y el
@@ -1365,6 +1390,8 @@ static bool escribir_resumen(const char *carpeta)
         e = nvs_get_u64(h, NVS_T_INICIO, &inicio);
         if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
         e = nvs_get_u8(h, NVS_T_VARIAS, &varias);
+        if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
+        e = nvs_get_u32(h, NVS_T_KM_CUADRO, &km_cuadro);
         if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
         size_t n = sizeof(moneda);
         e = nvs_get_str(h, NVS_T_MONEDA, moneda, &n);
@@ -1484,6 +1511,26 @@ static bool escribir_resumen(const char *carpeta)
     } else {
         fprintf(f, "\nRecorrido: no se ha podido medir. El GPS no llego a tener\n"
                    "posicion durante el viaje (antena tapada o pantalla apagada).\n");
+    }
+    /* Tiempo CONDUCIENDO (16-oct-2026): lo suma el ordenador de viaje con la
+     * velocidad del GPS, asi que es tiempo de volante y no tiempo con la
+     * carpeta abierta (las noches paradas de un viaje de tres dias no cuentan).
+     * Por debajo del minuto no se saca -- no aporta -- y sin km medidos no se
+     * saca nada, para no escribir un "0 h 00 min" que se lee como un viaje
+     * sentado cuando lo que pasa es que el GPS no vio el cielo. */
+    if (t.seconds_driving >= 60) {
+        long tot_min = (long)(t.seconds_driving / 60);
+        fprintf(f, "  Conduciendo: %ld h %02ld min\n", tot_min / 60, tot_min % 60);
+    } else if (t.km >= 0.1) {
+        fprintf(f, "  Conduciendo: menos de 1 min\n");
+    }
+    /* Y el cuentakilometros del vehiculo que se tecleo AL EMPEZAR: es con quien
+     * se compara el recorrido del GPS cuando uno se pregunta "¿y esto cuanto ha
+     * sido de verdad en el cuadro?". Si no se apunto, se dice. */
+    if (km_cuadro) {
+        fprintf(f, "  Cuadro al salir: %lu km\n", (unsigned long)km_cuadro);
+    } else {
+        fprintf(f, "  Cuadro al salir: no se apunto\n");
     }
     /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
      * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. Y

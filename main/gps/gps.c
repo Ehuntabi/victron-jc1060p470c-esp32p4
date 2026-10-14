@@ -266,6 +266,19 @@ static void procesar(char *linea)
          * el modulo da hora aproximada desde su reloj interno antes de tener
          * fix, y ponerla seria empeorar la que ya tiene el RTC. */
         if (c[2] && *c[2] == 'A') poner_en_hora(c[1], c[9]);
+
+        /* Campo 7 = velocidad sobre el suelo en NUDOS (1 nudo = 1,852 km/h).
+         * Con 'A' se guarda; con 'V' se PONE A CERO, que es el caso que
+         * importa: sin fix valido el modulo repite la ultima velocidad buena,
+         * y darla por buena sumaria horas de conduccion sentado y parado. */
+        double v = 0.0;
+        if (c[2] && *c[2] == 'A' && n >= 8 && c[7] && *c[7]) {
+            v = atof(c[7]) * 1.852;
+            if (v < 0.0 || v >= 400.0) v = 0.0;   /* cordura: 400 km/h no es esto */
+        }
+        xSemaphoreTake(s_mtx, portMAX_DELAY);
+        s_d.vel_kmh = (float)v;
+        xSemaphoreGive(s_mtx);
     }
 }
 

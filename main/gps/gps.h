@@ -45,6 +45,15 @@ typedef struct {
      * llegado una trama RMC valida. */
     char     fecha[11];           /* "DD-MM-AAAA" */
     char     hora[9];             /* "HH:MM:SS" UTC */
+
+    /* Velocidad sobre el suelo en km/h, del campo 7 del RMC (que viene en
+     * nudos). 0 si la ultima trama venia con 'V' (sin fix valido): el modulo
+     * arrastra entonces la ultima buena, y creersela seria contar como
+     * conduccion el rato parado sin cobertura.
+     *
+     * La usa el ordenador de viaje para sumar el tiempo CONDUCIENDO (ver
+     * trip_computer_on_gps). No se enseña en ninguna pantalla. */
+    float    vel_kmh;
 } gps_data_t;
 
 /* Arranca el UART y la tarea de lectura. Una vez, al iniciar. */

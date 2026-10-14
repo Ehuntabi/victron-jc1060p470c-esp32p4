@@ -19,7 +19,7 @@ static SemaphoreHandle_t s_mtx;
 /* Snapshot para persistir fuera del lock (el commit/GC del NVS no debe retener
  * s_mtx: trip_computer_get quedaria bloqueado desde LVGL durante el commit). */
 typedef struct {
-    int64_t reset_epoch, seconds_running;
+    int64_t reset_epoch, seconds_running, seconds_driving;
     int32_t whc, whd, ahc_m, ahd_m;
     int32_t whs, ahs_m;   /* aporte solar: Wh y mAh */
     int64_t sol_secs;     /* tiempo con la placa cargando */
@@ -38,12 +38,27 @@ static double  s_gps_lat, s_gps_lon;
 static time_t  s_gps_t;
 static bool    s_gps_ancla;   /* hay un punto anterior con el que comparar */
 
+/* ── Tiempo CONDUCIENDO (16-oct-2026) ──────────────────────────────
+ * Por debajo de esta velocidad se considera PARADO. No se pone en 0 porque el
+ * receptor, quieto, no da 0 exacto: baila entre 0 y 2 km/h, y contarlo seria
+ * sumar horas de volante sentado en el camping. Y no se pone mas alto (10, 15)
+ * porque un atasco o una pista de tierra se hacen a 6-10 km/h y eso SI es
+ * conducir.
+ *
+ * Se cuenta por INTERVALOS DE LA LLAMADA DEL GPS (cada 5 s, ver main.c), no por
+ * tramos de distancia: asi tambien suma el atasco, donde en 5 s no se llega a
+ * los 15 m que exige el odometro y sin embargo se esta conduciendo. */
+#define VEL_CONDUCIENDO_KMH   4.0
+
+static time_t  s_ultima_vel_t;   /* cuando se miro la velocidad (0 = sin dato) */
+
 /* Copia el estado a un snapshot. El caller debe tener s_mtx tomado. */
 static trip_snap_t trip_snapshot_locked(void)
 {
     trip_snap_t snap = {
         .reset_epoch     = s.reset_epoch,
         .seconds_running = s.seconds_running,
+        .seconds_driving = s.seconds_driving,
         .whc   = (int32_t)s.wh_charged,
         .whd   = (int32_t)s.wh_discharged,
         .ahc_m = (int32_t)(s.ah_charged    * 1000.0),  /* en mAh: preserva decimales */
@@ -63,6 +78,7 @@ static void write_nvs(const trip_snap_t *snap)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
     nvs_set_i64(h, "reset", snap->reset_epoch);
     nvs_set_i64(h, "secs",  snap->seconds_running);
+    nvs_set_i64(h, "drv_s", snap->seconds_driving);
     nvs_set_i32(h, "wh_c", snap->whc);
     nvs_set_i32(h, "wh_d", snap->whd);
     nvs_set_i32(h, "ah_c", snap->ahc_m);
@@ -81,11 +97,15 @@ static void load_nvs(void)
 {
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
-    int64_t r = 0, secs = 0;
+    int64_t r = 0, secs = 0, drv_s = 0;
     int32_t whc = 0, whd = 0, ahc_m = 0, ahd_m = 0, whs = 0, ahs_m = 0;
     int64_t sol_s = 0;
     nvs_get_i64(h, "reset", &r);
     nvs_get_i64(h, "secs",  &secs);
+    /* Clave nueva (16-oct-2026): en una placa que venga de antes no existe y
+     * nvs_get la deja en 0, que es justo lo correcto -- las horas de
+     * conduccion se empiezan a contar en el primer viaje con este firmware. */
+    nvs_get_i64(h, "drv_s", &drv_s);
     nvs_get_i32(h, "wh_c", &whc);
     nvs_get_i32(h, "wh_d", &whd);
     nvs_get_i32(h, "ah_c", &ahc_m);
@@ -108,6 +128,7 @@ static void load_nvs(void)
     s.active = (act != 0);
     s.reset_epoch     = r;
     s.seconds_running = secs;
+    s.seconds_driving = drv_s;
     s.wh_charged      = (double)whc;
     s.wh_discharged   = (double)whd;
     s.ah_charged      = (double)ahc_m / 1000.0;
@@ -128,7 +149,8 @@ static double metros_entre(double lat1, double lon1, double lat2, double lon2)
     return sqrt(dlat * dlat + dlon * dlon);
 }
 
-void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon)
+void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
+                          double vel_kmh)
 {
     /* Si aun no ha corrido trip_computer_init() (desde main.c, al arrancar),
      * saltarse esta actualizacion en vez de reintentar el init aqui: dos
@@ -144,10 +166,30 @@ void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon)
      * vez de unir por la recta los dos extremos del tunel. */
     if (!fix || satelites < GPS_MIN_SATS) {
         s_gps_ancla = false;
+        /* Y la marca de velocidad, a cero: si no, al volver el fix se contaria
+         * como tiempo conduciendo TODO el hueco sin posicion (un tunel largo, o
+         * el rato con la antena tapada), que es justo lo que no se sabe. */
+        s_ultima_vel_t = 0;
         return;
     }
 
     xSemaphoreTake(s_mtx, portMAX_DELAY);
+
+    /* Tiempo conduciendo: el intervalo desde la ultima muestra, contado solo si
+     * la velocidad de AHORA pasa del umbral. Va ANTES del filtro de distancia a
+     * proposito (ver VEL_CONDUCIENDO_KMH): el atasco no llega a los 15 m por
+     * muestra y aun asi se conduce. */
+    if (s_ultima_vel_t != 0) {
+        long dt = (long)(now - s_ultima_vel_t);
+        /* El tope de hueco es el mismo que el del ancla: con muestras cada 5 s,
+         * un salto de mas de 30 s significa que esto estuvo parado o sin reloj,
+         * y ese rato no se le apunta a nadie. */
+        if (dt > 0 && dt <= GPS_HUECO_MAX_S && vel_kmh >= VEL_CONDUCIENDO_KMH) {
+            s.seconds_driving += (int64_t)dt;
+        }
+    }
+    s_ultima_vel_t = now;
+
     if (s_gps_ancla && (now - s_gps_t) <= GPS_HUECO_MAX_S) {
         double d = metros_entre(s_gps_lat, s_gps_lon, lat, lon);
         if (d >= GPS_SALTO_MIN_M && d <= GPS_SALTO_MAX_M) {
@@ -176,9 +218,11 @@ void trip_computer_init(void)
             write_nvs(&snap);
         }
     }
-    ESP_LOGI(TAG, "Trip: reset=%lld, Wh +%.1f -%.1f, Ah +%.2f -%.2f, secs=%lld",
+    ESP_LOGI(TAG, "Trip: reset=%lld, Wh +%.1f -%.1f, Ah +%.2f -%.2f, secs=%lld, "
+                  "conduciendo=%.1f h",
              (long long)s.reset_epoch, s.wh_charged, s.wh_discharged,
-             s.ah_charged, s.ah_discharged, (long long)s.seconds_running);
+             s.ah_charged, s.ah_discharged, (long long)s.seconds_running,
+             (double)s.seconds_driving / 3600.0);
 }
 
 void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
@@ -278,7 +322,9 @@ void trip_computer_reset(void)
     s.ah_solar = 0;
     s.solar_seconds = 0;
     s.seconds_running = 0;
+    s.seconds_driving = 0;
     s.km = 0;
+    s_ultima_vel_t = 0;   /* el primer intervalo del viaje nuevo no se cuenta */
     s_last_sample = 0;
     s_last_solar_sample = 0;
     s_gps_ancla = false;   /* el primer punto del viaje nuevo no arrastra el anterior */

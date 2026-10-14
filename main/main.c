@@ -105,7 +105,7 @@ static void gps_odometro_cb(void *arg)
 {
     gps_data_t g;
     gps_get(&g);
-    trip_computer_on_gps(g.hay_fix, g.satelites, g.lat, g.lon);
+    trip_computer_on_gps(g.hay_fix, g.satelites, g.lat, g.lon, g.vel_kmh);
 }
 
 /* ── Backup periódico de hora a NVS ──────────────────────────── */

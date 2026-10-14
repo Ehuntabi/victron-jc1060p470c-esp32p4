@@ -12,6 +12,7 @@
 #include "mini_proto.h"
 #include "gps/gps.h"
 #include "../data/dashboard_state.h"
+#include "../data/trip_computer.h"   /* los contadores del viaje en curso */
 #include "../alarma_estado.h"   /* alarma_estado_bits(): que alarmas estan activas */
 #include "frigo.h"
 #include "watchdog.h"   /* watchdog_heartbeat: la tarea late (ver watchdog.c) */
@@ -198,6 +199,46 @@ static void build_msg(mini_msg_t *out)
      * Se lee SIN cerrojo a proposito: alarma_estado.c publica cada alarma en un
      * bool volatile (asignacion de un byte), asi que no hay valor a medias. */
     out->alarmas = alarma_estado_bits();
+
+    /* ── Contadores del viaje en curso (16-oct-2026) ────────────────────────
+     *
+     * Los km y los minutos de CONDUCCION que la pantalla de 5" enseña en su
+     * tarjeta del viaje. Salen del ordenador de viaje, que es el unico que los
+     * sabe (ver mini_proto.h, bloque CONTADORES DEL VIAJE, para el reparto en
+     * bytes sueltos y para el porqué de km de GPS y no del cuadro).
+     *
+     * SI NO HAY VIAJE ABIERTO SE MANDA "SIN DATO", y esto es lo importante:
+     * los contadores de trip_computer NO se borran al cerrar un viaje (se
+     * quedan con lo del anterior hasta el siguiente reset), asi que mandarlos
+     * tal cual pondria en la pantalla los km del viaje de la semana pasada como
+     * si fueran de ahora. El flag 'active' es justo el que distingue las dos
+     * cosas. */
+    {
+        trip_computer_t t;
+        trip_computer_get(&t);
+        if (t.active) {
+            /* km en DECIMAS (100 m de resolucion), saturado al maximo que cabe
+             * antes del centinela: 6553,4 km en un solo viaje no pasa, pero si
+             * pasara es mejor un numero topado que uno dado la vuelta. */
+            long km_dec = (long)(t.km * 10.0 + 0.5);
+            if (km_dec < 0) km_dec = 0;
+            if (km_dec > (long)(MINI_NO_DATA_U16 - 1)) km_dec = (long)(MINI_NO_DATA_U16 - 1);
+            out->viaje_km_hi = (uint8_t)((uint16_t)km_dec >> 8);
+            out->viaje_km_lo = (uint8_t)((uint16_t)km_dec & 0xFF);
+
+            /* Minutos de conduccion, con el mismo tope. */
+            long min = (long)(t.seconds_driving / 60);
+            if (min < 0) min = 0;
+            if (min > (long)(MINI_NO_DATA_U16 - 1)) min = (long)(MINI_NO_DATA_U16 - 1);
+            out->viaje_min_hi = (uint8_t)((uint16_t)min >> 8);
+            out->viaje_min_lo = (uint8_t)((uint16_t)min & 0xFF);
+        } else {
+            out->viaje_km_hi  = (uint8_t)(MINI_NO_DATA_U16 >> 8);
+            out->viaje_km_lo  = (uint8_t)(MINI_NO_DATA_U16 & 0xFF);
+            out->viaje_min_hi = (uint8_t)(MINI_NO_DATA_U16 >> 8);
+            out->viaje_min_lo = (uint8_t)(MINI_NO_DATA_U16 & 0xFF);
+        }
+    }
 
     /* CRC32 sobre todo el msg excepto el propio campo crc32. */
     out->crc32 = esp_crc32_le(0, (const uint8_t *)out,

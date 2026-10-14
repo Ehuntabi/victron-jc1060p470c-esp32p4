@@ -39,6 +39,10 @@ extern "C" {
 #define MINI_NO_DATA_I16     INT16_MIN   /* -32768 = sin sensor / sin dato */
 #define MINI_NO_DATA_I32     INT32_MIN
 #define MINI_NO_DATA_U8      0xFF
+/* Sin dato para los dos contadores del viaje (ver el bloque "CONTADORES DEL
+ * VIAJE" mas abajo). Se usa 0xFFFF y no 0 porque 0 km y 0 min SON valores
+ * legitimos: un viaje recien abierto, antes de moverse, da exactamente eso. */
+#define MINI_NO_DATA_U16     0xFFFF
 
 /* ── Latido de vuelta: la cabina le dice a la P4 como la ve (2-oct-2026) ────
  *
@@ -104,7 +108,58 @@ _Static_assert(offsetof(mini_latido_t, crc32) == 8, "mini_latido_t: crc32 en 8")
 /* Payload broadcast 7" -> mini. Tamaño fijo, sin punteros, packed.
  * Total: 40 bytes (sizeof(struct mini_msg), verificado con el compilador).
  * Eran 32 hasta la v3 (que añadió epoch_local), 36 hasta la v4 (gps_estado) y
- * 38 hasta la v5 (alarmas). */
+ * 38 hasta la v5 (alarmas).
+ *
+ * SIGUE EN 40 CON LOS CONTADORES DEL VIAJE (16-oct-2026): entraron en los bytes
+ * de relleno que quedaban, sin tocar tamano ni version (ver el bloque de abajo,
+ * que ademas explica por que eso importa). */
+/* ── CONTADORES DEL VIAJE (16-oct-2026): km y horas de conduccion ───────────
+ *
+ * La pantalla de 5" enseña, en una tarjeta entre la bateria y las aguas, los km
+ * que se llevan hechos en la salida en curso y las horas de conduccion
+ * acumuladas. Los dos numeros los sabe la P4 -- es la unica con GPS y la unica
+ * que ve el viaje entero -- asi que viajan en la telemetria.
+ *
+ * POR QUE VAN PARTIDOS EN DOS BYTES SUELTOS Y NO ENTEROS:
+ *
+ * Cada contador ocupa 16 bits, pero NO hay 4 bytes contiguos libres en el
+ * struct. Repartirlo de nuevo para hacerselos -- mover epoch_local o los
+ * niveles de agua -- habria cambiado los offsets de campos que YA viajan, y una
+ * cabina sin grabar los leeria DESPLAZADOS y sin un solo aviso: peor que
+ * rechazar la trama, porque el CRC seguiria cuadrando (el CRC cubre el struct
+ * entero, no campo a campo). Con los bytes de relleno que quedaban (los
+ * antiguos _pad1.._pad4) no cambia ni un offset, ni el tamano, ni la version:
+ * una cabina vieja ignora estos bytes y sigue funcionando igual.
+ *
+ * El precio, dicho claro: ESTE ERA EL ULTIMO RELLENO. El siguiente dato que
+ * haya que mandar ya obliga a subir MINI_PROTO_VERSION y a grabar las TRES
+ * placas a la vez. Los _Static_assert de abajo fijan los offsets para que un
+ * campo nuevo no los mueva en silencio.
+ *
+ * COMO SE RECOMPONEN (asi lo hace data_model.c en las cabinas):
+ *     km_decimas = (uint16_t)((viaje_km_hi  << 8) | viaje_km_lo);
+ *     minutos    = (uint16_t)((viaje_min_hi << 8) | viaje_min_lo);
+ *
+ * UNIDADES Y RANGO:
+ *   - km en DECIMAS de km (100 m): 0..65534 son 6553.4 km, y 0xFFFF es "sin
+ *     dato". Un viaje de mas de 6500 km no existe en esta autocaravana.
+ *   - tiempo en MINUTOS enteros: 65534 min son 45 dias conduciendo, de sobra.
+ *
+ * QUE SIGNIFICA "SIN DATO" (0xFFFF): que la P4 NO tiene ningun viaje abierto
+ * (su ordenador de viaje esta parado, y sus contadores son los del viaje
+ * ANTERIOR: mandarlos seria mentir con toda la pinta de ser verdad). La cabina
+ * enseña "--" en ese caso, y tambien si es ella la que no tiene salida abierta.
+ *
+ * POR QUE LOS KM SON DEL GPS Y NO DEL CUADERNO DEL VEHICULO: el cuentakilometros
+ * de la autocaravana lo teclea el usuario al empezar el viaje (va aparte, en el
+ * campo km_cuadro de POST /api/viaje) y no se vuelve a leer hasta el final. Lo
+ * que se puede medir en marcha, segundo a segundo, es el GPS: los km de esta
+ * tarjeta son los mismos que salen luego en "Recorrido:" del resumen.txt.
+ *
+ * Y LAS HORAS SON DE CONDUCCION, NO DE VIAJE ABIERTO: se cuenta el tiempo con el
+ * vehiculo en movimiento (GPS), no el tiempo desde que se abrio la carpeta. Un
+ * viaje de tres dias con las noches paradas son tres dias de calendario y unas
+ * pocas horas de volante, y lo que se quiere saber es lo segundo. */
 struct __attribute__((packed)) mini_msg {
     uint8_t  version;             /* MINI_PROTO_VERSION */
     /* DESFASE HORARIO LOCAL EN CUARTOS DE HORA (15 min), con signo (leer como
@@ -131,12 +186,13 @@ struct __attribute__((packed)) mini_msg {
     int16_t  dcdc_v_in_centi;
     int16_t  dcdc_v_out_centi;
     uint8_t  dcdc_state;          /* 0=off, 3=bulk, 4=absorption, 5=float */
-    uint8_t  _pad1;
+    uint8_t  viaje_km_hi;         /* km del viaje (decimas) >> 8. Ver el bloque
+                                   * CONTADORES DEL VIAJE: era el relleno _pad1 */
 
     /* Frigorífico (sensor 1-Wire si está conectado). */
     int16_t  frigo_temp_centi;    /*  °C * 100. MINI_NO_DATA_I16 si sin sensor */
     uint8_t  frigo_fan_pct;       /* 0..100. >0 implica compresor/vent ON */
-    uint8_t  _pad2;
+    uint8_t  viaje_km_lo;         /* km del viaje (decimas) & 0xFF (era _pad2) */
 
     /* Aguas (NE185 RS-485, niveles 0..4). MINI_NO_DATA_U8 si !fresh. */
     uint8_t  water_clean;         /* s1 limpia */
@@ -184,7 +240,7 @@ struct __attribute__((packed)) mini_msg {
      * sitio donde ocurrieron, habrá que subir el protocolo OTRA VEZ y regrabar
      * las dos pantallas. */
     uint8_t  gps_estado;          /* 0=sin datos, 1=buscando, 2=posición fijada */
-    uint8_t  _pad3;               /* relleno heredado: mantiene los offsets */
+    uint8_t  viaje_min_hi;        /* minutos de conduccion >> 8 (era _pad3) */
 
     /* Alarmas ACTIVAS (MINI_ALARM_*, ver arriba). Va AQUI, en el hueco de
      * relleno que ya existia antes del CRC (el byte 34, que hasta la v4 nadie
@@ -198,7 +254,9 @@ struct __attribute__((packed)) mini_msg {
      * verdad, porque es la unica que tiene los umbrales y las temporizaciones. */
     uint8_t  alarmas;
 
-    uint8_t  _pad4[1];            /* el relleno que alinea el uint32 del CRC */
+    /* Minutos de conduccion del viaje, & 0xFF. Era el relleno que alineaba el
+     * uint32 del CRC: sigue en el mismo sitio y el CRC sigue cuadrando. */
+    uint8_t  viaje_min_lo;
 
     uint32_t crc32;               /* CRC32 sobre los bytes [0 .. crc32) */
 };
@@ -219,6 +277,15 @@ _Static_assert(offsetof(mini_msg_t, crc32) == 36,
                "udp_tx.c y la comprobacion en udp_rx.c asumen los bytes "
                "[0..crc32) como el area protegida");
 _Static_assert(offsetof(mini_msg_t, alarmas) == 34, "mini_proto: alarmas en offset 34");
+
+/* Los cuatro bytes de los contadores del viaje viven donde vivia el relleno:
+ * 15, 19, 33 y 35. Si algun dia alguien mete un campo delante de ellos, estos
+ * asserts paran el build -- que es justo lo que hay que hacer, porque moverlos
+ * cambiaria los offsets que las cabinas ya grabadas estan leyendo. */
+_Static_assert(offsetof(mini_msg_t, viaje_km_hi)  == 15, "mini_proto: viaje_km_hi en 15 (era _pad1)");
+_Static_assert(offsetof(mini_msg_t, viaje_km_lo)  == 19, "mini_proto: viaje_km_lo en 19 (era _pad2)");
+_Static_assert(offsetof(mini_msg_t, viaje_min_hi) == 33, "mini_proto: viaje_min_hi en 33 (era _pad3)");
+_Static_assert(offsetof(mini_msg_t, viaje_min_lo) == 35, "mini_proto: viaje_min_lo en 35 (era _pad4)");
 
 #ifdef __cplusplus
 }
