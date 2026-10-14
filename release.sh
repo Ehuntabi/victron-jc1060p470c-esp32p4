@@ -215,11 +215,24 @@ else
     NOTAS=(--notes-file "$NOTAS_TMP")
   fi
   echo "[..] publicando la Release en GitHub"
-  gh release create "$TAG" -R "$REPO" \
-     --title "Joint SPL 145 Control $TAG" \
-     "${NOTAS[@]}" \
-     "build/$OUT" "$APP_CON_TAG" \
-    && echo "[ok] Release $TAG publicada con el firmware completo y el app-bin de OTA"
+  if gh release create "$TAG" -R "$REPO" \
+       --title "Joint SPL 145 Control $TAG" \
+       "${NOTAS[@]}" \
+       "build/$OUT" "$APP_CON_TAG"; then
+    echo "[ok] Release $TAG publicada con el firmware completo y el app-bin de OTA"
+  else
+    echo "AVISO: GitHub no ha creado la Release (¿un 5xx suyo? paso el 16-oct-2026)."
+  fi
+fi
+# SE COMPRUEBA, no se da por hecho: sin Release, el tag esta subido y el .bin
+# donde siempre, pero nadie puede descargarlo -- y scripts/grabar.sh no dejaria
+# grabar la placa. Se dice aqui, con el comando para reintentarlo.
+if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+  echo
+  echo "LA RELEASE $TAG NO ESTA PUBLICADA (el tag si). Reintenta con:"
+  echo "  gh release create $TAG -R $REPO --title \"Joint SPL 145 Control $TAG\" \\"
+  echo "     --notes-from-tag \"build/$OUT\" \"$APP_CON_TAG\""
+  exit 1
 fi
 
 # ── 6c) ahora si: dejar en ~/joint-releases SOLO lo publicado ───────────────
