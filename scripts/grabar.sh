@@ -108,7 +108,15 @@ if [ "$RAPIDO" = "0" ]; then
         echo "ERROR: no encuentro ESP-IDF en $IDF_EXPORT"; exit 1
     fi
     # shellcheck disable=SC1090
-    . "$IDF_EXPORT" >/dev/null 2>&1
+    # shellcheck disable=SC1090
+    # OJO con el "|| true": export.sh de ESP-IDF termina con un codigo
+    # distinto de cero y con "set -e" eso mataba este script en silencio
+    # (se quedo en la comprobacion y no compilaba nada, visto el 16-oct).
+    . "$IDF_EXPORT" >/dev/null 2>&1 || true
+    command -v idf.py >/dev/null 2>&1 || {
+        echo "ERROR: ESP-IDF no ha cargado (idf.py no esta en el PATH)."
+        exit 1
+    }
     echo "[..] compilando"
     idf.py build
 fi
