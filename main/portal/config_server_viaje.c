@@ -136,10 +136,14 @@ static bool dev_es_mac(const char *dev);
 #define NVS_T_VARIAS    "t_varias"    /* 1 = hubo mas de una moneda */
 #define NVS_T_INICIO    "t_inicio"    /* epoch del inicio, para contar los dias */
 #define NVS_T_APLIC     "t_aplic"     /* apuntes APLICADOS de este viaje */
-/* Cuentakilometros del vehiculo que el usuario teclea AL EMPEZAR el viaje (16-
+/* Cuentakilometros del vehiculo que el usuario teclea al EMPEZAR el viaje (16-
  * oct-2026). 0 = no lo apunto (o el viaje se empezo desde una pantalla que no
  * lo pide). Es un dato del viaje, asi que se borra con los totales. */
 #define NVS_T_KM_CUADRO "t_kmcuadro"
+/* Y el que teclea al CERRARLO (misma fecha, 16-oct-2026): con los dos se sabe lo
+ * que ha hecho el viaje DE VERDAD (cuadro) y se puede comparar con lo que midio
+ * el GPS. 0 = no apuntado. */
+#define NVS_T_KM_LLEGADA "t_kmllegada"
 
 /* Marca de que al viaje le faltan apuntes. Un fichero y no una linea dentro de
  * otro: la lista de descargas tiene que decidir el estado de cada viaje con un
@@ -1040,12 +1044,29 @@ static void totales_borrar(void)
     nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
     nvs_erase_key(h, NVS_T_AGUA);   nvs_erase_key(h, NVS_T_ALOJA);
     nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
-    /* El cuentakilometros del viaje ANTERIOR, fuera: si este viaje no trae
-     * lectura (lo empezo la 3,5", que no la pide), el resumen tiene que decir
-     * que no la hay, no repetir la del viaje de la semana pasada. */
+    /* El cuentakilometros del viaje ANTERIOR, fuera (los dos: el de salida y el
+     * de llegada): si este viaje no trae lectura, el resumen tiene que decir que
+     * no la hay, no repetir la del viaje de la semana pasada. */
     nvs_erase_key(h, NVS_T_KM_CUADRO);
+    nvs_erase_key(h, NVS_T_KM_LLEGADA);
     nvs_commit(h);
     nvs_close(h);
+}
+
+/* El cuentakilometros que teclea el usuario en el campo 'km_cuadro': en el
+ * INICIO es lo que marcaba el vehiculo al salir, y en el FIN lo que marca al
+ * llegar. 0 = no apuntado (campo ausente, o una pantalla que no lo pide), que es
+ * un valor legitimo: no se obliga a teclearlo.
+ *
+ * Se acota a 6 cifras, que es lo que admite el teclado de la cabina y lo que
+ * cabe en cualquier cuadro real; un numero mayor es un dedazo y se topa. */
+static uint32_t km_cuadro_de(const cJSON *j)
+{
+    const cJSON *jk = cJSON_GetObjectItem(j, "km_cuadro");
+    if (!cJSON_IsNumber(jk) || jk->valuedouble <= 0) return 0;
+    double d = jk->valuedouble;
+    if (d > 999999.0) d = 999999.0;
+    return (uint32_t)(d + 0.5);
 }
 
 /* ── Las operaciones ──────────────────────────────────────────────────────── */
@@ -1299,13 +1320,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * que es "no apuntado". Se acota a 6 cifras, que es lo que admite el
          * teclado de la cabina y lo que cabe en cualquier cuadro real. */
         {
-            const cJSON *jk = cJSON_GetObjectItem(j, "km_cuadro");
-            uint32_t kmc = 0;
-            if (cJSON_IsNumber(jk) && jk->valuedouble > 0) {
-                double d = jk->valuedouble;
-                if (d > 999999.0) d = 999999.0;
-                kmc = (uint32_t)(d + 0.5);
-            }
+            uint32_t kmc = km_cuadro_de(j);
             nvs_set_u32(h, NVS_T_KM_CUADRO, kmc);
             if (kmc) ESP_LOGI(TAG, "cuadro al salir: %lu km", (unsigned long)kmc);
         }
@@ -1364,6 +1379,7 @@ static bool escribir_resumen(const char *carpeta)
     uint64_t inicio = 0;
     uint8_t varias = 0;
     uint32_t km_cuadro = 0;   /* cuentakilometros que tecleo el usuario al salir */
+    uint32_t km_llegada = 0;  /* y el que tecleo al llegar */
     char moneda[8] = "EUR";
     /* SI LA NVS NO SE PUEDE LEER, NO SE ESCRIBE EL RESUMEN (auditoria del
      * 14-oct-2026): antes cualquier fallo de lectura se convertia en un 0 y el
@@ -1392,6 +1408,8 @@ static bool escribir_resumen(const char *carpeta)
         e = nvs_get_u8(h, NVS_T_VARIAS, &varias);
         if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
         e = nvs_get_u32(h, NVS_T_KM_CUADRO, &km_cuadro);
+        if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
+        e = nvs_get_u32(h, NVS_T_KM_LLEGADA, &km_llegada);
         if (e != ESP_OK && e != ESP_ERR_NVS_NOT_FOUND) lecturas_ok = false;
         size_t n = sizeof(moneda);
         e = nvs_get_str(h, NVS_T_MONEDA, moneda, &n);
@@ -1524,13 +1542,47 @@ static bool escribir_resumen(const char *carpeta)
     } else if (t.km >= 0.1) {
         fprintf(f, "  Conduciendo: menos de 1 min\n");
     }
-    /* Y el cuentakilometros del vehiculo que se tecleo AL EMPEZAR: es con quien
-     * se compara el recorrido del GPS cuando uno se pregunta "¿y esto cuanto ha
-     * sido de verdad en el cuadro?". Si no se apunto, se dice. */
+    /* ── El cuadro del vehiculo: al salir y al llegar (16-oct-2026) ─────────
+     *
+     * Con las dos lecturas se sabe lo que ha hecho el viaje DE VERDAD, que es lo
+     * que uno mira al llegar a casa, y se puede comparar con lo que midio el
+     * GPS: si discrepan mucho, o el GPS se perdio un tramo o alguien tecleo mal
+     * un numero. Cada dato se cuenta por separado (puede haber solo una de las
+     * dos lecturas: la 3,5" no las pide, y el viaje puede haberse empezado en
+     * una pantalla y cerrado en otra). */
     if (km_cuadro) {
         fprintf(f, "  Cuadro al salir: %lu km\n", (unsigned long)km_cuadro);
     } else {
         fprintf(f, "  Cuadro al salir: no se apunto\n");
+    }
+    if (km_llegada) {
+        fprintf(f, "  Cuadro al llegar: %lu km\n", (unsigned long)km_llegada);
+    } else {
+        fprintf(f, "  Cuadro al llegar: no se apunto\n");
+    }
+    if (km_cuadro && km_llegada) {
+        if (km_llegada < km_cuadro) {
+            /* Un cuadro no va hacia atras: eso es un dedazo, y restar daria un
+             * numero negativo con toda la pinta de ser un dato. */
+            fprintf(f, "  OJO: el cuadro al llegar es MENOR que al salir.\n"
+                       "  Alguna de las dos lecturas esta mal: no se puede decir\n"
+                       "  cuanto ha hecho el viaje de verdad.\n");
+        } else {
+            unsigned long real = (unsigned long)(km_llegada - km_cuadro);
+            /* Comparacion con el GPS solo si el GPS midio algo: sin posicion no
+             * hay con que comparar, y un "0.0 km" al lado de 333 se leeria como
+             * un fallo del GPS cuando lo que pasa es que no vio el cielo. */
+            if (t.km >= 0.1) {
+                double dif = (double)real - t.km;
+                fprintf(f, "  El cuadro dice %lu km; el GPS midio %.1f km "
+                           "(%+.1f km)\n", real, t.km, dif);
+            } else {
+                fprintf(f, "  El cuadro dice %lu km\n", real);
+            }
+            ESP_LOGI(TAG, "viaje de cuadro: %lu -> %lu km = %lu km (GPS %.1f km)",
+                     (unsigned long)km_cuadro, (unsigned long)km_llegada,
+                     real, t.km);
+        }
     }
     /* fclose devuelve error si el volcado a la tarjeta fallo (disco lleno):
      * hasta aqui todo eran fprintf a un buffer que puede no haber bajado. Y
@@ -1952,6 +2004,27 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         responde_con_hueco(req, "la carpeta del viaje no esta en la tarjeta");
         return ESP_OK;
     }
+    /* EL CUENTAKILOMETROS DEL CIERRE, a NVS ANTES del resumen (16-oct-2026):
+     * escribir_resumen() lee de la NVS, asi que si esto fuera despues el resumen
+     * saldria sin la lectura. Se guarda aunque el cierre falle mas abajo (507):
+     * el fin se reintenta y esa lectura ES la del viaje que se esta cerrando; si
+     * el reintento viniera sin ella (la reconciliacion del arranque, que no la
+     * tiene), la del primer intento sigue siendo la buena. */
+    {
+        uint32_t kml = km_cuadro_de(j);
+        nvs_handle_t hk;
+        if (nvs_open(NVS_NS, NVS_READWRITE, &hk) == ESP_OK) {
+            nvs_set_u32(hk, NVS_T_KM_LLEGADA, kml);
+            nvs_commit(hk);
+            nvs_close(hk);
+            if (kml) ESP_LOGI(TAG, "cuadro al llegar: %lu km", (unsigned long)kml);
+        } else if (kml) {
+            /* No es motivo para no cerrar el viaje: la lectura es un extra. */
+            ESP_LOGW(TAG, "no he podido guardar el cuadro al llegar (%lu km)",
+                     (unsigned long)kml);
+        }
+    }
+
     bool escrito = diario(carpeta, "fin", "");
     /* Lo que quede de ruta en memoria, a la tarjeta ANTES de cerrar. No condiciona
      * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
