@@ -137,8 +137,15 @@ if [ "$V_BIN" != "$VER" ]; then
     exit 1
 fi
 
+# SE GRABA CON esptool Y NO CON `idf.py flash`, y es a proposito: `idf.py flash`
+# compila OTRA VEZ antes de grabar, y ese segundo build puede recalcular la
+# version (el propio build reescribe dependencies.lock y sdkconfig) y grabar algo
+# DISTINTO de lo que se acaba de verificar. Aqui la imagen ya esta hecha y
+# comprobada: se escribe y punto. `build/flash_args` es la lista de offsets que
+# mantiene el propio build (bootloader, tabla de particiones, app, spiffs).
 echo "[..] grabando en $PUERTO"
-idf.py -p "$PUERTO" flash
+( cd build && python -m esptool --chip esp32p4 -p "$PUERTO" -b 460800 \
+    --before default_reset --after hard_reset write_flash @flash_args )
 echo
 echo "GRABADO $V_BIN en $PUERTO."
 if [ "${GRABAR_SIN_PUBLICAR:-0}" = "1" ]; then

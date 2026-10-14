@@ -32,8 +32,16 @@ set(EXTRA_C_FLAGS "-Wl,--defsym=hal_disable_nan_tsf=0")
 # etiquetada, y no aparece por ningun lado la palabra "-dirty".
 # El +0.1 es solo el valor del trabajo en curso: la version de verdad la fija el
 # tag que crea release.sh, y en cuanto existe el tag manda el tag.
+# OJO CON --dirty, Y ESTO COSTO UN DESPISTE (16-oct-2026): con --dirty, un arbol
+# con ficheros que REESCRIBE EL PROPIO BUILD (dependencies.lock, sdkconfig)
+# devolvia "v4.41-dirty", la segunda regla veia el guion y le sumaba 0.1, y el
+# firmware salia diciendo la version SIGUIENTE a la que se acababa de publicar
+# (la P4 quedo grabada con la v4.42 y la Release era la v4.41). El +0.1 es para
+# COMMITS por encima del tag, no para cambios sin commitear: la version
+# identifica un commit, y ademas grabar con el arbol sucio ya no se puede
+# (scripts/grabar.sh lo exige limpio).
 execute_process(
-    COMMAND git describe --always --tags --dirty --match "v*.*"
+    COMMAND git describe --always --tags --match "v*.*"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     OUTPUT_VARIABLE VER_DESCRITA
     OUTPUT_STRIP_TRAILING_WHITESPACE
