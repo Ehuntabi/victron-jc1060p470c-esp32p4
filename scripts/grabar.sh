@@ -63,7 +63,8 @@ if [ -z "$DESC" ]; then
 fi
 case "$DESC" in
     *-*)  # hay commits por encima del tag -> la version es la siguiente, +0.1
-        VER="$(printf '%s' "$DESC" | awk -F'[.-]' '{ printf "v%s.%d", $1, $2 + 1 }')" ;;
+        # OJO: el tag YA lleva la "v" ($1 es "v4"), asi que no se le anade otra.
+        VER="$(printf '%s' "$DESC" | awk -F'[.-]' '{ printf "%s.%d", $1, $2 + 1 }')" ;;
     *)    VER="$DESC" ;;
 esac
 echo "[i] esta copia es la $VER   ($(git describe --tags --always --match 'v*.*'))"
