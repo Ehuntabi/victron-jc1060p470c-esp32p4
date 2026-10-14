@@ -79,7 +79,13 @@ volver a investigarlos:
 ## Comandos habituales
 - Entorno IDF (necesario antes de compilar/flashear): `. ~/.espressif/esp-idf-5.5/export.sh`
 - Compilar: `idf.py build`
-- Flashear: `idf.py -p /dev/ttyACM0 flash`  (el puerto varia: ttyACM0 o ttyACM1)
+- Flashear: **`scripts/grabar.sh [puerto]`** desde la raiz del repo (el puerto por
+  defecto es `/dev/ttyACM0`; a veces es ttyACM1). Ese script NO graba si lo que
+  se va a grabar no esta publicado: exige arbol limpio, tag de la version y
+  Release en GitHub (16-oct-2026, "esto no puede pasar": la P4 quedo con la v4.38
+  grabada y GitHub enseñando la v4.37). Para una prueba en el banco con algo sin
+  publicar: `GRABAR_SIN_PUBLICAR=1 scripts/grabar.sh`.
+  A mano, sin las comprobaciones, sigue siendo `idf.py -p /dev/ttyACM0 flash`.
   - **TRAMPA (6-oct-2026, costo media hora):** despues de una OTA la placa queda
     arrancando de la OTRA particion (`ota_1`, 0x410000), asi que un
     `write_flash ... 0x10000` se escribe en `ota_0` **y no arranca**: la placa
