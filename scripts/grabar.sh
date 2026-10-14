@@ -145,7 +145,7 @@ fi
 # comprobada: se escribe y punto. `build/flash_args` es la lista de offsets que
 # mantiene el propio build (bootloader, tabla de particiones, app, spiffs).
 echo "[..] grabando en $PUERTO"
-( cd build && python -m esptool --chip esp32p4 -p "$PUERTO" -b 460800 \
+( cd build && python3 -m esptool --chip esp32p4 -p "$PUERTO" -b 460800 \
     --before default_reset --after hard_reset write_flash @flash_args )
 echo
 echo "GRABADO $V_BIN en $PUERTO."
