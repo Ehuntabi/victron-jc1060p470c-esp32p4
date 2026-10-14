@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #
 # grabar.sh — graba la P4 en la placa, pero SOLO si lo que se va a grabar esta
 # publicado (commit, tag y Release en GitHub).
