@@ -93,6 +93,10 @@ static bool dev_es_mac(const char *dev);
 /* Que pantalla empezo el viaje abierto: su MAC en hex. Vacio = no se sabe (una
  * cabina con firmware viejo, o un viaje empezado antes de este cambio). */
 #define NVS_DEV         "v_dev"
+/* Id del INICIO del viaje abierto (16-oct-2026). Sirve para reconocer un evento
+ * que se quedo rezagado del viaje ANTERIOR: ver id_rezagado(). Ausente = no se
+ * sabe (viaje abierto por un firmware que no lo apuntaba, o por la web). */
+#define NVS_VIAJE_INI   "v_ini"
 /* Renombrado del cierre que se quedo a medias (ver op_fin): el nombre VIEJO y
  * el NUEVO de la carpeta, en base (sin VIAJES_DIR). Presentes solo si hay un
  * renombrado por terminar. */
@@ -300,8 +304,13 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
     /* Al CERRAR (carpeta == NULL) se borra tambien de que pantalla era: si no,
      * el siguiente viaje heredaria el dueno del anterior y una cabina distinta
-     * se llevaria un 412 en vez del 409 de siempre. */
-    if (!carpeta) nvs_erase_key(h, NVS_DEV);
+     * se llevaria un 412 en vez del 409 de siempre. Y se borra el id del inicio
+     * por el mismo motivo: sin viaje abierto no hay "viaje anterior" contra el
+     * que comparar (ver id_rezagado()). */
+    if (!carpeta) {
+        nvs_erase_key(h, NVS_DEV);
+        nvs_erase_key(h, NVS_VIAJE_INI);
+    }
     estado_set_en(h, carpeta, id);
     esp_err_t e = nvs_commit(h);
     nvs_close(h);
@@ -370,6 +379,48 @@ static int byte_de_dev(const char *dev)
     char par[3] = {dev[l - 2], dev[l - 1], 0};
     long v = strtol(par, NULL, 16);
     return (v >= 0 && v <= 255) ? (int)v : -1;
+}
+
+/* ── UN EVENTO REZAGADO DEL VIAJE ANTERIOR (auditoria del 16-oct-2026) ───────
+ *
+ * EL FALLO QUE ESTO CIERRA, tal cual: la cabina manda el "fin" de un viaje, la
+ * P4 lo aplica y la respuesta se pierde (Wi-Fi, un 503 del cerrojo de la SD...).
+ * La cabina, que reintenta la cabeza de su cola, lo vuelve a mandar. Si entre
+ * medias el usuario empieza OTRO viaje -- y en el montaje previsto eso es normal:
+ * el mismo aparato, el mismo dia -- ese "fin" reintentado llegaba con el viaje
+ * nuevo ABIERTO, con el anillo de dedupe recien VACIADO (ids_ring_limpiar, que se
+ * vacia al abrir justo para que los ids del viaje nuevo no choquen con los del
+ * viejo) y sin dueño distinto al que lo manda: 200, resumen y carpeta del viaje
+ * NUEVO cerrados, con los datos y el cuentakilometros del VIEJO. Ni un aviso.
+ *
+ * COMO SE RECONOCE, sin cambiar el protocolo: el byte alto del id es la MAC de la
+ * pantalla que lo genero y el resto es su contador (next_trip_seq(), que solo
+ * sube y vive en la NVS de la cabina). Asi que "mismo byte de pantalla y numero
+ * ANTERIOR al inicio del viaje abierto" es, sin duda, un evento del viaje
+ * anterior. Si no se sabe (sin viaje abierto, sin id de inicio apuntado, id sin
+ * byte de pantalla -- la web, o un firmware viejo), esto dice que NO y todo sigue
+ * como siempre. */
+static uint32_t viaje_ini_id(void)
+{
+    char carpeta[CARPETA_MAX];
+    if (!viaje_abierto(carpeta, sizeof(carpeta))) return 0;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return 0;
+    uint32_t ini = 0;
+    nvs_get_u32(h, NVS_VIAJE_INI, &ini);
+    nvs_close(h);
+    return ini;
+}
+
+static bool id_rezagado(uint32_t id)
+{
+    uint32_t ini = viaje_ini_id();
+    if (!ini || !id) return false;
+    int pant = byte_de_id(ini);
+    if (pant < 0 || byte_de_id(id) != pant) return false;
+    /* El contador de 24 bits no da la vuelta en la vida de una pantalla (16
+     * millones de eventos), asi que comparar el resto basta. */
+    return (id & 0x00FFFFFFu) < (ini & 0x00FFFFFFu);
 }
 
 /* SI EL QUE PIDE ES OTRA PANTALLA.
@@ -1342,6 +1393,10 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             }
             nvs_set_str(h, NVS_DEV, dev);
         }
+        /* EL ID DEL INICIO, en el mismo commit (16-oct-2026): con esto se
+         * distingue un evento de ESTE viaje de uno que se quedo dando vueltas del
+         * anterior (ver id_rezagado()). */
+        nvs_set_u32(h, NVS_VIAJE_INI, id);
         estado_set_en(h, carpeta, id);
         ne = nvs_commit(h);
         nvs_close(h);
@@ -1548,8 +1603,8 @@ static bool escribir_resumen(const char *carpeta)
      * que uno mira al llegar a casa, y se puede comparar con lo que midio el
      * GPS: si discrepan mucho, o el GPS se perdio un tramo o alguien tecleo mal
      * un numero. Cada dato se cuenta por separado (puede haber solo una de las
-     * dos lecturas: la 3,5" no las pide, y el viaje puede haberse empezado en
-     * una pantalla y cerrado en otra). */
+     * dos lecturas: se puede dejar en blanco en cualquiera de los dos pasos, y el
+     * viaje puede haberse empezado en una pantalla y cerrado en otra). */
     if (km_cuadro) {
         fprintf(f, "  Cuadro al salir: %lu km\n", (unsigned long)km_cuadro);
     } else {
@@ -2006,22 +2061,35 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     /* EL CUENTAKILOMETROS DEL CIERRE, a NVS ANTES del resumen (16-oct-2026):
      * escribir_resumen() lee de la NVS, asi que si esto fuera despues el resumen
-     * saldria sin la lectura. Se guarda aunque el cierre falle mas abajo (507):
-     * el fin se reintenta y esa lectura ES la del viaje que se esta cerrando; si
-     * el reintento viniera sin ella (la reconciliacion del arranque, que no la
-     * tiene), la del primer intento sigue siendo la buena. */
+     * saldria sin la lectura.
+     *
+     * SOLO SI HAY LECTURA (correccion del 16-oct-2026): antes se escribia
+     * SIEMPRE, tambien con 0, asi que un fin que llegaba sin el campo -- la
+     * reconciliacion del arranque, un reintento de una cabina con firmware viejo,
+     * o el mismo usuario dejandolo en blanco -- BORRABA la lectura que si se habia
+     * apuntado en el primer intento. El comentario decia justo lo contrario ("la
+     * del primer intento sigue siendo la buena") mientras el codigo la pisaba.
+     * Con 0 no se toca: 0 significa "no apuntado", no "marcaba cero".
+     * Se guarda aunque el cierre falle mas abajo (507): el fin se reintenta y esa
+     * lectura ES la del viaje que se esta cerrando. */
     {
         uint32_t kml = km_cuadro_de(j);
-        nvs_handle_t hk;
-        if (nvs_open(NVS_NS, NVS_READWRITE, &hk) == ESP_OK) {
-            nvs_set_u32(hk, NVS_T_KM_LLEGADA, kml);
-            nvs_commit(hk);
-            nvs_close(hk);
-            if (kml) ESP_LOGI(TAG, "cuadro al llegar: %lu km", (unsigned long)kml);
-        } else if (kml) {
-            /* No es motivo para no cerrar el viaje: la lectura es un extra. */
-            ESP_LOGW(TAG, "no he podido guardar el cuadro al llegar (%lu km)",
-                     (unsigned long)kml);
+        if (kml) {
+            nvs_handle_t hk;
+            esp_err_t ek = nvs_open(NVS_NS, NVS_READWRITE, &hk);
+            if (ek == ESP_OK) {
+                ek = nvs_set_u32(hk, NVS_T_KM_LLEGADA, kml);
+                if (ek == ESP_OK) ek = nvs_commit(hk);
+                nvs_close(hk);
+            }
+            if (ek == ESP_OK) {
+                ESP_LOGI(TAG, "cuadro al llegar: %lu km", (unsigned long)kml);
+            } else {
+                /* No es motivo para no cerrar el viaje: la lectura es un extra. */
+                ESP_LOGW(TAG, "no he podido guardar el cuadro al llegar (%lu km): %s",
+                         (unsigned long)kml, esp_err_to_name(ek));
+                anota_fallo_nvs();
+            }
         }
     }
 
@@ -2422,6 +2490,12 @@ static esp_err_t op_descartar(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     camera_sd_bus_unlock();
 
+    /* Y los contadores del viaje, a NVS y a cero, igual que en el fin
+     * (auditoria del 16-oct-2026): el viaje descartado dejaba de estar abierto en
+     * la NVS pero trip_computer seguia sumando km y horas de conduccion a cuenta
+     * de el, y esos numeros son los que van en la telemetria de la 5" -- o sea que
+     * la tarjeta del viaje nuevo arrancaba con lo del descartado dentro. */
+    trip_computer_end();
     ESP_LOGW(TAG, "VIAJE DESCARTADO: %s -> %s", carpeta, destino);
     responde_con_hueco(req, destino);
     return ESP_OK;
@@ -3401,6 +3475,37 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         ESP_LOGI(TAG, "id %lu ya aplicado, lo descarto", (unsigned long)id);
         cJSON_Delete(j);
         httpd_resp_sendstr(req, "duplicado");
+        return ESP_OK;
+    }
+
+    /* UN EVENTO REZAGADO DEL VIAJE ANTERIOR NO SE APLICA AL QUE HAY ABIERTO
+     * (auditoria del 16-oct-2026, ver id_rezagado()): es el "fin" reintentado que
+     * cerraba el viaje nuevo, con el resumen y la carpeta del viejo.
+     *
+     * QUE SE CONTESTA, y por que no lo mismo en los dos casos:
+     *  - "fin" y "descartar" (y "borrar"): "duplicado", que es lo que ya contesta
+     *    el anillo de dedupe. Su intencion -- cerrar aquel viaje -- ya se cumplio
+     *    (por eso existe el reintento) o la superó el viaje nuevo, y devolver un
+     *    409 dejaria la cola de la cabina atascada detras de algo que ya no hay
+     *    que hacer. El nombre/destino no se pierde: lo lleva el fin.
+     *  - "registro": un apunte lleva DATOS del usuario, asi que no se tira en
+     *    silencio. Se contesta 409 -- el codigo que la cola ya sabe leer y
+     *    enseñar -- y queda a la vista para decidirlo a mano. */
+    if (!es_inicio && id != 0 && id_rezagado(id)) {
+        if (!strcmp(jop->valuestring, "registro")) {
+            ESP_LOGW(TAG, "apunte con id %lu (pantalla %d) ANTERIOR al inicio del "
+                          "viaje abierto: es del viaje anterior, no lo aplico",
+                     (unsigned long)id, byte_de_id(id));
+            httpd_resp_set_status(req, "409 Conflict");
+            responde_con_hueco(req, "ese apunte es de un viaje ya cerrado: "
+                                    "no lo meto en el que hay abierto");
+        } else {
+            ESP_LOGW(TAG, "%s con id %lu (pantalla %d) ANTERIOR al inicio del viaje "
+                          "abierto: es del viaje anterior, lo descarto",
+                     jop->valuestring, (unsigned long)id, byte_de_id(id));
+            httpd_resp_sendstr(req, "duplicado");
+        }
+        cJSON_Delete(j);
         return ESP_OK;
     }
 

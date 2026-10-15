@@ -18,6 +18,8 @@
 #      antes había que copiarlo y pegarlo a mano -- por eso la última Release
 #      publicada llevaba tres semanas de retraso sobre el tag real, visto el
 #      24-ago-2026, ver el comentario del paso 6 mas abajo).
+#      Sin 'gh' no se publica: se exige ANTES de crear el tag (paso 0b), y al
+#      final se comprueba que la Release tenga su .bin de verdad (paso 6b).
 #
 # La versión que se ve en la pantalla (Ajustes → Acerca de) sale sola de este
 # tag: no hay que editar ningún número en el código.
@@ -67,6 +69,18 @@ if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+$'; then
 fi
 TAG="v$VER"
 MSG="${2:-Joint SPL 145 Control $TAG}"
+
+# ── 0b) hace falta 'gh': sin él no hay Release ──────────────────────────────
+# Se comprueba AQUÍ, antes de crear el tag y de compilar, que es cuando abortar
+# es gratis. Antes esto se miraba al final y, si faltaba 'gh', el script se
+# quedaba en "AVISO" y seguía: el código y el tag subidos y la Release sin
+# publicar, o sea una publicación a medias (auditoría del 15-oct-2026).
+if ! command -v gh >/dev/null 2>&1; then
+  echo "ERROR: no está 'gh' (GitHub CLI) y sin él no se puede publicar la Release."
+  echo "       Instálalo (https://cli.github.com), entra con 'gh auth login' y"
+  echo "       vuelve a lanzar ./release.sh $VER_IN. Todavía no se ha tocado nada."
+  exit 1
+fi
 
 # ── 1) working tree limpio (ignorando el churn conocido de dependencies.lock) ─
 git checkout dependencies.lock 2>/dev/null || true
@@ -173,10 +187,15 @@ echo "[..] subiendo código y tag"
 git push origin "$RAMA" "$TAG"
 
 if ! command -v gh >/dev/null 2>&1; then
-  echo "AVISO: no está 'gh', así que la Release NO se ha publicado."
-  echo "       Instálalo o publícala a mano:"
+  # No debería llegar aquí (se comprueba en el paso 0b, antes de crear el tag),
+  # pero si pasa NO se sigue: el código y el tag YA están subidos, así que
+  # dejarlo así es una publicación a medias, que es lo que este script evita.
+  echo "ERROR: 'gh' ha desaparecido a mitad de la publicación (¿el PATH?)."
+  echo "       El código y el tag $TAG YA están subidos; falta la Release. Instala"
+  echo "       'gh', entra con 'gh auth login' y publícala con:"
   echo "       gh release create $TAG -R $REPO --title \"Joint SPL 145 Control $TAG\" \\"
-  echo "          --notes-file NOTAS.md \"$RELDIR/$OUT\""
+  echo "          --notes-from-tag \"build/$OUT\" \"$APP_CON_TAG\""
+  exit 1
 elif gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   echo "[ok] la Release $TAG ya existe, no la toco"
 else
@@ -234,6 +253,28 @@ if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   echo "     --notes-from-tag \"build/$OUT\" \"$APP_CON_TAG\""
   exit 1
 fi
+
+# Y ADEMÁS tiene que llevar su .bin: una Release sin asset no la puede descargar
+# nadie, y scripts/grabar.sh la rechazaría (auditoría del 15-oct-2026). GitHub
+# tarda un momento en procesar lo que acaba de subir `gh release create`, así que
+# se hacen 5 comprobaciones con 2 s de espera (unos 10 s en total) antes de darla
+# por incompleta. En este punto el .bin sigue en build/ (a ~/joint-releases se
+# copia en el paso 6c, solo cuando la Release está bien).
+ASSETS=""
+for _ in 1 2 3 4 5; do
+  ASSETS="$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+  if printf '%s\n' "$ASSETS" | grep -q '\.bin$'; then break; fi
+  sleep 2
+done
+if ! printf '%s\n' "$ASSETS" | grep -q '\.bin$'; then
+  echo
+  echo "ERROR: el tag $TAG quedó subido, pero la Release está INCOMPLETA: no tiene"
+  echo "       ningún asset .bin (visto: ${ASSETS:-ninguno}). El firmware sigue en"
+  echo "       build/; súbelo a mano y vuelve a mirar:"
+  echo "  gh release upload $TAG -R $REPO \"build/$OUT\" \"$APP_CON_TAG\""
+  exit 1
+fi
+echo "[ok] la Release $TAG lleva su .bin"
 
 # ── 6c) ahora si: dejar en ~/joint-releases SOLO lo publicado ───────────────
 # Se llega aqui con el push y la Release ya hechos (o con la Release ya

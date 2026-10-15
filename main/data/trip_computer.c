@@ -162,6 +162,14 @@ void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
     if (!s_mtx) return;
     time_t now = time(NULL);
 
+    /* TODO LO QUE TOCA EL ESTADO, BAJO EL MUTEX (auditoria del 16-oct-2026).
+     * El corte por falta de fix escribia s_gps_ancla y s_ultima_vel_t ANTES de
+     * tomarlo, mientras trip_computer_get() y trip_computer_flush() los leen con
+     * el mutex tomado: una carrera de verdad sobre estado compartido, aunque en
+     * un ESP32 las escrituras de 32 bits no se rompan. Ahora se toma primero y el
+     * corte sale por donde entro. */
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+
     /* Sin posicion de fiar no hay ancla: al recuperarla se empieza de nuevo en
      * vez de unir por la recta los dos extremos del tunel. */
     if (!fix || satelites < GPS_MIN_SATS) {
@@ -170,10 +178,9 @@ void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
          * como tiempo conduciendo TODO el hueco sin posicion (un tunel largo, o
          * el rato con la antena tapada), que es justo lo que no se sabe. */
         s_ultima_vel_t = 0;
+        xSemaphoreGive(s_mtx);
         return;
     }
-
-    xSemaphoreTake(s_mtx, portMAX_DELAY);
 
     /* Tiempo conduciendo: el intervalo desde la ultima muestra, contado solo si
      * la velocidad de AHORA pasa del umbral. Va ANTES del filtro de distancia a

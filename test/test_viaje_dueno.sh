@@ -2,10 +2,13 @@
 # Tabla de verdad de la PROPIEDAD DEL VIAJE de la P4 (auditoria del 14-oct-2026).
 #
 # Lo importante de este test es que NO prueba una copia: extrae las funciones
-# REALES de main/portal/config_server_viaje.c (pide_otra_pantalla, byte_de_id,
-# byte_de_dev, dev_es_mac, destino_seguro) y las compila con el arnes de
-# test/viaje_dueno_arnes.c, que solo sustituye la lectura de la NVS. Asi no
+# REALES de main/portal/config_server_viaje.c (pide_otra_pantalla, id_rezagado,
+# byte_de_id, byte_de_dev, dev_es_mac, destino_seguro) y las compila con el arnes
+# de test/viaje_dueno_arnes.c, que solo sustituye la lectura de la NVS. Asi no
 # puede quedarse obsoleto: si alguien cambia la logica, el test cambia con ella.
+#
+# id_rezagado() entro el 16-oct-2026: es la guardia que impide que un "fin"
+# reintentado del viaje anterior cierre el viaje que se acaba de empezar.
 #
 # Lo que fija: quien puede cerrar/apartar un viaje, cuando un apunte se desvia
 # al historial del vehiculo, y que la salida de emergencia ('forzar') solo vale
@@ -48,6 +51,7 @@ piezas = [
     extrae(v, 'static int byte_de_id(uint32_t id)'),
     extrae(v, 'static int byte_de_dev(const char *dev)'),
     extrae(v, 'static bool pide_otra_pantalla(const cJSON *j, uint32_t id, bool admite_forzar)'),
+    extrae(v, 'static bool id_rezagado(uint32_t id)'),
     extrae(v, 'static void destino_seguro(const char *in, char *out, size_t n)'),
     extrae(ca, 'int viaje_dev_ajeno(const char *dev_pide, const char *dev_abierto)'),
 ]
