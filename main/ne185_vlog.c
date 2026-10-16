@@ -164,12 +164,6 @@ static void flush_to_sd(void)
         written++;
     }
 
-    /* Solo se descartan las muestras que se escribieron bien. */
-    if (written > 0) {
-        int rest = s_count - written;
-        if (rest > 0) memmove(s_buf, &s_buf[written], rest * sizeof(vlog_entry_t));
-        s_count = rest;
-    }
     xSemaphoreGive(s_mutex);
 
     /* fclose() se mira aparte (con el buffer de stdio de 16 KB parte de la
@@ -179,9 +173,39 @@ static void flush_to_sd(void)
     }
     camera_sd_bus_unlock();
 
+    /* LAS MUESTRAS NO SE DESCARTAN HASTA QUE EL FICHERO ESTA CERRADO Y SIN
+     * ERROR (auditoria del 16-oct-2026). Antes el cursor se movia aqui arriba,
+     * antes del fclose y sin mirar `io_error`: con el buffer de stdio de 16 KB
+     * (CONFIG_FATFS_VFS_FSTAT_BLKSIZE) buena parte de la escritura ocurre EN EL
+     * CIERRE, asi que un fallo de E/S ahi -- tarjeta llena, contactos, tarjeta
+     * sacada a media escritura -- se llevaba por delante hasta 10 minutos de
+     * muestras sin que nadie las reintentara: el CSV quedaba truncado y en el
+     * log solo salia un aviso. Es el mismo criterio que log_capture.c con el
+     * volcado del coredump ("si falla el cierre, NO borrar el original, se
+     * reintenta") y que datalogger.c.
+     *
+     * El precio de reintentar es que una fila que SI llegara a la tarjeta puede
+     * repetirse; en un registro de muestras eso se ve y se cuadra al analizar,
+     * mientras que un hueco no se ve. */
     if (io_error) {
-        ESP_LOGW(TAG, "error de escritura en %s (%d escritas)", path, written);
-    } else if (written) {
+        ESP_LOGW(TAG, "error de escritura en %s (%d escritas): NO descarto las "
+                      "muestras, se reintentan en el proximo volcado",
+                 path, written);
+        return;
+    }
+    if (written > 0) {
+        if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+            int rest = s_count - written;
+            if (rest > 0) memmove(s_buf, &s_buf[written], rest * sizeof(vlog_entry_t));
+            s_count = rest;
+            xSemaphoreGive(s_mutex);
+        } else {
+            /* Sin el cerrojo no se toca el buffer: se reintentaran (pueden
+             * salir repetidas, ver arriba). */
+            ESP_LOGW(TAG, "%d muestras escritas en %s pero no he podido "
+                          "descontarlas: se reintentaran", written, path);
+            return;
+        }
         ESP_LOGD(TAG, "%d muestras -> %s", written, path);
     }
 }

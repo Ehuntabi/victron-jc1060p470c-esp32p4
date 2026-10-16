@@ -340,8 +340,8 @@ PUBLICADO: código, tag y Release de $TAG. Solo queda grabar:
 
   # (eso comprueba que la version esta publicada, que el asset de la Release es
   #  el de ESTA version -- nombre y sha256 -- y que en el puerto hay una P4, no
-  #  una cabina. A mano, sin comprobaciones, sigue estando `idf.py -p PUERTO
-  #  flash`, pero es el camino por el que se grabo la v4.38 con la Release en la
+  #  una cabina. A mano, sin comprobaciones, sigue estando \`idf.py -p PUERTO
+  #  flash\`, pero es el camino por el que se grabo la v4.38 con la Release en la
   #  v4.37: mejor el script.)
 
   # OTA por el portal Wi-Fi: sube $RELDIR/joint-spl-145-control-$TAG-app.bin
