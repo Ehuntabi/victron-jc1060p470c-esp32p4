@@ -15,6 +15,19 @@ static trip_computer_t s;
 static time_t s_last_sample;
 static time_t s_last_solar_sample;   /* stream propio de la solar (MPPT) */
 static SemaphoreHandle_t s_mtx;
+/* Mutex de la PERSISTENCIA, aparte del de los datos (auditoria del 16-oct-2026).
+ *
+ * El snapshot se tomaba bajo s_mtx pero write_nvs() se llamaba DESPUES de
+ * soltarlo, y a write_nvs() se llega desde tres sitios que corren en tareas
+ * distintas (el reset del inicio de viaje desde el httpd, el guardado de cada
+ * 5 min desde el hook del BMV -- que corre en la tarea de LVGL --, el flush de
+ * Ajustes y el end() del fin de viaje, tambien desde el httpd). Dos de esos
+ * write_nvs() a la vez es una apertura de NVS y un commit concurrentes sobre
+ * las mismas claves, y el que llegue ultimo pisa al otro con un snapshot VIEJO:
+ * tras un reinicio los km/Wh del viaje salen de la copia que no tocaba. Con
+ * este mutex, snapshot + write_nvs van juntos y en orden, y el ultimo en
+ * escribir es siempre el que tiene el estado mas nuevo. */
+static SemaphoreHandle_t s_nvs_mtx;
 
 /* Snapshot para persistir fuera del lock (el commit/GC del NVS no debe retener
  * s_mtx: trip_computer_get quedaria bloqueado desde LVGL durante el commit). */
@@ -72,25 +85,42 @@ static trip_snap_t trip_snapshot_locked(void)
     return snap;
 }
 
-static void write_nvs(const trip_snap_t *snap)
+/* Persiste el snapshot. DEVUELVE el resultado (16-oct-2026).
+ *
+ * Aqui pasaba lo mismo que en el resto del proyecto: se miraba SOLO el
+ * nvs_commit, y en IDF 5.5 nvs_commit() es un no-op (la entrada se escribe en
+ * la pagina al hacer el set; ver nvs_api.cpp). Con la NVS llena -- y la de esta
+ * placa son 16 KB, que es poco -- todos los nvs_set_* fallaban, el commit decia
+ * ESP_OK y el aviso "trip computer no persistio" era INALCANZABLE: los
+ * contadores se quedaban sin guardar y nadie se enteraba hasta que el resumen
+ * del viaje salia con la energia de hacia tres viajes. Ahora se acumula el
+ * retorno de cada set (mismo criterio que config_server_viaje.c). */
+static esp_err_t write_nvs(const trip_snap_t *snap)
 {
     nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i64(h, "reset", snap->reset_epoch);
-    nvs_set_i64(h, "secs",  snap->seconds_running);
-    nvs_set_i64(h, "drv_s", snap->seconds_driving);
-    nvs_set_i32(h, "wh_c", snap->whc);
-    nvs_set_i32(h, "wh_d", snap->whd);
-    nvs_set_i32(h, "ah_c", snap->ahc_m);
-    nvs_set_i32(h, "ah_d", snap->ahd_m);
-    nvs_set_i32(h, "wh_s", snap->whs);
-    nvs_set_i32(h, "ah_s", snap->ahs_m);
-    nvs_set_i64(h, "sol_t", snap->sol_secs);
-    nvs_set_i32(h, "km_m", snap->km_m);
-    nvs_set_u8(h, "active", snap->active);
-    esp_err_t err = nvs_commit(h);
-    if (err != ESP_OK) ESP_LOGW(TAG, "trip computer no persistio: %s", esp_err_to_name(err));
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_i64(h, "reset", snap->reset_epoch);
+    #define APUNTA(e) do { esp_err_t _e = (e); if (err == ESP_OK) err = _e; } while (0)
+    APUNTA(nvs_set_i64(h, "secs",  snap->seconds_running));
+    APUNTA(nvs_set_i64(h, "drv_s", snap->seconds_driving));
+    APUNTA(nvs_set_i32(h, "wh_c", snap->whc));
+    APUNTA(nvs_set_i32(h, "wh_d", snap->whd));
+    APUNTA(nvs_set_i32(h, "ah_c", snap->ahc_m));
+    APUNTA(nvs_set_i32(h, "ah_d", snap->ahd_m));
+    APUNTA(nvs_set_i32(h, "wh_s", snap->whs));
+    APUNTA(nvs_set_i32(h, "ah_s", snap->ahs_m));
+    APUNTA(nvs_set_i64(h, "sol_t", snap->sol_secs));
+    APUNTA(nvs_set_i32(h, "km_m", snap->km_m));
+    APUNTA(nvs_set_u8(h, "active", snap->active));
+    APUNTA(nvs_commit(h));
+    #undef APUNTA
     nvs_close(h);
+    if (err != ESP_OK)
+        ESP_LOGW(TAG, "trip computer no persistio (%s): NVS llena o gastada; los "
+                      "contadores que se vean tras un reinicio seran los de antes",
+                 esp_err_to_name(err));
+    return err;
 }
 
 static void load_nvs(void)
@@ -139,9 +169,24 @@ static void load_nvs(void)
     s.km              = (double)km_m / 1000.0;
 }
 
+/* Guarda el estado AHORA: toma s_mtx para el snapshot y s_nvs_mtx para que el
+ * par snapshot+escritura sea atomico frente a otro guardado (ver el comentario
+ * de s_nvs_mtx). Devuelve false si no se pudo (mutex inexistente o sin tomar),
+ * que solo pasa en la ventana de arranque. */
+static bool trip_guardar_ya(void)
+{
+    if (!s_mtx || !s_nvs_mtx) return false;
+    xSemaphoreTake(s_nvs_mtx, portMAX_DELAY);   /* SIEMPRE antes que s_mtx: orden fijo */
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    const trip_snap_t snap = trip_snapshot_locked();
+    xSemaphoreGive(s_mtx);
+    write_nvs(&snap);
+    xSemaphoreGive(s_nvs_mtx);
+    return true;
+}
+
 /* Metros entre dos posiciones. Equirectangular en vez de haversine: en tramos
- * de segundos el error es despreciable y se ahorra la trigonometria pesada. */
-static double metros_entre(double lat1, double lon1, double lat2, double lon2)
+ * de segundos el error es despreciable y se ahorra la trigonometria pesada. */static double metros_entre(double lat1, double lon1, double lat2, double lon2)
 {
     const double GRADO_M = 111320.0;
     double dlat = (lat2 - lat1) * GRADO_M;
@@ -216,6 +261,7 @@ void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
 void trip_computer_init(void)
 {
     if (s_mtx == NULL) s_mtx = xSemaphoreCreateMutex();
+    if (s_nvs_mtx == NULL) s_nvs_mtx = xSemaphoreCreateMutex();
     load_nvs();
     if (s.reset_epoch == 0) {
         time_t now = time(NULL);
@@ -239,6 +285,20 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     if (now < 1000000000L) {
+        xSemaphoreGive(s_mtx);
+        return;
+    }
+    /* SIN VIAJE ABIERTO NO SE INTEGRA NADA (auditoria del 16-oct-2026). El
+     * comentario de trip_computer_end() decia que dejaba los contadores a cero y
+     * no lo hacia: seguian sumando km/horas/Wh con el viaje ya cerrado, y esos
+     * numeros son los que /api/state publica como "energia del viaje" y los que
+     * se llevaba el resumen del viaje SIGUIENTE si este se empezaba por un
+     * camino que no llama a reset(). Mirar 'active' aqui es lo que hace que el
+     * flag sirva para algo. Se siguen actualizando las marcas de tiempo (mas
+     * abajo) para que al empezar el viaje nuevo el primer intervalo no cuente el
+     * rato que estuvo cerrado. */
+    if (!s.active) {
+        s_last_sample = now;
         xSemaphoreGive(s_mtx);
         return;
     }
@@ -269,13 +329,14 @@ void trip_computer_on_battery(int32_t i_milli, uint16_t v_centi)
         }
     }
     s_last_sample = now;
-
-    /* Snapshot bajo lock; el commit a flash se hace FUERA del lock para no
-     * bloquear a trip_computer_get (LVGL/dashboard) durante el commit/GC. */
-    trip_snap_t snap;
-    if (do_save) snap = trip_snapshot_locked();
     xSemaphoreGive(s_mtx);
-    if (do_save) write_nvs(&snap);
+
+    /* El guardado va por trip_guardar_ya(), que vuelve a tomar s_mtx (liberado
+     * arriba) y ademas s_nvs_mtx: el snapshot que se escribe es el de ESTE
+     * momento, no el de un reset que se haya colado entre medias. Y el commit a
+     * flash sigue haciendose FUERA de s_mtx para no bloquear a
+     * trip_computer_get (LVGL/dashboard) durante el commit/GC. */
+    if (do_save) trip_guardar_ya();
 }
 
 void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi)
@@ -284,6 +345,12 @@ void trip_computer_on_solar(int32_t i_milli, uint16_t v_centi)
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     if (now < 1000000000L) {
+        xSemaphoreGive(s_mtx);
+        return;
+    }
+    /* Misma guarda que en on_battery(): sin viaje abierto no se acumula. */
+    if (!s.active) {
+        s_last_solar_sample = now;
         xSemaphoreGive(s_mtx);
         return;
     }
@@ -308,16 +375,16 @@ void trip_computer_flush(void)
 {
     /* Fuerza el guardado en NVS ahora mismo. Normalmente se hace cada 5 min;
      * al finalizar un viaje hay que asegurarlo antes de apagar o sacar la SD. */
-    if (!s_mtx) return;
-    xSemaphoreTake(s_mtx, portMAX_DELAY);
-    const trip_snap_t snap = trip_snapshot_locked();
-    xSemaphoreGive(s_mtx);
-    write_nvs(&snap);
+    trip_guardar_ya();
 }
 
-void trip_computer_reset(void)
+/* __attribute__((unused)): esta declarada en el .h y la llama config_server_viaje.c
+ * (otro componente), asi que el compilador de ESTE fichero no la ve usada y
+ * avisa; el aviso taparia los de verdad. */
+__attribute__((unused)) void trip_computer_reset(void)
 {
     if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
+    if (s_nvs_mtx) xSemaphoreTake(s_nvs_mtx, portMAX_DELAY);
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     time_t now = time(NULL);
     s.reset_epoch = (now >= 1000000000L) ? now : 0;
@@ -335,26 +402,88 @@ void trip_computer_reset(void)
     s_last_sample = 0;
     s_last_solar_sample = 0;
     s_gps_ancla = false;   /* el primer punto del viaje nuevo no arrastra el anterior */
-    s.active = true;            /* empezar un viaje lo deja abierto */
+    /* 'active' NO SE TOCA (16-oct-2026). Antes esto ponia active = true, y como
+     * esta funcion la llama TAMBIEN el boton "Poner a cero" de Ajustes
+     * (trip_manager.c), pulsarlo con la P4 sin viaje abierto dejaba un VIAJE
+     * FANTASMA: udp_tx publicaba "en curso" y la cabina enseñaba km 0,0 de un
+     * viaje que no existe, y sobrevivia a los reinicios (va a NVS).
+     *
+     * El viaje lo declara el INICIO DE VIAJE, y es el quien tiene que marcar el
+     * trip computer como activo: ver trip_computer_iniciar(), que llama aqui y
+     * ademas pone active = true. Poner a cero los contadores es solo eso. */
     trip_snap_t snap = trip_snapshot_locked();
+    write_nvs(&snap);           /* con s_nvs_mtx tomado: nadie escribe a la vez */
     xSemaphoreGive(s_mtx);
-    write_nvs(&snap);
-    ESP_LOGI(TAG, "Trip reset (viaje nuevo, activo)");
+    if (s_nvs_mtx) xSemaphoreGive(s_nvs_mtx);
+    ESP_LOGI(TAG, "Contadores del viaje a cero (el viaje sigue %s)",
+             s.active ? "en curso" : "cerrado");
 }
 
-/* Cambia el flag de viaje abierto/cerrado y persiste, sin tocar los contadores. */
-static void trip_set_active(bool on)
+/* INICIO DE VIAJE: contadores a cero Y el viaje marcado como abierto.
+ *
+ * Es lo que llama op_inicio() (/api/viaje, la cabina declara el viaje). Antes
+ * bastaba trip_computer_reset() porque era el quien ponia active = true; desde
+ * el 16-oct-2026 la marca es cosa de esta funcion, para que el boton de Ajustes
+ * (que solo quiere poner los numeros a cero) no invente un viaje. */
+void trip_computer_iniciar(void)
 {
-    if (!s_mtx) return;   /* ver el comentario en trip_computer_on_gps() */
+    if (!s_mtx) return;
+    trip_computer_reset();
+    if (s_nvs_mtx) xSemaphoreTake(s_nvs_mtx, portMAX_DELAY);
     xSemaphoreTake(s_mtx, portMAX_DELAY);
-    s.active = on;
+    s.active = true;
     trip_snap_t snap = trip_snapshot_locked();
-    xSemaphoreGive(s_mtx);
     write_nvs(&snap);
-    ESP_LOGI(TAG, "Viaje %s", on ? "en curso" : "terminado");
+    xSemaphoreGive(s_mtx);
+    if (s_nvs_mtx) xSemaphoreGive(s_nvs_mtx);
+    ESP_LOGI(TAG, "Viaje en curso (contadores a cero)");
 }
 
-void trip_computer_end(void) { trip_set_active(false); }
+/* TERMINAR EL VIAJE: ademas de apagar el flag, DEJA LOS CONTADORES A CERO
+ * (auditoria del 16-oct-2026).
+ *
+ * El comentario de aqui arriba decia "sin tocar los contadores" y el del .h
+ * "marca el viaje como TERMINADO y guarda", pero lo unico que pasaba era el
+ * flag: los km, las horas y los Wh seguian sumando despues de cerrar (nadie
+ * miraba 'active') y /api/state los publicaba como si el viaje siguiera -- el
+ * dueño lo vio en la web. Peor: el motor de arranque de la 5" usa estos
+ * contadores, asi que un viaje empezado por un camino que no pase por
+ * trip_computer_reset() (el boton de Ajustes, un reinicio a mitad de viaje)
+ * arrancaba con los numeros del viaje ANTERIOR ya dentro.
+ *
+ * Se ponen a cero AQUI, que es el momento en que el resumen ya se ha escrito
+ * (op_fin llama a esto despues de escribir_resumen) y por tanto ya no hay nada
+ * que los lea. 'reset_epoch' se deja como estaba: es "cuando empezo lo que se
+ * esta midiendo", y un 0 ahi haria que el primer sample del viaje siguiente
+ * creyera que no hay epoch. */
+void trip_computer_end(void)
+{
+    if (!s_mtx) return;
+    if (s_nvs_mtx) xSemaphoreTake(s_nvs_mtx, portMAX_DELAY);
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    s.active = false;
+    s.wh_charged = 0;
+    s.wh_discharged = 0;
+    s.ah_charged = 0;
+    s.ah_discharged = 0;
+    s.wh_solar = 0;
+    s.ah_solar = 0;
+    s.solar_seconds = 0;
+    s.seconds_running = 0;
+    s.seconds_driving = 0;
+    s.km = 0;
+    /* Y las anclas de los integradores, para que el primer tramo del viaje
+     * siguiente no cuente el rato que estuvo cerrado. */
+    s_ultima_vel_t = 0;
+    s_last_sample = 0;
+    s_last_solar_sample = 0;
+    s_gps_ancla = false;
+    trip_snap_t snap = trip_snapshot_locked();
+    write_nvs(&snap);
+    xSemaphoreGive(s_mtx);
+    if (s_nvs_mtx) xSemaphoreGive(s_nvs_mtx);
+    ESP_LOGI(TAG, "Viaje terminado: contadores a cero (no siguen sumando)");
+}
 
 void trip_computer_get(trip_computer_t *out)
 {

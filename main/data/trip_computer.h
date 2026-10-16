@@ -61,18 +61,28 @@ void trip_computer_on_gps(bool fix, uint8_t satelites, double lat, double lon,
  * Antes de sacar la tarjeta o apagar. */
 void trip_computer_flush(void);
 
-/* Pone todos los contadores a cero y deja el viaje abierto. Guarda en NVS.
+/* Pone todos los contadores a cero. Guarda en NVS. NO cambia si el viaje esta
+ * abierto o cerrado (16-oct-2026): antes ponia active = true y el boton "Poner a
+ * cero" de Ajustes dejaba un viaje FANTASMA que la cabina veia como en curso.
  *
- * Lo llama el INICIO DE VIAJE del cuaderno de la cabina (/api/viaje), no el
- * usuario: el apartado ENERGIA del resumen.txt sale de estos contadores, y si
- * solo se pusieran a cero a mano el resumen acabaria contando energia de
- * viajes anteriores como si fuera de este. En Ajustes queda el mismo boton
- * como puesta a cero suelta, para cuando se quiera medir algo aparte. */
+ * Lo usa el boton de Ajustes (puesta a cero suelta, para medir algo aparte). El
+ * INICIO DE VIAJE de la cabina usa trip_computer_iniciar(), que ademas marca el
+ * viaje como abierto: el apartado ENERGIA del resumen.txt sale de estos
+ * contadores, y si solo se pusieran a cero a mano el resumen acabaria contando
+ * energia de viajes anteriores como si fuera de este. */
 void trip_computer_reset(void);
 
-/* Marca el viaje como TERMINADO y guarda los contadores. Contraparte de
- * trip_computer_reset: lo llama el fin de viaje, despues de escribir el
- * resumen (que es quien lee estos numeros). */
+/* INICIO DE VIAJE: contadores a cero Y el viaje marcado como abierto. Es lo que
+ * llama op_inicio() de /api/viaje (la cabina declara el viaje). */
+void trip_computer_iniciar(void);
+
+/* Marca el viaje como TERMINADO: apaga el flag, DEJA LOS CONTADORES A CERO y
+ * guarda en NVS. Contraparte de trip_computer_reset: lo llama el fin de viaje,
+ * despues de escribir el resumen (que es quien lee estos numeros).
+ *
+ * Ponerlos a cero es del 16-oct-2026: hasta entonces solo se apagaba el flag,
+ * nadie miraba 'active' y los km/horas/Wh seguian sumando con el viaje cerrado
+ * (/api/state los publicaba como si siguiera). Ver el comentario del .c. */
 void trip_computer_end(void);
 
 /* Copia el snapshot actual a out. Thread-safe (mutex interno). */
