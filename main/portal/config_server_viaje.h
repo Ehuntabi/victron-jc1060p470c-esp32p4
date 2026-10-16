@@ -22,8 +22,22 @@ TaskHandle_t viaje_tick_task_handle(void);
  *
  * Lo usan los logs (main/log_capture/log_capture.c) para dejar escrito A QUE
  * VIAJE pertenecen: sin eso, dos viajes distintos acaban con ficheros del mismo
- * nombre y no hay forma de saber de cual es cada uno. */
+ * nombre y no hay forma de saber de cual es cada uno.
+ *
+ * Y lo usa el .tar (data_export_tar.c) a traves de viaje_es_el_abierto(). */
 bool viaje_abierto_nombre(char *out, size_t n);
+
+/* ¿'nombre' (el nombre de la carpeta, sin ruta) es el viaje que la P4 tiene
+ * ABIERTO ahora mismo? (16-oct-2026)
+ *
+ * Existe porque un cierre que falla puede dejar resumen.txt escrito con el viaje
+ * todavia abierto en la NVS (ver escribir_resumen(): se escribe a .tmp y se
+ * renombra, que cierra el caso del resumen a medias, pero entre el rename y el
+ * commit de la NVS el viaje sigue abierto). Sin esto, /data/viajes lo enseñaba
+ * como "Listo" y se podia descargar: el usuario se bajaba un viaje que la P4
+ * cree que sigue en curso, y la cabina le seguia mandando apuntes. Con esto, el
+ * .tar lo rechaza con 409 y lo dice. */
+bool viaje_es_el_abierto(const char *nombre);
 
 /* Vuelca a la SD lo unico que vive en RAM y se perderia en un reinicio: los
  * puntos de ruta del viaje abierto (hasta 5 min de traza). Se llama desde TODOS

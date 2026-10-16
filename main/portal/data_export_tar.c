@@ -6,6 +6,7 @@ static const char *TAG = "cfg_srv";
 
 #include "config_server_internal.h"
 #include "data_export_tar.h"
+#include "config_server_viaje.h"   /* viaje_es_el_abierto(): no servir el viaje en curso */
 #include "camera.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -133,6 +134,10 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
         FILE *f = (sr == 0 && st.st_size > 0) ? fopen(full_path, "rb") : NULL;
         camera_sd_bus_unlock();
         if (!f) continue;
+        /* Fichero abierto mientras se suelta el cerrojo entre trozos: se avisa
+         * para que "Soltar tarjeta" no desmonte por debajo y el .tar salga
+         * truncado (ver sd_reader_abrir en camera.h). */
+        sd_reader_abrir();
 
         tar_build_header(hdr, entry, st.st_size, st.st_mtime);
         if (httpd_resp_send_chunk(req, (const char*)hdr, TAR_BLOCK) != ESP_OK) ok = false;
@@ -164,6 +169,7 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
         if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
         fclose(f);
         if (got_lock) camera_sd_bus_unlock();
+        sd_reader_cerrar();
         if (!ok) break;
 
         /* Padding hasta multiplo de 512 */
@@ -410,6 +416,25 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
     if (!existe) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "ese viaje no existe");
         return ESP_FAIL;
+    }
+
+    /* UN VIAJE QUE LA P4 TIENE ABIERTO NO SE SIRVE, AUNQUE TENGA resumen.txt
+     * (auditoria del 16-oct-2026). El "cerrado" de arriba es un stat() de
+     * resumen.txt, y ese fichero puede existir con el viaje todavia abierto en
+     * la NVS: el cierre escribe el resumen, y si el commit del estado falla
+     * despues (507 de NVS) el fin se reintenta pero el fichero ya esta. Tambien
+     * cabe entre el rename() del resumen y el estado_set() del cierre.
+     *
+     * Servirlo ahi es dar por bueno un viaje que la cabina sigue grabando: el
+     * usuario se lo baja creyendo que esta cerrado y los apuntes que lleguen
+     * despues ya no entran en el (el resumen esta escrito). Se pregunta a quien
+     * lo sabe -- la NVS -- y se contesta lo mismo que para uno en curso. */
+    if (!hist && viaje_es_el_abierto(v)) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, "Ese viaje sigue ABIERTO en la P4 (su cierre no "
+                                "llego a cuajar): finalizalo en la pantalla de la "
+                                "cabina antes de bajarlo.");
+        return ESP_OK;
     }
 
     /* Un viaje descartado (op_descartar en config_server_viaje.c, carpeta
