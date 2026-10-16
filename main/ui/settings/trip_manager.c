@@ -33,6 +33,7 @@
 #include "data/solar_daily.h"
 #include "ne185_vlog.h"
 #include "datalogger.h"
+#include "camera.h"   /* sd_reader_cuantos(): decir POR QUE no se suelta la tarjeta */
 #include "portal/config_server_viaje.h"   /* viaje_abierto_nombre(): no soltar la tarjeta con viaje abierto */
 
 /* ── Reset del viaje y soltar tarjeta ──────────────────────────────── */
@@ -72,6 +73,15 @@ static void do_soltar_tarjeta_action(void)
         ui_show_info_dialog(LV_SYMBOL_SD_CARD "  Tarjeta suelta",
             "Todo guardado.\n\nYa puedes sacar la tarjeta.\n\n"
             "Para volver a registrar, reinicia la pantalla.");
+    } else if (sd_reader_cuantos() > 0) {
+        /* Ficheros de la tarjeta abiertos por un lector troceado (una descarga
+         * en curso desde la web, la galeria). Desmontar ahora dejaria el .tar o
+         * la foto a medias, asi que no se hace: se dice lo que pasa, que el
+         * mensaje "puede estar ocupada" no ayuda a nadie (16-oct-2026). */
+        ui_show_info_dialog(LV_SYMBOL_WARNING "  Tarjeta en uso",
+            "Se ha guardado todo lo pendiente, pero hay una\n"
+            "descarga o una lectura en curso de la tarjeta.\n\n"
+            "Espera a que acabe y vuelve a intentarlo.");
     } else {
         ui_show_info_dialog(LV_SYMBOL_WARNING "  Tarjeta ocupada",
             "Se ha guardado todo lo pendiente, pero la tarjeta\n"

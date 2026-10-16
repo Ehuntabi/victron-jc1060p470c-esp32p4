@@ -219,6 +219,10 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *base_dir, const char 
     FILE *f = fopen(path, "rb");
     camera_sd_bus_unlock();
     if (!f) { httpd_resp_send_404(req); return ESP_FAIL; }
+    /* Avisar de que hay un fichero abierto mientras se suelta el cerrojo entre
+     * trozos: asi "Soltar tarjeta" no desmonta por debajo y no se sirve media
+     * foto (ver sd_reader_abrir en camera.h). Se cierra en TODOS los caminos. */
+    sd_reader_abrir();
 
     httpd_resp_set_type(req, "image/jpeg");
     static char buf[4096];   /* estatico: la pila del httpd la comparten mas handlers */
@@ -232,6 +236,7 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *base_dir, const char 
             if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
             fclose(f);
             if (got_lock) camera_sd_bus_unlock();
+            sd_reader_cerrar();
             return ESP_FAIL;
         }
         vTaskDelay(1);   /* ceder al GDMA de la camara entre trozos */
@@ -241,6 +246,7 @@ static esp_err_t vig_sd_send(httpd_req_t *req, const char *base_dir, const char 
         if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
         fclose(f);
         if (got_lock) camera_sd_bus_unlock();
+        sd_reader_cerrar();
     }
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -333,10 +339,18 @@ esp_err_t handle_vigilancia_json(httpd_req_t *req)
         const char *fn = slash ? slash + 1 : nm;
         char when[32] = "";
         if (strlen(fn) >= 15) {                        /* AAAAMMDD_HHMMSS... */
+            /* LAS RODAJAS ESTABAN UNA POSICION A LA IZQUIERDA (16-oct-2026).
+             * El nombre es "AAAAMMDD_HHMMSS_nnn.jpg", o sea que el '_' ocupa el
+             * indice 8: con fn+8/fn+10/fn+12 se leia "_H", "HH" y "MM", y la
+             * hora salia con el guion bajo dentro (atoi -> 0) y los segundos
+             * eran en realidad los minutos. En el JSON se veia
+             * "2026-10-16 0:18:18" para un fichero de las 18:22. La rama HTML de
+             * este mismo fichero ya usaba +9/+11/+13 (ver el snprintf de mas
+             * abajo): ahora las dos leen lo mismo. */
             struct tm tmv = {0};
             char f[5] = {0}, h[3] = {0}, m[3] = {0}, sg[3] = {0};
-            memcpy(f, fn, 4); memcpy(h, fn + 8, 2); memcpy(m, fn + 10, 2);
-            memcpy(sg, fn + 12, 2);
+            memcpy(f, fn, 4); memcpy(h, fn + 9, 2); memcpy(m, fn + 11, 2);
+            memcpy(sg, fn + 13, 2);
             tmv.tm_year = atoi(f) - 1900; tmv.tm_mon = atoi(fn + 4) - 1;
             tmv.tm_mday = atoi(fn + 6); tmv.tm_hour = atoi(h);
             tmv.tm_min = atoi(m); tmv.tm_sec = atoi(sg);

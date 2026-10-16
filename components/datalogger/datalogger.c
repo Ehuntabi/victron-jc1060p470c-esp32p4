@@ -315,6 +315,24 @@ esp_err_t datalogger_close_sd(void)
         ESP_LOGW(TAG, "la camara esta usando la tarjeta: no se desmonta, reintenta");
         return ESP_ERR_TIMEOUT;
     }
+    /* Y LOS LECTORES ABIERTOS (auditoria del 16-oct-2026). El cerrojo del bus
+     * solo cubre el INSTANTE de la I/O: los lectores de ficheros grandes (el .tar
+     * de un viaje, un JPEG de galeria) lo sueltan entre trozos y lo recuperan
+     * para los siguientes, asi que en ese hueco el bus esta libre y el
+     * desmontaje entra. Al volver, el descriptor ya no vale y el lector da el
+     * fichero por acabado (lectura corta): el usuario se baja un .tar truncado o
+     * ve una foto a medias, y el unico rastro es una linea en el log.
+     *
+     * Desmontar con un lector dentro no se puede arreglar desde aqui: lo que se
+     * hace es NO desmontar, decir por que y devolver lo mismo que si el bus
+     * estuviera ocupado (el boton ya sabe reintentar). */
+    int lectores = sd_reader_cuantos();
+    if (lectores > 0) {
+        camera_sd_bus_unlock();
+        ESP_LOGW(TAG, "hay %d fichero(s) de la tarjeta abiertos (descarga en curso?): "
+                      "no se desmonta, reintenta en unos segundos", lectores);
+        return ESP_ERR_TIMEOUT;
+    }
     esp_err_t err = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
     if (err == ESP_OK) {
         s_card = NULL;

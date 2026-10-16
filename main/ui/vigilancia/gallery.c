@@ -176,6 +176,10 @@ static uint8_t *gallery_read_file(const char *path, size_t *out_len)
     int fd = open(path, O_RDONLY);
     camera_sd_bus_unlock();
     if (fd < 0) { heap_caps_free(buf); return NULL; }
+    /* Fichero abierto mientras se suelta el cerrojo entre trozos: se avisa para
+     * que "Soltar tarjeta" no desmonte por debajo y la foto salga a medias (ver
+     * sd_reader_abrir en camera.h). */
+    sd_reader_abrir();
 
     size_t off = 0;
     bool ok = true;
@@ -195,6 +199,7 @@ static uint8_t *gallery_read_file(const char *path, size_t *out_len)
     if (!got_lock) ESP_LOGW(TAG, "close sin cerrojo SD tras 5s de espera");
     close(fd);
     if (got_lock) camera_sd_bus_unlock();
+    sd_reader_cerrar();
 
     if (!ok || off != len) { heap_caps_free(buf); return NULL; }
     *out_len = len;
