@@ -74,6 +74,23 @@ PY
 fi
 es_version() { printf '%s' "$1" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?$'; }
 
+# ¿la version A es numericamente MAYOR que la B? ("si"/"no"). Compara campo a
+# campo, asi que v4.10 > v4.9 (con `sort` o comparando cadenas saldria al reves).
+# Se usa para no borrar de ~/joint-releases una version mas nueva que este build.
+version_mayor() {
+    awk -v a="$1" -v b="$2" 'BEGIN{
+        sub(/^v/, "", a); sub(/^v/, "", b);      # la "v" no es un numero
+        na = split(a, x, "."); nb = split(b, y, ".");
+        n = (na > nb) ? na : nb;
+        for (i = 1; i <= n; i++) {
+            xi = x[i] + 0; yi = y[i] + 0;
+            if (xi > yi) { print "si"; exit }
+            if (xi < yi) { print "no"; exit }
+        }
+        print "no";
+    }'
+}
+
 if ! es_version "$V_ARBOL"; then
     echo "AVISO: el arbol no da una version utilizable ('$VER_DESCRITA')." >&2
     echo "       No dejo copia con version (el .bin de siempre esta donde toca)." >&2
@@ -146,12 +163,25 @@ fi
 RELBIN="$RELDIR/$(basename "$BIN" .bin | tr '_' '-')-${V_ARBOL}-app.bin"
 if mkdir -p "$RELDIR" 2>/dev/null && cp "$BIN" "$RELBIN" 2>/dev/null; then
     echo "[bin] $RELBIN"
+    # ── OJO: solo se retira lo MAS VIEJO (16-oct-2026) ───────────────────────
+    # Este bucle borraba CUALQUIER version que no fuera la de este build, sin
+    # mirar si era mas nueva. Con el arbol en un tag viejo (`git checkout v4.43
+    # && idf.py build`) el build calculaba v4.43 y BORRABA de ~/joint-releases la
+    # v4.45 publicada, que es justo la que se lleva a la autocaravana. Ahora una
+    # version numericamente MAYOR no se toca: se avisa y se queda.
     for viejo in "$RELDIR"/joint-spl-145-control-v*-app.bin \
                  "$RELDIR"/joint-spl-145-control-v*-esp32p4-full.bin; do
         [ -e "$viejo" ] || continue
         case "$viejo" in
             *"-${V_ARBOL}-"*) continue ;;   # la de este build: se queda
         esac
+        V_VIEJO="$(printf '%s' "$(basename "$viejo")" | sed -n \
+            -e 's/.*\(v[0-9][0-9.]*\)-app\.bin$/\1/p' \
+            -e 's/.*\(v[0-9][0-9.]*\)-esp32p4-full\.bin$/\1/p')"
+        if [ -n "$V_VIEJO" ] && [ "$(version_mayor "$V_VIEJO" "$V_ARBOL")" = "si" ]; then
+            echo "[bin] NO borro $(basename "$viejo"): $V_VIEJO es MAS NUEVA que $V_ARBOL" >&2
+            continue
+        fi
         rm -f "$viejo" && echo "[bin] fuera la version vieja: $(basename "$viejo")"
     done
 else
