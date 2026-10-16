@@ -31,6 +31,11 @@ static void dev_abierto(char *out, size_t n)
 static uint32_t g_ini;
 static uint32_t viaje_ini_id(void) { return g_ini; }
 
+/* El id con el que la WEB cierra un viaje (el del fuente, tal cual): fijo y con
+ * el byte alto 0xFF, que es justo lo que lo hacia confundible con una pantalla
+ * de MAC ...FF. Ver los casos de cierre web de main(). */
+#define ID_CIERRE_WEB   0xFFFFFF01u
+
 /*__PIEZAS__*/
 
 static int fallos = 0, pruebas = 0;
@@ -72,6 +77,18 @@ static void caso_rezagado(const char *que, uint32_t ini, uint32_t id, bool esper
     }
 }
 
+/* EL CIERRE DE LA WEB CON 'forzar' (16-oct-2026).
+ *
+ * El id de cierre de la web es fijo y su byte alto es 0xFF, que es el de una
+ * MAC que acabe en 0xFF: con esa pantalla de dueño, el id de la web caia en la
+ * comparacion de contadores y el cierre se tomaba por rezagado (200 y no
+ * cerraba nada). Aqui se fija que NO es rezagado, y ademas que una operacion de
+ * cierre sigue pasando por la guarda de dueño salvo que traiga 'forzar'. */
+static void caso_cierre_web(const char *que, uint32_t ini, bool esperado_rezagado)
+{
+    caso_rezagado(que, ini, 0xFFFFFF01u, esperado_rezagado);
+}
+
 int main(void)
 {
     const char *D1 = "aabbccddee01";
@@ -103,6 +120,39 @@ int main(void)
     caso_rezagado("id 0 (no es id valido)",               0x01000040u, 0u,          false);
     caso_rezagado("inicio sin byte de pantalla (web)",    0x00000040u, 0x00000005u, false);
     caso_rezagado("los dos sin byte de pantalla",         0x00000040u, 0x00000041u, false);
+
+    /* ── El CONTADOR DE LA CABINA REINICIADO (16-oct-2026) ────────────────────
+     *
+     * Si al satelite se le borra la memoria (o la cabina es nueva y hereda la
+     * MAC), su next_trip_seq() vuelve a empezar. Los apuntes del viaje nuevo
+     * llevan numeros BAJOS con el mismo byte de pantalla, asi que la regla de
+     * "numero menor que el del inicio" los tomaria por rezagados del viaje
+     * anterior y los tiraria (un "fin" contestado "duplicado" y apuntes con
+     * 409). La regla de verdad es "numero ANTERIOR AL INICIO", y si lo que hay
+     * abierto empezo en el numero 5, un 9 es posterior: es del viaje de ahora.
+     *
+     * (El caso que SI es ambiguo -- contador que da la vuelta entera, 16
+     * millones de eventos -- no se puede distinguir sin cambiar el protocolo:
+     * se queda como estaba, y por eso la comparacion sigue siendo la misma.) */
+    caso_rezagado("contador reiniciado: inicio 5, ahora 9", 0x01000005u, 0x01000009u, false);
+    caso_rezagado("contador reiniciado: el inicio mismo",   0x01000001u, 0x01000001u, false);
+    caso_rezagado("contador reiniciado: apunte anterior al inicio", 0x01000009u, 0x01000002u, true);
+    caso_rezagado("contador alto y apunte bajo (viaje anterior)",   0x0100FF00u, 0x01000010u, true);
+
+    /* ── El CIERRE DE LA WEB, que trae 'forzar' (16-oct-2026) ─────────────────
+     * ID_CIERRE_WEB = 0xFFFFFF01. Su byte alto (0xFF) puede coincidir con el de
+     * una MAC, y entonces el cierre se tomaba por rezagado: 200 y no cerraba
+     * nada. No es un evento de pantalla: no puede ser rezagado de nada. */
+    caso_cierre_web("cierre web con MAC ...FF y contador alto", 0xFF00FF00u, false);
+    caso_cierre_web("cierre web con cualquier otro inicio",     0x01000040u, false);
+    caso_cierre_web("cierre web sin viaje abierto",             0u,          false);
+
+    /* Y "fin" con 'forzar' sigue siendo de la pantalla que lo manda cuando el
+     * dueño coincide: la llave solo salta la guarda de dueño, no la de
+     * rezagado (que es la misma pantalla). */
+    caso("fin de la duena con forzar",   D1, "{\"dev\":\"aabbccddee01\",\"forzar\":true}", id1, true, false);
+    caso("fin de OTRA con forzar (emergencia)", D1,
+         "{\"dev\":\"aabbccddee02\",\"forzar\":true}", id2, true, false);
 
     printf("\n%d pruebas, %d fallos\n", pruebas, fallos);
     return fallos ? 1 : 0;
