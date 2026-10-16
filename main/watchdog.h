@@ -33,6 +33,15 @@ void watchdog_clear_reset_count(void);
  * real (p.ej. el borrado de flash al empezar una actualización OTA). */
 void watchdog_suspend(bool suspend);
 
+/* Igual, pero diciendo QUIEN suspende, para que dos usuarios distintos no se
+ * pisen (auditoria del 16-oct-2026): 'dueno' false = el carrusel de capturas,
+ * true = la OTA (los dos unicos que lo usan). Solo el mismo dueño puede
+ * reanudar, y la suspension CADUCA a los 10 minutos: si el carrusel se atasca
+ * entre su suspend y su reanudar, la vigilancia de LVGL vuelve sola en vez de
+ * quedarse apagada el resto del uptime. watchdog_suspend() es esta misma con
+ * dueno = false. */
+void watchdog_suspend_ex(bool suspend, bool dueno);
+
 
 /* Fecha y hora del ultimo arranque QUE NO FUE PARA REPROGRAMAR, en epoch.
  * 0 = no hay dato: o el reloj no estaba puesto, o el ultimo arranque fue una

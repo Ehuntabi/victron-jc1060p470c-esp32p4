@@ -53,6 +53,12 @@ static const char *s_reason_str = "Unknown";
  * de NVS una vez al arrancar, no cada vez que se pinta Ajustes. */
 static uint8_t s_arranque_reason_code = 0xFF;
 static volatile bool s_suspended = false;
+/* Quien la suspendio y hasta cuando (ver watchdog_suspend_ex). No van dentro del
+ * critical de s_beat_mux: se leen/escriben desde tareas distintas (OTA, carrusel,
+ * el monitor) y un bool/entero alineado se lee y se escribe de una pieza. */
+static volatile bool s_suspendido = false;
+static volatile bool s_suspend_dueno = false;   /* false = carrusel, true = OTA */
+static volatile int64_t s_suspend_hasta_us = 0;
 static esp_reset_reason_t s_reason_code = ESP_RST_UNKNOWN;   /* motivo crudo */
 static uint8_t s_forced_code = 0;                             /* que lo forzo (o 0) */
 static uint32_t s_arranque_epoch = 0;                         /* ultimo arranque util */
@@ -125,6 +131,10 @@ void watchdog_heartbeat(wd_task_t task)
     portEXIT_CRITICAL(&s_beat_mux);
 }
 
+/* Definida mas abajo, con watchdog_suspend_ex(): dice si la vigilancia de LVGL
+ * esta suspendida AHORA (teniendo en cuenta la caducidad). */
+static bool wd_suspendida(void);
+
 /* Devuelve el indice de la primera tarea que lleva muda mas de SU umbral, o
  * -1. Ignora tareas que aun no han latido (s_last_beat == 0).
  *
@@ -135,9 +145,14 @@ void watchdog_heartbeat(wd_task_t task)
 static int wd_stalled_task(int64_t now)
 {
     int stalled = -1;
+    /* FUERA del critical: wd_suspendida() usa esp_timer_get_time() y puede
+     * escribir en el log, y las dos cosas estan prohibidas dentro de una seccion
+     * critica (interrupciones apagadas). Se consulta una vez por vuelta, que es
+     * lo mismo que hacia el `s_suspended` de antes. */
+    bool lvgl_suspendida = wd_suspendida();
     portENTER_CRITICAL(&s_beat_mux);
     for (int i = 0; i < WD_TASK_COUNT; i++) {
-        if (i == WD_TASK_LVGL && s_suspended) continue;
+        if (i == WD_TASK_LVGL && lvgl_suspendida) continue;
         if (s_last_beat[i] != 0 && (now - s_last_beat[i]) > WD_TASK_TIMEOUT_US_TABLE[i]) {
             stalled = i;
             break;
@@ -438,9 +453,61 @@ esp_err_t watchdog_init(void)
     return (ok == pdPASS) ? ESP_OK : ESP_FAIL;
 }
 
+/* CON DUEÑO Y CADUCIDAD (auditoria del 16-oct-2026).
+ *
+ * Esto era `s_suspended = suspend;` a secas: un bool sin dueño ni fecha. Dos
+ * usuarios distintos lo comparten -- la OTA (ota_update.c) y el carrusel de
+ * capturas (capture_carousel.c) -- y se pisaban: si la OTA reanudaba mientras el
+ * carrusel seguia, la vigilancia de LVGL volvia a estar activa en medio de las
+ * capturas (falsos positivos); y al reves, si el carrusel se atascaba entre su
+ * suspend(true) y su suspend(false), la vigilancia de LVGL se quedaba APAGADA el
+ * resto del uptime, que es justo lo que esta funcion existe para poder hacer sin
+ * perder la red de seguridad.
+ *
+ * Ahora:
+ *  - 'dueno' identifica a quien suspende (TRUE = OTA, FALSE = carrusel) y solo
+ *    el mismo puede reanudar: el otro no puede reanudar por debajo;
+ *  - hay CADUCIDAD: pasados WD_SUSPEND_MAX_MS sin reanudar, la vigilancia vuelve
+ *    sola. Un carrusel atascado deja de tapar un cuelgue real para siempre. */
+#define WD_SUSPEND_MAX_MS   (10 * 60 * 1000)   /* 10 min: el carrusel tarda ~2 */
+
+/* true = suspender, false = reanudar. 'dueno': ver watchdog_suspend_ex(). */
 void watchdog_suspend(bool suspend)
 {
-    s_suspended = suspend;
+    watchdog_suspend_ex(suspend, false);
+}
+
+void watchdog_suspend_ex(bool suspend, bool dueno)
+{
+    if (!suspend) {
+        /* Reanudar solo vale si lo pide quien suspendio: si no, se ignora (y se
+         * dice), porque reanudar por debajo del otro es exactamente el pisotón
+         * que esto viene a cerrar. */
+        if (s_suspendido && s_suspend_dueno != dueno) {
+            ESP_LOGW(TAG, "reanudar la vigilancia de LVGL sin ser quien la suspendio "
+                          "(dueno=%d, pide=%d): lo ignoro", (int)s_suspend_dueno, (int)dueno);
+            return;
+        }
+        s_suspendido = false;
+        return;
+    }
+    s_suspendido = true;
+    s_suspend_dueno = dueno;
+    s_suspend_hasta_us = esp_timer_get_time() + (int64_t)WD_SUSPEND_MAX_MS * 1000;
+}
+
+/* ¿Esta suspendida AHORA? Tiene en cuenta la caducidad: si el que suspendio no
+ * reanudo a tiempo, la vigilancia vuelve sola (ver el comentario de arriba). */
+static bool wd_suspendida(void)
+{
+    if (!s_suspendido) return false;
+    if (s_suspend_hasta_us && esp_timer_get_time() > s_suspend_hasta_us) {
+        ESP_LOGW(TAG, "la suspension de la vigilancia de LVGL caduco (dueno=%d): "
+                      "la reanudo sola", (int)s_suspend_dueno);
+        s_suspendido = false;
+        return false;
+    }
+    return true;
 }
 
 /* ¿El arranque de ahora ha sido para reprogramar? Entonces no se apunta: no es

@@ -119,7 +119,11 @@ static void capture_carousel_task(void *arg)
      * de la OTA (ota_update.c). Detectado el 08-sep-2026 con el simulador
      * activo en la P4 de reserva (mas carga que en produccion, lo hizo mas
      * facil de reproducir, pero el riesgo ya estaba sin el). */
-    watchdog_suspend(true);
+    /* dueno = false: el OTRO usuario de watchdog_suspend es la OTA (dueno=true).
+     * Desde el 16-oct-2026 solo el mismo dueño puede reanudar y la suspension
+     * caduca a los 10 min, asi que un carrusel atascado ya no deja la vigilancia
+     * de LVGL apagada hasta el siguiente reinicio. */
+    watchdog_suspend_ex(true, false);
 
     /* UN SOLO bucle sobre ui_tour_goto_screen: es la MISMA lista que usa la
      * pagina web /capturas, asi que una pantalla nueva en el tour entra aqui
@@ -147,7 +151,7 @@ static void capture_carousel_task(void *arg)
         cap_save(path, &ok, &first_err);
     }
 
-    watchdog_suspend(false);
+    watchdog_suspend_ex(false, false);
 
     /* Restaurar: cerrar lo que quede abierto y volver a Live + la vista previa. */
     if (lvgl_port_lock(1000)) {
