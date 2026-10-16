@@ -143,12 +143,26 @@ static lv_obj_t *s_bh_prev_screen = NULL;
 void ui_close_battery_history_screen(void)
 {
     if (s_bh_screen) {
+        lv_obj_t *mio = s_bh_screen;        /* LA PANTALLA QUE HAY QUE BORRAR */
         lv_obj_t *prev = s_bh_prev_screen;
         if (!prev) prev = lv_disp_get_scr_prev(NULL);
-        /* auto_del=true → LVGL borra s_bh_screen al terminar la transición.
-         * Hacerlo manualmente con lv_obj_del aquí provoca corrupción porque
-         * la pantalla aún puede estar siendo renderizada. */
-        if (prev) lv_scr_load_anim(prev, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
+        /* auto_del=true hace que LVGL borre... la pantalla ACTIVA, no 'mio'
+         * (auditoria del 16-oct-2026). Mientras esta pantalla es la activa da
+         * igual, pero si otro camino cargo otra pantalla por medio -- el
+         * salvapantallas, el auto-return de Ajustes, el carrusel de capturas --,
+         * el auto_del se lleva por delante ESA otra (que puede estar en uso) y
+         * deja 'mio' viva y sin puntero: doble free o pantalla fantasma.
+         *
+         * Se hace a mano y con lv_obj_del_async(): si 'mio' es la activa, se
+         * deja de serlo con lv_scr_load() y solo entonces se borra, y el borrado
+         * diferido es justo lo que evita la corrupcion que el comentario de
+         * antes avisaba (la pantalla aun puede estar renderizandose en este
+         * fotograma). Si 'mio' NO es la activa, no hay nada que cargar: se borra
+         * y punto. */
+        if (prev && lv_scr_act() == mio) lv_scr_load(prev);
+        if (lv_scr_act() != mio) lv_obj_del_async(mio);
+        else ESP_LOGW(TAG_UI, "no puedo cerrar el historico de bateria: sigue siendo "
+                           "la pantalla activa");
         s_bh_screen = NULL;
         s_bh_chart = NULL;
         s_bh_prev_screen = NULL;
