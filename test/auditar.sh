@@ -8,10 +8,19 @@
 #   - dos tareas se quedaban sin pila  -> se comprueba el tamano declarado
 #   - habia 31 strcpy  -> se vigila que no aparezcan nuevos con origen no literal
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 fallos=0
 ok()    { printf '  ok    %s\n' "$1"; }
 mal()   { printf '  FALLO %s\n' "$1"; fallos=$((fallos+1)); }
+
+# ── EN CI, NO TENER BUILD ES UN FALLO (16-oct-2026) ─────────────────────────
+# Las reglas que miran el BINARIO o el sdkconfig.h se saltaban en silencio si no
+# existia build/ ("se omite"), asi que el dia que el step del build falle, se
+# renombre o se cambie el orden, esta auditoria diria OK sin haber mirado nada.
+# En CI el build va ANTES: si falta, es un fallo del workflow y se dice.
+if [ -n "${CI:-}" ] && [ ! -f build/config/sdkconfig.h ]; then
+    mal "no hay build/config/sdkconfig.h y en CI se compila antes de auditar: revisa el workflow (o el step del build)"
+fi
 
 echo "=== 1. Opciones criticas EN EL BINARIO compilado ==="
 H=build/config/sdkconfig.h
@@ -434,6 +443,94 @@ if [ "$FONTSDK" -eq 0 ]; then
     ok "la UI usa los papeles de la guia (UI_FONT_*), no fuentes del SDK"
 else
     mal "$FONTSDK usos de fuente del SDK en la UI: escribe el papel (UI_FONT_DISPLAY/TITLE/VALUE/TEXT/SMALL)"
+fi
+
+# 1b) Y ADEMAS el alias tiene que ser VISIBLE en la UNIDAD DE COMPILACION que usa
+#     el nombre (16-oct-2026). La regla de arriba mira main/ui y main/ui.c; un
+#     fichero NUEVO fuera de ahi (o un include que se cae) puede escribir
+#     lv_font_montserrat_20 sin que fonts_es.h llegue a verlo, y entonces tira de
+#     la Montserrat del SDK: el texto sale al tamaño LITERAL y no falla nada al
+#     compilar. Es exactamente lo que paso en la cabina de 5" ese dia
+#     (capture_carousel.c). Se resuelve el grafo de #include de cada .c de main/
+#     (menos main/fonts/, que SI puede usar la del SDK como .fallback a proposito)
+#     y se exige que el #define sea alcanzable desde ahi.
+SINALIAS="$(python3 - <<'PYFUENTES'
+import pathlib, re
+TXT = {}
+def txt(p):
+    p = str(p)
+    if p not in TXT:
+        try: TXT[p] = pathlib.Path(p).read_text(errors='ignore')
+        except OSError: TXT[p] = ''
+    return TXT[p]
+def limpia(t):
+    t = re.sub(r'/\*.*?\*/', ' ', t, flags=re.S)
+    return re.sub(r'//[^\n]*', ' ', t)
+raices = [pathlib.Path('main').resolve(), pathlib.Path('.').resolve()]
+def alcanza(f):
+    vistos, pila = set(), [pathlib.Path(f).resolve()]
+    while pila:
+        a = pila.pop()
+        if a in vistos: continue
+        vistos.add(a)
+        for inc in re.findall(r'^\s*#\s*include\s+"([^"]+)"', txt(a), re.M):
+            for base in [a.parent] + raices:
+                c = base / inc
+                if c.is_file():
+                    pila.append(c.resolve()); break
+    return vistos
+defs = {}
+for f in pathlib.Path('main').rglob('*'):
+    if f.suffix in ('.c', '.h') and 'managed_components' not in str(f):
+        for m in re.finditer(r'^\s*#\s*define\s+(lv_font_montserrat_(?:bold_)?[0-9]+)\b', txt(f), re.M):
+            defs.setdefault(m.group(1), set()).add(f.resolve())
+malos = []
+for f in sorted(pathlib.Path('main').rglob('*.c')):
+    if 'managed_components' in str(f) or 'main/fonts/' in str(f): continue
+    usados = set(re.findall(r'\blv_font_montserrat_(?:bold_)?[0-9]+\b', limpia(txt(f))))
+    if not usados: continue
+    alc = alcanza(f)
+    for u in sorted(usados):
+        if not (defs.get(u, set()) & alc):
+            malos.append('%s: %s' % (f, u))
+print('; '.join(malos))
+PYFUENTES
+)"
+if [ -z "$SINALIAS" ]; then
+    ok "los nombres de fuente del SDK que se usan ven su alias en su unidad de compilacion"
+else
+    mal "fuente del SDK SIN alias visible (saldria al tamaño literal): $SINALIAS"
+fi
+# 1c) Y que las fuentes del proyecto traigan los acentos del castellano. Son
+#     fuentes generadas a mano: si alguien las regenera con otro juego de
+#     caracteres, "Configuración" se ve "Configuracin" y no falla nada. Se AVISA
+#     (no se falla) porque hay fuentes de solo cifras/unidades a proposito.
+FALTA_ACENTOS="$(python3 - <<'PYACENTOS'
+import pathlib, re
+ACENTOS = "áéíóúüñÁÉÍÓÚÑ¿¡"
+malas = []
+for f in sorted(pathlib.Path('main/fonts').glob('lv_font_*.c')):
+    t = f.read_text(errors='ignore')
+    cps = set()
+    listas = {}
+    for m in re.finditer(r'static const uint16_t (unicode_list_\d+)\[\]\s*=\s*\{(.*?)\};', t, re.S):
+        listas[m.group(1)] = [int(x, 0) for x in re.findall(r'0x[0-9A-Fa-f]+|\b\d+\b', m.group(2))]
+    patron = (r'\.range_start\s*=\s*(\d+)\s*,\s*\.range_length\s*=\s*(\d+)'
+              r'[^}]*?\.unicode_list\s*=\s*(\w+)[^}]*?\.type\s*=\s*(LV_FONT_FMT_TXT_CMAP_\w+)')
+    for m in re.finditer(patron, t, re.S):
+        ini, largo, lista, tipo = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4)
+        if 'SPARSE' in tipo and lista in listas:
+            cps |= {ini + v for v in listas[lista]}
+        else:
+            cps |= set(range(ini, ini + largo))
+    faltan = ''.join(c for c in ACENTOS if ord(c) not in cps)
+    if faltan:
+        malas.append('%s (%s)' % (f.name, faltan))
+print('; '.join(malas))
+PYACENTOS
+)"
+if [ -n "$FALTA_ACENTOS" ]; then
+    echo "  (aviso) fuentes sin algun acento del castellano (vale si son de cifras/unidades): $FALTA_ACENTOS"
 fi
 # 2) Paleta CERRADA: el unico sitio con lv_color_hex(0x...) es ui_style.h (donde
 #    se DEFINEN los tokens). Empezó siendo un tope (203 literales en 18 ficheros,
