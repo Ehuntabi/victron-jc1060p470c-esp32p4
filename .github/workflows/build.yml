@@ -42,10 +42,62 @@ jobs:
       # El verificador va DESPUES del build a proposito: comprueba las opciones
       # criticas dentro del sdkconfig.h que se acaba de generar, que es donde se
       # descubrio que la IPA nunca estuvo encendida.
-      - name: Test del protocolo mini_proto
-        run: bash test/run.sh
+      #
+      # El cJSON del IDF se baja AQUI (clon disperso, solo esa carpeta) porque el
+      # test estrella de la propiedad del viaje lo necesita para compilar el codigo
+      # real de config_server_viaje.c: sin el imprimia "SKIP" y salia 0, asi que el
+      # step se veia verde sin probar nada (auditoria del 16-oct-2026, run
+      # 38949498337). Ahora test_viaje_dueno.sh FALLA si en CI no encuentra el
+      # cJSON, y aqui se le da.
+      - name: Bajar el cJSON del IDF (para el test de propiedad del viaje)
+        run: |
+          git clone --depth 1 --branch v5.5.5 --filter=blob:none --sparse \
+            https://github.com/espressif/esp-idf.git /tmp/idf
+          cd /tmp/idf && git sparse-checkout set components/json/cJSON
+          ls components/json/cJSON/cJSON.c
+
+      - name: Test del protocolo mini_proto y de la propiedad del viaje
+        run: IDF_PATH=/tmp/idf bash test/run.sh
       - name: Verificador de reglas (opciones criticas, pilas, cadenas, clave)
         run: bash test/auditar.sh
+
+      # ── LOS GUARDAS DE LOS SCRIPTS DE PUBLICAR Y GRABAR (16-oct-2026) ─────
+      # El CI no graba ni publica (no hay placa ni secretos): el .bin de la
+      # Release lo compila release.sh en local. Lo que si puede hacer es vigilar
+      # que esos scripts conserven sus comprobaciones: la auditoria del 16-oct
+      # encontro el "idf.py flash" a mano en la salida de release.sh y el asset de
+      # la Release comprobado solo "existe y tiene algun .bin". Que se caiga aqui
+      # es barato; que se caiga con la placa delante, no.
+      - name: Los guardas de grabar.sh y release.sh siguen en su sitio
+        run: |
+          fallo=0
+          g=scripts/grabar.sh; r=release.sh
+          for f in "$g" "$r" scripts/bin_con_version.sh; do
+            [ -f "$f" ] || { echo "FALTA $f"; fallo=1; }
+          done
+          for frase in 'git describe --tags --exact-match' 'git ls-remote origin'                        'gh release download' 'sha256sum' 'chip_id' 'write_flash'                        'components' 'partitions.csv' 'spiffs.bin'                        'git checkout -- sdkconfig'; do
+            grep -qF -- "$frase" "$g" || { echo "$g: le falta '$frase'"; fallo=1; }
+          done
+          for frase in 'sha256sum' 'gh release upload' 'grep -qxF "$a"' \
+                       'la Release $TAG ya existe' 'git checkout -- sdkconfig'; do
+            grep -qF -- "$frase" "$r" || { echo "$r: le falta '$frase'"; fallo=1; }
+          done
+          # release.sh no puede volver a mandar a `idf.py flash` (el camino sin
+          # comprobaciones y que recompila antes de grabar)
+          if grep -qE '^[[:space:]]*idf\.py +-p.*flash' "$r"; then
+            echo "$r: ha vuelto 'idf.py -p ... flash' a la salida del script"; fallo=1
+          fi
+          # bin_con_version.sh no puede borrar de ~/joint-releases una version mas
+          # nueva que la del build (paso el 16-oct con un checkout de un tag viejo)
+          grep -q 'version_mayor' scripts/bin_con_version.sh \
+            || { echo "scripts/bin_con_version.sh: le falta el guard de version mayor"; fallo=1; }
+          [ "$fallo" = 0 ] || { echo "Se han perdido guardas en los scripts de publicar/grabar"; exit 1; }
+          echo "guardas presentes"
+
+      - name: shellcheck de los scripts propios
+        run: |
+          shellcheck -S warning scripts/grabar.sh scripts/bin_con_version.sh release.sh \
+            test/auditar.sh test/run.sh test/test_viaje_dueno.sh
 
 
   # El contrato con la app del movil, comprobado SIN placa: se compilan
