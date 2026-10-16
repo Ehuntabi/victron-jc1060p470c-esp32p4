@@ -1662,6 +1662,11 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     if (ne != ESP_OK) {
         ESP_LOGE(TAG, "la NVS no acepta el viaje %s (%s): lo dejo sin abrir y "
                       "deshago la carpeta", carpeta, esp_err_to_name(ne));
+        /* Y EL TRIP COMPUTER, A CERRAR (16-oct-2026): trip_computer_iniciar() ya
+         * lo ha marcado como "viaje en curso" y este viaje NO se ha abierto, asi
+         * que sin esto quedaria un viaje fantasma publicado por udp_tx y
+         * sobreviviendo a los reinicios (va a NVS). */
+        trip_computer_end();
         if (camera_sd_bus_lock(3000)) {
             char ev[RUTA_MAX];
             snprintf(ev, sizeof(ev), "%s/eventos.csv", carpeta);
