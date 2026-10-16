@@ -217,18 +217,21 @@ CONFIG_ESP_MM_CACHE_MSYNC_C2M_CHUNKED_OPS_MAX_LEN=0x20000
 # bucle de reinicios sin una sola pista en el log -- es exactamente la firma de
 # los 417 reinicios de la cabina de 5".
 #
-# Con esto: los avisos y errores de LVGL salen por el log (nivel Warn, que es el
+# Con esto, los avisos y errores de LVGL salen por el log (nivel Warn, que es el
 # que usa la propia libreria para "algo no cuadra") y un assert IMPRIME su
-# fichero:linea (lo hace el propio LVGL cuando LV_USE_LOG esta activo) y llama a
-# abort(), que en ESP-IDF pasa por el panic handler: volcado, backtrace y, si
-# esta activado, core dump en flash en vez de 10 s de silencio.
+# expresion y su fichero:linea (lo hace el propio LVGL cuando LV_USE_LOG esta
+# activo) ANTES de colgarse: el Task WDT sigue reiniciando a los 10 s, pero el
+# log ya dice QUE fallo y DONDE, que es lo que faltaba para poder arreglarlo.
 #
-# CONFIG_LV_ASSERT_HANDLER no es un simbolo del Kconfig de LVGL (solo lo es el
-# _INCLUDE), pero lv_conf_internal.h lo lee de CONFIG_ si esta definido, que es
-# justo lo que hace falta aqui.
+# CONFIG_LV_ASSERT_HANDLER (el que cambiaria el while(1) por un abort()) NO se
+# pone aqui, y no es un olvido: no existe en el Kconfig de LVGL -- solo el
+# _INCLUDE --, asi que Kconfig lo marca como "unknown kconfig symbol" y NO llega
+# al sdkconfig.h generado. Definirlo en la linea de compilacion tampoco vale: el
+# valor tiene que llevar un ';' y CMake no puede pasar un ';' dentro de un -D
+# (parte la lista de definiciones y LVGL no compila). Ver el comentario de
+# CMakeLists.txt para las dos alternativas que quedan.
 CONFIG_LV_USE_LOG=y
 CONFIG_LV_LOG_LEVEL_WARN=y
 CONFIG_LV_LOG_LEVEL=2
 CONFIG_LV_LOG_PRINTF=y
 CONFIG_LV_ASSERT_HANDLER_INCLUDE="assert.h"
-CONFIG_LV_ASSERT_HANDLER="abort();"

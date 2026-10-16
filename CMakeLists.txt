@@ -91,6 +91,28 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format-truncation" APPEND)
 
 project(joint_spl_145_control)
 
+# ── LVGL: que un assert al menos SE VEA (auditoria del 16-oct-2026) ──────────
+#
+# CONFIG_LV_USE_LOG=y (ver sdkconfig) es lo que hace que un LV_ASSERT de LVGL
+# IMPRIMA su expresion y su fichero:linea por el log antes de nada. Sin eso,
+# LV_USE_LOG=0 y el LV_ASSERT ni siquiera llamaba al log.
+#
+# LO QUE NO SE HA PODIDO HACER, y por que (comprobado en este arbol):
+# el lv_conf_internal.h de LVGL 8.4 deja el manejador en
+#     #define LV_ASSERT_HANDLER while(1);   /*Halt by default*/
+# y CONFIG_LV_ASSERT_HANDLER NO existe en el Kconfig de LVGL (solo existe
+# LV_ASSERT_HANDLER_INCLUDE), asi que Kconfig lo marca como "unknown kconfig
+# symbol" y NO llega al sdkconfig.h generado: por sdkconfig no hay forma.
+# La otra via seria definirlo en la linea de compilacion, pero el valor tiene
+# que llevar un ';' (LV_ASSERT lo expande sin punto y coma delante de la llave
+# de cierre) y CMake no puede pasar un ';' dentro de un -D: parte la lista de
+# definiciones y el componente no compila ("expected ';' before '}' token").
+# Queda por tanto: el assert IMPRIME (con esto) y luego se cuelga, con lo que el
+# Task WDT reinicia a los 10 s -- pero ahora el log dice QUE fallo y DONDE, que
+# es lo que faltaba para poder arreglarlo. Si algun dia se quiere el abort(),
+# hay que tocar el lv_conf_internal.h del componente (se pierde al actualizar
+# la dependencia) o subir a LVGL 9, que ya lo trae configurable.
+
 # .bin con la version en el nombre, para saber cual se lleva a la autocaravana.
 # El nombre lo calcula scripts/bin_con_version.sh (ver alli la regla de version:
 # siempre un numero limpio vX.Y, nunca "-dirty"); deja el original intacto al
