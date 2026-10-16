@@ -28,6 +28,7 @@ extern esp_err_t ov02c10_recover_over_i2c(i2c_master_bus_handle_t bus);
 #include "driver/jpeg_decode.h"   /* decoder JPEG por HW (galeria: fotos de vigilancia) */
 #include "freertos/semphr.h"      /* mutex del anillo de capturas en RAM */
 #include "esp_task_wdt.h"         /* vigilar la tarea de camara (DQBUF puede colgarse) */
+#include <stdatomic.h>            /* contador de lectores de SD (ver sd_reader_abrir) */
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -732,8 +733,24 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
     bool ok = false;
 
     if (camera_jpeg_init()) {
-        int act = s_thumb_act;
-        if (act >= 0 && s_thumb[act] != NULL) {
+        /* LA MINIATURA SE PUBLICA SIN CERROJO, ASI QUE SE COMPRUEBA LA FIRMA
+         * (auditoria del 16-oct-2026). s_thumb_act lo escribe la tarea de camara
+         * ("publicar", al final de downscale_rgb) y lo lee esto, que corre en la
+         * tarea del httpd: si el cambio de indice cae entre el `act` y el memcpy
+         * de las filas, se copia MITAD de una miniatura y MITAD de la otra, y el
+         * JPEG que sale por /snapshot esta rasgado. No es corrupcion de memoria
+         * -- los dos buffers son validos -- pero la foto sale mal.
+         *
+         * s_thumb_seq se incrementa justo despues de publicar: si no cambia
+         * entre el principio y el final de la copia, la miniatura es la misma de
+         * principio a fin. Si cambia, se reintenta una vez con la nueva (el
+         * fotograma se publica cada 1,5-2 s, asi que la segunda casi siempre
+         * entra; si tampoco, se devuelve la ultima copia hecha, que es lo que
+         * hacia antes). */
+        for (int intento = 0; intento < 2 && !ok; intento++) {
+            uint32_t seq_antes = s_thumb_seq;
+            int act = s_thumb_act;
+            if (act < 0 || act >= 2 || s_thumb[act] == NULL) break;
             const uint8_t *src = s_thumb[act];   /* RGB888, THUMB_W*3 por fila */
             /* La miniatura ya viene en RGB888 del acelerador: copia directa de
              * filas, sin intercambiar canales (antes venia en BGR). */
@@ -741,6 +758,10 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
                 memcpy(&s_jpeg_in[(uint32_t)y * JPEG_W * 3],
                        &src[(uint32_t)y * THUMB_W * 3],
                        (size_t)JPEG_W * 3);
+            }
+            if (s_thumb_seq != seq_antes) {
+                ESP_LOGD(TAG, "miniatura cambiada a mitad de copia: la repito");
+                continue;
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
@@ -1116,26 +1137,90 @@ static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (l
  * su ventana ociosa; los escritores de SD (datalogger/battery_history/log) lo toman
  * antes de su I/O -> escriben solo cuando el GDMA esta parado. */
 static SemaphoreHandle_t s_sd_bus = NULL;
+/* Quien lo tiene y cuantas veces (auditoria del 16-oct-2026). Ver
+ * camera_sd_bus_unlock(): soltar un mutex que no se posee es un configASSERT
+ * (panic) en FreeRTOS, y el cerrojo se suelta desde sitios que NO lo tomaron
+ * (los `if (lock) unlock()` de todo el firmware). Con esto se comprueba el
+ * poseedor antes de soltar, y se CUENTA: el mismo dueno puede anidar (la tarea
+ * de camara toma el cerrojo y, dentro de esa ventana, algun camino vuelve a
+ * pedirlo). NO se usa xSemaphoreCreateRecursiveMutex() a proposito: un mutex
+ * recursivo cambia la semantica de xSemaphoreTake para TODOS los que ya lo usan
+ * (el segundo take del mismo dueno pasaria de bloquear a colarse), y aqui lo que
+ * hace falta es lo contrario: que un segundo "lock" del mismo dueno siga
+ * bloqueando como hasta hoy, con el contador solo para saber cuando soltar. */
+static TaskHandle_t s_sd_bus_dueno = NULL;
+static int          s_sd_bus_n     = 0;
+
+/* El cerrojo se crea UNA SOLA VEZ desde app_main, antes de que exista nada que
+ * toque la tarjeta.
+ *
+ * POR QUE HACIA FALTA (auditoria del 16-oct-2026). El mutex se creaba dentro de
+ * camera_init_intento(). Si la camara NO arrancaba (sensor que no responde al
+ * encender), s_sd_bus se quedaba en NULL y camera_sd_bus_lock() devolvia true
+ * SIN TOMAR NADA. Todo el firmware hace `if (lock) { ...; unlock(); }`, asi que
+ * ese true acababa en un camera_sd_bus_unlock() con el mutex ya creado: si por
+ * el camino alguien llamaba a camera_reintentar() (que reejecuta el init y crea
+ * el mutex), el unlock soltaba un mutex que esa tarea NO poseia -> configASSERT
+ * -> panic. Y mientras tanto, con el mutex NULL, dos tareas creian tener el bus
+ * a la vez y se perdia la serializacion que evita el INT WDT del GDMA. Creandolo
+ * al arrancar (antes del portal y de la tarea de camara) el cerrojo existe
+ * siempre. */
+void camera_sd_bus_init(void)
+{
+    if (s_sd_bus) return;
+    s_sd_bus = xSemaphoreCreateMutex();
+    if (!s_sd_bus) {
+        /* Sin heap no hay cerrojo: se avisa y se sigue con el comportamiento de
+         * antes (lock que no bloquea). Peor remedio seria no arrancar. */
+        ESP_LOGE(TAG, "no he podido crear el cerrojo del bus SD: sin serializacion");
+    }
+}
+
+/* Para escritores de SD externos: tomar/soltar el bus alrededor de su I/O a SD.
+ * lock devuelve false si no lo consigue en timeout_ms (el que llama debe omitir la
+ * escritura y reintentar luego). Si el cerrojo no existe (arranque, o sin heap)
+ * no hay contencion posible -> permitir siempre. */
+bool camera_sd_bus_lock(uint32_t timeout_ms)
+{
+    if (!s_sd_bus) return true;
+    if (xSemaphoreTake(s_sd_bus, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) return false;
+    s_sd_bus_dueno = xTaskGetCurrentTaskHandle();
+    s_sd_bus_n++;
+    return true;
+}
+
+/* Suelta el cerrojo, COMPROBANDO QUE LO TIENE QUIEN LO SUELTA.
+ *
+ * Un xSemaphoreGive() de un mutex que no se posee es un configASSERT y tumba la
+ * placa; y si el mutex esta en NULL (camara que no arranco en la version de
+ * antes) el give se lo saltaba y seguia como si nada, con lo que la tarea que SI
+ * lo tenia se quedaba dentro para siempre. Aqui:
+ *  - sin cerrojo creado no hay nada que soltar;
+ *  - si lo tiene otra tarea, NO se suelta y se dice en el log (es un fallo de
+ *    simetria del que llama, y dejarlo pasar es lo que corrompe la
+ *    serializacion o provoca el panic);
+ *  - se cuenta la profundidad, asi que solo se suelta de verdad en el unlock que
+ *    corresponde al ultimo lock. */
+void camera_sd_bus_unlock(void)
+{
+    if (!s_sd_bus) return;
+    TaskHandle_t yo = xTaskGetCurrentTaskHandle();
+    if (s_sd_bus_dueno != yo) {
+        ESP_LOGE(TAG, "unlock del bus SD sin tenerlo (dueno=%p, yo=%p): NO lo suelto",
+                 (void *)s_sd_bus_dueno, (void *)yo);
+        return;
+    }
+    if (s_sd_bus_n > 1) { s_sd_bus_n--; return; }   /* anidado: aun le queda */
+    s_sd_bus_n = 0;
+    s_sd_bus_dueno = NULL;
+    xSemaphoreGive(s_sd_bus);
+}
 
 /* Handle de la tarea de streaming, para que operaciones externas que se sabe
  * que bloquean mucho rato (p.ej. el borrado/escritura de flash de una OTA)
  * puedan desuscribirla del Task Watchdog de ESP-IDF mientras dura, igual que
  * watchdog_suspend() ya hace con el watchdog SW propio del proyecto. */
 static TaskHandle_t s_cam_stream_task = NULL;
-
-/* Para escritores de SD externos: tomar/soltar el bus alrededor de su I/O a SD.
- * lock devuelve false si no lo consigue en timeout_ms (el que llama debe omitir la
- * escritura y reintentar luego). Si la camara no ha arrancado (mutex NULL) no hay
- * contencion -> permitir siempre. */
-bool camera_sd_bus_lock(uint32_t timeout_ms)
-{
-    if (!s_sd_bus) return true;
-    return xSemaphoreTake(s_sd_bus, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
-}
-void camera_sd_bus_unlock(void)
-{
-    if (s_sd_bus) xSemaphoreGive(s_sd_bus);
-}
 
 bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms)
 {
@@ -1145,6 +1230,25 @@ bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms)
     }
     return true;
 }
+
+/* ── Lectores que sueltan el cerrojo a mitad (ver camera.h) ──────────────────
+ *
+ * Cuenta de ficheros de SD abiertos por lectores TROCEADOS. atomicas porque las
+ * incrementa/decrementa cualquier tarea (httpd pesado, LVGL, la galeria) y las
+ * lee el cierre de tarjeta desde otra. */
+static _Atomic int s_sd_lectores = 0;
+
+void sd_reader_abrir(void) { s_sd_lectores++; }
+
+void sd_reader_cerrar(void)
+{
+    /* Nunca por debajo de cero: un doble cierre dejaria la cuenta negativa y
+     * "Soltar tarjeta" seguiria diciendo que hay lectores para siempre. */
+    int n = atomic_load(&s_sd_lectores);
+    if (n > 0) atomic_fetch_sub(&s_sd_lectores, 1);
+}
+
+int sd_reader_cuantos(void) { return atomic_load(&s_sd_lectores); }
 
 TaskHandle_t camera_stream_task_handle(void)
 {
@@ -1719,6 +1823,23 @@ static void camera_stream_task(void *arg)
          * automatico del ISP, que se reajusta en cada fotograma. Ponerlas a pelo
          * peleaba con el y dejaba la imagen quemada o negra segun la escena. */
 
+        /* PAUSA DEL BUCLE DURANTE LA RECUPERACION DEL SENSOR (16-oct-2026).
+         *
+         * s_cam_pausa se ponia a true en cam_recupera_task() "para que el AE del
+         * ISP deje de escribir en el sensor", pero NADIE lo leia: la pausa que el
+         * comentario de arriba declara imprescindible no existia. Ahora si: aqui,
+         * antes de sacar otro buffer, se espera a que termine la recuperacion.
+         *
+         * Esperar aqui es justo lo que hace falta, porque el GDMA solo se
+         * reactiva al QBUF (ver la nota de arriba): sin DQBUF los buffers se
+         * llenan, el GDMA se para por contrapresion y el AE deja de escribir en
+         * el sensor, que es lo que evita el cruce de escrituras I2C que dejaba el
+         * sensor sin responder (PID=0x0, comprobado el 4-oct-2026). */
+        if (s_cam_pausa) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
         struct v4l2_buffer b = { .type = type, .memory = V4L2_MEMORY_MMAP };
         if (ioctl(fd, VIDIOC_DQBUF, &b) != 0) {
             if (dqbuf_fails < CAM_DQBUF_FAIL_LIMIT) {
@@ -2036,11 +2157,17 @@ static esp_err_t camera_init_intento(void)
 
     ESP_LOGI(TAG, "esp_video_init OK - camara OV02C10 lista (/dev/video0)");
 
-    /* Cerrojo de bus camara<->SD + mutex del encoder JPEG (ANTES de arrancar la tarea). */
-    s_sd_bus = xSemaphoreCreateMutex();
+    /* Cerrojo de bus camara<->SD + mutex del encoder JPEG (ANTES de arrancar la tarea).
+     *
+     * EL DEL BUS SD YA NO SE CREA AQUI (16-oct-2026): lo crea
+     * camera_sd_bus_init() desde app_main, antes que nada, para que exista
+     * aunque la camara no arranque. Volver a crearlo aqui dejaria el puntero
+     * nuevo (y el contador de poseedor apuntando al viejo, con el mutex viejo
+     * perdido): la guarda de dentro lo evita. */
+    camera_sd_bus_init();
     s_jpeg_mutex = xSemaphoreCreateMutex();
     s_vig_mtx = xSemaphoreCreateMutex();   /* anillo de vigilancia: crear ANTES de arrancar las tareas */
-    if (!s_sd_bus || !s_jpeg_mutex || !s_vig_mtx) {
+    if (!s_jpeg_mutex || !s_vig_mtx) {
         ESP_LOGE(TAG, "no se pudieron crear los mutex de camara (sin heap) -> sin camara");
         return ESP_ERR_NO_MEM;
     }

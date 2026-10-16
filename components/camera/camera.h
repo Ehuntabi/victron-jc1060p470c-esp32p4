@@ -47,11 +47,25 @@ bool camera_reintentar(void);
  * false si aun no hay frame valido. Base del auto-brillo. */
 bool camera_get_luma(uint8_t *out_luma);
 
+/* Crea el cerrojo del bus camara<->SD. Llamar UNA VEZ desde app_main, ANTES de
+ * arrancar el portal y cualquier cosa que toque la tarjeta (16-oct-2026).
+ *
+ * Sin esto el mutex lo creaba camera_init(): si la camara no arrancaba, no
+ * existia, y camera_sd_bus_lock() devolvia true SIN TOMAR NADA -- el cerrojo se
+ * corrompia en cuanto la camara se recuperaba en un reintento. Es idempotente:
+ * llamarlo dos veces no hace nada. */
+void camera_sd_bus_init(void);
+
 /* Cerrojo de bus camara<->SD: los escritores de SD (datalogger/battery_history/log)
  * DEBEN envolver su I/O con estas para no solapar con el DMA de la camara (la
  * contencion en el controlador SDMMC provoca INT WDT -> reinicio). lock devuelve
  * false si no consigue el bus en timeout_ms (entonces omitir la escritura y reintentar
- * luego). Si la camara no esta arrancada (mutex no creado) permite siempre. */
+ * luego). Si el cerrojo no esta creado (arranque) permite siempre.
+ *
+ * unlock COMPRUEBA QUE LO TIENE QUIEN LO SUELTA (16-oct-2026): soltar un mutex
+ * que no se posee es un configASSERT (panic) en FreeRTOS, y ademas cuenta la
+ * profundidad, asi que un lock/unlock anidado del mismo dueno no suelta el bus
+ * antes de tiempo. */
 bool camera_sd_bus_lock(uint32_t timeout_ms);
 void camera_sd_bus_unlock(void);
 
@@ -66,6 +80,28 @@ void camera_sd_bus_unlock(void);
  * igual (mejor sin cerrojo que fuga de fd), solo que avisando. Detectado
  * auditando el 08-sep-2026. */
 bool camera_sd_bus_lock_wait(uint32_t total_timeout_ms);
+
+/* ── LECTORES DE SD QUE SUELTAN EL CERROJO A MITAD (16-oct-2026) ─────────────
+ *
+ * Los que leen un fichero GRANDE (el .tar de un viaje, un JPEG de vigilancia)
+ * sueltan el cerrojo del bus entre trozos para que la camara recupere su ventana
+ * de GDMA: si no, el bus queda tomado durante todo el envio, que por Wi-Fi puede
+ * durar minutos. Lo que no se puede es DESMONTAR la tarjeta en medio de uno de
+ * esos huecos: el lector se encuentra el descriptor cerrado y da el fichero por
+ * acabado (lectura corta), asi que el usuario se baja un .tar truncado o ve una
+ * foto a medias y el unico rastro es una linea en el log.
+ *
+ * Estas dos funciones son ese aviso: el lector las llama al abrir el fichero y
+ * al cerrarlo, y datalogger_close_sd() ("Soltar tarjeta") se niega a desmontar
+ * mientras haya alguno abierto. Son de CONTAR y ya: no toman ningun cerrojo (el
+ * cerrojo del bus lo sigue tomando el lector, como hasta ahora).
+ *
+ * REGLA: cada sd_reader_abrir() tiene que tener su sd_reader_cerrar(), pase lo
+ * que pase (tambien en los caminos de error), o "Soltar tarjeta" dejara de
+ * funcionar hasta el siguiente reinicio. */
+void sd_reader_abrir(void);
+void sd_reader_cerrar(void);
+int  sd_reader_cuantos(void);
 
 /* Handle de la tarea de streaming (NULL si la camara no arranco). Para que
  * operaciones que se sabe que bloquean mucho rato (p.ej. el borrado/escritura

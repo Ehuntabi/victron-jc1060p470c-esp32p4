@@ -927,6 +927,14 @@ static void finish_boot_splash(void)
  * periodico de telemetria al modo excedente solar del frigo. */
 static void init_camera_and_solar_feed(void)
 {
+    /* EL CERROJO DEL BUS SD, ANTES DE NADA (16-oct-2026): lo usan el datalogger,
+     * el historico de bateria, los logs, el portal entero y la propia camara, y
+     * hasta hoy lo creaba camera_init(). Si la camara no arrancaba (sensor que no
+     * contesta al encender), el cerrojo NO existia: camera_sd_bus_lock() devolvia
+     * true sin tomar nada y su unlock soltaba un mutex que la tarea no poseia en
+     * cuanto un reintento lo creaba -> panic o dos tareas dentro del bus a la
+     * vez. Creandolo aqui existe siempre, arranque la camara o no. */
+    camera_sd_bus_init();
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
