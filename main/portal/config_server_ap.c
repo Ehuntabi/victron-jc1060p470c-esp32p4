@@ -11,6 +11,7 @@
 #include "config_server_viaje.h"   /* viaje_flush_antes_de_reiniciar() */
 #include "ui/settings/restart_flush.h"   /* ui_flush_all_before_restart() */
 #include "esp_log.h"
+#include "esp_idf_version.h"   /* ESP_IDF_VERSION_VAL: ver dhcp_set_captiveportal_url() */
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_netif.h"
@@ -715,6 +716,19 @@ static void cfg_srv_ap_probe_req(void *arg, esp_event_base_t base,
     ap_off_timer_arm();
 }
 
+/* URL que se le anuncia al cliente por DHCP (opcion 114, "captive portal API").
+ *
+ * TIENE QUE VIVIR AQUI, NO EN LA PILA (16-oct-2026). lwIP NO COPIA la cadena:
+ * `dhcps_set_option_info()` hace `dhcps->dhcps_captiveportal_uri = (char *)opt_info`
+ * a secas (components/lwip/apps/dhcpserver/dhcpserver.c:326) y la usa despues,
+ * al armar CADA respuesta DHCP, con strlen()+memcpy (dhcpserver.c:504-510). Con
+ * el buffer local de antes, en cuanto dhcp_set_captiveportal_url() devolvia, el
+ * puntero apuntaba a la pila ya reutilizada: la opcion 114 salia con basura y el
+ * aviso de "portal cautivo" del movil no aparecia -- o, peor, se leia mas alla
+ * del buffer. Estatico y de fichero: la direccion no cambia nunca, asi que el
+ * puntero que se le dio a lwIP sigue siendo valido toda la vida del programa. */
+static char s_captive_uri[32];
+
 static void dhcp_set_captiveportal_url(void)
 {
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -726,20 +740,32 @@ static void dhcp_set_captiveportal_url(void)
     esp_netif_get_ip_info(netif, &ip_info);
     char ip_str[16];
     inet_ntoa_r(ip_info.ip.addr, ip_str, sizeof(ip_str));
-    char uri[32];
-    snprintf(uri, sizeof(uri), "http://%s", ip_str);
+    snprintf(s_captive_uri, sizeof(s_captive_uri), "http://%s", ip_str);
+
+    /* ESP_NETIF_CAPTIVEPORTAL_URI NO ES UN MACRO, ES UN ENUMERADO
+     * (esp_netif_dhcp_option_id_t = 114, ver esp_netif_types.h): un
+     * `#ifdef` sobre el es SIEMPRE falso, asi que la rama que de verdad
+     * configuraba el portal no se compilaba nunca y el log de despues decia
+     * "URL set" mintiendo. Aqui estaba el "el portal cautivo nunca se
+     * configura" (16-oct-2026). Se cambia el #ifdef por una prueba que el
+     * preprocesador SI puede hacer: la version de IDF en la que la opcion
+     * existe. En esta placa (IDF 5.5) entra siempre por la rama buena. */
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_stop(netif));
-#ifdef ESP_NETIF_CAPTIVEPORTAL_URI
-    ESP_ERROR_CHECK(esp_netif_dhcps_option(netif,
-                                           ESP_NETIF_OP_SET,
-                                           ESP_NETIF_CAPTIVEPORTAL_URI,
-                                           uri, strlen(uri)));
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+    esp_err_t ce = esp_netif_dhcps_option(netif,
+                                          ESP_NETIF_OP_SET,
+                                          ESP_NETIF_CAPTIVEPORTAL_URI,
+                                          s_captive_uri, strlen(s_captive_uri));
+    if (ce != ESP_OK)
+        ESP_LOGW(TAG, "no he podido anunciar el portal cautivo por DHCP (%s): "
+                      "el movil no ofrecera el aviso, el portal sigue abierto",
+                 esp_err_to_name(ce));
 #else
     /* ESP_NETIF_CAPTIVEPORTAL_URI not available on this IDF/target — skipped */
     ESP_LOGI(TAG, "Captive portal DHCP option not supported on this platform");
 #endif
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_start(netif));
-    ESP_LOGI(TAG, "DHCP captive portal URL set to %s", uri);
+    ESP_LOGI(TAG, "DHCP captive portal URL set to %s", s_captive_uri);
 }
 
 /**
