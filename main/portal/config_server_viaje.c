@@ -2326,7 +2326,14 @@ int viaje_borrar_carpeta(const char *nombre, char *motivo, size_t n)
         snprintf(motivo, n, "falta el nombre");
         return 400;
     }
-    if (strlen(nombre) > 96 || strchr(nombre, '/') || strstr(nombre, "..")) {
+    /* NI "." NI NADA QUE EMPIECE POR PUNTO (16-oct-2026, arbitraje). La guarda
+     * rechazaba '/' y "..", pero NO ".": con {"op":"borrar","carpeta":"."} la
+     * ruta quedaba en /sdcard/viajes/. y borrar_arbol() se llevaba por delante
+     * TODAS las carpetas de viaje (y el rmdir final fallaba, asi que ademas se
+     * contestaba 500 "no se pudo borrar todo"). Demostrado en host con la funcion
+     * real: las tres carpetas de prueba, borradas. */
+    if (strlen(nombre) > 96 || strchr(nombre, '/') || strstr(nombre, "..") ||
+        nombre[0] == '.') {
         ESP_LOGW(TAG, "borrar: nombre rechazado (%.40s)", nombre);
         snprintf(motivo, n, "nombre de carpeta no valido");
         return 400;
