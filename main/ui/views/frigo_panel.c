@@ -1029,6 +1029,17 @@ void ui_frigo_panel_update(ui_state_t *ui, const frigo_state_t *state)
         };
         for (int i = 0; i < 3; ++i) {
             if (!dds[i].dd) continue;
+            /* CERRAR LA LISTA ANTES DE CAMBIAR LAS OPCIONES (auditoria del
+             * 16-oct-2026). En LVGL 8.4 lv_dropdown_set_options() LIBERA el
+             * buffer de opciones anterior (lv_dropdown.c: la lista de la
+             * izquierda se sustituye), pero si el desplegable esta ABIERTO su
+             * lista es un lv_label con el texto en modo ESTATICO apuntando a ese
+             * mismo buffer: al reescanear las sondas con la lista desplegada
+             * -- frigo_init enumera 1-Wire de fondo y este bloque corre en cada
+             * refresco del panel -- el label se queda apuntando a memoria
+             * liberada y LVGL la lee al pintar: use-after-free (basura en
+             * pantalla o panic). Cerrarla primero deja el label sin ese puntero. */
+            lv_dropdown_close(dds[i].dd);
             lv_dropdown_set_options(dds[i].dd, opts);
             /* Sin el n_sensors>0, un rol ausente (FRIGO_SONDA_AUSENTE = 0xFF)
              * llegaba tal cual al dropdown cuando NO queda ninguna sonda. */

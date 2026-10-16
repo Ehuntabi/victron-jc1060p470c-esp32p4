@@ -47,7 +47,12 @@ static const char *TAG = "ota";
  * arrancada, camera_stream_task_handle() da NULL y esto no hace nada. */
 static void ota_wdt_suspend(bool suspend)
 {
-    watchdog_suspend(suspend);
+    /* dueno = true: la OTA es uno de los DOS usuarios de watchdog_suspend (el
+     * otro es el carrusel de capturas). Desde el 16-oct-2026 hay que decir quien
+     * es: solo el mismo dueño puede reanudar (asi el carrusel no reanuda por
+     * debajo de una OTA en curso) y una suspension que se quede colgada caduca
+     * sola a los 10 minutos. */
+    watchdog_suspend_ex(suspend, true);
 
     /* El borrado de esp_ota_begin (varios segundos) tambien puede impedir
      * que la tarea IDLE del nucleo que ejecuta este worker httpd llegue a

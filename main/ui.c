@@ -909,11 +909,37 @@ static void idle_to_live_timer_cb(lv_timer_t *t)
     ui_gallery_close();
 }
 
+/* Avisa a la UI de que el usuario ha hecho algo (un toque): reinicia el reloj
+ * del idle-to-live y despierta el salvapantallas, devolviendo el brillo.
+ *
+ * CON EL CERROJO DE LVGL (auditoria del 16-oct-2026). Esta funcion la llaman
+ * tambien tareas que NO son la de LVGL -- la del httpd, desde la OTA
+ * (ota_update.c:166 y :249) -- y todo lo que hay debajo es API de LVGL:
+ * lv_timer_reset y, por ui_settings_panel_on_user_activity -> screensaver_wake,
+ * lv_timer_del, lv_tabview_set_act y el cierre de pantallas y modales. Tocar las
+ * listas de LVGL (timers, objetos) desde dos tareas a la vez corrompe el heap y
+ * acaba en panic -- y la prueba de que hace falta es que el carrusel de capturas
+ * envuelve ESTA MISMA funcion en lvgl_port_lock() (capture_carousel.c:43-45).
+ *
+ * El mutex del port es RECURSIVO, asi que envolverla aqui no se bloquea cuando
+ * ya se tiene desde la tarea de LVGL ni desde el carrusel: solo añade el cerrojo
+ * cuando falta. Si no se consigue (300 ms), no se hace nada y se dice: es una
+ * comodidad de la UI (despertar la pantalla), no algo de lo que dependa un dato,
+ * y quedarse sin despertar el brillo es mucho mejor que corromper LVGL.
+ *
+ * El timeout es corto a proposito: esta funcion corre en la tarea del httpd, y
+ * un cerrojo de LVGL retenido mas de la cuenta la dejaria muda justo durante una
+ * OTA. */
 void ui_notify_user_activity(void)
 {
+    if (!lvgl_port_lock(300)) {
+        ESP_LOGW(TAG_UI, "actividad de usuario sin cerrojo de LVGL: no despierto la UI");
+        return;
+    }
     ui_state_t *ui = &g_ui;
     if (s_idle_to_live_timer) lv_timer_reset(s_idle_to_live_timer);
     ui_settings_panel_on_user_activity(ui);
+    lvgl_port_unlock();
 }
 
 /* ── Detalle a pantalla completa de una card del Overview ──────────────
