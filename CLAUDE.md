@@ -85,7 +85,12 @@ volver a investigarlos:
   Release en GitHub (16-oct-2026, "esto no puede pasar": la P4 quedo con la v4.38
   grabada y GitHub enseñando la v4.37). Para una prueba en el banco con algo sin
   publicar: `GRABAR_SIN_PUBLICAR=1 scripts/grabar.sh`.
-  A mano, sin las comprobaciones, sigue siendo `idf.py -p /dev/ttyACM0 flash`.
+  A mano, sin las comprobaciones, sigue siendo `idf.py -p /dev/ttyACM0 flash`,
+  pero es el camino por el que se grabo la v4.38 con la Release en la v4.37 (y el
+  que recompila antes de grabar): usa `scripts/grabar.sh`. Ese script comprueba
+  ADEMAS que el asset de la Release es el de ESTA version (nombre exacto y
+  sha256), que el chip del puerto es un ESP32-P4 (no una cabina) y, si el .bin de
+  aqui no es byte a byte el publicado, graba EL PUBLICADO.
   - **TRAMPA (6-oct-2026, costo media hora):** despues de una OTA la placa queda
     arrancando de la OTRA particion (`ota_1`, 0x410000), asi que un
     `write_flash ... 0x10000` se escribe en `ota_0` **y no arranca**: la placa

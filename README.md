@@ -216,7 +216,7 @@ git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 cd victron-jc1060p470c-esp32p4
 idf.py set-target esp32p4
 idf.py build
-idf.py -p /dev/ttyACM0 flash monitor
+scripts/grabar.sh /dev/ttyACM0   # graba lo PUBLICADO (y comprueba que lo esta)
 ```
 
 ### Configuración inicial
@@ -405,7 +405,7 @@ git clone https://github.com/Ehuntabi/victron-jc1060p470c-esp32p4
 cd victron-jc1060p470c-esp32p4
 idf.py set-target esp32p4
 idf.py build
-idf.py -p /dev/ttyACM0 flash monitor
+scripts/grabar.sh /dev/ttyACM0   # graba lo PUBLICADO (y comprueba que lo esta)
 ```
 
 ### First-time setup
