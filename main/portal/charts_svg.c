@@ -16,6 +16,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>       /* isfinite(): ver rango_grafica_seguro() y grid_paso_y_limites() */
 #include <sys/stat.h>
 #include <dirent.h>
 #include <time.h>
@@ -213,6 +214,80 @@ static void fmt_axis(char *out, size_t cap, float v)
     else                 snprintf(out, cap, "%.2f", v);
 }
 
+/* Deja el rango de un eje en algo PINTABLE (16-oct-2026).
+ *
+ * POR QUE EXISTE. El rango sale de restar dos floats que vienen de un CSV, y
+ * hasta hoy no se comprobaba NADA: ni que fueran finitos, ni que el rango
+ * cupiera en un float. Con una temperatura absurda (>=1e38, que es lo que sale
+ * de un sensor que contesta basura o de una linea del CSV con un numero
+ * disparatado) el rango se iba a infinito y el bucle de las gridlines no
+ * terminaba nunca de avanzar:
+ *
+ *   - `v += step` deja de avanzar cuando |v| > 2^24 * step (el float ya no
+ *     tiene bits para sumar algo tan pequeño): el bucle no termina NUNCA;
+ *   - y con step=inf, `v <= max + step` es siempre cierto con v=inf.
+ *
+ * Eso cuelga la tarea del httpd pesado (la que sirve /data/frigo y
+ * /data/bateria), el Task WDT la mata a los 10 s y la placa se reinicia: un
+ * bucle de reinicios que se repite en CADA peticion de esa grafica. Visto con
+ * ASan/UBSan en host (auditoria del 16-oct-2026).
+ *
+ * Si el rango no es creible se cae a [0,100], que es un eje valido y feo: antes
+ * un dato malo tumbaba la placa, ahora se ve una grafica rara y se sigue. */
+static void rango_grafica_seguro(float *lo, float *hi, float respaldo_lo, float respaldo_hi)
+{
+    if (!isfinite(*lo) || !isfinite(*hi) || !(*hi > *lo) || (*hi - *lo) > 1.0e6f) {
+        ESP_LOGW(TAG, "rango de eje no utilizable (%.3g .. %.3g): uso %.3g .. %.3g",
+                 (double)*lo, (double)*hi, (double)respaldo_lo, (double)respaldo_hi);
+        *lo = respaldo_lo;
+        *hi = respaldo_hi;
+    }
+}
+
+/* Ayudante para el bucle de gridlines de los DOS graficos.
+ *
+ * Los dos lo tenian copiado igual, y el fallo (bucle infinito con datos no
+ * finitos) estaba en los dos: con un solo sitio donde calcular el paso, un
+ * arreglo futuro no se queda a medias en uno de ellos.
+ *
+ * Devuelve el paso y deja en *inicio y *fin los extremos del recorrido. El
+ * porque de cada guarda esta en el comentario del bucle que lo usa. */
+static bool grid_paso_y_limites(float lo, float hi, float *paso,
+                                float *inicio, float *fin, int *vueltas)
+{
+    if (!isfinite(lo) || !isfinite(hi) || !(hi > lo)) return false;
+
+    float step = nice_step(hi - lo);
+    if (!isfinite(step) || step <= 0.0f) step = 1.0f;   /* 0 o inf no avanzan */
+
+    /* Empezar en un multiplo de step <= lo. El (int) puede desbordar con un lo
+     * enorme, asi que se acota ANTES de convertirlo. */
+    float base = lo / step;
+    if (base < -1.0e6f) base = -1.0e6f;
+    if (base >  1.0e6f) base =  1.0e6f;
+
+    *paso    = step;
+    *inicio  = (float)((int)base - 1) * step;
+    *fin     = hi + step;
+    *vueltas = 512;
+    return true;
+}
+
+/* Rotulos de los DOS ejes, con su unidad. */
+static void rotulo_grados(char *out, size_t cap, float v)
+{
+    char n[16];
+    fmt_axis(n, sizeof(n), v);
+    snprintf(out, cap, "%s°", n);
+}
+
+static void rotulo_amperios(char *out, size_t cap, float v)
+{
+    char n[16];
+    fmt_axis(n, sizeof(n), v);
+    snprintf(out, cap, "%s A", n);
+}
+
 /* Append seguro con formato a 'buf' (tamaño 'cap') a partir de 'sp'. Devuelve
  * el nuevo 'sp'. Sustituye al idiom inseguro 'sp += snprintf(buf+sp, cap-sp,..)':
  * snprintf devuelve lo que HABRIA escrito, no lo truncado, asi que al llenarse
@@ -324,22 +399,41 @@ static void build_frigo_html(const char *csv,
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%' style='max-width:100%%'>"
         "<rect x='0' y='0' width='%d' height='%d' fill='#111' rx='8'/>",
         W, H, W, H);
-    /* Gridlines de temperatura con auto-step */
-    float step = nice_step(t_range);
-    /* Empezar en múltiplo de step <= t_min */
-    float start = (float)((int)(t_min / step) - 1) * step;
-    char num[16];
-    for (float v = start; v <= t_max + step; v += step) {
-        if (v < t_min - step * 0.01f) continue;
-        int yy = Y_TEMP_AS(v);
-        if (yy < pad_t || yy > H - pad_b) continue;
-        sp = svg_vappend(svg, svg_cap, sp,
-            "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
-            pad_l, yy, W - pad_r, yy);
-        fmt_axis(num, sizeof(num), v);
-        sp = svg_vappend(svg, svg_cap, sp,
-            "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s°</text>",
-            pad_l - 4, yy + 4, num);
+    /* El rango, saneado ANTES de calcular ninguna 'y': ver
+     * rango_grafica_seguro(). Aqui estaba el bucle que colgaba la tarea. */
+    rango_grafica_seguro(&t_min, &t_max, 0.0f, 100.0f);
+    t_range = t_max - t_min;
+
+    /* Gridlines de temperatura con auto-step.
+     *
+     * 'v' se CALCULA de 'k' en vez de acumularse con v += step (auditoria del
+     * 16-oct-2026): acumulando, cuando |v| pasa de 2^24 * step el float ya no
+     * puede sumar algo tan pequeño, v deja de cambiar y el bucle se queda
+     * dando vueltas PARA SIEMPRE -- la tarea del httpd pesado colgada, Task WDT
+     * a los 10 s y reinicio en CADA peticion de /data/frigo. Hacia falta que
+     * llegara un no finito (>=1e38, un "inf" del CSV) para entrar ahi.
+     * Las 512 vueltas son un tope de seguridad: un eje de 0 a 100 con paso 0.2
+     * son 500, asi que ninguna grafica decente lo alcanza. */
+    {
+        float paso = 0, ini_v = 0, fin_v = 0;
+        int vueltas = 0;
+        if (grid_paso_y_limites(t_min, t_max, &paso, &ini_v, &fin_v, &vueltas)) {
+            char num[24];
+            for (int k = 0; k < vueltas; k++) {
+                float v = ini_v + (float)k * paso;
+                if (v > fin_v) break;
+                if (v < t_min - paso * 0.01f) continue;   /* por debajo del eje */
+                int yy = Y_TEMP_AS(v);
+                if (yy < pad_t || yy > H - pad_b) continue;
+                sp = svg_vappend(svg, svg_cap, sp,
+                    "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
+                    pad_l, yy, W - pad_r, yy);
+                rotulo_grados(num, sizeof(num), v);
+                sp = svg_vappend(svg, svg_cap, sp,
+                    "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s</text>",
+                    pad_l - 4, yy + 4, num);
+            }
+        }
     }
     /* Eje derecho fan 0/50/100 */
     for (int v = 0; v <= 100; v += 25) {
@@ -595,21 +689,36 @@ static void build_bateria_html(const char *csv,
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 %d %d' width='100%%' style='max-width:100%%'>"
         "<rect x='0' y='0' width='%d' height='%d' fill='#111' rx='8'/>",
         W, H, W, H);
-    /* Gridlines auto */
-    float step = nice_step(a_range);
-    float start = (float)((int)(a_min / step) - 1) * step;
-    char num[16];
-    for (float v = start; v <= a_max + step; v += step) {
-        if (v < a_min - step * 0.01f) continue;
-        int yy = Y_BAT_AS(v);
-        if (yy < pad_t || yy > H - pad_b) continue;
-        sp = svg_vappend(svg, svg_cap, sp,
-            "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
-            pad_l, yy, W - pad_r, yy);
-        fmt_axis(num, sizeof(num), v);
-        sp = svg_vappend(svg, svg_cap, sp,
-            "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s A</text>",
-            pad_l - 4, yy + 4, num);
+    /* El rango, saneado ANTES de calcular ninguna 'y': ver
+     * rango_grafica_seguro(). Este es el mismo bucle que el del frigo, y
+     * tenia el mismo fallo (la bateria tambien puede mandar un numero
+     * disparatado desde su CSV). */
+    rango_grafica_seguro(&a_min, &a_max, -10.0f, 10.0f);
+    a_range = a_max - a_min;
+
+    /* Gridlines auto. Mismo bucle y mismas guardas que el del frigo: este tenia
+     * EL MISMO fallo de bucle infinito (la bateria tambien puede mandar un
+     * numero disparatado desde su CSV). */
+    {
+        float paso = 0, ini_v = 0, fin_v = 0;
+        int vueltas = 0;
+        if (grid_paso_y_limites(a_min, a_max, &paso, &ini_v, &fin_v, &vueltas)) {
+            char num[24];
+            for (int k = 0; k < vueltas; k++) {
+                float v = ini_v + (float)k * paso;
+                if (v > fin_v) break;
+                if (v < a_min - paso * 0.01f) continue;
+                int yy = Y_BAT_AS(v);
+                if (yy < pad_t || yy > H - pad_b) continue;
+                sp = svg_vappend(svg, svg_cap, sp,
+                    "<line x1='%d' y1='%d' x2='%d' y2='%d' stroke='#222'/>",
+                    pad_l, yy, W - pad_r, yy);
+                rotulo_amperios(num, sizeof(num), v);
+                sp = svg_vappend(svg, svg_cap, sp,
+                    "<text x='%d' y='%d' fill='#888' font-size='12' text-anchor='end'>%s</text>",
+                    pad_l - 4, yy + 4, num);
+            }
+        }
     }
     /* Eje cero destacado */
     if (a_min < 0 && a_max > 0) {
