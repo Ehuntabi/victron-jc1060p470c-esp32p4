@@ -83,7 +83,7 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 # ── 1) working tree limpio (ignorando el churn conocido de dependencies.lock) ─
-git checkout dependencies.lock 2>/dev/null || true
+git checkout dependencies.lock sdkconfig 2>/dev/null || true
 if [ -n "$(git status --porcelain | grep -v 'dependencies.lock' || true)" ]; then
   echo "ERROR: tienes cambios sin commitear. Haz commit antes de releasear:"
   git status --short

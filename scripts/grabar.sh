@@ -111,7 +111,7 @@ cd "$REPO"
 # usa OTA; la P4 no.
 #
 # ── 1) arbol limpio (dependencies.lock se reescribe solo en cada build) ──────
-git checkout dependencies.lock 2>/dev/null || true
+git checkout dependencies.lock sdkconfig 2>/dev/null || true
 SUCIO="$(git status --porcelain | grep -v 'dependencies.lock' || true)"
 if [ -n "$SUCIO" ]; then
     echo "NO GRABO: hay cambios sin commitear. Lo que se graba tiene que estar"
