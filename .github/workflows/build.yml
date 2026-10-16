@@ -51,10 +51,17 @@ jobs:
       # cJSON, y aqui se le da.
       - name: Bajar el cJSON del IDF (para el test de propiedad del viaje)
         run: |
-          git clone --depth 1 --branch v5.5.5 --filter=blob:none --sparse \
-            https://github.com/espressif/esp-idf.git /tmp/idf
-          cd /tmp/idf && git sparse-checkout set components/json/cJSON
-          ls components/json/cJSON/cJSON.c
+          # cJSON NO es una carpeta del IDF: es un SUBMODULO suyo
+          # (components/json/cJSON -> DaveGamble/cJSON). Un clon disperso del IDF
+          # deja ahi el enlace del submodulo, no el codigo, y `git sparse-checkout
+          # set` aborta con "is not a directory" (exit 128, visto en el run
+          # 38957404979). Se clona su repositorio a la version que el IDF 5.5.5
+          # fija (1.7.19, ver .gitmodules del IDF) directamente donde el test lo
+          # busca.
+          mkdir -p /tmp/idf/components/json
+          git clone --depth 1 --branch v1.7.19 \
+            https://github.com/DaveGamble/cJSON.git /tmp/idf/components/json/cJSON
+          ls /tmp/idf/components/json/cJSON/cJSON.c
 
       - name: Test del protocolo mini_proto y de la propiedad del viaje
         run: IDF_PATH=/tmp/idf bash test/run.sh

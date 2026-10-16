@@ -26,12 +26,14 @@ if [ -z "$IDF" ]; then
     # el test que cubre la propiedad del viaje y el id_rezagado, y en el runner de
     # GitHub no hay arbol de IDF (la accion de ESP-IDF compila en Docker), asi que
     # imprimia "SKIP" y salia 0 -- el step se veia verde sin probar nada. El
-    # workflow baja el cJSON con un clon disperso y le pasa IDF_PATH; si algun dia
-    # deja de hacerlo, esto tiene que ponerse ROJO, no saltarse.
+    # workflow clona el repositorio de cJSON (es un SUBMODULO del IDF, no una
+    # carpeta suya) en /tmp/idf y le pasa IDF_PATH; si algun dia deja de hacerlo,
+    # esto tiene que ponerse ROJO, no saltarse.
     if [ -n "${CI:-}" ]; then
         echo "ERROR test_viaje_dueno: en CI no hay cJSON del IDF y este test NO se puede saltar."
-        echo "      El workflow tiene que bajar components/json/cJSON del arbol de IDF"
-        echo "      (git sparse-checkout) y llamar a este test con IDF_PATH apuntando ahi."
+        echo "      El workflow tiene que traer components/json/cJSON (el repo de"
+        echo "      DaveGamble/cJSON, que es un submodulo del IDF) y llamar a este"
+        echo "      test con IDF_PATH apuntando ahi."
         exit 2
     fi
     echo "SKIP test_viaje_dueno: no encuentro el cJSON del IDF (define IDF_PATH)"
