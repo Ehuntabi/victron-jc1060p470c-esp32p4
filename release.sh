@@ -82,8 +82,26 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+# ── ¿estamos en una rama? (un HEAD desprendido no se puede publicar) ────────
+# `git push origin "$(git branch --show-current)"` con HEAD desprendido deja el
+# refspec vacio y el push muere con un error críptico ("refspec inválido: ''")
+# DESPUÉS de haber creado el tag. Se mira aquí, con lo demás (16-oct-2026).
+if [ -z "$(git branch --show-current)" ]; then
+    echo "ERROR: HEAD está desprendido (detached): no sé a qué rama subir el código."
+    echo "       Ponte en la rama de trabajo (git switch main) y vuelve a lanzarlo."
+    exit 1
+fi
+
 # ── 1) working tree limpio (ignorando el churn conocido de dependencies.lock) ─
-git checkout dependencies.lock sdkconfig 2>/dev/null || true
+# sdkconfig se reescribe solo en cada build, asi que se restaura ANTES de mirar
+# si el arbol esta limpio. OJO con hacerlo en UNA sola orden: en cabina5
+# dependencies.lock NO esta versionado (esta en .gitignore) y `git checkout a b`
+# aborta ENTERO si un pathspec no existe... con el `|| true` eso pasaba
+# desapercibido y sdkconfig NO se restauraba, asi que cualquier churn del build
+# dejaba el arbol "sucio" y el script se negaba a grabar/publicar (auditoria del
+# 16-oct-2026). Dos ordenes separadas: cada una hace lo que puede.
+git checkout -- sdkconfig 2>/dev/null || true
+git checkout -- dependencies.lock 2>/dev/null || true
 if [ -n "$(git status --porcelain | grep -v 'dependencies.lock' || true)" ]; then
   echo "ERROR: tienes cambios sin commitear. Haz commit antes de releasear:"
   git status --short
@@ -197,7 +215,31 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "          --notes-from-tag \"build/$OUT\" \"$APP_CON_TAG\""
   exit 1
 elif gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
-  echo "[ok] la Release $TAG ya existe, no la toco"
+  # La Release YA existía: antes esto decía "[ok] no la toco" y seguía, así que
+  # una Release a la que le faltara el .bin (creada a mano, o con el asset
+  # borrado) acababa en "PUBLICADO" -- y luego scripts/grabar.sh se negaba a
+  # grabar sin decir por qué. Ahora se comprueban SUS DOS assets (el app-bin de
+  # OTA y la imagen completa) y se sube el que falte (auditoría del 16-oct-2026).
+  echo "[ok] la Release $TAG ya existe, compruebo sus assets"
+  ASSETS="$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+  for a in "$(basename "$APP_CON_TAG")" "$OUT"; do
+    if printf '%s\n' "$ASSETS" | grep -qxF "$a"; then
+      echo "[ok] la Release $TAG ya tiene $a"
+      continue
+    fi
+    echo "[..] le falta $a (tiene: ${ASSETS:-nada}); lo subo"
+    SUBIR_A="build/$a"
+    [ -f "$SUBIR_A" ] || { echo "ERROR: no encuentro $SUBIR_A para subirlo"; exit 1; }
+    gh release upload "$TAG" -R "$REPO" "$SUBIR_A" || true
+    ASSETS="$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+    if ! printf '%s\n' "$ASSETS" | grep -qxF "$a"; then
+      echo
+      echo "ERROR: la Release $TAG sigue sin '$a' (visto: ${ASSETS:-nada}). Súbelo a mano:"
+      echo "  gh release upload $TAG -R $REPO \"$SUBIR_A\""
+      exit 1
+    fi
+    echo "[ok] subido $a"
+  done
 else
   # Las notas SALEN DEL HISTORIAL, no de un fichero a mano.
   #
@@ -286,6 +328,7 @@ rm -f "$RELDIR"/joint-spl-145-control-v*-esp32p4-full.bin \
 mv "build/$OUT" "$RELDIR/"
 mv "$APP_CON_TAG" "$RELDIR/joint-spl-145-control-$TAG-app.bin"
 echo "[ok] $RELDIR actualizado (full + app de $TAG), version anterior borrada"
+echo "[ok] sha256 del app-bin publicado: $(sha256sum "$RELDIR/joint-spl-145-control-$TAG-app.bin" | awk '{print $1}')"
 
 # ── 7) lo que queda por hacer a mano ────────────────────────────────────────
 cat <<EOF
@@ -293,7 +336,13 @@ cat <<EOF
 ────────────────────────────────────────────────────────────────────────────
 PUBLICADO: código, tag y Release de $TAG. Solo queda grabar:
 
-  idf.py -p /dev/ttyACM0 flash
+  scripts/grabar.sh /dev/ttyACM0
+
+  # (eso comprueba que la version esta publicada, que el asset de la Release es
+  #  el de ESTA version -- nombre y sha256 -- y que en el puerto hay una P4, no
+  #  una cabina. A mano, sin comprobaciones, sigue estando `idf.py -p PUERTO
+  #  flash`, pero es el camino por el que se grabo la v4.38 con la Release en la
+  #  v4.37: mejor el script.)
 
   # OTA por el portal Wi-Fi: sube $RELDIR/joint-spl-145-control-$TAG-app.bin
 ────────────────────────────────────────────────────────────────────────────
@@ -305,5 +354,5 @@ Unico .bin de cada tipo en $RELDIR (firmware full + app-bin para OTA).
     huecos esta la NVS: grabarlo desde el principio BORRA TODOS LOS AJUSTES
     guardados (umbrales del frigo, red Wi-Fi, claves Victron, calibraciones...)
     y todo vuelve a los valores de fabrica del programa.
-    Para actualizar: "idf.py -p PUERTO flash" o el app-bin por OTA.
+    Para actualizar: "scripts/grabar.sh PUERTO" o el app-bin por OTA.
 EOF
