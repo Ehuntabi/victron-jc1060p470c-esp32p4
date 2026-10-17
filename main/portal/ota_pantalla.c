@@ -267,6 +267,26 @@ typedef struct {
     char     sha256[65];
 } pantalla_fw_info_t;
 
+/* CACHE del sha256 por modelo (17-oct-2026).
+ *
+ * Hashar los dos .bin en CADA llamada son ~2-3 s del servidor LIGERO, y ese
+ * endpoint lo pide una pantalla al arrancar y cada vez que el usuario pulsa
+ * "Actualizar pantalla": mientras tanto el portal (80) no contesta otra cosa.
+ * El sha256 solo depende del CONTENIDO, asi que se guarda junto con la fecha y
+ * el tamano del fichero -- que es lo que cambia cuando se sube otro -- y solo se
+ * recalcula cuando esos cambian. La subida no necesita invalidar nada: al
+ * publicar el .bin nuevo cambian fecha y tamano.
+ *
+ * Si un modelo no esta en la cache o no cuadra, se calcula y se apunta. */
+typedef struct {
+    bool     hay;
+    time_t   mtime;
+    off_t    size;
+    pantalla_fw_info_t info;
+} pantalla_cache_t;
+
+static pantalla_cache_t s_cache[PANTALLA_NUM_MODELOS];
+
 /* Lee version, tamano y sha256 de un .bin. Devuelve false si no hay fichero, si
  * no es valido para ese modelo o si la tarjeta no deja leerlo.
  *
@@ -280,6 +300,9 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
     memset(out, 0, sizeof(*out));
     if (!datalogger_sd_montada()) return false;
 
+    const size_t idx = (size_t)(m - s_modelos);
+    if (idx >= PANTALLA_NUM_MODELOS) return false;
+
     struct stat st;
     FILE *f = NULL;
     if (!camera_sd_bus_lock(3000)) {
@@ -288,6 +311,14 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
     }
     const bool existe = (stat(m->ruta, &st) == 0 && S_ISREG(st.st_mode) &&
                          st.st_size > 0);
+
+    /* Atajo de la cache: mismo fichero (fecha y tamano) que la ultima vez. */
+    if (existe && s_cache[idx].hay && s_cache[idx].mtime == st.st_mtime &&
+        s_cache[idx].size == st.st_size) {
+        camera_sd_bus_unlock();
+        *out = s_cache[idx].info;
+        return true;
+    }
     if (existe && (uint64_t)st.st_size > (uint64_t)PANTALLA_MAX_BYTES) {
         camera_sd_bus_unlock();
         ESP_LOGW(TAG, "info %s: %lld bytes, mas que el tope; no lo anuncio",
@@ -380,6 +411,12 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
     memcpy(out->ver, ver, sizeof(out->ver));
     out->ver[sizeof(out->ver) - 1] = '\0';
     pantalla_sha256_hex(hash, out->sha256);
+
+    /* A la cache, para no volver a hashearlo en la siguiente pregunta. */
+    s_cache[idx].hay   = true;
+    s_cache[idx].mtime = st.st_mtime;
+    s_cache[idx].size  = st.st_size;
+    s_cache[idx].info  = *out;
     return true;
 }
 
