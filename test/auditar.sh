@@ -293,7 +293,11 @@ for h in $(grep -rhoE '\.handler[[:space:]]*=[[:space:]]*[A-Za-z_][A-Za-z0-9_]*'
     if ! awk -v fn="$h" '
         index($0, "esp_err_t " fn "(httpd_req_t") > 0 { dentro = 1 }
         dentro {
-            if (index($0, "REQUIRE_AUTH") > 0) { encontrado = 1 }
+            # Tres formas validas de pedir la clave: las dos macros y la
+            # llamada directa que usan los que necesitan su propio aviso
+            # (borrar un viaje, subir el firmware de una pantalla).
+            if (index($0, "REQUIRE_AUTH") > 0 ||
+                index($0, "check_basic_auth_strict_aviso") > 0) { encontrado = 1 }
             n = gsub(/\{/, "{"); m = gsub(/\}/, "}")
             llaves += n - m
             if (llaves <= 0 && index($0, "}") > 0) { dentro = 0 }
