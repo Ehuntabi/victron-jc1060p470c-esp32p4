@@ -61,11 +61,19 @@ Los tokens viven en `main/ui/widgets/ui_style.h` (una sola fuente de verdad).
 
 Reglas:
 
-1. **Cero `lv_color_hex()` fuera de `ui_style.h`.** Si falta un color, se añade
-   un token (con nombre y motivo), no un literal. **Aplicado el 4-oct-2026**: los
-   **59 colores distintos / 203 literales** que había repartidos en 18 ficheros se
-   colapsaron a los 14 tokens (el único fichero con `lv_color_hex` es ahora
-   `ui_style.h`), y la auditoría falla si vuelve a aparecer uno.
+1. **Cero literales `lv_color_hex(0x...)` fuera de `ui_style.h`.** Si falta un
+   color, se añade un token (con nombre y motivo), no un literal. **Aplicado el
+   4-oct-2026**: los **59 colores distintos / 203 literales** que había repartidos
+   en 18 ficheros se colapsaron a los 14 tokens. Ojo con cómo se dice: `lv_color_hex()`
+   **sí se usa en 11 ficheros** (46 llamadas: `ui_style.h` 16, `settings_gps.c` 9,
+   `settings_panel.c` 5, `battery_history_screen.c`/`frigo_panel.c`/`view_solar_history.c`
+   3 cada uno, `splash.c`/`ui.c` 2, `alarma_estado.c`/`bombona_card.c`/`ui_card.h` 1),
+   pero con **variables** (tokens, colores calculados), que es lo correcto. Lo que
+   la auditoría prohíbe y cuenta es el **literal** `lv_color_hex(0x...)` fuera de
+   `ui_style.h`; hoy hay **0** dentro de lo que vigila (`main/ui` y `main/ui.c`).
+   Matiz: quedan 3 literales fuera de ese barrido (`alarma_estado.c:257`,
+   `splash.c:41,73`) y algún literal dentro de un ternario (p. ej.
+   `bombona_card.c:85`), que la regla no ve; si se tocan, usar tokens.
 2. **Un solo tono por significado.** Tonos que se colapsaron (medidos en pantalla
    antes del cambio):
 

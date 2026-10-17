@@ -66,7 +66,7 @@ el reemplazo no funciona aunque el firmware sea correcto.
 | Baudios | **38400** |
 | Formato | 8N1 |
 | Transceptor | ADM485JRZ (mismo chip en NE187 y NE185) |
-| Cadencia poll | ~100 ms (16 Hz) en nuestro firmware; el NE187 original ~60–100 ms |
+| Cadencia poll | 100 ms (10 Hz) en nuestro firmware (`POLL_PERIOD_MS`); el NE187 original ~60–100 ms |
 | Bias | pull-up A→+5V 680Ω, pull-down B→GND 680Ω, terminación A-B ≈120Ω |
 
 Referencia de tensión del bias: **+5V del ESP**, NO los 12V de batería (el
@@ -243,26 +243,39 @@ eliminó (era el artefacto de responder al poll erróneo).
 
 ## 8. Modos de operación del firmware
 
-| Modo | `s_polling_paused` | Qué hace | Para qué |
-|------|--------------------|----------|----------|
-| **MASTER** | `false` (default) | Sondea (alternancia) y **parsea a la UI** | Reemplazar al NE187 |
-| **SNIFF**  | `true`  | Read-only: NO transmite, **loguea** POLL/RESP/RAW | Ingeniería inversa con el NE187 puesto |
+**Hoy hay UN solo modo: maestro.** El P4 sondea siempre (alternando los dos
+comandos idle cada 100 ms) y parsea a la UI; no existe `s_polling_paused` ni un
+conmutador MASTER/SNIFF en pantalla. El modo sniff y la página "Consola" que lo
+llevaba **se retiraron** (ver el comentario de `autostart_switch_cb` en
+`settings_panel.c`: "instrumental NE185 ya retirado"); `main/ui/settings_logs_panel.c`
+no existe. Esta tabla es histórica, de cuando se hizo la ingeniería inversa:
 
-Se conmuta desde **Settings → Logs → botón "MASTER MODE" ⟷ "SNIFF ON"**
-(`main/ui/settings_logs_panel.c`). NB: está en la página **Logs**, no en Consola.
+| Modo (histórico) | Qué hacía | Para qué |
+|------|----------|----------|
+| **MASTER** | Sondea (alternancia) y **parsea a la UI** | Reemplazar al NE187 |
+| **SNIFF**  | Read-only: NO transmitía, **logueaba** POLL/RESP/RAW | Ingeniería inversa con el NE187 puesto |
 
-### Logs del modo SNIFF (capturados a fichero vía pyserial)
+### Logs del modo SNIFF (histórico: ya no existen)
+
 - `POLL t=…: FF 40 00 00 3F` — poll detectado (5 B, checksum FF), nivel W.
 - `RESP t=…: <20 bytes> clean(b5)=.. grey(b7)=.. shore(b16)=..` — respuesta válida.
 - `RAW n=40: <hex>` — volcado crudo del buffer (dedup vs anterior), para ver la
   respuesta completa sea cual sea su formato.
 
+**Lo que sí hay hoy para diagnosticar el NE185** (sin sniff y sin consola):
+`main/ne185_vlog.c` apunta una muestra por minuto en `/sdcard/ne185v/AAAA-MM-DD.csv`
+con los bytes 12/13 **crudos** junto al voltaje del SmartShunt, y se descarga en
+`/data/ne185v.csv`. Los avisos van al log normal (`ESP_LOGW`), no a un volcado hex.
+
 ---
 
-## 9. Cómo capturar el bus (workflow de banco)
+## 9. Cómo capturar el bus (workflow de banco, histórico)
 
 1. **Hardware:** NE187 + NE185 en el bus, P4 enchufado en paralelo (con su bias).
-2. **Firmware:** poner el P4 en **SNIFF ON** (Settings → Logs).
+2. **Firmware:** entonces había que poner el P4 en **SNIFF ON** (Settings → Logs);
+   **hoy ese modo no existe**, así que el P4 también sondearía y se pelearía con el
+   NE187. Para un sniff pasivo de verdad hace falta otro firmware o un analizador
+   de bus.
 3. **Captura a fichero** con pyserial (NO `idf.py monitor`):
    ```bash
    PY=~/.espressif/python_env/idf5.4_py3.12_env/bin/python   # tiene pyserial
@@ -270,7 +283,8 @@ Se conmuta desde **Settings → Logs → botón "MASTER MODE" ⟷ "SNIFF ON"**
    ```
    (`cap.py`: abre el puerto a 115200, lee líneas N segundos y vuelca a stdout.)
 4. **Para reemplazar al NE187:** desconectar el NE187, conectar la **placa de
-   bias**, poner el P4 en **MASTER MODE**. Los tanques deben salir en Overview.
+   bias** y dejar que el P4 sondee (es maestro siempre). Los tanques deben salir
+   en Overview.
 
 > En el portátil el puerto es **/dev/ttyACM0** (no ttyACM1). Build/flash con
 > `. ~/.espressif/esp-idf-5.5/export.sh` (ESP-IDF v5.5.5).
@@ -347,7 +361,8 @@ garaje, encender luz interior + bomba. Ahora el P4 lo hace solo.
 **Persistencia / UI:**
 - Flag en NVS (namespace `ne185`, key `autostart`), **default OFF**.
   `load_autostart_loads()` / `save_autostart_loads()` en `config_storage`.
-- Toggle **`⏻ AUTO ON/OFF`** en **Settings → Consola** (junto a MASTER/SNIFF/LOG).
+- Tarjeta **"Auto-encendido (luz + bomba)"** en **Settings → Autocaravana** (la
+  antigua página "Consola", con MASTER/SNIFF/LOG, ya no existe).
 - API: `ne185_set_autostart(bool)` (persiste) / `ne185_get_autostart()`.
 
 **Verificado en condiciones reales (2026-06-24):** P4 a batería, USB fuera, ciclo

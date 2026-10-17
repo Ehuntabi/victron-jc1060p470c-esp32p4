@@ -87,8 +87,14 @@ idf.py -p /dev/ttyACM0 flash monitor   # flash + serial monitor
 ```bash
 victron
 # editar código
-idf.py flash monitor   # rebuild incremental + flash + monitor en uno
+scripts/grabar.sh        # compila y graba SOLO si lo que se graba esta publicado
+idf.py monitor           # el log, aparte (grabar.sh no abre el monitor)
 ```
+
+Ojo: desde el 16-oct-2026 el camino es `scripts/grabar.sh` (exige árbol limpio,
+tag y Release con el asset exacto; ver `CLAUDE.md`). Para una prueba en el banco
+con algo sin publicar: `GRABAR_SIN_PUBLICAR=1 scripts/grabar.sh`. `idf.py flash`
+sigue existiendo, pero se salta esas comprobaciones (y recompila antes de grabar).
 
 ### Si pierdes el entorno (terminal nueva):
 
@@ -104,11 +110,13 @@ get_idf      # alias que ejecuta . ~/.espressif/esp-idf-5.5/export.sh
 
 **Hardware en autocaravana**: pantalla DSI 1024x600, conectada al sistema RS-485 NE185.
 
-**Estado al 28-may-2026**:
+**Estado al 28-may-2026** (histórico; lo que ya está resuelto va marcado):
 - ✅ Luces interior/exterior/bomba **se encienden** vía RS-485 (test 28-may 7:42)
 - ❌ Luces **no se apagan** tras encenderse (probable `FF 01 00 C0 C0` es "set ON" no toggle)
 - ⚠️ Tanks de agua: NO aparecen (frame15 degradado con header `F8 E0`)
-- ✅ 230V shore: detectado (bit 4 de b[10] confirmado)
+- ✅ 230V shore: detectado. **Corregido**: el 28-may se anotó "bit 4 de b[10]", pero
+  hoy el código lo lee en **`b[16] & 0x01`** (`main/ne185/ne185.c:240`); el bit 7 de
+  `b[15]` es un latido del poll, no la señal de red.
 - ❌ Orion Tr 12/12-30 DC/DC: NO llega al P4 (parser idéntico al de pantalla 3.5 que SÍ recibe)
 
 **Lo primero que hay que hacer en la autocaravana**:
@@ -220,7 +228,7 @@ Ya cubierto en sección 3.1 punto 3.
 
 ```bash
 idf.py erase-flash    # cuidado, borra TODO incluyendo bootloader
-# Luego flash normal:
+# Luego graba normal: scripts/grabar.sh (recomendado) o, en el banco,
 idf.py flash monitor
 # Reconfigurar WiFi/MAC/keys desde la web UI del ESP32
 ```
@@ -436,11 +444,15 @@ Tipos: `feat`, `fix`, `refactor`, `docs`, `chore`, `diag` (diagnostic logging), 
 
 ### 9.2 Si el ESP no entra en modo flash automaticamente
 - Mantener BOOT pulsado mientras pulsas RESET
-- O añadir `--before=default_reset --after=hard_reset` al `idf.py flash`
+- O añadir `--before=default_reset --after=hard_reset` al `idf.py flash` (el
+  camino normal desde el 16-oct-2026 es `scripts/grabar.sh`, que ya lo usa)
 
 ### 9.3 NE187 panel (físico)
 - Debe estar conectado al mismo bus RS-485 que el ESP32-P4
-- Polling 60ms, hold 2+ frames, checksum (b5+b9+b14+b15+0xB1)
+- Polling del P4: **100 ms** (10 Hz), **8 tramas** de pulsación (al NE185 le bastan 2)
+- Checksum real: **`b[19] = suma(b[5..b18]) & 0xFF`**, y la trama tiene que traer
+  `b[6] == 0x02` (`main/ne185/ne185.c:182-196`). La fórmula `b5+b9+b14+b15+0xB1`
+  que decía antes era la del NE334 y no validaba **ninguna** respuesta.
 - IMPORTANTE: NE187 != NE334 (protocolos distintos)
 
 ---

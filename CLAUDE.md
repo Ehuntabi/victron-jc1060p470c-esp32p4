@@ -170,14 +170,19 @@ ellas desde otro equipo (`/home/db3/...`).
    `dependencies.lock` que va a entrar lleva una ruta absoluta. En un clon
    nuevo hay que activarlo UNA vez: `git config core.hooksPath .githooks`
    (este repo ya lo tiene puesto).
-2. **Bit `skip-worktree`** (local, no versionable): `git ls-files -v` lo muestra
-   como `S dependencies.lock`; hace que git ignore el churn que los builds de
-   este equipo le meten al fichero.
+2. **Bit `skip-worktree`** (local, no versionable): **a 17-oct-2026 NO esta
+   puesto** en este equipo — `git ls-files -v dependencies.lock` da `H` (normal),
+   no `S`, y por eso `git status` lo enseña modificado con la ruta absoluta
+   dentro tras un build. Se pone con `git update-index --skip-worktree
+   dependencies.lock` (y entonces sí sale `S`); hace que git ignore el churn que
+   los builds de este equipo le meten al fichero. Quitarlo:
+   `git update-index --no-skip-worktree dependencies.lock`.
 
 El chequeo rapido sigue siendo util: `grep -n "path: /" dependencies.lock` —
 pero ojo, en este equipo devuelve resultado SIN que haya problema (el build
-reescribe el fichero y el skip-worktree lo esconde de git); lo que decide de
-verdad es el hook, que mira lo que SE VA A COMMITEAR.
+reescribe el fichero con la ruta absoluta). Con el skip-worktree puesto git no
+lo ve; sin el, sale como modificado, pero el hook no deja commitear la ruta
+absoluta. Lo que decide de verdad es el hook, que mira lo que SE VA A COMMITEAR.
 
 ## Convenciones del proyecto
 - Estética card-based aplicada en Settings (cada página con su color de borde)
@@ -186,9 +191,12 @@ verdad es el hook, que mira lo que SE VA A COMMITEAR.
 - Logs sin acentos para evitar problemas de codificación
 
 ## Estructura clave
-- main/main.c: app_main() son 10 llamadas a init_*() en fases (una por
+- main/main.c: app_main() son 9 llamadas a init_*() en fases (una por
   seccion del arranque: display/UI, SD+RTC+frigo, red, telemetria,
   audio+BLE, timers periodicos, camara...), todas en el mismo fichero
+  (`init_boot_diagnostics`, `init_nvs_wifi_pass_watchdog`, `init_display_ui`,
+  `init_sd_rtc_frigo`, `init_network`, `init_telemetry`, `init_audio_ble`,
+  `init_periodic_timers`, `init_camera_and_solar_feed`; ver main/main.c:982-991)
 - main/ui.c: tabview, barra inferior, screensaver, hora
 - main/ui/ agrupado por tema (2026-08-14, antes plano):
   - settings/: settings_panel.c (orquestador: paginas SD, Autocaravana,

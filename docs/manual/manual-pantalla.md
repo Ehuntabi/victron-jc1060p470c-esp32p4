@@ -260,7 +260,8 @@ vigilancia, sin tener que sacar la tarjeta.
 ### Actualizar la pantalla sin cables
 
 1. Conéctate a su Wi-Fi.
-2. Abre `http://192.168.4.1/ota`.
+2. Abre `http://192.168.4.1:8081/ota` (el **8081** no es un adorno: `/ota` vive
+   en el servidor pesado de la pantalla; en el 80 daría "no encontrado").
 3. Te pedirá un **usuario y una contraseña**: son los de la tarjeta *Acceso a
    Actualizar y Claves*, en **Ajustes → Wi-Fi**. Solo la primera vez; el
    navegador las recuerda.
