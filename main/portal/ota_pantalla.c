@@ -72,7 +72,11 @@ static const pantalla_modelo_t s_modelos[] = {
  * real de esp_app_desc_t son 32, pero 16 sobran para "vX.Y"). */
 #define PANTALLA_VER_N 17
 
-#define PANTALLA_CHUNK  4096
+/* 64 KB y no 4 (17-oct-2026): sirviendo de 4 en 4 KB, CADA trozo cogia el
+ * cerrojo de la SD y hacia un httpd_send, y la descarga de una pantalla se iba a
+ * ~20 KB/s (medido: 2,2 MB en mas de 100 s, y el cliente acababa cortando por
+ * timeout). Con 64 KB son 34 trozos y el cerrojo se coge una vez por trozo. */
+#define PANTALLA_CHUNK  (64 * 1024)
 #define PANTALLA_ESPERAS 4
 /* Subir 4 MB por el AP puede tardar; 10 min cubren una subida lenta legitima
  * sin dejar la tarea del httpd colgada para siempre con un cliente que gotea. */
@@ -746,7 +750,7 @@ esp_err_t ota_pantalla_bin(httpd_req_t *req)
         if (!pantalla_enviar(req, (const char *)buf, n)) { ok = false; break; }
         enviado += n;
         desde_yield += n;
-        if (desde_yield >= 32 * 1024) {
+        if (desde_yield >= 256 * 1024) {
             desde_yield = 0;
             vTaskDelay(1);   /* ceder a LVGL/WiFi: el httpd pesado comparte CPU */
         }
