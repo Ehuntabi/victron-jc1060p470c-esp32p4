@@ -442,6 +442,49 @@ static esp_err_t estado_set(const char *carpeta, uint32_t id)
     return e;
 }
 
+/* INTENTO MINIMO DE OLVIDAR EL VIAJE EN LA NVS (D11, 17-oct-2026).
+ *
+ * Existe por el unico caso en que ya esta TODO escrito en la tarjeta (resumen
+ * incluido) y lo unico que falla es el estado: con la NVS llena, estado_set() no
+ * cabe -- escribe la carpeta, borra de que pantalla era, y encima mete el blob de
+ * 256 B del anillo de dedupe --. Esta version escribe SOLO NVS_CARPETA="" (lo
+ * minimo para que viaje_abierto() deje de apuntar al viaje) y despues RELEE: con
+ * nvs_commit() siendo un no-op en IDF 5.5 el retorno del nvs_set_str es lo unico
+ * que dice si entro, y verlo en viaje_abierto() es la prueba de verdad.
+ *
+ * Devuelve si el viaje ha dejado de estar abierto. Da igual si el cierre se
+ * contesta 200 de todas formas (ver op_fin): un viaje CERRADO con la NVS tocada
+ * se arregla reiniciando o ampliando la particion; uno imposible de cerrar deja
+ * atascada la cola de la cabina y no hay forma de salir. */
+static bool estado_olvidar_carpeta(void)
+{
+    nvs_handle_t h;
+    esp_err_t e = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (e == ESP_OK) {
+        e = nvs_set_str(h, NVS_CARPETA, "");
+        e = nvs_apunta(e, nvs_commit(h));
+        nvs_close(h);
+    }
+    char sigue[CARPETA_MAX];
+    bool limpio = !viaje_abierto(sigue, sizeof(sigue));
+    if (!limpio) {
+        ESP_LOGE(TAG, "ni el intento minimo de olvidar el viaje en la NVS (%s)",
+                 esp_err_to_name(e));
+        return false;
+    }
+    /* Ya no hay viaje abierto: se borra tambien de que pantalla era y su id de
+     * inicio, para que el proximo viaje no herede un dueno que le daria 409 a
+     * quien lo empiece (ver estado_set). Esto es adorno: si no entra, no pasa
+     * nada, lo que importa ya esta hecho. */
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_erase_key(h, NVS_DEV);
+        nvs_erase_key(h, NVS_VIAJE_INI);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    return true;
+}
+
 /* ── DE QUE PANTALLA ES EL VIAJE ABIERTO (auditoria del 14-oct-2026) ─────────
  *
  * Hasta hoy 'dev' solo se miraba al ABRIR el viaje (op_inicio, que contesta 412
@@ -936,9 +979,17 @@ static void fecha_de_dias(uint32_t dias, char *out, size_t n)
  *
  * La tabla y el bucle son los de cabina5/main/salida.c (sanear()) COPIADOS a
  * proposito: si algun dia se añade una letra alli, hay que añadirla aqui, y por
- * eso el comentario lleva el nombre del fichero. Aqui ademas se conservan los
- * separadores (- y _) tal cual y una racha de ellos se junta en uno solo, igual
- * que en la cabina, para que "Cádiz  -  Norte" salga igual en los dos sitios. */
+ * eso el comentario lleva el nombre del fichero.
+ *
+ * LOS TRES SEPARADORES SON EL MISMO (17-oct-2026): espacio, '-' y '_' salen
+ * como '_', y una racha de ellos se junta en uno solo, igual que en la cabina,
+ * para que "Cádiz  -  Norte" salga igual en los dos sitios. Antes aqui el guion
+ * se RESPETABA ("Casa-Beach") mientras la cabina lo convertia en '_'
+ * ("Casa_Beach"): el mismo viaje se llamaba de una forma en la pantalla y de
+ * otra en la tarjeta -- 10 de 21 nombres de la muestra divergian -- y ademas
+ * dejaba carpetas acabadas en '-' (la cabina no las deja acabar en '_'). El
+ * criterio bueno es el de la cabina: es ella la que compone el nombre que ve el
+ * usuario y la que manda el destino en el inicio del viaje. */
 static void destino_seguro(const char *in, char *out, size_t n)
 {
     static const char *const ACENTOS = "aeiouAEIOUnNcCuU";
@@ -964,7 +1015,9 @@ static void destino_seguro(const char *in, char *out, size_t n)
             c = (char)*p;
         } else if (*p == '-' || *p == '_' || *p == ' ') {
             if (ultimo_guion) continue;         /* no acumular separadores */
-            c = (*p == '-') ? '-' : '_';        /* el guion se respeta; espacio y _ -> _ */
+            /* Espacio, '-' y '_' -> '_': es lo que hace sanear() en la cabina
+             * (ver el comentario de arriba). El guion NO se respeta. */
+            c = '_';
         } else {
             continue;                            /* lo demas (/, \, :, *, ...) fuera */
         }
@@ -990,14 +1043,52 @@ static void destino_seguro(const char *in, char *out, size_t n)
  * TODOS los lectores actuales correctos, que es lo que hace falta aqui; lo que
  * se pierde es una coma tecleada, y el texto con comas sigue entero en
  * resumen.txt, que es donde se lee. */
+/* COMO SE ESCRIBE UN CARACTER DE TEXTO LIBRE EN UN CSV, en un solo sitio.
+ *
+ * La usan la FILA (csv_texto, sobre el fichero) y la CABECERA (csv_texto_a,
+ * sobre un buffer): antes la fila sustituia y la cabecera no, y una clave con
+ * una coma dejaba el CSV desalineado para siempre (D3, ver csv_por_tipo). */
+static char csv_car(char c)
+{
+    if (c == ',') return ';';
+    if (c == '"') return '\'';
+    if (c == '\n' || c == '\r') return ' ';     /* una fila = una linea (y una
+                                                 * cabecera = una linea) */
+    return c;
+}
+
 static void csv_texto(FILE *f, const char *v)
 {
-    for (const char *p = v; *p; p++) {
-        if      (*p == ',') fputc(';', f);
-        else if (*p == '"') fputc('\'', f);
-        else if (*p == '\n' || *p == '\r') fputc(' ', f);   /* una fila = una linea */
-        else                fputc(*p, f);
+    for (const char *p = v; *p; p++) fputc(csv_car(*p), f);
+}
+
+/* Lo mismo, pero a un BUFFER con tope: lo necesita la cabecera, que se compone
+ * antes de saber si cabe. Devuelve los caracteres escritos. */
+static size_t csv_texto_a(char *out, size_t n, const char *v)
+{
+    size_t j = 0;
+    for (const char *p = v; *p && j + 1 < n; p++) out[j++] = csv_car(*p);
+    if (n) out[j] = 0;
+    return j;
+}
+
+/* ¿La clave de 'datos' vale como COLUMNA de un CSV? [A-Za-z0-9_] y nada mas.
+ *
+ * Lo exige op_registro para todas las claves de 'datos' (D3, 17-oct-2026). El
+ * criterio es el mismo que ya se aplicaba al 'tipo' (que acaba siendo el nombre
+ * del fichero): con letras, digitos y guion bajo, una clave no puede meter una
+ * coma ni un salto de linea, que son lo unico que desalinea un CSV. Se rechaza
+ * con 400 en vez de sanearla, porque renombrar la columna por detras dejaria un
+ * fichero que dice otra cosa que lo que manda el cliente. */
+static bool clave_de_datos_valida(const char *k)
+{
+    if (!k || !k[0]) return false;
+    for (const char *p = k; *p; p++) {
+        bool vale = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+                    (*p >= '0' && *p <= '9') || *p == '_';
+        if (!vale) return false;
     }
+    return true;
 }
 
 /* Tamano de un fichero, o 0 si no existe: la "marca de agua" para poder
@@ -1142,6 +1233,156 @@ static esp_err_t nvs_set_d(nvs_handle_t h, const char *k, double v)
     return nvs_set_u64(h, k, raw);
 }
 
+/* Convierte el TEXTO de un importe. Devuelve false si no es un numero limpio
+ * (las reglas estan en el comentario de numero_de). */
+static bool texto_a_numero(const char *s, double *out)
+{
+    char t[16];
+    size_t k = 0;
+    bool hay_sep = false, hay_digito = false;
+
+    while (*s == ' ' || *s == '\t') s++;         /* espacios de delante */
+    for (; *s; s++) {
+        char c = *s;
+        if (c == ' ' || c == '\t') {
+            /* Solo pueden ir al final (" 12.50 " se teclea asi). En medio
+             * ("12 50") es una cifra partida, y adivinar cual era seria
+             * inventarse el importe: lo que quede detras tiene que ser nada. */
+            while (*s == ' ' || *s == '\t') s++;
+            break;
+        }
+        if (c >= '0' && c <= '9') {
+            hay_digito = true;
+        } else if (c == '.' || c == ',') {
+            if (hay_sep) return false;           /* "1.2.3": dos separadores */
+            hay_sep = true;
+            c = '.';                             /* la coma decimal, a punto */
+        } else {
+            return false;                        /* 'e', '-', '+', letras... */
+        }
+        if (k + 1 >= sizeof(t)) return false;    /* mas de 15 cifras: no es un importe */
+        t[k++] = c;
+    }
+    if (*s) return false;                        /* basura detras de los espacios */
+    if (!hay_digito) return false;               /* "." o "," a solas */
+    t[k] = 0;
+    char *fin = NULL;
+    double v = strtod(t, &fin);
+    if (!fin || *fin) return false;              /* imposible, pero se mira */
+    *out = v;
+    return true;
+}
+
+/* ── LOS NUMEROS DE 'datos' SE LEEN CON VALIDEZ (D5, 17-oct-2026) ────────────
+ *
+ * Esto era `atof(ji->valuestring)` a secas, y atof no falla: devuelve lo que
+ * puede y calla. Medido: atof("1.2.3")=1.2, atof("12,50")=12, atof("1e9")=1e9,
+ * atof(".")=0. O sea que el CSV guardaba el texto crudo ("12,50") y los totales
+ * del resumen sumaban otra cosa (12), sin avisar a nadie: al volver a casa las
+ * cuentas no cuadran con el fichero y no hay forma de saber cual de los dos
+ * miente. Un importe mal tecleado es un dato malo, y el sitio de decirlo es la
+ * respuesta al que lo manda (400 con motivo), no un resumen con media cifra.
+ *
+ * REGLAS, y el porque de cada una:
+ *  - campo ausente = 0. Es normal: un peaje no lleva litros.
+ *  - cadena VACIA (o solo espacios) = 0, y NO puede ser un error: la cabina
+ *    manda "" en el precio de cada servicio que no se hizo (view_registro.c:
+ *    "lo que no se ha hecho deja el precio VACIO, que no es lo mismo que un
+ *    cero"). Rechazarla dejaria la cola de la cabina atascada en el primer
+ *    apunte sin agua.
+ *  - coma O punto decimal, pero UNO solo: "12,50" y "12.50" valen; "1.2.3" no.
+ *  - ni exponentes, ni signos, ni letras: lo que el teclado de la cabina no
+ *    puede teclear (acepta "0123456789.") es un POST a mano, y ahi vale mas un
+ *    400 que un total de mil millones. Tope de 15 cifras por lo mismo (mas no es
+ *    un importe, y asi strtod no puede llegar a infinito).
+ *  - lo que se suma es EXACTAMENTE el texto que queda escrito en el CSV: la
+ *    fila lleva la cadena tal cual (csv_por_tipo) y aqui se convierte ese mismo
+ *    texto, asi que las dos cuentas cuadran por construccion.
+ *
+ * 'ok' (opcional) dice si el valor era legible; el valor devuelto en ese caso es
+ * 0 para no sumar basura. Quien valida ANTES de escribir es op_registro(), con
+ * numeros_validos(); quien suma (totales_sumar_en) pasa ok=NULL porque a esas
+ * alturas ya esta comprobado. */
+static double numero_de(const cJSON *datos, const char *campo, bool *ok)
+{
+    if (ok) *ok = true;
+    const cJSON *ji = datos ? cJSON_GetObjectItem(datos, campo) : NULL;
+    if (!ji) return 0.0;                         /* campo ausente: no hay importe */
+    if (cJSON_IsNumber(ji)) return ji->valuedouble;   /* el CSV escribe %g de esto */
+    if (cJSON_IsString(ji)) {
+        const char *s = ji->valuestring;
+        while (*s == ' ' || *s == '\t') s++;
+        if (!*s) return 0.0;                     /* vacio = no apuntado, no error */
+        double v = 0;
+        if (texto_a_numero(s, &v)) return v;
+    }
+    if (ok) *ok = false;
+    ESP_LOGW(TAG, "'%s' de 'datos' no es un numero: '%s'", campo,
+             cJSON_IsString(ji) ? ji->valuestring : "(no es texto)");
+    return 0.0;
+}
+
+/* Los campos de 'datos' que este modulo suma como DINERO o CANTIDAD, por tipo de
+ * apunte, EN UN SOLO SITIO (D5, 17-oct-2026). Los usan las dos mitades que antes
+ * podian separarse:
+ *   - op_registro(), que los valida ANTES de escribir nada en la tarjeta (400 con
+ *     motivo, que la cabina enseña en pantalla);
+ *   - totales_sumar_en(), que los suma con la MISMA conversion (numero_de).
+ * Si algun dia se añade un importe nuevo, se añade aqui y queda validado; al
+ * reves (validar de mas) solo costaria un 400, nunca un total mal sumado.
+ *
+ * Los tipos que no estan no llevan importes (parada). En la pernocta, ademas de
+ * los precios, se validan 'noches' y 'minutos': multiplican al precio, asi que un
+ * valor ilegible en ellos da un total que no es el del CSV igual que un importe
+ * malo (la cabina los manda como numeros, pero un POST a mano puede mandar
+ * cualquier cosa). */
+static const char *const NUM_REPOSTAJE[] = { "litros", "importe", NULL };
+static const char *const NUM_PEAJE[]     = { "importe", NULL };
+static const char *const NUM_BOMBONA[]   = { "precio", NULL };
+static const char *const NUM_MANTEN[]    = { "coste", NULL };
+static const char *const NUM_ITV[]       = { "precio", NULL };
+static const char *const NUM_AGUA[]      = { "precio_grises", "precio_wc",
+                                             "precio_agua", NULL };
+static const char *const NUM_PERNOCTA[]  = { "precio", "precio_agua",
+                                             "precio_grises", "precio_wc",
+                                             "precio_luz", "precio_duchas",
+                                             "precio_basura",
+                                             "noches", "minutos", NULL };
+
+static const char *const *numeros_de_tipo(const char *tipo)
+{
+    if (!tipo) return NULL;
+    if (!strcmp(tipo, "repostaje"))     return NUM_REPOSTAJE;
+    if (!strcmp(tipo, "peaje"))         return NUM_PEAJE;
+    if (!strcmp(tipo, "bombona"))       return NUM_BOMBONA;
+    if (!strcmp(tipo, "mantenimiento")) return NUM_MANTEN;
+    if (!strcmp(tipo, "itv"))           return NUM_ITV;
+    if (!strcmp(tipo, "agua"))          return NUM_AGUA;
+    if (!strcmp(tipo, "pernocta"))      return NUM_PERNOCTA;
+    return NULL;
+}
+
+/* ¿Se pueden leer TODOS los numeros de este apunte? Si no, deja en 'motivo' cual
+ * y que traia, para contestar 400: la cabina no puede adivinar cual de las
+ * casillas esta mal, y el usuario tiene el formulario delante. */
+static bool numeros_validos(const char *tipo, const cJSON *datos,
+                            char *motivo, size_t n)
+{
+    const char *const *campos = numeros_de_tipo(tipo);
+    if (!campos || !datos) return true;
+    for (int i = 0; campos[i]; i++) {
+        bool ok = true;
+        numero_de(datos, campos[i], &ok);
+        if (!ok) {
+            const cJSON *ji = cJSON_GetObjectItem(datos, campos[i]);
+            snprintf(motivo, n, "el campo '%s' no es un numero: '%.20s'", campos[i],
+                     cJSON_IsString(ji) ? ji->valuestring : "?");
+            return false;
+        }
+    }
+    return true;
+}
+
 /* Suma lo que trae el apunte a los totales del viaje.
  *
  * OJO CON LAS MONEDAS: se suman los numeros tal cual, sin convertir. Un viaje
@@ -1180,11 +1421,13 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
         }
     }
 
-    /* atof de un campo de texto; los importes viajan como cadena porque es lo
-     * que hay tecleado, con su coma o su punto tal cual. */
-    const cJSON *ji;
-    #define IMPORTE_DE(campo) ( (ji = cJSON_GetObjectItem(datos, campo)) && \
-                                cJSON_IsString(ji) ? atof(ji->valuestring) : 0.0 )
+    /* Los importes viajan como TEXTO (es lo que hay tecleado, con su coma o su
+     * punto tal cual) y se leen con numero_de(), que es la unica conversion del
+     * fichero: atof() se comia la basura y el resumen sumaba una cifra distinta
+     * de la que queda escrita en el CSV (ver el comentario de numero_de). Aqui
+     * ya no hay nada que validar -- op_registro lo hizo ANTES de escribir la
+     * fila --, asi que el 'ok' va a NULL. */
+    #define IMPORTE_DE(campo) numero_de(datos, campo, NULL)
 
     if (!strcmp(tipo, "repostaje")) {
         err = nvs_apunta(err, nvs_set_d(h, NVS_T_LITROS, nvs_get_d(h, NVS_T_LITROS) + IMPORTE_DE("litros")));
@@ -1204,9 +1447,10 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
         /* Los TRES importes al mismo total: en el resumen interesa lo que se ha
          * ido en aguas, y el desglose de cual fue el vaciado y cual el llenado
          * ya esta en aguas.csv. */
-        /* De uno en uno y NO en la misma suma: IMPORTE_DE asigna a 'ji', y tres
-         * asignaciones a la misma variable dentro de una expresion no tienen
-         * orden definido (el compilador lo para en seco: -Wsequence-point). */
+        /* De uno en uno porque se lee mejor; el orden de evaluacion ya da igual:
+         * IMPORTE_DE no asigna a nada (antes si, al 'ji' del cJSON, y tres
+         * asignaciones a la misma variable en una expresion eran
+         * -Wsequence-point). */
         double t = nvs_get_d(h, NVS_T_AGUA);
         t += IMPORTE_DE("precio_grises");
         t += IMPORTE_DE("precio_wc");
@@ -1226,8 +1470,12 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
          * que se anuncia a la entrada. Lo que cuesta la estancia hay que
          * multiplicarlo aqui. */
         double precio = IMPORTE_DE("precio");
-        const cJSON *jn = cJSON_GetObjectItem(datos, "noches");
-        double noches = cJSON_IsNumber(jn) ? jn->valuedouble : 1.0;
+        /* 'noches' y 'minutos' los manda la cabina como NUMEROS de JSON, pero se
+         * leen con numero_de() como todo lo demas (D5): asi un "3" en texto (un
+         * POST a mano) cuenta 3 y no 1 -- el CSV escribiria 3 y el resumen
+         * sumaria una noche. Ausente = 0, y el tope de abajo lo sube a 1, que es
+         * el defecto de siempre. */
+        double noches = numero_de(datos, "noches", NULL);
         /* Llegar y marcharse el mismo dia son cero noches de calendario, pero
          * el area se cobra igual: por debajo de una no se baja. */
         if (noches < 1.0) noches = 1.0;
@@ -1245,7 +1493,7 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
          * costo dormir ahi -- pero el DESGLOSE queda entero en pernoctas.csv,
          * que es donde se mira para decidir si volver.
          *
-         * De uno en uno y no en la misma suma: IMPORTE_DE asigna a 'ji' (ver la
+         * De uno en uno porque se lee mejor; el orden ya no influye (ver la
          * nota de las aguas). */
         double extras = 0;
         extras += IMPORTE_DE("precio_agua");
@@ -1265,8 +1513,7 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
         double unidades = noches;
         const cJSON *jcob = cJSON_GetObjectItemCaseSensitive(datos, "cobro");
         if (cJSON_IsString(jcob) && strstr(jcob->valuestring, "24h")) {
-            const cJSON *jm = cJSON_GetObjectItem(datos, "minutos");
-            double min = cJSON_IsNumber(jm) ? jm->valuedouble : 0;
+            double min = numero_de(datos, "minutos", NULL);
             if (min > 0) {
                 long u = (long)((min + 1439.0) / 1440.0);   /* hacia arriba */
                 if (u < 1) u = 1;
@@ -1283,22 +1530,51 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
     return err;
 }
 
-static void totales_borrar(void)
+/* Borra una clave de la NVS, y "no estaba" NO es un error (17-oct-2026).
+ *
+ * nvs_erase_key() devuelve ESP_ERR_NVS_NOT_FOUND cuando la clave no existe, y
+ * en totales_borrar() eso es LO NORMAL: un viaje sin peajes no tiene
+ * NVS_T_PEAJE. Se traga ese codigo y se deja pasar cualquier otro (particion
+ * ilegible, NVS llena), que es el que de verdad hay que decir. */
+static esp_err_t nvs_borra(nvs_handle_t h, const char *clave)
+{
+    esp_err_t e = nvs_erase_key(h, clave);
+    return (e == ESP_ERR_NVS_NOT_FOUND) ? ESP_OK : e;
+}
+
+/* Deja los totales del viaje a cero. DEVUELVE el resultado (D14, 17-oct-2026):
+ * antes era void y se tiraban los doce nvs_erase_key, contra el criterio que el
+ * propio fichero documenta ("NVS: CADA ESCRITURA SE MIRA"): si la NVS no
+ * aceptaba el borrado, el viaje NUEVO arrancaba con los totales del anterior
+ * dentro y el resumen salia con dinero que no era de ese viaje -- sin un aviso.
+ * Quien llama (op_inicio) lo trata como un fallo de NVS mas: no se abre el viaje
+ * y se deshace la carpeta, en vez de dar por bueno un viaje con los contadores
+ * heredados. */
+static esp_err_t totales_borrar(void)
 {
     nvs_handle_t h;
-    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_erase_key(h, NVS_T_LITROS);  nvs_erase_key(h, NVS_T_COMBUS);
-    nvs_erase_key(h, NVS_T_PEAJE);   nvs_erase_key(h, NVS_T_BOMBONA);
-    nvs_erase_key(h, NVS_T_MANTEN);  nvs_erase_key(h, NVS_T_PARADAS);
-    nvs_erase_key(h, NVS_T_AGUA);   nvs_erase_key(h, NVS_T_ALOJA);
-    nvs_erase_key(h, NVS_T_MONEDA);  nvs_erase_key(h, NVS_T_VARIAS);
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    /* Los doce de uno en uno y acumulando (nvs_apunta): un solo && saltaria
+     * los siguientes en cuanto uno fallara, y aqui interesa intentarlos todos. */
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_LITROS));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_COMBUS));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_PEAJE));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_BOMBONA));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_MANTEN));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_PARADAS));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_AGUA));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_ALOJA));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_MONEDA));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_VARIAS));
     /* El cuentakilometros del viaje ANTERIOR, fuera (los dos: el de salida y el
      * de llegada): si este viaje no trae lectura, el resumen tiene que decir que
      * no la hay, no repetir la del viaje de la semana pasada. */
-    nvs_erase_key(h, NVS_T_KM_CUADRO);
-    nvs_erase_key(h, NVS_T_KM_LLEGADA);
-    nvs_commit(h);
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_KM_CUADRO));
+    err = nvs_apunta(err, nvs_borra(h, NVS_T_KM_LLEGADA));
+    err = nvs_apunta(err, nvs_commit(h));
     nvs_close(h);
+    return err;
 }
 
 /* El cuentakilometros que teclea el usuario en el campo 'km_cuadro': en el
@@ -1528,6 +1804,18 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * Detectado auditando el 08-sep-2026. */
     bool hay = (mk == 0);
     bool inicio_ok = hay ? diario(carpeta, "inicio", destino) : false;
+    /* Y EL BUFFER DE RUTA DEL VIAJE ANTERIOR SE TIRA AQUI, CON EL CERROJO TOMADO
+     * (D10, 17-oct-2026). Esta llamada estaba DESPUES del camera_sd_bus_unlock()
+     * de abajo -- y su comentario, y el de ruta_olvidar_sin_cerrojo(), decian que
+     * el cerrojo estaba tomado. No lo estaba: la tarea de telemetria entra en
+     * ruta_volcar() con el mismo cerrojo, y si estaba justo dentro, el
+     * `s_ruta_n = 0` de aqui le dejaba los puntos a medias o, peor, el volcado
+     * seguia con su copia de s_ruta_n y los escribia en el ruta.csv del viaje
+     * NUEVO. Es exactamente lo que esta funcion existe para impedir: un punto
+     * del viaje anterior dentro del de hoy, con sus coordenadas y sus km.
+     * Y solo si el viaje se ha abierto de verdad ("hay"): si la carpeta no se
+     * pudo crear, esa ruta sigue siendo de un viaje que no se toca. */
+    if (hay) ruta_olvidar_sin_cerrojo();
     camera_sd_bus_unlock();
 
     if (!hay) {
@@ -1549,13 +1837,27 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
             rmdir(carpeta);
             camera_sd_bus_unlock();
         }
-        anota_fallo_nvs();
+        /* ESTE 507 ES DE LA TARJETA, NO DE LA NVS (D12, 17-oct-2026). Aqui ha
+         * fallado diario(), que escribe eventos.csv en la SD: se contestaba con
+         * responde_sin_sitio_nvs() (sufijo "sin_sitio=nvs") y ademas contaba como
+         * fallo de NVS, asi que la cabina enseñaba "es su memoria interna" cuando
+         * lo que habia que hacer era sitio en la tarjeta -- y el icono de la SD
+         * (que mira fallos de ESCRITURA) se quedaba verde. El respondedor y el
+         * contador correctos son los de la tarjeta. */
+        anota_fallo_escritura();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_sin_sitio_nvs(req, "no puedo escribir el inicio del viaje en la NVS");
+        responde_con_hueco(req, "no puedo escribir el inicio del viaje en la tarjeta");
         return ESP_OK;
     }
 
-    totales_borrar();
+    /* LOS TOTALES A CERO, MIRANDO EL RETORNO (D14, 17-oct-2026): ver la nota de
+     * totales_borrar(). El error se acumula en 'ne' y lo trata el MISMO camino
+     * que un fallo de NVS al apuntar el viaje (mas abajo): no se abre y se
+     * deshace la carpeta, en vez de dejar un viaje con el dinero del anterior. */
+    esp_err_t ne = totales_borrar();
+    if (ne != ESP_OK)
+        ESP_LOGE(TAG, "la NVS no acepta borrar los totales del viaje anterior (%s): "
+                      "el viaje %s no se abre", esp_err_to_name(ne), carpeta);
     /* Contadores de energia a cero: el apartado ENERGIA del resumen.txt sale de
      * aqui. Hasta el 24-ago-2026 solo se ponian a cero con el boton de
      * Ajustes -> Autocaravana, en la pantalla de atras, asi que un viaje en el
@@ -1568,9 +1870,6 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * que ya no toca el flag (antes lo ponia a true y dejaba un viaje fantasma
      * que la cabina veia como en curso). */
     trip_computer_iniciar();
-    /* Sin cerrojo: op_inicio ya lo tiene tomado desde antes de crear la carpeta
-     * (el mutex de FreeRTOS no es recursivo). */
-    ruta_olvidar_sin_cerrojo();   /* ningun punto de un viaje anterior puede caer en este */
 
     /* ── Dejar constancia del viaje: TODO O NADA (auditoria del 13-oct-2026) ──
      *
@@ -1593,7 +1892,10 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
      * el retorno de CADA set (nvs_apunta) y el viaje no se abre si alguno
      * fallo. */
     nvs_handle_t h;
-    esp_err_t ne = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    /* 'ne' viene de totales_borrar() (D14): si los totales no se han podido
+     * borrar, NO se abre otro handle ni se apunta el viaje -- se va directo al
+     * camino de fallo de abajo, que deshace la carpeta. */
+    if (ne == ESP_OK) ne = nvs_open(NVS_NS, NVS_READWRITE, &h);
     if (ne == ESP_OK) {
         /* Numeracion nueva en cada viaje: ver el comentario de id_ya_aplicado()
          * -- se vacia el anillo entero, no solo se pone a 0 un maximo, para que
@@ -1667,6 +1969,19 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * que sin esto quedaria un viaje fantasma publicado por udp_tx y
          * sobreviviendo a los reinicios (va a NVS). */
         trip_computer_end();
+        /* Y EL VIAJE, A BORRAR TAMBIEN DE LA NVS (D2, 17-oct-2026). Aqui se
+         * deshacia la CARPETA y nada mas. Como estado_set_en() escribe
+         * NVS_CARPETA ANTES que el blob del anillo (y como un nvs_commit puede
+         * decir ESP_OK con el set fallido), la NVS puede quedarse con la carpeta
+         * apuntada justo cuando se borra su directorio: viaje_abierto() devuelve
+         * entonces un viaje ABIERTO FANTASMA, que contesta 409 a cualquier viaje
+         * nuevo, 507 en los apuntes y 507 en el fin (no hay carpeta donde
+         * escribir el resumen). Demostrado con una NVS que falla en el 7º set. La
+         * unica salida era reiniciar y que el arranque lo viera
+         * (marcar_huerfanas depende de que la SD este montada). */
+        if (estado_set(NULL, 0) != ESP_OK)
+            ESP_LOGE(TAG, "NO he podido limpiar el viaje %s de la NVS: si la carpeta "
+                          "ya no esta, el proximo arranque lo limpiara", carpeta);
         if (camera_sd_bus_lock(3000)) {
             char ev[RUTA_MAX];
             snprintf(ev, sizeof(ev), "%s/eventos.csv", carpeta);
@@ -1682,6 +1997,64 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     ESP_LOGI(TAG, "VIAJE ABIERTO: %s", carpeta);
     responde_con_hueco(req, carpeta);
     return ESP_OK;
+}
+
+/* Publica el resumen que acaba de escribirse en el .tmp con su nombre bueno,
+ * PUDIENDO PISAR el que ya hubiera (D0, 17-oct-2026).
+ *
+ * POR QUE HACE FALTA. rename() de FatFs NO pisa el destino: si resumen.txt ya
+ * existe, rename(ruta_tmp, ruta) falla (FR_EXIST). Y basta con que un cierre
+ * dejara escrito el resumen sin llegar a limpiar el estado -- o con que el bloque
+ * de "faltan apuntes" de op_fin lo creara -- para que TODOS los reintentos del
+ * fin fallaran en ese rename: 507 PARA SIEMPRE y sin salida por software (ni la
+ * cabina, ni la web, que usa el mismo op_fin; ni el .tar, que contesta 409 por
+ * viaje_es_el_abierto). El propio fichero ya lo tenia aprendido para la
+ * numeracion del destino y del apartado ("rename() falla si el destino ya
+ * existe"); esto es lo mismo, pero para el cierre, que tiene que ser IDEMPOTENTE:
+ * reintentarlo no puede empeorar nada.
+ *
+ * EL PATRON ES EL DE components/datalogger/datalogger.c
+ * (arreglar_cabecera_si_hace_falta): apartar el original a .bak, poner el nuevo,
+ * y solo entonces borrar el respaldo. Si el segundo paso falla, se devuelve el
+ * original a su sitio: en ningun momento se queda el viaje sin resumen, que es lo
+ * que decide si esta cerrado (estado_de() y data_export_tar.c miran ese nombre).
+ *
+ * Y si el destino NO existe (el caso normal, tambien el del primer cierre), no
+ * se aparta nada: un solo rename, que en FAT es atomico. */
+static bool publicar_resumen(const char *ruta_tmp, const char *ruta)
+{
+    struct stat st;
+    if (stat(ruta, &st) != 0) {
+        if (rename(ruta_tmp, ruta) == 0) return true;
+        ESP_LOGE(TAG, "no he podido renombrar %s a %s: el viaje sigue sin cerrar",
+                 ruta_tmp, ruta);
+        remove(ruta_tmp);
+        return false;
+    }
+
+    char bak[RUTA_MAX + 8];
+    if (snprintf(bak, sizeof(bak), "%s.bak", ruta) >= (int)sizeof(bak)) {
+        remove(ruta_tmp);
+        return false;
+    }
+    remove(bak);                        /* resto de un intento anterior */
+    if (rename(ruta, bak) != 0) {       /* 1) apartar el original */
+        ESP_LOGE(TAG, "no he podido apartar %s: el resumen se queda como estaba", ruta);
+        remove(ruta_tmp);
+        return false;
+    }
+    if (rename(ruta_tmp, ruta) != 0) {  /* 2) poner el nuevo */
+        ESP_LOGE(TAG, "no he podido poner el resumen nuevo en %s", ruta);
+        if (rename(bak, ruta) != 0)     /* 3) devolver el original a su sitio */
+            ESP_LOGE(TAG, "OJO: el resumen viejo se ha quedado en %s", bak);
+        remove(ruta_tmp);
+        return false;
+    }
+    /* 4) ya sobra el respaldo. Si no se deja borrar, el proximo cierre lo aparta
+     * otra vez; es un .bak dentro de la carpeta del viaje y el .tar se lo
+     * llevaria, por eso se intenta y se dice. */
+    if (remove(bak) != 0) ESP_LOGW(TAG, "no he podido borrar %s (sobra)", bak);
+    return true;
 }
 
 /* resumen.txt: lo que uno quiere saber al volver, en castellano llano y no en
@@ -1793,7 +2166,13 @@ static bool escribir_resumen(const char *carpeta)
      * Con .tmp, o el resumen esta ENTERO con su nombre bueno, o no esta: el
      * rename() de FAT es atomico, asi que no hay estado intermedio. Y el .tmp se
      * borra en los caminos de fallo para no dejar basura en la carpeta del viaje
-     * (que el .tar se llevaria al PC). */
+     * (que el .tar se llevaria al PC).
+     *
+     * Y EL DESTINO PUEDE EXISTIR YA -- un cierre anterior que no llego a
+     * completarse --, asi que el paso final NO es un rename a pelo: es
+     * publicar_resumen(), que aparta el viejo a .bak antes de poner el nuevo
+     * (D0, 17-oct-2026: sin eso, el segundo cierre fallaba siempre y el viaje no
+     * habia forma de cerrarlo). */
     char ruta[RUTA_MAX];
     snprintf(ruta, sizeof(ruta), "%s/resumen.txt", carpeta);
     char ruta_tmp[RUTA_MAX + 4];
@@ -1974,15 +2353,10 @@ static bool escribir_resumen(const char *carpeta)
         remove(ruta_tmp);
         return false;
     }
-    /* AQUI esta el viaje cerrado: el rename es el unico momento en que
-     * resumen.txt aparece, y aparece entero. */
-    if (rename(ruta_tmp, ruta) != 0) {
-        ESP_LOGE(TAG, "no he podido renombrar %s a %s: el viaje sigue sin cerrar",
-                 ruta_tmp, ruta);
-        remove(ruta_tmp);
-        return false;
-    }
-    return true;
+    /* AQUI esta el viaje cerrado: publicar_resumen() es el unico momento en que
+     * resumen.txt aparece, y aparece entero. Y puede PISAR uno anterior, que es
+     * lo que hace idempotente al cierre (ver su comentario). */
+    return publicar_resumen(ruta_tmp, ruta);
 }
 
 /* Compara lo que dice el satelite que genero con lo que esta P4 ha aplicado.
@@ -2430,7 +2804,21 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         }
     }
 
-    bool escrito = diario(carpeta, "fin", "");
+    /* ¿EL CIERRE YA ESTABA ESCRITO? (D11, 17-oct-2026). resumen.txt es lo que
+     * marca un viaje como cerrado, asi que si ya esta es que un intento anterior
+     * llego hasta aqui: lo unico que fallo fue limpiar el estado en la NVS (o el
+     * diario). En ese caso NO se vuelve a escribir la linea "fin": el anillo de
+     * dedupe vive en la MISMA NVS que esta fallando, asi que el reintento entra
+     * como nuevo y el diario acabaria con dos (o veinte) lineas "fin" -- y el
+     * analizador del PC cuenta lineas. */
+    char ruta_resumen[RUTA_MAX];
+    snprintf(ruta_resumen, sizeof(ruta_resumen), "%s/resumen.txt", carpeta);
+    struct stat st_cierre;
+    bool ya_cerrado = (stat(ruta_resumen, &st_cierre) == 0);
+    if (ya_cerrado)
+        ESP_LOGW(TAG, "%s ya tiene resumen: es un cierre REPETIDO, no reescribo "
+                      "la linea 'fin' del diario", carpeta);
+    bool escrito = ya_cerrado ? true : diario(carpeta, "fin", "");
     /* Lo que quede de ruta en memoria, a la tarjeta ANTES de cerrar. No condiciona
      * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
      * y dejar el viaje abierto por eso seria peor que el mal que evita. */
@@ -2448,31 +2836,11 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         responde_con_hueco(req, "no se ha podido marcar el viaje: sigue abierto");
         return ESP_OK;
     }
+    /* Se reescribe SIEMPRE (tambien si ya estaba): el resumen se rehace con los
+     * totales de ahora, y asi un intento que se corto a medias no deja unas
+     * cuentas viejas. Y ya no puede fallar por "el destino existe":
+     * publicar_resumen() lo aparta a .bak. */
     escrito = escribir_resumen(carpeta) && escrito;
-    if (faltan) {
-        FILE *rf; char rr[RUTA_MAX];
-        snprintf(rr, sizeof(rr), "%s/resumen.txt", carpeta);
-        rf = fopen(rr, "a");
-        if (rf) {
-            fprintf(rf, "\n*** VIAJE INCOMPLETO: faltan %lu apuntes. ***\n",
-                    (unsigned long)faltan);
-            fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
-                        MARCA_INCOMPLETO ".\n"
-                        "Puede que NO se hayan perdido: mira el historial del\n"
-                        "vehiculo (carpeta 'vehiculo' de la tarjeta).\n");
-            /* fsync: este añadido es lo que deja claro que faltan apuntes. */
-            fflush(rf);
-            fsync(fileno(rf));
-            fclose(rf);
-        } else {
-            /* La marca INCOMPLETO.txt YA esta escrita (es la que manda para el
-             * estado y para el nombre), asi que esto es solo el resumen: se
-             * deja constancia y se sigue, que el cierre no depende de ello. */
-            ESP_LOGW(TAG, "no he podido anotar en resumen.txt que faltan %lu "
-                          "apuntes (la marca INCOMPLETO.txt si esta)",
-                     (unsigned long)faltan);
-        }
-    }
 
     if (!escrito) {
         /* El viaje NO se cierra: sin resumen no esta cerrado del todo, y
@@ -2498,6 +2866,40 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
         httpd_resp_set_status(req, "507 Insufficient Storage");
         responde_con_hueco(req, "no se ha podido escribir el cierre");
         return ESP_OK;
+    }
+
+    /* ── EL AVISO DE "FALTAN APUNTES" VA DESPUES DEL CIERRE (D0, 17-oct-2026) ──
+     *
+     * Este bloque estaba ANTES del `if (!escrito) return;` de arriba, asi que un
+     * cierre que NO habia podido escribir el resumen (la NVS ilegible:
+     * escribir_resumen() sale sin crear nada) CREABA igualmente resumen.txt, con
+     * solo este aviso dentro. Y resumen.txt es lo que dice "viaje cerrado": el
+     * siguiente intento lo encontraba ya creado, el rename fallaba porque FatFs no
+     * pisa, y el viaje se quedaba sin poder cerrar PARA SIEMPRE (ni cabina, ni
+     * web, ni .tar). Ahora, si el resumen no se ha escrito, este bloque no se
+     * ejecuta y no se crea nada. */
+    if (faltan) {
+        FILE *rf;
+        rf = fopen(ruta_resumen, "a");
+        if (rf) {
+            fprintf(rf, "\n*** VIAJE INCOMPLETO: faltan %lu apuntes. ***\n",
+                    (unsigned long)faltan);
+            fprintf(rf, "Los totales de arriba NO los incluyen. Ver "
+                        MARCA_INCOMPLETO ".\n"
+                        "Puede que NO se hayan perdido: mira el historial del\n"
+                        "vehiculo (carpeta 'vehiculo' de la tarjeta).\n");
+            /* fsync: este añadido es lo que deja claro que faltan apuntes. */
+            fflush(rf);
+            fsync(fileno(rf));
+            fclose(rf);
+        } else {
+            /* La marca INCOMPLETO.txt YA esta escrita (es la que manda para el
+             * estado y para el nombre), asi que esto es solo el resumen: se
+             * deja constancia y se sigue, que el cierre no depende de ello. */
+            ESP_LOGW(TAG, "no he podido anotar en resumen.txt que faltan %lu "
+                          "apuntes (la marca INCOMPLETO.txt si esta)",
+                     (unsigned long)faltan);
+        }
     }
 
     /* ── CAMBIO DE DESTINO APLAZADO AL CIERRE (12-oct-2026) ─────────────────
@@ -2574,12 +2976,48 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * nombre viejo -- estado valido: los datos y el resumen estan dentro -- y el
      * renombrado lo termina el siguiente fin (ver renombrado_pendiente_*). */
     if (estado_set(NULL, id) != ESP_OK) {
-        camera_sd_bus_unlock();
-        ESP_LOGE(TAG, "cierre de %s escrito, pero no he podido olvidarlo en NVS: "
-                      "el viaje sigue abierto y habra que reintentar", carpeta);
+        /* UN VIAJE CERRADO CON LA NVS TOCADA ES MEJOR QUE UNO IMPOSIBLE DE
+         * CERRAR (D11, 17-oct-2026).
+         *
+         * Aqui el resumen YA esta en la tarjeta: el viaje esta cerrado de hecho,
+         * lo unico que no ha entrado es el olvido en la NVS. Antes se contestaba
+         * 507, el satelite reintentaba el fin para siempre (y cada reintento
+         * volvia a escribir "fin" en el diario, porque el anillo de dedupe vive
+         * en la misma NVS que falla: el viaje acababa con veinte lineas "fin" y
+         * la cola de la cabina atascada detras), sin salida por ningun sitio.
+         * Ahora se intenta el minimo (solo NVS_CARPETA="") y se contesta 200
+         * diga lo que diga: la cabina suelta el apunte y el usuario se entera por
+         * el log y por el aviso de NVS llena de Ajustes. */
+        bool limpio = estado_olvidar_carpeta();
         anota_fallo_nvs();
-        httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_sin_sitio_nvs(req, "no se ha podido cerrar el viaje en la NVS");
+        if (limpio) {
+            ESP_LOGW(TAG, "cierre de %s: la NVS no acepto el estado completo y se "
+                          "ha limpiado a la segunda (solo la carpeta)", carpeta);
+        } else {
+            ESP_LOGE(TAG, "cierre de %s ESCRITO en la tarjeta, pero la NVS no lo "
+                          "olvida: la P4 seguira creyendolo abierto hasta que se "
+                          "pueda limpiar (el resumen SI esta)", carpeta);
+        }
+        /* El renombrado del cambio de destino, SOLO si el viaje ya no esta
+         * abierto: con la NVS apuntando a la carpeta vieja, renombrarla dejaria
+         * a la P4 con un viaje abierto que no existe -- el estado sin salida de
+         * la auditoria del 13-oct-2026. Si no se puede, la marca del renombrado
+         * pendiente se queda para el siguiente cierre. */
+        if (limpio && hay_renombrado) {
+            if (rename(carpeta, nueva) == 0) {
+                ESP_LOGI(TAG, "DESTINO CAMBIADO: %s -> %s", carpeta, nueva);
+                renombrado_pendiente_olvidar();
+            } else {
+                ESP_LOGW(TAG, "no he podido renombrar %s a %s: se queda con el "
+                              "nombre viejo (reintentare al proximo cierre)",
+                         carpeta, nueva);
+            }
+        }
+        camera_sd_bus_unlock();
+        trip_computer_end();
+        ESP_LOGI(TAG, "VIAJE CERRADO (sin verificar en NVS): %s", carpeta);
+        responde_con_hueco(req, "cerrado sin verificar: el resumen esta escrito, "
+                                "pero la NVS de la P4 no ha aceptado olvidar el viaje");
         return ESP_OK;
     }
 
@@ -2874,20 +3312,39 @@ static bool csv_por_tipo(const char *carpeta, const char *tipo,
      * por nombre de columna saca importes cambiados y no se nota). Ahora la fila
      * escribe EXACTAMENTE las mismas columnas que la cabecera: si una clave no
      * cupo, su valor no se escribe. Se pierde un dato raro (hacen falta muchisimas
-     * claves) y a cambio la fila siempre cuadra. */
+     * claves) y a cambio la fila siempre cuadra.
+     *
+     * Y LA CLAVE PASA POR LA MISMA SUSTITUCION QUE LOS VALORES (D3, 17-oct-2026):
+     * la cabecera se construia con el texto CRUDO de la clave (",%s", it->string)
+     * mientras los valores si pasaban por csv_texto(). Una clave con una coma
+     * ("a,b") metia una columna de mas en la cabecera y dejaba la fila una
+     * columna corta: el CSV entero desalineado desde ahi hasta el final, y el
+     * analizador del PC leyendo importes cambiados. No es alcanzable desde la
+     * pantalla (las claves las pone el firmware de la cabina), pero esto es una
+     * API HTTP: op_registro ya rechaza las claves que no son [A-Za-z0-9_], y esto
+     * es el cinturon para cualquier otra clave que se cuele. */
     char cab[512];
     int p = snprintf(cab, sizeof(cab), "fecha_hora");
     int cab_cols = 1;   /* fecha_hora ya esta */
     for (const cJSON *it = datos ? datos->child : NULL; it; it = it->next) {
         if (!it->string) continue;
-        if (p >= (int)sizeof(cab) - 1) {
+        char clave[64];
+        size_t nc = csv_texto_a(clave, sizeof(clave), it->string);
+        /* UNA COLUMNA QUE NO CABE NO SE CUENTA. El snprintf de antes recortaba
+         * la clave EN SILENCIO y sumaba la columna igual, asi que el valor de esa
+         * clave SI se escribia bajo un nombre cortado a media palabra -- justo lo
+         * que el parrafo de arriba dice que no puede pasar. Ahora, si no entra
+         * entera, no se escribe ni el nombre ni el valor. */
+        if (p + 1 + (int)nc >= (int)sizeof(cab)) {
             ESP_LOGW(TAG, "la cabecera de %ss.csv no cabe en %u bytes: dejo fuera "
                           "la clave '%s' y las que vengan detras (la fila llevara "
                           "las mismas columnas que la cabecera)",
                      tipo, (unsigned)sizeof(cab), it->string);
             break;
         }
-        p += snprintf(cab + p, sizeof(cab) - p, ",%s", it->string);
+        cab[p++] = ',';
+        memcpy(cab + p, clave, nc + 1);          /* nc caracteres + el cero */
+        p += (int)nc;
         cab_cols++;
     }
 
@@ -2970,6 +3427,47 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     }
     if (strcmp(tipo, jt->valuestring) != 0)
         ESP_LOGW(TAG, "tipo con caracteres raros: '%s' -> '%s'", jt->valuestring, tipo);
+
+    /* LAS CLAVES DE 'datos' TAMBIEN SE FILTRAN (D3, 17-oct-2026). Estas claves
+     * acaban siendo la CABECERA del CSV de su tipo, asi que una clave con una
+     * coma deja la cabecera con una columna de mas y la fila con una de menos: el
+     * fichero entero desalineado de ahi al final. Con esta guarda, ademas, lo que
+     * llega a la cabecera solo puede ser [A-Za-z0-9_], que es lo que la deja
+     * cuadrar con los valores (que ya pasan por csv_texto). No es alcanzable
+     * desde la pantalla -- las claves las pone el firmware de la cabina --, pero
+     * esto es una API HTTP. */
+    if (jd && !cJSON_IsObject(jd)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        responde_con_hueco(req, "'datos' tiene que ser un objeto");
+        return ESP_OK;
+    }
+    for (const cJSON *it = jd ? jd->child : NULL; it; it = it->next) {
+        if (clave_de_datos_valida(it->string)) continue;
+        char motivo[128];
+        snprintf(motivo, sizeof(motivo), "clave de 'datos' no valida: '%.40s' "
+                                         "(solo A-Z, a-z, 0-9 y _)",
+                 it->string ? it->string : "(sin nombre)");
+        ESP_LOGW(TAG, "apunte '%s' RECHAZADO: %s", tipo, motivo);
+        httpd_resp_set_status(req, "400 Bad Request");
+        responde_con_hueco(req, motivo);
+        return ESP_OK;
+    }
+
+    /* Y LOS NUMEROS, TAMBIEN ANTES DE ESCRIBIR NADA (D5, 17-oct-2026). Se valida
+     * aqui, con la tarjeta todavia sin tocar, y no despues: asi un importe mal
+     * tecleado ("12,50" escrito como "1.2.3", un "1e9" de un POST a mano) no
+     * llega a dejar una fila a medias que habria que deshacer, ni suma medio
+     * importe al resumen. El motivo dice QUE campo y QUE traia, que es lo unico
+     * que le sirve al usuario que tiene el formulario delante. */
+    {
+        char motivo[128];
+        if (!numeros_validos(tipo, jd, motivo, sizeof(motivo))) {
+            ESP_LOGW(TAG, "apunte '%s' RECHAZADO: %s", tipo, motivo);
+            httpd_resp_set_status(req, "400 Bad Request");
+            responde_con_hueco(req, motivo);
+            return ESP_OK;
+        }
+    }
 
     /* Sin viaje abierto el apunte NO se rechaza: se apunta al historial del
      * vehiculo en vez de perderse.
@@ -3485,23 +3983,27 @@ static void ruta_cerrar(const char *carpeta)
  * aqui (se aparto, se cayo la P4) -- y garantiza que la carpeta nueva no pueda
  * heredar ni un punto de la vieja.
  *
- * CON EL CERROJO DEL BUS (auditoria del 16-oct-2026). El buffer de ruta lo toca
- * la tarea de telemetria bajo camera_sd_bus_lock (ruta_volcar) y esto se hacia
- * a pelo desde el httpd: si el tick estaba justo dentro de ruta_volcar con
- * puntos del viaje ANTERIOR, este `s_ruta_n = 0` los dejaba a medias -- o, peor,
- * el volcado seguia con su copia de s_ruta_n y escribia esos puntos en el
- * ruta.csv del viaje NUEVO, que es exactamente lo que esta funcion existe para
- * impedir. Con el cerrojo, los dos se serializan. */
+ * CON EL CERROJO DEL BUS TOMADO POR QUIEN LLAMA (D10, 17-oct-2026). El buffer de
+ * ruta lo toca la tarea de telemetria bajo camera_sd_bus_lock (ruta_volcar) y
+ * esto se hacia a pelo desde el httpd: si el tick estaba justo dentro de
+ * ruta_volcar con puntos del viaje ANTERIOR, este `s_ruta_n = 0` los dejaba a
+ * medias -- o, peor, el volcado seguia con su copia de s_ruta_n y escribia esos
+ * puntos en el ruta.csv del viaje NUEVO, que es exactamente lo que esta funcion
+ * existe para impedir. Con el cerrojo, los dos se serializan.
+ *
+ * Y EL CERROJO LO TIENE QUE TRAER TOMADO EL QUE LLAMA, de verdad: op_inicio()
+ * la llamaba DESPUES de soltar el suyo, con el comentario diciendo lo contrario.
+ * Ahora se llama dentro del bloque cerrado (antes del camera_sd_bus_unlock()).
+ * Por eso la funcion no toma el cerrojo ella misma: el mutex de FreeRTOS no es
+ * recursivo y volver a pedirlo ahi seria un bloqueo. Si algun dia aparece otro
+ * llamador, tiene que envolverla el -- o se parte de la premisa de este
+ * comentario, que es la que costo un punto del viaje anterior en el nuevo. */
 static void ruta_olvidar_sin_cerrojo(void)
 {
     if (s_ruta_n) ESP_LOGW(TAG, "tiro %d puntos de ruta de un viaje anterior",
                            s_ruta_n);
     s_ruta_n = 0;
 }
-
-/* El UNICO llamador es op_inicio(), que ya tiene tomado el cerrojo del bus
- * desde antes de crear la carpeta (y el mutex de FreeRTOS no es recursivo:
- * volver a pedirlo aqui seria un bloqueo). Por eso no hay envoltorio. */
 
 /* Anota un punto de la ruta EN MEMORIA. Vuelca cuando se llena el buffer.
  *
@@ -3884,7 +4386,8 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         return ESP_OK;
     }
 
-    /* ── 'forzar' EXIGE LA CLAVE DE ADMINISTRACION (auditoria del 16-oct-2026) ──
+    /* ── 'forzar' EXIGE LA CLAVE DE ADMINISTRACION... SALVO SI LO PIDE UNA
+     *    PANTALLA (D1, 17-oct-2026) ──────────────────────────────────────────
      *
      * 'forzar' es la salida de emergencia de GUARDARLO/APARTARLO: salta la
      * guarda de dueño y cierra o aparta el viaje que QUIZA ESTA GRABANDO LA OTRA
@@ -3892,23 +4395,41 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * sin embargo este camino iba por el nivel ABIERTO (la clave del portal, que
      * esta publicada en el historial de dos repos publicos): con esa clave y un
      * "forzar":true se cerraba el viaje de la otra pantalla, con su resumen y su
-     * cuentakilometros, y sus apuntes siguientes se iban al historial del
-     * vehiculo sin que nadie se enterase. Es el unico fallo de la lista que
-     * destruye datos de la OTRA cabina.
+     * cuentakilometros. De ahi el control.
      *
-     * El cierre de la web entra aqui con `forzar` (lo pone handle_data_viajes
-     * para reutilizar op_fin) y ya ha pasado por el nivel estricto, asi que este
-     * segundo control no le cuesta nada: el mutex de auth es recursivo y la
-     * cabecera ya esta validada.
+     * PERO PEDIRLA ASI ROMPIA LA SALIDA DE EMERGENCIA (regresion del 16-oct):
+     * la cabina manda 'forzar' en p4_api_cuerpo_fin_ajeno() desde el dialogo
+     * "Cerrarlo/Apartarlo igual", y solo tiene la clave del portal. Resultado:
+     * 403, y la cola lo pinta como RECHAZO ("la P4 rechaza el apunte") -- un
+     * diagnostico falso, porque lo que pasa es que la P4 le pide una clave que
+     * esa pantalla no puede tener. El usuario se queda sin la unica salida que
+     * tiene (la P4 vive detras y no hay boton en ella).
      *
-     * SOLO CUANDO VIENE 'forzar': el GUARDARLO normal de una cabina (sin la
-     * llave) sigue por el nivel abierto, que es lo que tiene que seguir
-     * funcionando con la clave de siempre. */
+     * EL CRITERIO: si el cuerpo trae un 'dev' con MAC valida, quien lo pide es
+     * una PANTALLA -- las cabinas lo mandan siempre (p4_api_dev_id()) y un
+     * navegador o la app no lo mandan nunca --, y una pantalla tactil no puede
+     * tener la clave de administracion. En ese caso vale el nivel abierto. Sin
+     * 'dev' (la web, la app, un POST a mano) se sigue exigiendo la clave
+     * estricta: ahi 'forzar' si es exactamente lo que este control vigila.
+     *
+     * LO QUE ESTO NO DISTINGUE: un cliente con la clave del portal que se
+     * invente un 'dev' de 12 hex pasa por pantalla. Es el precio de que la
+     * salida de emergencia exista; lo que compra es que la cabina de verdad
+     * pueda cerrar un viaje cuyo dueño ya no esta. La guarda de dueño
+     * (pide_otra_pantalla) sigue intacta para todo lo que no traiga 'forzar'. */
     {
         const cJSON *jf = cJSON_GetObjectItemCaseSensitive(j, "forzar");
         bool pide_forzar = cJSON_IsTrue(jf) ||
                            (cJSON_IsNumber(jf) && jf->valuedouble != 0);
-        if (pide_forzar &&
+        char dev_forzar[24] = {0};
+        const cJSON *jdv = cJSON_GetObjectItemCaseSensitive(j, "dev");
+        if (cJSON_IsString(jdv)) destino_seguro(jdv->valuestring, dev_forzar,
+                                                sizeof(dev_forzar));
+        bool es_una_pantalla = dev_es_mac(dev_forzar);
+        if (pide_forzar && es_una_pantalla)
+            ESP_LOGI(TAG, "'%s' con forzar de la pantalla %s: vale el nivel abierto",
+                     jop->valuestring, dev_forzar);
+        if (pide_forzar && !es_una_pantalla &&
             check_basic_auth_strict_aviso(req,
                 "cerrar o apartar el viaje que quiza esta grabando otra pantalla "
                 "(forzar) necesita la clave de administracion "

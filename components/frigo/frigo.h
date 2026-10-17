@@ -102,6 +102,21 @@ void frigo_sim_inject(float t_aletas, float t_congelador,
  * pantalla. NO cierra el rele del frigo. Solo lo llama sim_overview.c. */
 void frigo_sim_solar(bool activo, uint16_t minutos_hoy);
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx);
+/* Asigna una sonda a un rol MANTENIENDO la invariante "cada sonda, como mucho en
+ * un rol" (A16/D9, 17-oct-2026).
+ *
+ * Si la sonda ya estaba en OTRO rol, los dos se intercambian; y si el rol de
+ * destino NO tenia sonda (FRIGO_SONDA_AUSENTE, que es el caso que rompia el swap
+ * que vivia en frigo_panel.c), la sonda se MUEVE y el otro rol se queda sin
+ * ninguna. Antes, en ese caso, el primer paso del swap pedia asignar 0xFF -- que
+ * frigo_set_assignment() rechaza -- y los dos roles acababan apuntando a la MISMA
+ * sonda: en AUTO el ventilador comparaba dos temperaturas identicas.
+ *
+ * Todo va bajo un solo cerrojo y un solo guardado en NVS, asi que no hay un
+ * estado intermedio visible para la tarea del frigo ni para la UI. Devuelve
+ * ESP_ERR_INVALID_ARG si la sonda no existe y ESP_ERR_TIMEOUT si el cerrojo no
+ * llego: ahora SI hay que mirar el retorno. */
+esp_err_t frigo_asignar_rol_con_swap(frigo_slot_t slot, uint8_t sensor_idx);
 /* Umbrales de T_Aletas para el ventilador en AUTO. Rango 30..60 en pasos de 5,
  * con t_min < t_max. Por debajo de t_min el ventilador esta parado, por encima
  * de t_max va al 100 %, y entre medias interpola. */

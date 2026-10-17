@@ -126,21 +126,33 @@ static void refresh_dd_selections(void)
 
 /* Asigna new_idx al slot target. Si new_idx ya estaba asignado a OTRO slot,
  * hace swap: ese otro slot recibe lo que tenia el target. Garantiza
- * permutacion 1:1. */
+ * permutacion 1:1.
+ *
+ * LA OPERACION LA HACE frigo_asignar_rol_con_swap() (A16/D9, 17-oct-2026), no
+ * este fichero. Antes se hacia aqui, en dos llamadas a frigo_set_assignment() y
+ * sin mirar el retorno: cuando el slot destino NO tenia sonda (su assignment es
+ * FRIGO_SONDA_AUSENTE = 0xFF) el primer paso pedia asignar 0xFF -- que
+ * frigo_set_assignment() rechaza con ESP_ERR_INVALID_ARG -- y el segundo dejaba
+ * los DOS roles apuntando a la MISMA sonda. En AUTO eso es el ventilador
+ * comparando dos temperaturas identicas, y en pantalla dos roles con la misma
+ * lectura sin avisar de nada.
+ *
+ * Y EL RETORNO SE MIRA Y SE DICE, que era el otro agujero: si el cambio no
+ * entra, la UI tiene que volver a pintar lo que de verdad hay (refresh abajo) y
+ * dejar constancia, porque si no el usuario ve en el desplegable una eleccion
+ * que el frigo no esta usando. */
 static void apply_assignment_with_swap(frigo_slot_t target, uint8_t new_idx)
 {
-    frigo_state_t st_copy;
-    frigo_get_state_copy(&st_copy);
-    const frigo_state_t *st = &st_copy;
-    uint8_t prev_in_target = st->assignment[target];
-    for (int s = 0; s < 3; ++s) {
-        if (s == (int)target) continue;
-        if (st->assignment[s] == new_idx) {
-            frigo_set_assignment((frigo_slot_t)s, prev_in_target);
-            break;
-        }
+    esp_err_t e = frigo_asignar_rol_con_swap(target, new_idx);
+    if (e != ESP_OK) {
+        static const char *const NOMBRE[3] = { "aletas", "congelador", "exterior" };
+        ESP_LOGW(TAG, "no se pudo asignar la sonda %u a '%s' (%s): se queda como "
+                      "estaba", (unsigned)new_idx,
+                 (int)target < 3 ? NOMBRE[(int)target] : "?", esp_err_to_name(e));
     }
-    frigo_set_assignment(target, new_idx);
+    /* Siempre: los tres desplegables se repintan desde el estado REAL, y tras un
+     * cambio con movimiento de sonda el rol que se queda sin ninguna tiene que
+     * verse como tal (su temperatura saldra "--"). */
     refresh_dd_selections();
 }
 

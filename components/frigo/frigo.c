@@ -751,22 +751,95 @@ void frigo_sim_inject(float t_aletas, float t_congelador,
 
 esp_err_t frigo_set_assignment(frigo_slot_t slot, uint8_t sensor_idx)
 {
+    /* Sin init no hay mutex NI estado: pedirlo seria un assert, no un fallo
+     * suave (mismo criterio que frigo_sim_inject). */
+    if (!s_mutex) return ESP_ERR_INVALID_STATE;
     if (slot >= FRIGO_MAX_SENSORS || sensor_idx >= s_state.n_sensors)
         return ESP_ERR_INVALID_ARG;
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        s_state.assignment[slot] = sensor_idx;
-        /* Anclar el rol a la sonda FISICA elegida: es role_addr lo que sobrevive
-         * a un reescaneo, assignment se recalcula a partir de el. */
-        s_state.role_addr[slot] = s_state.sensors[sensor_idx].address;
-        /* El usuario acaba de decidir, asi que la situacion ya no es "hay una
-         * sonda sin rol": recalcular las banderas para no volver a avisar. */
-        uint64_t hay[FRIGO_MAX_SENSORS] = {0};
-        for (int i = 0; i < s_state.n_sensors; i++)
-            hay[i] = s_state.sensors[i].address;
-        s_scan_flags = frigo_sondas_resolver(hay, s_state.n_sensors,
-                                             s_state.role_addr).flags;
+    /* EL CERROJO SE MIRA Y SE DICE (A16/D9, 17-oct-2026). Esto devolvia
+     * ESP_OK aunque xSemaphoreTake fallara: el rol no se asignaba (el ajuste se
+     * perdia en silencio), el nvs_save() guardaba el estado VIEJO y quien llamaba
+     * no tenia forma de enterarse. Con la UI comprobando el retorno, un OK falso
+     * es justo lo que la deja mintiendo. */
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+    s_state.assignment[slot] = sensor_idx;
+    /* Anclar el rol a la sonda FISICA elegida: es role_addr lo que sobrevive
+     * a un reescaneo, assignment se recalcula a partir de el. */
+    s_state.role_addr[slot] = s_state.sensors[sensor_idx].address;
+    /* El usuario acaba de decidir, asi que la situacion ya no es "hay una
+     * sonda sin rol": recalcular las banderas para no volver a avisar. */
+    uint64_t hay[FRIGO_MAX_SENSORS] = {0};
+    for (int i = 0; i < s_state.n_sensors; i++)
+        hay[i] = s_state.sensors[i].address;
+    s_scan_flags = frigo_sondas_resolver(hay, s_state.n_sensors,
+                                         s_state.role_addr).flags;
+    xSemaphoreGive(s_mutex);
+    nvs_save();
+    return ESP_OK;
+}
+
+/* ASIGNAR UN ROL CON SWAP, EN UNA SOLA OPERACION (A16/D9, 17-oct-2026).
+ *
+ * El swap vivia en frigo_panel.c, en dos llamadas a frigo_set_assignment() y sin
+ * mirar el retorno. Si el rol de destino NO tenia sonda (assignment ==
+ * FRIGO_SONDA_AUSENTE, 0xFF) el primer paso pedia asignar 0xFF, que
+ * frigo_set_assignment() rechaza, y el segundo dejaba los DOS ROLES apuntando a
+ * la MISMA sonda: en AUTO el ventilador comparaba dos temperaturas identicas y en
+ * la pantalla salian dos roles con la misma lectura, sin decirlo.
+ *
+ * Aqui la operacion es una sola, bajo un cerrojo y con un unico guardado en NVS,
+ * y mantiene la invariante de siempre (cada sonda pertenece como mucho a un rol):
+ *   - la sonda estaba en otro rol y el destino TENIA sonda -> se intercambian;
+ *   - la sonda estaba en otro rol y el destino NO tenia -> la sonda se MUEVE y el
+ *     otro rol se queda sin ninguna (es lo que el usuario acaba de pedir al
+ *     moverla; y el proximo escaneo avisara de que hay una sonda sin rol);
+ *   - nadie la tenia -> asignacion normal.
+ * Lo que NO se puede es intentar asignar FRIGO_SONDA_AUSENTE a un rol: no es una
+ * sonda, y por eso el "rol sin sonda" de arriba se pone aqui mismo, en el estado,
+ * sin pasar por la validacion de indices. */
+esp_err_t frigo_asignar_rol_con_swap(frigo_slot_t slot, uint8_t sensor_idx)
+{
+    if (!s_mutex) return ESP_ERR_INVALID_STATE;
+    if (slot >= FRIGO_MAX_SENSORS) return ESP_ERR_INVALID_ARG;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+    if (sensor_idx >= s_state.n_sensors) {     /* el dropdown solo ofrece validos */
         xSemaphoreGive(s_mutex);
+        return ESP_ERR_INVALID_ARG;
     }
+
+    /* Quien tiene esa sonda ahora mismo: a lo sumo uno (es la invariante). */
+    int otro = -1;
+    for (int s = 0; s < FRIGO_MAX_SENSORS; s++) {
+        if (s == (int)slot) continue;
+        if (s_state.assignment[s] == sensor_idx) { otro = s; break; }
+    }
+    if (otro >= 0) {
+        uint8_t prev = s_state.assignment[slot];
+        if (prev < s_state.n_sensors) {
+            /* Swap de verdad: el otro rol hereda la sonda que tenia el destino. */
+            s_state.assignment[otro] = prev;
+            s_state.role_addr[otro]  = s_state.sensors[prev].address;
+        } else {
+            /* El destino no tenia sonda: es un MOVER, el otro rol se queda sin
+             * ninguna. role_addr = 0 es "rol sin asignar" para el resolutor, asi
+             * que un reescaneo lo respeta (no se la reasigna por posicion). */
+            s_state.assignment[otro] = FRIGO_SONDA_AUSENTE;
+            s_state.role_addr[otro]  = 0;
+        }
+    }
+    s_state.assignment[slot] = sensor_idx;
+    s_state.role_addr[slot]  = s_state.sensors[sensor_idx].address;
+
+    /* Las banderas, como en frigo_set_assignment(): el usuario acaba de decidir
+     * y no se le vuelve a avisar de lo mismo. */
+    uint64_t hay[FRIGO_MAX_SENSORS] = {0};
+    for (int i = 0; i < s_state.n_sensors; i++)
+        hay[i] = s_state.sensors[i].address;
+    s_scan_flags = frigo_sondas_resolver(hay, s_state.n_sensors,
+                                         s_state.role_addr).flags;
+    xSemaphoreGive(s_mutex);
     nvs_save();
     return ESP_OK;
 }
