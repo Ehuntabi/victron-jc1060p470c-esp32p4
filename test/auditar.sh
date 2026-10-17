@@ -146,6 +146,44 @@ grep -q "NO ha latido nunca" main/watchdog.c && grep -q "2 \* WD_TASK_TIMEOUT_US
     && ok "avisa de las entradas que nunca han latido (2x su propio plazo)" \
     || mal "falta el aviso de las entradas que nunca laten (hueco silencioso del watchdog)"
 
+echo "=== 2f. OTA de las pantallas (5\" y 3,5\"): validar antes de publicar ==="
+# La subida de MAIN/portal/ota_pantalla.c escribe un firmware que otra pantalla
+# va a instalar: si se publica un .bin que no es de ese modelo (o a medias), la
+# cabina se queda sin arrancar. Cada regla protege un paso de esa cadena.
+OTAP=main/portal/ota_pantalla.c
+if [ -f "$OTAP" ]; then
+    grep -q "0xABCD5432u" "$OTAP" \
+        && ok "comprueba el magic de esp_app_desc_t (0xABCD5432)" \
+        || mal "la subida no comprueba el magic de esp_app_desc_t"
+    grep -qE '^#define PANTALLA_MAX_BYTES[[:space:]]+0x3F0000u' "$OTAP" \
+        && ok "el tope de la subida es 0x3F0000 (el del contrato)" \
+        || mal "PANTALLA_MAX_BYTES ya no es 0x3F0000"
+    grep -q "pantalla_fw_valido(" "$OTAP" \
+        && ok "valida proyecto/version con la funcion probada en host" \
+        || mal "no usa pantalla_fw_valido(): lo probado en host no seria lo que corre"
+    grep -q 'httpd_req_get_hdr_value_str(req, "Content-Length"' "$OTAP" \
+        && ok "exige Content-Length antes de recibir (411 sin el)" \
+        || mal "la subida no exige Content-Length"
+    grep -q "mbedtls_sha256_" "$OTAP" \
+        && ok "el sha256 de /api/pantalla/info es real (mbedtls_sha256)" \
+        || mal "no calcula el sha256 con mbedtls"
+    grep -q '\.tmp' "$OTAP" && grep -q 'rename(' "$OTAP" \
+        && ok "escribe a .tmp y publica con rename (nunca un .bin a medias)" \
+        || mal "no usa el patron .tmp + rename al publicar el firmware"
+    # El reparto importa: la info en el 80 (ligero) y los megabytes en el 8081.
+    grep -q "registrar(server, &uri_pantalla_info)" main/portal/config_server.c \
+        && ok "/api/pantalla/info va en el servidor ligero (80)" \
+        || mal "/api/pantalla/info no esta registrada en el servidor ligero"
+    grep -q "registrar(server_heavy, &uri_pantalla_bin)" main/portal/config_server.c \
+        && ok "/api/pantalla/bin va en el servidor pesado (8081)" \
+        || mal "/api/pantalla/bin no esta registrada en el servidor pesado"
+    grep -q "registrar(server_heavy, &uri_pantalla_subir)" main/portal/config_server.c \
+        && ok "/api/pantalla/subir va en el servidor pesado (8081)" \
+        || mal "/api/pantalla/subir no esta registrada en el servidor pesado"
+else
+    mal "falta main/portal/ota_pantalla.c (OTA de las pantallas)"
+fi
+
 echo "=== 3. Copias de cadenas sin limite (strcpy/strcat/sprintf con origen no literal) ==="
 malas=$(grep -rnE '\b(strcpy|strcat|sprintf)\s*\(' main components --include="*.c" 2>/dev/null \
     | grep -v managed_components | grep -v espressif__ \

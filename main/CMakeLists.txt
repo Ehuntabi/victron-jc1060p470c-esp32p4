@@ -1,3 +1,10 @@
+# OJO: file(GLOB) se evalua al CONFIGURAR. Un .c que aparezca despues NO entra
+# en un build/ ya generado (el enlace falla con "undefined reference" y parece
+# que el codigo esta mal). Al anadir un fichero nuevo: `idf.py reconfigure` o
+# borrar build/. El CI y release.sh configuran de cero, asi que alli no pasa.
+# CONFIGURE_DEPENDS NO vale aqui: el IDF incluye este CMakeLists en modo script
+# y CMake lo rechaza ("invalid for script and find package modes").
+# 17-oct-2026: al anadir portal/ota_pantalla.c.
 file(GLOB_RECURSE SOURCES "*.c")
 
 idf_component_register(

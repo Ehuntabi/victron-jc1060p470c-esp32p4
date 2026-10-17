@@ -7,3 +7,5 @@ gcc -std=gnu11 -Wall -Wextra -I. -o /tmp/test_mini_proto test/test_mini_proto.c
 /tmp/test_mini_proto
 echo "=== test de la propiedad del viaje (dueno de las operaciones) ==="
 bash test/test_viaje_dueno.sh
+echo "=== test de la validacion del firmware de las pantallas (OTA) ==="
+bash test/test_pantalla_fw.sh
