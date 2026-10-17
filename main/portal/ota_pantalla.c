@@ -631,7 +631,12 @@ static esp_err_t pantalla_enviar_bloque(httpd_req_t *req,
 
 esp_err_t ota_pantalla_pagina(httpd_req_t *req)
 {
-    REQUIRE_AUTH(req);
+    /* Estricta, igual que la subida: el realm es lo que hace que el navegador
+     * reutilice la clave que acaba de pedir para el /ota y no la pida otra vez
+     * al enviar el fichero. */
+    if (check_basic_auth_strict_aviso(req,
+            "la pagina de firmware pide la clave de administracion") != ESP_OK)
+        return ESP_OK;
 
     pantalla_fw_info_t info[PANTALLA_NUM_MODELOS] = {0};
     bool hay[PANTALLA_NUM_MODELOS] = {false};
@@ -782,7 +787,20 @@ esp_err_t ota_pantalla_bin(httpd_req_t *req)
  * falla se borra el .tmp y la version anterior sigue intacta. */
 esp_err_t ota_pantalla_subir(httpd_req_t *req)
 {
-    REQUIRE_AUTH(req);
+    /* NIVEL DE ADMINISTRACION (17-oct-2026). Se probo a bajarlo al nivel del
+     * portal para que el movil no pidiera una segunda clave a mitad de la
+     * subida, pero el /ota de la PROPIA P4 (con el que se cambia el firmware de
+     * la placa entera) es estricto: dejar la subida de las pantallas por debajo
+     * permitiria que cualquiera con la clave del portal -- que la llevan la app
+     * y las dos cabinas -- publicara un firmware para las pantallas. No es un
+     * privilegio que haga falta para lo que pide el dueño: el movil abre /ota o
+     * /pantallas, teclea la clave de administracion UNA vez y el navegador la
+     * reutiliza para la pagina y para la subida (mismo realm). Y si en esa P4 no
+     * hay clave de administracion puesta, el nivel estricto cae al del portal y
+     * no pide nada. */
+    if (check_basic_auth_strict_aviso(req,
+            "subir el firmware de una pantalla pide la clave de administracion") != ESP_OK)
+        return ESP_OK;
 
     const pantalla_modelo_t *m = pantalla_modelo_de_query(req);
     if (!m)

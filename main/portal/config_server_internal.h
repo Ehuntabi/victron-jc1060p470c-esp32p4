@@ -67,9 +67,8 @@ void cfg_dns_stop(void);
 } while (0)
 
 /* El aviso propio del 401/403 lo piden los handlers que lo necesitan llamando
- * a check_basic_auth_strict_aviso() directamente (borrar un viaje); ya no hay
- * macro: la subida del firmware de las pantallas paso al nivel del portal el
- * 17-oct-2026 para no pedir una segunda clave en mitad de la subida. */
+ * a check_basic_auth_strict_aviso() directamente (borrar un viaje, subir el
+ * firmware de una pantalla y su pagina): no hay macro para eso. */
 
 /* Escape HTML de texto libre (nombres de fichero/carpeta que vienen de la SD,
  * o el destino de viaje que se teclea en la 3,5"): sustituye & < > " ' por sus
