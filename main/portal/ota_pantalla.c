@@ -562,8 +562,10 @@ static const char PANTALLA_PAGINA_CABECERA[] =
 static const char PANTALLA_PAGINA_PIE[] =
     "<p style='color:#666;font-size:14px'>La de 5\" usa "
     "<code>cabina5-vX.Y.bin</code>; la de 3,5\" usa "
-    "<code>35cabina-vX.Y.bin</code>. La clave que pida el navegador es la del "
-    "portal (la que se ve en la pantalla de la P4: Ajustes -&gt; Wi-Fi).</p>"
+    "<code>35cabina-vX.Y.bin</code>. La clave que pide el navegador es la de "
+    "<b>administracion</b> (la misma que en /ota, no la del portal): se ve en "
+    "la pantalla de la P4, Ajustes -&gt; Wi-Fi, y si no te acuerdas, alli mismo "
+    "el boton <b>Clave de administracion</b> genera una nueva.</p>"
     "<script>"
     "function tam(n){"
     " if(typeof n!=='number'||!isFinite(n))return '?';"
