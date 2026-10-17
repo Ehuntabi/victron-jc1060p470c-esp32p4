@@ -653,6 +653,7 @@ static const char DASHBOARD_HTML[] =
       "<a href='/dashboard'><b>Dashboard</b></a>"
       "<a href='/data'>Logs</a>"
       "<a href='/keys'>Keys</a>"
+      "<a href='" PORTAL_HEAVY_BASE "/pantallas'>Pantallas</a>"
     "</nav>"
     "<h1>Victron Dashboard</h1>"
     "<div class='grid'>"
@@ -968,10 +969,10 @@ esp_err_t config_server_start(void) {
     cfg_heavy.recv_wait_timeout = 30;
     cfg_heavy.max_open_sockets = 4;
     cfg_heavy.lru_purge_enable = true;
-    /* 28 plazas para 23 handlers (contados el 17-oct-2026: los 21 de antes mas
-     * /api/pantalla/bin y /api/pantalla/subir). El margen es 5: si algun dia no
-     * cabe uno, ahora se ve en el log -- registrar() comprueba el retorno -- en
-     * vez de desaparecer en silencio. */
+    /* 28 plazas para 24 handlers (contados el 17-oct-2026: los 21 de antes mas
+     * /api/pantalla/bin, /api/pantalla/subir y /pantallas). El margen es 4: si
+     * algun dia no cabe uno, ahora se ve en el log -- registrar() comprueba el
+     * retorno -- en vez de desaparecer en silencio. */
     cfg_heavy.max_uri_handlers = 28;
     cfg_heavy.max_resp_headers = 16;
     esp_err_t herr_heavy = httpd_start(&server_heavy, &cfg_heavy);
@@ -1004,12 +1005,15 @@ esp_err_t config_server_start(void) {
 
     /* OTA de las CABINAS (5" y 3,5"), ver ota_pantalla.c. La info va en el
      * servidor LIGERO (80), como /api/state: es JSON pequeno y se pide al
-     * entrar en la pantalla de actualizacion. El binario y la subida van en el
-     * PESADO (8081), como /ota y los .tar: mover 2-4 MB por Wi-Fi no puede
-     * dejar mudo el portal. OJO: la info hashea los .bin enteros (sha256 real)
-     * y eso cuesta un par de segundos; es la excepcion conocida del 80. */
+     * entrar en la pantalla de actualizacion. La pagina para el movil, el
+     * binario y la subida van en el PESADO (8081), como /ota y los .tar: mover
+     * 2-4 MB por Wi-Fi no puede dejar mudo el portal. OJO: la info hashea los
+     * .bin enteros (sha256 real) y eso cuesta un par de segundos; es la
+     * excepcion conocida del 80. */
     httpd_uri_t uri_pantalla_info = { .uri = "/api/pantalla/info", .method = HTTP_GET, .handler = ota_pantalla_info };
     registrar(server, &uri_pantalla_info);
+    httpd_uri_t uri_pantalla_pagina = { .uri = "/pantallas", .method = HTTP_GET, .handler = ota_pantalla_pagina };
+    if (server_heavy) registrar(server_heavy, &uri_pantalla_pagina);
     httpd_uri_t uri_pantalla_bin = { .uri = "/api/pantalla/bin", .method = HTTP_GET, .handler = ota_pantalla_bin };
     if (server_heavy) registrar(server_heavy, &uri_pantalla_bin);
     httpd_uri_t uri_pantalla_subir = { .uri = "/api/pantalla/subir", .method = HTTP_POST, .handler = ota_pantalla_subir };

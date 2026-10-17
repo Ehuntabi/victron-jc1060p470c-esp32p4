@@ -1,13 +1,16 @@
-/* Arnes del test de host de la validacion del firmware de las pantallas.
+/* Arnes del test de host de la validacion del firmware de las pantallas y del
+ * texto que pinta la pagina /pantallas.
  *
- * La funcion pantalla_fw_valido() NO se copia aqui: test/test_pantalla_fw.sh la
- * extrae del fuente de produccion (main/portal/ota_pantalla.c) y la pega en el
- * hueco marcado mas abajo, igual que test_viaje_dueno.sh hace con las reglas
- * del viaje. Asi lo que se prueba es el codigo que corre en la P4.
+ * Las funciones (pantalla_fw_valido, pantalla_bytes_legible y
+ * pantalla_estado_texto) NO se copian aqui: test/test_pantalla_fw.sh las extrae
+ * del fuente de produccion (main/portal/ota_pantalla.c) y las pega en el hueco
+ * marcado mas abajo, igual que test_viaje_dueno.sh hace con las reglas del
+ * viaje. Asi lo que se prueba es el codigo que corre en la P4.
  *
  * Se construye un .bin de mentira: los primeros 0x70 bytes con el magic en
  * 0x20, project_name en 0x50 y version en 0x30. Los casos fijan el contrato:
- * acepta una cabecera buena y rechaza cada forma de romperla.
+ * acepta una cabecera buena y rechaza cada forma de romperla. Y aparte se
+ * prueban los tamanos/estados que ve el dueno en el movil.
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -57,6 +60,37 @@ static void caso(const char *que, bool esperado, const char *modelo,
                ok ? "ACEPTA" : "RECHAZA",
                (esperado && ok) ? " ver=" : "",
                (esperado && ok) ? ver : "");
+    }
+}
+
+/* ── Texto de /pantallas ───────────────────────────────────────────────────
+ * Tambien es codigo de PRODUCCION (extraido del fuente): el tamano y el estado
+ * que ve el dueno en el movil. Se prueban los dos .bin publicados y los bordes
+ * de unidad, porque un "2,1 MB" donde pone "2,2" no rompe nada pero confunde. */
+static void texto_caso(const char *que, uint64_t bytes, const char *esperado)
+{
+    char out[32];
+    pantalla_bytes_legible(bytes, out, sizeof(out));
+    pruebas++;
+    if (strcmp(out, esperado) != 0) {
+        printf("FALLO  %-46s -> '%s' (esperado '%s')\n", que, out, esperado);
+        fallos++;
+    } else {
+        printf("ok     %-46s -> %s\n", que, out);
+    }
+}
+
+static void estado_caso(const char *que, const char *ver, uint64_t bytes,
+                        const char *esperado)
+{
+    char out[64];
+    pantalla_estado_texto(ver, bytes, out, sizeof(out));
+    pruebas++;
+    if (strcmp(out, esperado) != 0) {
+        printf("FALLO  %-46s -> '%s' (esperado '%s')\n", que, out, esperado);
+        fallos++;
+    } else {
+        printf("ok     %-46s -> %s\n", que, out);
     }
 }
 
@@ -149,6 +183,20 @@ int main(void)
         printf("FALLO  %-46s -> ACEPTA\n", "modelo NULL");
         fallos++;
     }
+
+    /* ── texto de /pantallas: tamano y estado ───────────────────────────── */
+    texto_caso("tamano del cabina5 v1.31 (2.237.216 B)", 2237216, "2,2 MB");
+    texto_caso("tamano del 35cabina v2.44 (1.960.688 B)", 1960688, "2,0 MB");
+    texto_caso("tamano en el tope (4.128.768 B)", 4128768, "4,1 MB");
+    texto_caso("justo 1 MB", 1000000, "1,0 MB");
+    texto_caso("999.999 B redondea a 1,0 MB", 999999, "1,0 MB");
+    texto_caso("999 B se queda en bytes", 999, "999 B");
+    texto_caso("justo 1 KB", 1000, "1 KB");
+    texto_caso("cero bytes", 0, "0 B");
+
+    estado_caso("estado con fichero", "v1.31", 2237216, "v1.31 (2,2 MB)");
+    estado_caso("estado sin version (NULL)", NULL, 0, "no hay fichero");
+    estado_caso("estado sin version (cadena vacia)", "", 0, "no hay fichero");
 
     printf("\n%d pruebas, %d fallos\n", pruebas, fallos);
     return fallos ? 1 : 0;

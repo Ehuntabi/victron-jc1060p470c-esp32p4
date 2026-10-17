@@ -485,7 +485,7 @@ esp_err_t ota_update_page(httpd_req_t *req)
      * formulario lo envuelve con separadores MIME y habria que desenvolverlo en
      * la pantalla (mas codigo y mas cosas que fallen). Asi el servidor solo
      * tiene que escribir lo que recibe. */
-    char html[2400];
+    char html[3200];
     snprintf(html, sizeof(html),
         "<!doctype html><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -493,6 +493,7 @@ esp_err_t ota_update_page(httpd_req_t *req)
         "<h2>Actualizar la pantalla</h2>"
         "<p>Version instalada: <b>%s</b><br>Compilada el %s</p>"
         "%s"
+        "<p><a href='/pantallas'>Actualizar las pantallas (5\" y 3,5\")</a></p>"
         "<p><input type='file' id='f' accept='.bin'></p>"
         "<p><button id='b' style='padding:12px 20px;font-size:16px'>Instalar</button></p>"
         "<p id='e'></p>"

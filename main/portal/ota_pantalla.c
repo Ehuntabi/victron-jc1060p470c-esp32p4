@@ -10,14 +10,15 @@
  * REPARTO DE SERVIDORES (ver config_server.c):
  *   - /api/pantalla/info va en el httpd LIGERO (80), como /api/state: es lo que
  *     se pide al entrar en la pantalla de actualizacion.
- *   - /api/pantalla/bin y /api/pantalla/subir van en el PESADO (8081), como
- *     /ota y los .tar: mover 2-4 MB por Wi-Fi no puede dejar mudo el portal.
+ *   - /pantallas (la pagina para el movil), /api/pantalla/bin y
+ *     /api/pantalla/subir van en el PESADO (8081), como /ota y los .tar: mover
+ *     2-4 MB por Wi-Fi no puede dejar mudo el portal.
  *
  * NADA de ESP_ERROR_CHECK en los caminos de datos: un abort en la tarea del
  * httpd se lleva por delante el portal entero (y con la cabina a medias).
  */
 #include "ota_pantalla.h"
-#include "config_server_internal.h"   /* REQUIRE_AUTH / REQUIRE_AUTH_STRICT_AVISO */
+#include "config_server_internal.h"   /* REQUIRE_AUTH y html_escape */
 #include "camera.h"                   /* camera_sd_bus_lock y sd_reader_* */
 #include "datalogger.h"               /* datalogger_sd_montada */
 #include "sd_safe.h"                  /* sd_mkdir con el cerrojo de la SD dentro */
@@ -44,15 +45,16 @@ static const char *TAG = "ota_pantalla";
  * pueda quedar desfasada (si el .bin se llama cabina5.bin, su project_name
  * TIENE que ser "cabina5", y la validacion de la subida lo exige). */
 typedef struct {
-    const char *nombre;
+    const char *nombre;   /* project_name y nombre del fichero, sin adornos */
     const char *ruta;
+    const char *titulo;   /* lo que se lee en la pagina /pantallas */
 } pantalla_modelo_t;
 
 #define PANTALLA_DIR "/sdcard/firmware"
 
 static const pantalla_modelo_t s_modelos[] = {
-    { "cabina5",  PANTALLA_DIR "/cabina5.bin"  },
-    { "35cabina", PANTALLA_DIR "/35cabina.bin" },
+    { "cabina5",  PANTALLA_DIR "/cabina5.bin",  "Pantalla de 5\""   },
+    { "35cabina", PANTALLA_DIR "/35cabina.bin", "Pantalla de 3,5\"" },
 };
 #define PANTALLA_NUM_MODELOS (sizeof(s_modelos) / sizeof(s_modelos[0]))
 
@@ -143,6 +145,52 @@ static bool pantalla_fw_valido(const uint8_t *cab, size_t cab_n, size_t bytes,
     memcpy(ver, cab + OFF_VER, ver_len);
     ver[ver_len] = '\0';
     return true;
+}
+
+/* ── Texto que ve el movil en /pantallas ───────────────────────────────────
+ *
+ * Estas dos funciones son PURAS (no tocan SD ni HTTP) a proposito: el test
+ * test/test_pantalla_fw.sh las EXTRAE del fuente y las compila en el host, asi
+ * que el "v1.31 (2,2 MB)" de la pagina se prueba con el mismo codigo que corre
+ * en la P4. Si alguien cambia el formato, el test se entera.
+ *
+ * Se usan unidades DECIMALES (1 MB = 1.000.000 B), que es lo que ensena
+ * cualquier movil: 2.237.216 B son "2,2 MB", no "2,1 MiB". Se hace con enteros
+ * (nada de %f) para no depender del sprintf de coma flotante de newlib.
+ */
+static void pantalla_bytes_legible(uint64_t bytes, char *out, size_t n)
+{
+    if (!out || n == 0) return;
+    if (bytes >= 999500ULL) {
+        /* Decimas de MB, redondeadas: 2.237.216 -> 22 -> "2,2 MB". El umbral
+         * es 999.500 (no 1.000.000) para que 999.999 no salga "1000 KB". */
+        const uint64_t decimas = (bytes + 50000ULL) / 100000ULL;
+        snprintf(out, n, "%llu,%llu MB",
+                 (unsigned long long)(decimas / 10),
+                 (unsigned long long)(decimas % 10));
+    } else if (bytes >= 1000ULL) {
+        snprintf(out, n, "%llu KB",
+                 (unsigned long long)((bytes + 500ULL) / 1000ULL));
+    } else {
+        snprintf(out, n, "%llu B", (unsigned long long)bytes);
+    }
+}
+
+/* Estado actual de un modelo tal y como se pinta en su bloque: la version y el
+ * tamano si pantalla_leer_info() encontro un .bin valido, o "no hay fichero".
+ * La version la valida antes pantalla_fw_valido(), pero aun asi el llamador la
+ * pasa por html_escape(): es texto que viene de un fichero. */
+static void pantalla_estado_texto(const char *ver, uint64_t bytes,
+                                  char *out, size_t n)
+{
+    if (!out || n == 0) return;
+    if (!ver || !ver[0]) {
+        snprintf(out, n, "no hay fichero");
+        return;
+    }
+    char tam[24];
+    pantalla_bytes_legible(bytes, tam, sizeof(tam));
+    snprintf(out, n, "%s (%s)", ver, tam);
 }
 
 /* ── Utilidades de SD ───────────────────────────────────────────────────────
@@ -475,6 +523,148 @@ esp_err_t ota_pantalla_info(httpd_req_t *req)
     return e;
 }
 
+/* ── GET /pantallas: la pagina para subir los .bin desde el MOVIL ──────────
+ *
+ * Servidor PESADO (8081) y nivel ABIERTO (la clave del portal), igual que
+ * /api/pantalla/subir. Se hace desde el navegador del telefono, de la misma
+ * forma que /ota: se elige el fichero y un XHR lo manda EN CRUDO (sin
+ * multipart), asi el servidor solo escribe lo que recibe.
+ *
+ * La version que se pinta en cada bloque sale de pantalla_leer_info(), la MISMA
+ * funcion que alimenta /api/pantalla/info: no hay una segunda forma de leer el
+ * .bin que se pueda quedar desfasada. La primera visita puede tardar un par de
+ * segundos si la cache del sha256 esta fria (esa funcion lo calcula), pero el
+ * servidor pesado esta para eso: el portal del 80 no se queda mudo.
+ */
+static const char PANTALLA_PAGINA_CABECERA[] =
+    "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>Actualizar las pantallas</title>"
+    "<style>"
+    "body{font-family:sans-serif;padding:24px;max-width:640px;margin:0 auto}"
+    "h2{margin:0 0 12px}"
+    ".bloque{border:2px solid #d9d9d9;border-radius:10px;padding:14px;margin:18px 0}"
+    ".aviso{background:#fff3cd;border:2px solid #ffb300;padding:12px;border-radius:8px}"
+    ".resultado{min-height:1.2em}"
+    "progress{width:100%;height:18px}"
+    "</style></head><body>"
+    "<h2>Actualizar las pantallas</h2>"
+    "<p class='aviso'><b>La pantalla se actualiza sola en el proximo minuto.</b> "
+    "No hay que tocar nada en ella. Mientras se actualiza se reinicia (es "
+    "normal). Si algo se corta, la pantalla sigue con la version que tenia.</p>"
+    "<p>Elige el <code>.bin</code> de cada pantalla. Se sube tal cual, sin "
+    "formularios. Abajo del todo se explica que fichero es de cada una.</p>";
+
+static const char PANTALLA_PAGINA_PIE[] =
+    "<p style='color:#666;font-size:14px'>La de 5\" usa "
+    "<code>cabina5-vX.Y.bin</code>; la de 3,5\" usa "
+    "<code>35cabina-vX.Y.bin</code>. La clave que pida el navegador es la del "
+    "portal (la que se ve en la pantalla de la P4: Ajustes -&gt; Wi-Fi).</p>"
+    "<script>"
+    "function tam(n){"
+    " if(typeof n!=='number'||!isFinite(n))return '?';"
+    " if(n>=999500)return (n/1000000).toFixed(1).replace('.',',')+' MB';"
+    " if(n>=1000)return Math.round(n/1000)+' KB';"
+    " return n+' B';}"
+    "function mensaje(status,texto){"
+    " var j=null;"
+    " try{j=JSON.parse(texto);}catch(e){}"
+    " if(j&&j.ok===true&&j.ver){"
+    "  return 'Subido '+j.ver+' ('+tam(j.bytes)+'). La pantalla lo instalara "
+    "en el proximo minuto.';"
+    " }"
+    " var motivo=(texto||'').trim();"
+    " if(!motivo)motivo='el servidor no ha contestado';"
+    " return 'No se ha subido'+(status?' (HTTP '+status+')':'')+': '+motivo;"
+    "}"
+    "function subir(modelo){"
+    " var f=document.getElementById('f_'+modelo),"
+    "     b=document.getElementById('b_'+modelo),"
+    "     p=document.getElementById('p_'+modelo),"
+    "     e=document.getElementById('e_'+modelo);"
+    " if(!f||!b||!p||!e)return;"
+    " if(!f.files.length){e.textContent='Elige primero el fichero .bin.';return;}"
+    " b.disabled=true;p.style.display='block';p.value=0;"
+    " e.textContent='Subiendo...';"
+    " var x=new XMLHttpRequest();"
+    " x.upload.onprogress=function(ev){"
+    "  if(ev.lengthComputable){"
+    "   var pc=Math.round(ev.loaded*100/ev.total);"
+    "   p.value=pc;"
+    "   e.textContent='Subiendo... '+pc+'% ('+tam(ev.loaded)+' de '+tam(ev.total)+')';}};"
+    " x.onload=function(){b.disabled=false;p.value=100;"
+    "  e.textContent=mensaje(x.status,x.responseText);};"
+    " x.onerror=function(){b.disabled=false;p.style.display='none';"
+    "  e.textContent='Se corto la conexion. La pantalla sigue con la version "
+    "que tenia.';};"
+    " x.open('POST','/api/pantalla/subir?modelo='+modelo);"
+    " x.setRequestHeader('Content-Type','application/octet-stream');"
+    " x.send(f.files[0]);"
+    "}"
+    "</script></body></html>";
+
+/* Un bloque de la pagina (un modelo): estado actual, selector y progreso.
+ * 'estado' viene ya escapado por el llamador. */
+static esp_err_t pantalla_enviar_bloque(httpd_req_t *req,
+                                        const pantalla_modelo_t *m,
+                                        const char *estado)
+{
+    char bloque[1200];
+    const int n = snprintf(bloque, sizeof(bloque),
+        "<div class='bloque'>"
+        "<h3>%s</h3>"
+        "<p>Version en la tarjeta: <b>%s</b></p>"
+        "<p><input type='file' id='f_%s' accept='.bin'></p>"
+        "<p><button id='b_%s' onclick=\"subir('%s')\" "
+        "style='padding:12px 20px;font-size:16px'>Subir e instalar</button></p>"
+        "<progress id='p_%s' max='100' value='0' style='display:none'></progress>"
+        "<p id='e_%s' class='resultado'></p>"
+        "</div>",
+        m->titulo, estado, m->nombre, m->nombre, m->nombre, m->nombre, m->nombre);
+    if (n < 0 || (size_t)n >= sizeof(bloque)) {
+        ESP_LOGE(TAG, "bloque de %s: no cabe en %u bytes", m->nombre,
+                 (unsigned)sizeof(bloque));
+        return ESP_FAIL;
+    }
+    return httpd_resp_send_chunk(req, bloque, n);
+}
+
+esp_err_t ota_pantalla_pagina(httpd_req_t *req)
+{
+    REQUIRE_AUTH(req);
+
+    pantalla_fw_info_t info[PANTALLA_NUM_MODELOS] = {0};
+    bool hay[PANTALLA_NUM_MODELOS] = {false};
+    if (datalogger_sd_montada()) {
+        for (size_t i = 0; i < PANTALLA_NUM_MODELOS; i++)
+            hay[i] = pantalla_leer_info(&s_modelos[i], &info[i]);
+    }
+
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    esp_err_t e = httpd_resp_send_chunk(req, PANTALLA_PAGINA_CABECERA,
+                                        HTTPD_RESP_USE_STRLEN);
+    for (size_t i = 0; e == ESP_OK && i < PANTALLA_NUM_MODELOS; i++) {
+        /* 160 y no 96: una version de 16 caracteres puede crecer a 96 al
+         * escaparla (& -> &amp;), y aun queda el " (2,2 MB)" detras. */
+        char estado[160];
+        if (hay[i]) {
+            char ver_html[PANTALLA_VER_N * 6];
+            html_escape(info[i].ver, ver_html, sizeof(ver_html));
+            pantalla_estado_texto(ver_html, info[i].bytes, estado, sizeof(estado));
+        } else {
+            pantalla_estado_texto(NULL, 0, estado, sizeof(estado));
+        }
+        e = pantalla_enviar_bloque(req, &s_modelos[i], estado);
+    }
+    if (e == ESP_OK)
+        e = httpd_resp_send_chunk(req, PANTALLA_PAGINA_PIE,
+                                  HTTPD_RESP_USE_STRLEN);
+    if (e == ESP_OK)
+        e = httpd_resp_send_chunk(req, NULL, 0);
+    return e;
+}
+
 /* ── GET /api/pantalla/bin?modelo=<m> ──────────────────────────────────────
  * Servidor PESADO (8081), nivel ABIERTO. Devuelve el fichero ENTERO.
  *
@@ -575,20 +765,24 @@ esp_err_t ota_pantalla_bin(httpd_req_t *req)
 }
 
 /* ── POST /api/pantalla/subir?modelo=<m> ───────────────────────────────────
- * Servidor PESADO (8081), nivel ADMINISTRACION (escribe un firmware que otras
- * pantallas van a instalar: mismo nivel que /ota, no el del portal).
+ * Servidor PESADO (8081), nivel ABIERTO (la clave del portal, igual que
+ * /api/viaje y que el resto de la web desde la que se sube).
+ *
+ * POR QUE NO PIDE LA CLAVE DE ADMINISTRACION: el dueno actualiza las dos
+ * pantallas desde el navegador del movil con la clave que ya le pide el portal.
+ * Si este endpoint pidiera la de administracion, el navegador pediria una
+ * SEGUNDA clave en mitad de la subida (y con el .bin ya elegido), que es justo
+ * lo que habia que evitar. Lo que de verdad protege esta puerta no es la clave
+ * sino la validacion de abajo: el fichero tiene que ser un firmware ESP32 con el
+ * magic de esp_app_desc_t, el project_name EXACTO del modelo y una version con
+ * 'v'; si no, se borra el .tmp y no se publica nada.
  *
  * El cuerpo se escribe tal cual a <modelo>.bin.tmp SIN cargarlo en RAM. Al
  * final se valida la cabecera capturada y SOLO entonces se publica: si algo
  * falla se borra el .tmp y la version anterior sigue intacta. */
 esp_err_t ota_pantalla_subir(httpd_req_t *req)
 {
-    /* Mismo patron de aviso que 'borrar' de config_server_viaje.c: la respuesta
-     * 401/403 ya la manda auth_comprueba, pero con un texto que dice QUE
-     * credencial falta (si no, el usuario solo ve un 401 pelado). */
-    REQUIRE_AUTH_STRICT_AVISO(req,
-        "subir el firmware de una pantalla necesita la clave de administracion "
-        "(pantalla de la P4: Ajustes -> Wi-Fi)");
+    REQUIRE_AUTH(req);
 
     const pantalla_modelo_t *m = pantalla_modelo_de_query(req);
     if (!m)

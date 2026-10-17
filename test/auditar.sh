@@ -180,6 +180,51 @@ if [ -f "$OTAP" ]; then
     grep -q "registrar(server_heavy, &uri_pantalla_subir)" main/portal/config_server.c \
         && ok "/api/pantalla/subir va en el servidor pesado (8081)" \
         || mal "/api/pantalla/subir no esta registrada en el servidor pesado"
+    # La pagina que usa el movil: en el pesado (mueve los mismos megabytes) y
+    # reutilizando pantalla_leer_info(), para que la version que se ve no salga
+    # de una segunda lectura que pueda quedarse desfasada.
+    grep -q "registrar(server_heavy, &uri_pantalla_pagina)" main/portal/config_server.c \
+        && ok "/pantallas va en el servidor pesado (8081)" \
+        || mal "/pantallas no esta registrada en el servidor pesado"
+    if awk -v fn="ota_pantalla_pagina" '
+        index($0, "esp_err_t " fn "(httpd_req_t") > 0 { dentro = 1 }
+        dentro {
+            if (index($0, "pantalla_leer_info(") > 0) usa = 1
+            n = gsub(/\{/, "{"); m = gsub(/\}/, "}")
+            llaves += n - m
+            if (llaves <= 0 && index($0, "}") > 0) dentro = 0
+        }
+        END { exit usa ? 0 : 1 }
+    ' "$OTAP"; then
+        ok "/pantallas lee la version con pantalla_leer_info() (la misma que /info)"
+    else
+        mal "/pantallas no usa pantalla_leer_info(): la version podria no ser la del /info"
+    fi
+    # El fichero va EN CRUDO (sin multipart): el servidor escribe el cuerpo tal
+    # cual y el .bin llegaria envuelto en separadores MIME si fuera un formulario.
+    grep -Fq "x.setRequestHeader('Content-Type','application/octet-stream')" "$OTAP" \
+        && grep -Fq "x.send(f.files[0])" "$OTAP" \
+        && ok "la pagina manda el .bin en crudo (sin multipart)" \
+        || mal "la pagina no manda el .bin en crudo: el servidor recibiria un formulario"
+    # El nivel de la subida es el del PORTAL, no el de administracion: con el
+    # .bin ya elegido, una segunda clave a mitad de la subida es justo lo que
+    # esta tarea tenia que quitar. Se mira el CUERPO del handler, no el fichero
+    # entero (la palabra "STRICT" aparece en otros handlers).
+    if awk -v fn="ota_pantalla_subir" '
+        index($0, "esp_err_t " fn "(httpd_req_t") > 0 { dentro = 1 }
+        dentro {
+            if (index($0, "REQUIRE_AUTH_STRICT") > 0) estricta = 1
+            if (index($0, "REQUIRE_AUTH(req)") > 0) abierta = 1
+            n = gsub(/\{/, "{"); m = gsub(/\}/, "}")
+            llaves += n - m
+            if (llaves <= 0 && index($0, "}") > 0) dentro = 0
+        }
+        END { exit (abierta && !estricta) ? 0 : 1 }
+    ' "$OTAP"; then
+        ok "la subida de pantallas pide la clave del portal (no la de admin)"
+    else
+        mal "la subida de pantallas pide la clave de administracion (segunda clave en el movil)"
+    fi
 else
     mal "falta main/portal/ota_pantalla.c (OTA de las pantallas)"
 fi

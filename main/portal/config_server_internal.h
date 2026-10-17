@@ -66,12 +66,10 @@ void cfg_dns_stop(void);
     if (check_basic_auth_strict(req) != ESP_OK) return ESP_OK; \
 } while (0)
 
-/* Nivel estricto con un aviso propio en el 401/403 (el que explica QUE
- * credencial falta y donde se pone). Mismo patron que 'borrar' de
- * config_server_viaje.c; lo usa la subida del firmware de las pantallas. */
-#define REQUIRE_AUTH_STRICT_AVISO(req, aviso) do { \
-    if (check_basic_auth_strict_aviso((req), (aviso)) != ESP_OK) return ESP_OK; \
-} while (0)
+/* El aviso propio del 401/403 lo piden los handlers que lo necesitan llamando
+ * a check_basic_auth_strict_aviso() directamente (borrar un viaje); ya no hay
+ * macro: la subida del firmware de las pantallas paso al nivel del portal el
+ * 17-oct-2026 para no pedir una segunda clave en mitad de la subida. */
 
 /* Escape HTML de texto libre (nombres de fichero/carpeta que vienen de la SD,
  * o el destino de viaje que se teclea en la 3,5"): sustituye & < > " ' por sus

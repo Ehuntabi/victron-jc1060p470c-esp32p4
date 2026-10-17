@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # test_pantalla_fw.sh — prueba SIN PLACA la validacion del .bin que se sube
-# para las pantallas (POST /api/pantalla/subir).
+# para las pantallas (POST /api/pantalla/subir) y el texto que pinta /pantallas.
 #
 # POR QUE EXISTE: un .bin que no sea de la pantalla pedida (o que este roto)
 # no se puede publicar, porque la cabina se lo baja y se queda sin arrancar.
-# La validacion de verdad esta en main/portal/ota_pantalla.c; aqui se EXTRAE
-# esa funcion del fuente y se compila con gcc, igual que test_viaje_dueno.sh
+# La validacion de verdad esta en main/portal/ota_pantalla.c; aqui se EXTRAEN
+# esas funciones del fuente y se compilan con gcc, igual que test_viaje_dueno.sh
 # hace con las reglas del viaje. No es una copia: si alguien cambia la funcion,
 # el test cambia con ella.
 set -euo pipefail
@@ -37,27 +37,40 @@ macro = re.search(r'^#define[ \t]+PANTALLA_CABECERA[ \t]+.*$', src, re.M)
 if not macro:
     raise SystemExit('no encuentro #define PANTALLA_CABECERA en ' + sys.argv[1])
 
-m = re.search(r'^static bool pantalla_fw_valido[ \t]*\(', src, re.M)
-if not m:
-    raise SystemExit('no encuentro pantalla_fw_valido() en ' + sys.argv[1])
 
-i = m.start()
-k = src.index('{', i)
-depth = 0
-while k < len(src):
-    c = src[k]
-    if c == '{':
-        depth += 1
-    elif c == '}':
-        depth -= 1
-        if depth == 0:
-            k += 1
-            break
-    k += 1
-if depth != 0:
-    raise SystemExit('no he podido delimitar el cuerpo de pantalla_fw_valido()')
+def extrae(nombre):
+    """Extrae la funcion ENTERA por su firma, contando llaves. Las funciones
+    puras de este fichero no llevan llaves dentro de cadenas ni comentarios,
+    asi que el conteo simple vale (si alguna vez llevan, el test lo dice)."""
+    m = re.search(r'^static[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+' +
+                  re.escape(nombre) + r'[ \t]*\(', src, re.M)
+    if not m:
+        raise SystemExit('no encuentro ' + nombre + '() en ' + sys.argv[1])
+    i = m.start()
+    k = src.index('{', i)
+    depth = 0
+    while k < len(src):
+        c = src[k]
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                k += 1
+                break
+        k += 1
+    if depth != 0:
+        raise SystemExit('no he podido delimitar el cuerpo de ' + nombre + '()')
+    return src[i:k]
 
-pathlib.Path(sys.argv[2]).write_text(macro.group(0) + '\n\n' + src[i:k] + '\n')
+
+# Las piezas van en orden de dependencia: estado_texto() usa bytes_legible().
+piezas = [macro.group(0)]
+for nombre in ('pantalla_bytes_legible', 'pantalla_estado_texto',
+               'pantalla_fw_valido'):
+    piezas.append(extrae(nombre))
+
+pathlib.Path(sys.argv[2]).write_text('\n\n'.join(piezas) + '\n')
 PY
 
 python3 - "$TMP/piezas.c" "$TMP/test.c" <<'PY'
