@@ -37,7 +37,6 @@
 #include "ne185/ne185.h"
 #include "watchdog.h"
 #include "stack_watch.h"   /* stack_watch_bloquea: no borrar un TCB vigilado */
-#include "net/udp_latido.h"   /* udp_latido_es_fuente: quien pide 'forzar' late */
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
@@ -4518,8 +4517,15 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         const cJSON *jdv = cJSON_GetObjectItemCaseSensitive(j, "dev");
         if (cJSON_IsString(jdv)) destino_seguro(jdv->valuestring, dev_forzar,
                                                 sizeof(dev_forzar));
-        bool es_una_pantalla = dev_es_mac(dev_forzar) &&
-                               udp_latido_es_fuente(portal_ip_cliente(req), 15);
+        /* SE INTENTO ATARLO A LA IP DEL QUE PIDE (latido vivo desde esa misma
+         * IP) y NO VALE EN ESTE httpd: portal_ip_cliente() devuelve 0 siempre
+         * -- getpeername() falla sobre el socket que da httpd_req_to_sockfd(),
+         * comprobado en la placa el 20-oct-2026 con el log del rechazo
+         * ("ip=0x00000000 latiendo=0") --, asi que con esa condicion la salida
+         * de emergencia no funcionaba NUNCA. Se queda el 'dev' valido, que es
+         * lo que hay, y queda pendiente atarlo a la tabla de concesiones DHCP
+         * (una MAC que el AP ha repartido IP) en vez de a la IP del socket. */
+        bool es_una_pantalla = dev_es_mac(dev_forzar);
         if (pide_forzar && es_una_pantalla)
             ESP_LOGI(TAG, "'%s' con forzar de la pantalla %s: vale el nivel abierto",
                      jop->valuestring, dev_forzar);
@@ -4528,9 +4534,19 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
                 "cerrar o apartar el viaje que quiza esta grabando otra pantalla "
                 "(forzar) necesita la clave de administracion "
                 "(pantalla de la P4: Ajustes -> Wi-Fi)") != ESP_OK) {
+            /* LA 'op' SE COPIA ANTES DE LIBERAR (aqui habia un use-after-free
+             * de manual, y es el que tumbo la P4 varias veces el 20-oct-2026):
+             * cJSON_Delete(j) libera el arbol, y el ESP_LOGW de detras leia
+             * jop->valuestring YA LIBERADO. El %s acababa leyendo basura y, con
+             * mala suerte, un puntero invalido -> Load access fault en
+             * _svfprintf_r con Core 1 en panic (el httpd). Se veia como "el
+             * portal se reinicia al intentar cerrar el viaje ajeno". */
+            char op_rechazada[16] = {0};
+            snprintf(op_rechazada, sizeof(op_rechazada), "%s",
+                     jop && jop->valuestring ? jop->valuestring : "?");
             cJSON_Delete(j);
             ESP_LOGW(TAG, "'%s' con forzar y sin credencial de administracion: rechazado",
-                     jop->valuestring);
+                     op_rechazada);
             return ESP_OK;
         }
     }
@@ -4785,7 +4801,25 @@ static void json_escapa(const char *in, char *out, size_t n)
 
 esp_err_t handle_data_viajes(httpd_req_t *req)
 {
-    REQUIRE_AUTH(req);
+    /* CERRAR PIDE LA CLAVE DE ADMINISTRACION, Y SOLO ESA (tanda 4 de la
+     * auditoria del 18-oct-2026). Este handler pedia el nivel abierto (la clave
+     * del PORTAL) y, mas abajo, el cierre pide la ESTRICTA (la de
+     * administracion). Un navegador manda UNA sola cabecera Authorization: si
+     * las dos claves son distintas -- que es el caso normal en cuanto se pone
+     * la de administracion -- el enlace "Cerrarlo SIN VERIFICAR" no podia
+     * funcionar NUNCA (401 del portal con la clave de admin, 403 del admin con
+     * la del portal), y se quedaba en un bucle de "pide clave" sin cerrar nada.
+     * Con '?cerrar=' vale la de admin (que es mas privilegio), y el resto de la
+     * pagina sigue pidiendo la del portal. */
+    bool pide_cerrar_pagina = false;
+    {
+        char q[192] = {0}, c[64] = {0};
+        pide_cerrar_pagina =
+            httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK &&
+            httpd_query_key_value(q, "cerrar", c, sizeof(c)) == ESP_OK &&
+            c[0];
+    }
+    if (!pide_cerrar_pagina) REQUIRE_AUTH(req);
 
     /* CERRAR EL VIAJE ABIERTO DESDE AQUI: /data/viajes?cerrar=<carpeta>
      *

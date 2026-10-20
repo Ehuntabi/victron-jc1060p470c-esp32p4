@@ -510,13 +510,6 @@ static void auth_cerrar_sesion(httpd_req_t *req, const char *motivo)
 
 /* IP del cliente (0 si no se puede saber: entonces no se le aplica el freno por
  * IP, solo el global de siempre). */
-static uint32_t auth_ip_cliente(httpd_req_t *req);
-
-uint32_t portal_ip_cliente(httpd_req_t *req)
-{
-    return auth_ip_cliente(req);
-}
-
 static uint32_t auth_ip_cliente(httpd_req_t *req)
 {
     int fd = httpd_req_to_sockfd(req);
