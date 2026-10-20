@@ -912,7 +912,11 @@ static void marcar_huerfanas(const char *abierta)
         if (ent->d_name[0] == '.') continue;
         if (!strncmp(ent->d_name, MARCA_DESCARTADO, strlen(MARCA_DESCARTADO))) continue;
         if (base_abierta && !strcmp(ent->d_name, base_abierta)) continue;
-        char ruta[RUTA_MAX];
+        /* CON SITIO PARA UN NOMBRE DE 255 (tanda 2 de la auditoria del
+         * 18-oct-2026): con RUTA_MAX (96) una carpeta de mas de ~69 caracteres
+         * -- creada desde el PC -- daba una ruta truncada, el stat fallaba y el
+         * viaje se quedaba "En curso" para siempre. Igual que estado_de(). */
+        char ruta[sizeof(VIAJES_DIR) + 256 + 32];
         struct stat st;
         snprintf(ruta, sizeof(ruta), VIAJES_DIR "/%s/resumen.txt", ent->d_name);
         if (stat(ruta, &st) == 0) continue;                       /* cerrado */
@@ -2212,7 +2216,14 @@ static bool escribir_resumen(const char *carpeta)
     if (inicio > 1000000000ULL) {
         /* Dias de calendario, no periodos de 24 h: salir un viernes y volver el
          * domingo son tres dias de viaje, aunque no sean 72 horas. */
-        long dias = (long)((now / 86400) - ((time_t)inicio / 86400)) + 1;
+        /* EN LOCAL, no en UTC (tanda 2 de la auditoria del 18-oct-2026): con
+         * epochs UTC, un viaje que empieza a las 00:30 de Madrid (22:30 UTC del
+         * dia anterior) contaba un dia de mas. dias_locales_de() ya existe en
+         * este fichero y la carpeta del viaje tambien se nombra en local. */
+        struct tm tm_i;
+        time_t ini_t = (time_t)inicio;
+        localtime_r(&ini_t, &tm_i);
+        long dias = dias_locales_de(&tm_l) - dias_locales_de(&tm_i) + 1;
         /* ACOTADA: 'inicio' es un epoch guardado en NVS, y si el reloj ha dado
          * un salto (el GPS corrige una hora que venia de un respaldo) la resta
          * sale inflada -- o negativa si el reloj fue hacia atras --. Un viaje de
@@ -2433,7 +2444,22 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
         return true;                         /* no se puede afirmar que falten */
     }
 
-    uint32_t esperados = (uint32_t)je->valuedouble;
+    /* RANGO ANTES DEL CAST (tanda 2 de la auditoria del 18-oct-2026): un
+     * "eventos":-1 o 1e20 era conversion indefinida en C; en la practica,
+     * "faltan 4.294.967.295 apuntes" y el viaje marcado INCOMPLETO sin poder
+     * quitarle la marca. Fuera de rango se trata como "no se sabe" (misma rama
+     * que cuando el campo no viene), que ya deja el viaje SIN VERIFICAR. */
+    if (cJSON_IsNumber(je) && !(je->valuedouble >= 0 && je->valuedouble <= 1e6)) {
+        FILE *fm = fopen(ruta, "w");
+        if (fm) {
+            fprintf(fm, "Este viaje se cerro SIN PODER COMPROBARLO.\n\n"
+                        "El cierre traia un contador de apuntes imposible (%g).\n",
+                    je->valuedouble);
+            fclose(fm);
+        }
+        return false;
+    }
+    uint32_t esperados = cJSON_IsNumber(je) ? (uint32_t)je->valuedouble : 0;
     uint32_t aplicados = 0;
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {
@@ -4349,7 +4375,12 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         httpd_resp_sendstr(req, falta);
         return ESP_OK;
     }
-    uint32_t id = cJSON_IsNumber(jid) ? (uint32_t)jid->valuedouble : 0;
+    /* Igual: un id negativo o gigante no se castea a lo bruto (UB); fuera de
+     * rango se trata como id 0, que es el camino que ya existe y se contesta
+     * 400 con un motivo legible. */
+    uint32_t id = (cJSON_IsNumber(jid) &&
+                   jid->valuedouble >= 1 && jid->valuedouble <= 4294967295.0)
+                  ? (uint32_t)jid->valuedouble : 0;
 
     /* ID 0 = NO HAY ID (revision del 13-oct-2026). La cabina puede llegar aqui
      * con 0 si su NVS falla al repartir el numero (ver next_trip_seq), y con id

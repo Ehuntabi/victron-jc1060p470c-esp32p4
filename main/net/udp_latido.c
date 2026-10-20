@@ -53,10 +53,24 @@ typedef struct {
 
 static latido_fuente_t s_fuentes[LATIDO_MAX_FUENTES];
 
+/* CERROJO DE LA TABLA (tanda 2 de la auditoria del 18-oct-2026). La escribe la
+ * tarea del latido y la leen la del portal y las de estado: sin cerrojo, un
+ * int64_t (dos palabras en RV32) se puede leer A MEDIAS -- no "con el valor de
+ * la vuelta anterior", como decia el comentario: un valor arbitrario. Eso deja
+ * latido_vivo=false o latiendo=0 con el enlace sano y el portal toma el camino
+ * de "cabina muda" (reinicio del AP, o de la placa). Las secciones son de dos
+ * lineas: un spinlock vale. */
+static portMUX_TYPE s_mux_fuentes = portMUX_INITIALIZER_UNLOCKED;
+
 /* Coge (o crea) la entrada de esa IP. Devuelve NULL si la tabla esta llena: con
  * cuatro huecos y dos cabinas de sobra, pero si un desconocido los llena, lo que
- * NO se hace es pisar a una cabina conocida. */
-static latido_fuente_t *fuente_de(uint32_t ip, int64_t ahora_us)
+ * NO se hace es pisar a una cabina conocida.
+ *
+ * SI RECICLA UN HUECO, LA IP VIEJA SALE POR 'reciclada' (tanda 2 de la auditoria
+ * del 18-oct-2026): esta funcion se llama con el cerrojo de la tabla cogido y el
+ * ESP_LOGI de aqui dentro escribia en el UART con las interrupciones apagadas.
+ * El que avisa es el que llama, ya sin cerrojo. */
+static latido_fuente_t *fuente_de(uint32_t ip, int64_t ahora_us, uint32_t *reciclada)
 {
     latido_fuente_t *libre = NULL;
     for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
@@ -72,8 +86,7 @@ static latido_fuente_t *fuente_de(uint32_t ip, int64_t ahora_us)
         if ((s_fuentes[i].ip == 0 || caducada) && !libre) libre = &s_fuentes[i];
     }
     if (libre && libre->ip != 0) {
-        ESP_LOGI(TAG, "hueco de latido reciclado (la cabina %08lx llevaba >60 s callada)",
-                 (unsigned long)libre->ip);
+        if (reciclada) *reciclada = libre->ip;
         libre->ip = 0;
     }
     return libre;
@@ -94,13 +107,16 @@ void udp_latido_estado(udp_latido_info_t *out)
 {
     if (!out) return;
     memset(out, 0, sizeof(*out));
+    portENTER_CRITICAL(&s_mux_fuentes);
     latido_fuente_t *f = fuente_mas_reciente();
-    if (!f) { out->seg_desde_latido = -1; out->seg_sin_datos_mini = -1; return; }
+    if (!f) { portEXIT_CRITICAL(&s_mux_fuentes);
+              out->seg_desde_latido = -1; out->seg_sin_datos_mini = -1; return; }
     out->seg_desde_latido = (int)((esp_timer_get_time() - f->ultimo_us) / 1000000);
     out->seg_sin_datos_mini = f->seg_sin_datos;
     out->ip_fija_mini = f->ip_fija;
     out->hay_datos = true;
     out->ip_mini = f->ip;
+    portEXIT_CRITICAL(&s_mux_fuentes);
 }
 
 /* Cuantas cabinas conocidas han latido en los ultimos 'vivo_s' segundos. */
@@ -108,21 +124,26 @@ int udp_latido_fuentes_vivas(int vivo_s)
 {
     int64_t ahora = esp_timer_get_time();
     int n = 0;
+    portENTER_CRITICAL(&s_mux_fuentes);
     for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
         if (s_fuentes[i].ip == 0) continue;
         if ((ahora - s_fuentes[i].ultimo_us) / 1000000 <= vivo_s) n++;
     }
+    portEXIT_CRITICAL(&s_mux_fuentes);
     return n;
 }
 
 bool udp_latido_alguna_callada(int callada_s)
 {
     int64_t ahora = esp_timer_get_time();
+    bool callada = false;
+    portENTER_CRITICAL(&s_mux_fuentes);
     for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
         if (s_fuentes[i].ip == 0) continue;
-        if ((ahora - s_fuentes[i].ultimo_us) / 1000000 > callada_s) return true;
+        if ((ahora - s_fuentes[i].ultimo_us) / 1000000 > callada_s) { callada = true; break; }
     }
-    return false;
+    portEXIT_CRITICAL(&s_mux_fuentes);
+    return callada;
 }
 
 /* true si ALGUNA cabina que sigue latiendo (esta viva, no se ha ido) dice llevar
@@ -257,8 +278,11 @@ static void latido_task(void *arg)
          * "Primer latido de una cabina" no aparecia nunca en el log). Lo que
          * queda es el filtro de subred del AP (que descarta a cualquiera de
          * fuera) mas el tope y la caducidad de la tabla. */
-        latido_fuente_t *f = fuente_de(origen, esp_timer_get_time());
+        uint32_t reciclada = 0;
+        portENTER_CRITICAL(&s_mux_fuentes);
+        latido_fuente_t *f = fuente_de(origen, esp_timer_get_time(), &reciclada);
         if (!f) {
+            portEXIT_CRITICAL(&s_mux_fuentes);
             ESP_LOGW(TAG, "latido de %s y la tabla de cabinas esta llena: lo ignoro",
                      inet_ntoa(src.sin_addr));
             continue;
@@ -269,6 +293,11 @@ static void latido_task(void *arg)
         /* El campo es int16 en el protocolo: saturado a lo que quepa. */
         f->seg_sin_datos = (l->seg_sin_datos > 32000) ? 32000 : (int)l->seg_sin_datos;
         f->ip_fija = (l->ip_fija != 0);
+        portEXIT_CRITICAL(&s_mux_fuentes);
+        if (reciclada) {
+            ESP_LOGI(TAG, "hueco de latido reciclado (la cabina %08lx llevaba >60 s callada)",
+                     (unsigned long)reciclada);
+        }
         if (primera) {
             ESP_LOGI(TAG, "Primer latido de una cabina (%s): lleva %d s sin datos%s",
                      inet_ntoa(src.sin_addr), (int)l->seg_sin_datos,

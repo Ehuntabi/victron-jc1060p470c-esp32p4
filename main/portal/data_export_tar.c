@@ -14,6 +14,8 @@ static const char *TAG = "cfg_srv";
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "esp_heap_caps.h"
+#include <errno.h>
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -96,7 +98,12 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
     if (!camera_sd_bus_lock(3000)) return false;
     DIR *dp = opendir(src_dir);
     camera_sd_bus_unlock();
-    if (!dp) return true;   /* carpeta ausente = aporta cero entradas, no es un error */
+    /* "NO EXISTE" NO ES "NO SE PUDO ABRIR" (tanda 2 de la auditoria del
+     * 18-oct-2026): si la tarjeta falla entre el stat y el opendir, antes se
+     * devolvia true y el .tar salia VALIDO Y VACIO, con el cliente dandolo por
+     * bueno. ENOENT es la carpeta que no esta (cero entradas, correcto); otro
+     * error corta el envio sin bloque final. */
+    if (!dp) return (errno == ENOENT);
 
     uint8_t hdr[TAR_BLOCK];
     bool ok = true;
@@ -265,9 +272,16 @@ typedef struct { char dir[192]; char prefix[128]; } tar_subdir_entry_t;
 static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_dir,
                                            const char *root_name, const char *attach_name)
 {
-    tar_subdir_entry_t *entries = malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS);
-    const char **dirs = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
-    const char **prefixes = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
+    /* EN PSRAM, QUE SON 82 KB (tanda 2 de la auditoria del 18-oct-2026): esto
+     * pedia el peor caso siempre y del heap INTERNO, que es el que comparten
+     * LVGL y la camara. Malloc normal de reserva si no hubiera PSRAM. */
+    tar_subdir_entry_t *entries = heap_caps_malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS,
+                                                   MALLOC_CAP_SPIRAM);
+    if (!entries) entries = malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS);
+    const char **dirs = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS, MALLOC_CAP_SPIRAM);
+    if (!dirs) dirs = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
+    const char **prefixes = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS, MALLOC_CAP_SPIRAM);
+    if (!prefixes) prefixes = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
     if (!entries || !dirs || !prefixes) {
         free(entries); free(dirs); free(prefixes);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
