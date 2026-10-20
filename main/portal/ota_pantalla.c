@@ -1014,6 +1014,16 @@ esp_err_t ota_pantalla_subir(httpd_req_t *req)
      * version publicada, que es un estado SEGURO (la cabina ve "no hay
      * actualizacion", nunca un binario a medias). */
     bool publicado = false;
+    /* LA CACHE DEL SHA256 SE TIRA AL PUBLICAR (tanda 1 de la auditoria del
+     * 18-oct-2026). La cache va por (fecha, tamano) y la FAT tiene resolucion de
+     * 2 s: dos subidas del mismo tamano dentro de la misma ventana -- o copiar
+     * el fichero del PC conservando la fecha -- dejaban un sha256 VIEJO
+     * anunciado, y la cabina abortaba siempre en "sha256 no cuadra". Invalidar
+     * aqui cuesta cero y cierra ese caso del todo. */
+    {
+        size_t k = (size_t)(m - s_modelos);
+        if (k < PANTALLA_NUM_MODELOS) s_cache[k].hay = false;
+    }
     if (camera_sd_bus_lock(3000)) {
         struct stat st_viejo;
         const bool hay_viejo = (stat(ruta, &st_viejo) == 0);

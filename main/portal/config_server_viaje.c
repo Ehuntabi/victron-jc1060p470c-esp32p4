@@ -1057,8 +1057,20 @@ static char csv_car(char c)
     return c;
 }
 
+static bool texto_a_numero(const char *s, double *out);   /* definida mas abajo */
+
 static void csv_texto(FILE *f, const char *v)
 {
+    /* UN NUMERO SE ESCRIBE COMO NUMERO (tanda 1 de la auditoria del 18-oct-2026).
+     * numero_de() acepta la coma decimal y la suma como 12,50, pero aqui la coma
+     * se convertia en ';' (csv_car) y la fila quedaba "12;50": el resumen sumaba
+     * 12,50 y el CSV decia 12. Dos ficheros permanentes en desacuerdo sobre el
+     * mismo dinero. Si el texto es un numero limpio, se escribe con punto. */
+    double d;
+    if (texto_a_numero(v, &d)) {
+        fprintf(f, "%.10g", d);   /* sin exponente ni ceros de mas en lo que cabe aqui */
+        return;
+    }
     for (const char *p = v; *p; p++) fputc(csv_car(*p), f);
 }
 
@@ -1196,16 +1208,6 @@ static bool diario(const char *carpeta, const char *que, const char *detalle)
 
 /* ── Totales del viaje ────────────────────────────────────────────────────── */
 
-static double nvs_get_d(nvs_handle_t h, const char *k)
-{
-    /* NVS no guarda double: se mete el patron de bits en un u64. Es exacto y
-     * evita redondeos que en dinero se notan. */
-    uint64_t raw = 0;
-    if (nvs_get_u64(h, k, &raw) != ESP_OK) return 0.0;
-    double v; memcpy(&v, &raw, sizeof(v));
-    return v;
-}
-
 /* Igual, pero DICE si la lectura fallo de verdad. Que una clave no este es
  * normal (un viaje sin peajes no tiene NVS_T_PEAJE): eso es 0. Un error de NVS
  * -- particion ilegible, entrada corrupta -- no lo es, y con nvs_get_d solo se
@@ -1222,6 +1224,22 @@ static bool nvs_get_d_verificado(nvs_handle_t h, const char *k, double *out)
     }
     memcpy(out, &raw, sizeof(*out));
     return true;
+}
+
+/* LECTURA PARA LOS TOTALES (tanda 1 de la auditoria del 18-oct-2026).
+ * totales_sumar_en() hacia "nvs_get_d(...) + importe", y nvs_get_d devuelve 0
+ * ante CUALQUIER error: una entrada ilegible convertia el acumulado del viaje
+ * en "solo el ultimo apunte" sin que nadie se enterase. Ahora el fallo se
+ * apunta en s_err_suma y se devuelve como error del apunte (507), con el total
+ * intacto. Vive en un static porque el que llama es una expresion de una linea;
+ * el handler corre en la tarea del httpd, asi que no hay concurrencia. */
+static esp_err_t s_err_suma;
+static double nvs_get_d_o_error(nvs_handle_t h, const char *k)
+{
+    double v = 0.0;
+    if (!nvs_get_d_verificado(h, k, &v) && s_err_suma == ESP_OK)
+        s_err_suma = ESP_FAIL;
+    return v;
 }
 
 /* Guarda un double (patron de bits en un u64) y DEVUELVE el resultado
@@ -1403,6 +1421,7 @@ static bool numeros_validos(const char *tipo, const cJSON *datos,
  * importe que no esta en ningun sitio. */
 static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON *datos)
 {
+    s_err_suma = ESP_OK;   /* ver nvs_get_d_o_error() */
     esp_err_t err = ESP_OK;
     if (!datos) return ESP_OK;
 
@@ -1430,19 +1449,19 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
     #define IMPORTE_DE(campo) numero_de(datos, campo, NULL)
 
     if (!strcmp(tipo, "repostaje")) {
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_LITROS, nvs_get_d(h, NVS_T_LITROS) + IMPORTE_DE("litros")));
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_COMBUS, nvs_get_d(h, NVS_T_COMBUS) + IMPORTE_DE("importe")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_LITROS, nvs_get_d_o_error(h, NVS_T_LITROS) + IMPORTE_DE("litros")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_COMBUS, nvs_get_d_o_error(h, NVS_T_COMBUS) + IMPORTE_DE("importe")));
     } else if (!strcmp(tipo, "peaje")) {
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_PEAJE, nvs_get_d(h, NVS_T_PEAJE) + IMPORTE_DE("importe")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_PEAJE, nvs_get_d_o_error(h, NVS_T_PEAJE) + IMPORTE_DE("importe")));
     } else if (!strcmp(tipo, "bombona")) {
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_BOMBONA, nvs_get_d(h, NVS_T_BOMBONA) + IMPORTE_DE("precio")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_BOMBONA, nvs_get_d_o_error(h, NVS_T_BOMBONA) + IMPORTE_DE("precio")));
     } else if (!strcmp(tipo, "mantenimiento")) {
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_MANTEN, nvs_get_d(h, NVS_T_MANTEN) + IMPORTE_DE("coste")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_MANTEN, nvs_get_d_o_error(h, NVS_T_MANTEN) + IMPORTE_DE("coste")));
     } else if (!strcmp(tipo, "itv")) {
         /* Va al saco del mantenimiento y no a uno propio: es un gasto del
          * vehiculo, sale una vez al ano y una linea suya en el resumen estaria
          * a cero en todos los viajes menos uno. */
-        err = nvs_apunta(err, nvs_set_d(h, NVS_T_MANTEN, nvs_get_d(h, NVS_T_MANTEN) + IMPORTE_DE("precio")));
+        err = nvs_apunta(err, nvs_set_d(h, NVS_T_MANTEN, nvs_get_d_o_error(h, NVS_T_MANTEN) + IMPORTE_DE("precio")));
     } else if (!strcmp(tipo, "agua")) {
         /* Los TRES importes al mismo total: en el resumen interesa lo que se ha
          * ido en aguas, y el desglose de cual fue el vaciado y cual el llenado
@@ -1451,7 +1470,7 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
          * IMPORTE_DE no asigna a nada (antes si, al 'ji' del cJSON, y tres
          * asignaciones a la misma variable en una expresion eran
          * -Wsequence-point). */
-        double t = nvs_get_d(h, NVS_T_AGUA);
+        double t = nvs_get_d_o_error(h, NVS_T_AGUA);
         t += IMPORTE_DE("precio_grises");
         t += IMPORTE_DE("precio_wc");
         t += IMPORTE_DE("precio_agua");
@@ -1524,9 +1543,10 @@ static esp_err_t totales_sumar_en(nvs_handle_t h, const char *tipo, const cJSON 
             }
         }
         err = nvs_apunta(err, nvs_set_d(h, NVS_T_ALOJA,
-                          nvs_get_d(h, NVS_T_ALOJA) + precio * unidades + extras));
+                          nvs_get_d_o_error(h, NVS_T_ALOJA) + precio * unidades + extras));
     }
     #undef IMPORTE_DE
+    err = nvs_apunta(err, s_err_suma);   /* si un total no se pudo leer, el apunte falla */
     return err;
 }
 
@@ -4417,10 +4437,11 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * salida de emergencia exista; lo que compra es que la cabina de verdad
      * pueda cerrar un viaje cuyo dueño ya no esta. La guarda de dueño
      * (pide_otra_pantalla) sigue intacta para todo lo que no traiga 'forzar'. */
+    bool pide_forzar = false;
     {
         const cJSON *jf = cJSON_GetObjectItemCaseSensitive(j, "forzar");
-        bool pide_forzar = cJSON_IsTrue(jf) ||
-                           (cJSON_IsNumber(jf) && jf->valuedouble != 0);
+        pide_forzar = cJSON_IsTrue(jf) ||
+                      (cJSON_IsNumber(jf) && jf->valuedouble != 0);
         char dev_forzar[24] = {0};
         const cJSON *jdv = cJSON_GetObjectItemCaseSensitive(j, "dev");
         if (cJSON_IsString(jdv)) destino_seguro(jdv->valuestring, dev_forzar,
@@ -4461,7 +4482,14 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      *  - "registro": un apunte lleva DATOS del usuario, asi que no se tira en
      *    silencio. Se contesta 409 -- el codigo que la cola ya sabe leer y
      *    enseñar -- y queda a la vista para decidirlo a mano. */
-    if (!es_inicio && id != 0 && id_rezagado(id)) {
+    /* CON 'forzar' NO SE DESCARTA POR REZAGADO (tanda 1 de la auditoria del
+     * 18-oct-2026). id_rezagado() compara el contador de la pantalla con el del
+     * inicio; si ese contador vuelve por debajo (NVS borrada al reflashear, o
+     * dos pantallas con el mismo mac[5]), TODOS los fin/descartar -incluido el
+     * GUARDARLO/APARTARLO de la salida de emergencia, que manda forzar- se
+     * contestaban 200 "duplicado" y el viaje se quedaba abierto para siempre.
+     * 'forzar' es la confirmacion explicita del usuario: si la pide, se aplica. */
+    if (!es_inicio && id != 0 && id_rezagado(id) && !pide_forzar) {
         if (!strcmp(jop->valuestring, "registro")) {
             ESP_LOGW(TAG, "apunte con id %lu (pantalla %d) ANTERIOR al inicio del "
                           "viaje abierto: es del viaje anterior, no lo aplico",

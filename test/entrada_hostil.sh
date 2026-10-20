@@ -362,6 +362,10 @@ piezas = [
     # vuelve a juntarlas en una sola funcion, esta lista se cae y hay que
     # ajustarla, que es justo lo que se quiere notar.
     extrae(v, "static char csv_car(char c)"),
+    # csv_texto() decide si un texto es numero (y entonces lo escribe con punto)
+    # llamando a texto_a_numero(): la conversion tiene que venir tambien, o el
+    # enlazador se queja (tanda 1 de la auditoria del 18-oct-2026).
+    extrae(v, "static bool texto_a_numero(const char *s, double *out)"),
     extrae(v, "static void csv_texto(FILE *f, const char *v)"),
     extrae(v, "static size_t csv_texto_a(char *out, size_t n, const char *v)"),
     extrae(v, "static bool csv_por_tipo(const char *carpeta, const char *tipo, const cJSON *datos, const char *cuando)"),
@@ -500,6 +504,12 @@ int main(void)
     puts("-- csv_texto(): lo que llega al CSV --");
     csv("texto normal",     "Cambio de filtro",              "Cambio de filtro");
     csv("coma",             "aceite, correa",                "aceite; correa");
+    /* UN NUMERO CON COMA SE ESCRIBE COMO NUMERO (tanda 1, 18-oct-2026): lo que
+     * se suma es 12,50, asi que el CSV no puede decir "12;50". */
+    csv("importe con coma", "12,50",                         "12.5");
+    csv("importe con punto","12.5",                          "12.5");
+    csv("entero",           "1234",                          "1234");
+    csv("con espacios",     " 12,50 ",                       "12.5");
     csv("comilla doble",    "filtro \"nuevo\"",              "filtro 'nuevo'");
     csv("salto de linea",   "aceite\ncorrea",                "aceite correa");
     csv("retorno",          "aceite\rcorrea",                "aceite correa");

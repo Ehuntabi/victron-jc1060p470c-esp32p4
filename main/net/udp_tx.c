@@ -70,7 +70,14 @@ static void build_msg(mini_msg_t *out)
          * 24-sep-2026 (2.619 tramas con SOC=102.3 % en una tanda). */
         out->shunt_soc_deci      = (snap.soc_deci <= 1000)
                                    ? (int16_t)snap.soc_deci : MINI_NO_DATA_I16;
-        out->shunt_voltage_centi = (int16_t)snap.bat_v_centi;
+        /* EL CERO DEL SHUNT NO ES UN VOLTAJE (tanda 1 de la auditoria del
+         * 18-oct-2026). victron_ble.c traduce el NA del SmartShunt (0x7FFF) a 0
+         * -- y la pantalla de 7" lo pinta como "--" --, pero por UDP viajaba 0 y
+         * la cabina lo daba por bueno (su centinela es -32768): enseñaba
+         * "0.00 V" con la bateria desconectada. 0 V en una bateria de 12 no es
+         * una lectura, es la ausencia de lectura. */
+        out->shunt_voltage_centi = (snap.bat_v_centi > 0)
+                                   ? (int16_t)snap.bat_v_centi : MINI_NO_DATA_I16;
         out->shunt_current_milli = snap.bat_i_milli;
         out->aux_value_raw       = snap.aux_value;
         out->aux_input           = snap.aux_input;
@@ -82,8 +89,15 @@ static void build_msg(mini_msg_t *out)
         out->aux_input           = MINI_NO_DATA_U8;
     }
     if (snap.dcdc_fresh) {
-        out->dcdc_v_in_centi  = (int16_t)snap.dc_in_v_centi;
-        out->dcdc_v_out_centi = (int16_t)snap.dc_out_v_centi;
+        /* Y EL RANGO, que aqui no habia (tanda 1 de la auditoria del
+         * 18-oct-2026): el registro del Orion no tiene filtro de cordura (el del
+         * battery monitor si), asi que un valor corrupto de 32768..65535 se
+         * volvia NEGATIVO al hacer el cast y viajaba como -327 V. Fuera de
+         * 0..60 V (6000 centi) no es un voltaje: se manda "sin dato". */
+        out->dcdc_v_in_centi  = (snap.dc_in_v_centi  > 0 && snap.dc_in_v_centi  <= 6000)
+                                ? (int16_t)snap.dc_in_v_centi  : MINI_NO_DATA_I16;
+        out->dcdc_v_out_centi = (snap.dc_out_v_centi > 0 && snap.dc_out_v_centi <= 6000)
+                                ? (int16_t)snap.dc_out_v_centi : MINI_NO_DATA_I16;
         out->dcdc_state       = snap.dc_state;
     } else {
         out->dcdc_v_in_centi  = MINI_NO_DATA_I16;
