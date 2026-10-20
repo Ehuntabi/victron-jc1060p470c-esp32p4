@@ -1,10 +1,14 @@
 # `forzar`: cómo autenticar a la pantalla (diseño, 20-oct-2026)
 
-Estado: **diseño aprobado pendiente de implementar**. Hoy (v4.56) el `forzar` del
-`fin`/`descartar` acepta el nivel abierto si el cuerpo trae un `dev` con MAC
-valida. Eso para un dedazo (escribir 12 hex), pero no autentica: cualquiera en el
-AP con la clave del portal —que está en el historial de dos repos publicos— puede
-mandarlo, y un portatil puede hasta ponerse la MAC de una cabina.
+Estado: **la mitad de la P4 hecha y grabada en la v4.57 (tanda 1, 20-oct-2026);
+falta la mitad de las cabinas (tanda 2)**. Lo implementado, y en qué se aparta
+del diseño, al final: «Cómo ha quedado en la v4.57».
+
+Hasta la v4.56 el `forzar` del `fin`/`descartar` aceptaba el nivel abierto si el
+cuerpo traia un `dev` con MAC valida. Eso para un dedazo (escribir 12 hex), pero
+no autentica: cualquiera en el AP con la clave del portal —que está en el
+historial de dos repos publicos— puede mandarlo, y un portatil puede hasta
+ponerse la MAC de una cabina.
 
 ## Que hay que proteger
 
@@ -29,18 +33,23 @@ no viaje— no vale esa duplicacion en este despliegue.
 ## Emparejamiento (una vez por pantalla)
 
 1. La cabina, al arrancar o al primer `inicio`, manda `inicio` como siempre (con
-   su `dev`).
-2. En la respuesta del `inicio` la P4 añade `"token":"<32 hex>"` **solo si esa MAC
-   no tenia secreto** (primer contacto) o si el que trae no cuadra (NVS borrada en
-   la P4: se re-emite). La cabina lo guarda en NVS (`save_pantalla_token`).
+   su `dev`) y con un campo `"token"`: el que tenga guardado, o `""` si no tiene.
+   **Ese campo es la señal de que la pantalla habla este protocolo**: una cabina
+   con el firmware viejo no lo manda y la P4 no la empareja (ver «Migracion»).
+2. En la respuesta del `inicio` la P4 añade ` token=<32 hex>` al final **solo si
+   esa MAC no tenia secreto** (primer contacto, o NVS borrada en la P4) o si el
+   que trae no cuadra (entonces le reenvia el guardado). La cabina lo guarda en
+   NVS (`save_pantalla_token`).
 3. A partir de ahi lo manda en cada `forzar`.
 
-Limite honesto de este paso: en el **primer** contacto, quien pueda mandar un
-`inicio` con la MAC de una cabina se lleva el token de esa MAC. Se acepta porque
-(a) para entonces el atacante ya tiene la clave del portal y podria empezar/cerrar
-viajes a su gusto por el camino abierto, y (b) cerrar esa ventana del todo pide
-emparejar por cable/SD, que no compensa aqui. Lo que SI cierra: una vez emparejada
-una pantalla, un portatil ya no puede hacerse pasar por ella.
+Limite honesto de este paso: quien pueda mandar un `inicio` con la MAC de una
+cabina y `"token":""` se lleva el token de esa MAC (y si ya estaba emparejada, se
+lo vuelven a dar). Se acepta porque (a) para entonces el atacante ya tiene la
+clave del portal y podria empezar/cerrar viajes a su gusto por el camino abierto,
+y (b) cerrar esa ventana del todo pide emparejar por cable/SD, que no compensa
+aqui. Lo que SI cierra: un navegador, la app o un POST a mano que no hable el
+emparejamiento ya no puede cerrar el viaje de la otra pantalla sin la clave de
+administracion; y que la cabina no tenga que llevar encima esa clave.
 
 ## Contrato (JSON)
 
@@ -53,20 +62,26 @@ cuando decide si `forzar` necesita la clave estricta.
 
 ## Cambios, fichero a fichero
 
-**P4 (`victron`)**
+**P4 (`victron`): HECHO en la v4.57**
+
 - `portal/config_server_viaje.c`
-  - `static bool token_de_pantalla_ok(const char *dev, const char *token);`
-    (lee `NVS_NS` clave `"tok_<mac>"`, compara con `auth_equal_ct`, que ya existe
-    en `config_server_auth.c` — hay que exportarla en `config_server_internal.h`).
-  - `static void token_de_pantalla_emite(const char *dev, char *out, size_t n);`
-    (genera con `esp_random()`, guarda en NVS, NVS_READWRITE + commit).
-  - En `op_inicio`: si el cuerpo trae `dev` y no hay secreto para esa MAC, emitir
-    y añadir al JSON de respuesta. (El inicio ya contesta con `carpeta` y
-    `libre_mb`; es un campo mas.)
-  - En el bloque de `forzar`: `bool es_una_pantalla = dev_es_mac(dev) &&
-    token_de_pantalla_ok(dev, token_del_cuerpo);` y **el fallback es pedir la
-    clave estricta**, nunca denegar (la leccion de la v4.55).
-- `main/portal/config_server_internal.h`: exportar `auth_equal_ct`.
+  - `token_normaliza()`: 32 hex, a minusculas. Cualquier otra cosa (33 caracteres,
+    `%s`, 31, una `g`) es «sin token».
+  - `token_de_pantalla_clave()`: clave de NVS `tk_<8 ultimos hex de la MAC>`. Las
+    claves de NVS no pasan de 15 caracteres y `tok_` + los 12 de la MAC son 16.
+  - `token_de_pantalla_lee()` / `token_de_pantalla_emite()`: leen o crean el
+    secreto de esa MAC en `NVS_NS` (`nvs_commit` comprobado, como el resto).
+  - `token_autoriza_forzar()`: la decision, **pura** (sin NVS ni httpd), probada
+    en el host. Sin secreto para esa MAC vale el `dev` (v4.56); con secreto, solo
+    el token de ESA MAC.
+  - `token_de_pantalla_emparejar()`: en `op_inicio`, si el cuerpo trae `"token"`,
+    emite o reenvia el secreto. Va al final del cuerpo de la respuesta
+    (`... libre_mb=NNN token=<32 hex>`), **detras de `libre_mb`**: una cabina con
+    el firmware viejo copia solo los primeros 96 bytes y busca ahi ese campo.
+  - En el bloque de `forzar` del handler: `dev` **y** token, y el fallback es
+    pedir la clave estricta, nunca denegar (la leccion de la v4.55).
+- `main/portal/config_server_internal.h`: `auth_equal_ct` exportada (ya existia en
+  `config_server_auth.c`, era `static`).
 
 **Cabinas (`cabina5` y `35cabina`, espejo)**
 - `components/config_storage`: `bool load_pantalla_token(char *out, size_t n)` /
@@ -81,33 +96,39 @@ cuando decide si `forzar` necesita la clave estricta.
 
 ## Migracion y compatibilidad
 
-- Pantalla con firmware viejo (sin token): el `forzar` pide admin → **es lo que
-  pasa hoy**; no se rompe nada nuevo, y la P4 re-emite el token en el siguiente
-  `inicio` cuando la pantalla se actualice.
-- P4 vieja + cabina nueva: el `token` es un campo mas del JSON; la P4 vieja lo
-  ignora (cJSON no se queja) y sigue aceptando el `dev`. Compatible.
-- NVS borrada en la cabina: pide token otra vez en el proximo `inicio`.
-- NVS borrada en la P4: emite token nuevo en el proximo `inicio`.
+- Pantalla con firmware viejo (sin `token` en el `inicio`): la P4 **no la
+  empareja**, asi que su `forzar` sigue valiendo con el `dev`, igual que en la
+  v4.56. Es lo que evita que actualizar la P4 deje a las dos cabinas sin la unica
+  salida de emergencia que tienen. Cuando se actualice la cabina, manda
+  `"token":""` y se empareja sola en ese mismo `inicio`.
+- P4 vieja + cabina nueva: el `token` es un campo mas del JSON y un sufijo mas del
+  texto de la respuesta; la P4 vieja los ignora y sigue aceptando el `dev`.
+- NVS borrada en la cabina: manda `""` y la P4 le reenvia el mismo secreto.
+- NVS borrada en la P4: no hay secreto → emite uno nuevo en el proximo `inicio`.
 
 ## Pruebas
 
-Host (sin placa):
-- `victron/test/contrato_app.sh`: el `forzar` sin token de una MAC desconocida →
-  camino estricto; con token correcto → camino abierto; con token de OTRA MAC →
-  estricto; sin `dev` → estricto.
-- `victron/test/entrada_hostil.sh`: token de 33 caracteres, token con `%s`,
-  `forzar` con `dev` de 12 hex inventado y token aleatorio → estricto.
-- `cabina5|35cabina/test/viaje_contadores.sh`: el cuerpo del `fin` ajeno lleva
-  `token` cuando el `dev` esta emparejado y no lo lleva cuando no.
+Host (sin placa, en `test/run.sh` y en el CI):
+- `victron/test/test_viaje_token.sh`: 35 casos, con las funciones REALES extraidas
+  del fuente (no una copia). Forma del token (32 hex, mayusculas, 31, 33, `%s`,
+  vacio, NULL), clave de NVS por MAC (distinta por pantalla y <= 15 caracteres) y
+  la tabla del `forzar`: token correcto / de otra MAC / sin token / inventado /
+  pantalla sin emparejar / `dev` que no es una MAC.
 
-Placa (dos pantallas, lo unico que de verdad cierra el circulo):
-1. Viaje abierto en la 5". En la 3,5" → "VIAJE EN LA P4" → GUARDARLO: debe cerrar
-   **sin pedir clave** (token valido).
-2. `curl` con la clave del portal, `dev` de la 5" y token inventado → **403**.
-3. Borrar el token de la 3,5" (Ajustes→ datos, o reflash) y repetir el 1: en el
-   siguiente `inicio` la P4 le da token nuevo y vuelve a funcionar.
-4. La 5" con firmware viejo (v1.41): `forzar` → pide admin (comportamiento actual),
-   y el viaje se puede cerrar igual con la clave.
+Placa:
+1. P4 v4.57 con las cabinas de antes (SIN token): `curl` con la clave del portal,
+   un `dev` valido y SIN token → el `forzar` pasa (nivel abierto, como la
+   v4.56). Es la prueba de que no se ha roto la salida de emergencia.
+2. `inicio` con `"token":""` y esa MAC → la respuesta trae ` token=<32 hex>` y el
+   log dice «pantalla ... emparejada».
+3. El mismo `forzar` de (1), sin token → ahora **403** (pide la clave estricta).
+4. Ese `forzar` con el token de (2) → pasa. Con el token de otra MAC → 403.
+
+Y con las cabinas de la tanda 2 (lo que cierra el circulo):
+5. Viaje abierto en la 5". En la 3,5" → "VIAJE EN LA P4" → GUARDARLO: cierra
+   **sin pedir clave**.
+6. Borrar el token de la 3,5" (Ajustes → datos, o reflash) y repetir el 5: en el
+   siguiente `inicio` la P4 le da el token y vuelve a funcionar.
 
 ## Por que esto y no las otras dos
 
@@ -120,3 +141,23 @@ Placa (dos pantallas, lo unico que de verdad cierra el circulo):
 
 El token es el unico que convierte "creo que es una pantalla" en "es ESTA
 pantalla", sin tocar el protocolo UDP y con la salida de emergencia siempre viva.
+
+## Cómo ha quedado en la v4.57 (tanda 1, 20-oct-2026)
+
+Implementado en la P4 y grabado en el banco. Tres desviaciones del diseño de
+arriba, todas para que lo que hay grabado siga funcionando:
+
+1. **El emparejamiento es opt-in**: la P4 solo crea secreto si el `inicio` trae el
+   campo `"token"`. El diseño no lo decia y habria roto la salida de emergencia:
+   al primer `inicio` de una cabina vieja la P4 le habria creado secreto, y su
+   `forzar` (que no puede mandar token) habria pasado a pedir la clave — 403, el
+   usuario sin salida, la regresion de la v4.55 otra vez.
+2. **Sin secreto para esa MAC, el `forzar` con `dev` vale** (comportamiento de la
+   v4.56). El diseño decia «siempre token»; eso solo es cierto a partir de que la
+   pantalla se empareja.
+3. **La clave de NVS es `tk_<8 hex>`**, no `tok_<mac>`: no cabe.
+
+Lo que queda para la tanda 2: `load_pantalla_token`/`save_pantalla_token` en
+`components/config_storage` de las dos cabinas, mandar el token en
+`p4_api_cuerpo_fin_ajeno()`/`p4_api_cuerpo_descartar()`, guardarlo al leer la
+respuesta del `inicio`, y la prueba con dos pantallas.
