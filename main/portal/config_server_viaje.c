@@ -39,6 +39,7 @@
 #include "stack_watch.h"   /* stack_watch_bloquea: no borrar un TCB vigilado */
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -530,6 +531,166 @@ static bool dev_es_mac(const char *dev)
     return true;
 }
 
+/* ── EL TOKEN DE UNA PANTALLA (diseño en docs/SEGURIDAD_FORZAR.md) ──────────
+ *
+ * El 'forzar' del fin/descartar cierra o aparta el viaje que QUIZA esta grabando
+ * otra pantalla. Hasta la v4.56 se conformaba con un 'dev' de 12 hex: eso vale
+ * para un dedazo, pero cualquiera con la clave del portal --que esta en el
+ * historial de dos repos publicos-- puede escribir 12 hex y cerrar el viaje
+ * ajeno. Cada pantalla tiene ahora un secreto de 16 bytes (32 hex) que la P4
+ * guarda POR MAC y que la cabina manda como "token" en el fin/descartar con
+ * 'forzar'.
+ *
+ * EL EMPAREJAMIENTO ES OPTATIVO, Y ESO ES LO QUE MANTIENE COMPATIBLE LO QUE HAY
+ * GRABADO (20-oct-2026). La P4 solo crea el secreto cuando el cuerpo del
+ * 'inicio' TRAE el campo "token" (aunque venga vacio): una cabina con el
+ * firmware viejo no lo manda, asi que no se empareja nunca y su 'forzar' sigue
+ * valiendo con el 'dev', igual que en la v4.56. Si no fuera asi, actualizar la
+ * P4 dejaria a las dos cabinas sin la unica salida que tienen cuando el viaje
+ * se queda abierto con un dueño que ya no existe (lo que arreglo la v4.56). La
+ * cabina nueva (tanda 2) manda el token que tenga; si no tiene, manda "" y la
+ * P4 se lo da.
+ *
+ * LO QUE ESTO *NO* CIERRA, dicho claro: quien pueda mandar un 'inicio' con la
+ * MAC de una cabina puede pedirle el token con "token":"" -- limite ya aceptado
+ * en el diseño (cerrarlo del todo pide emparejar por cable/SD, que no compensa
+ * aqui). Lo que si cierra: un navegador, la app o un POST a mano que no hable el
+ * protocolo de emparejamiento ya no pueden cerrar el viaje de la otra pantalla,
+ * y la cabina no necesita llevar encima la clave de administracion. */
+
+/* 32 digitos hex (16 bytes) y normalizado a minusculas. Devuelve false si no lo
+ * es: un token de 33 caracteres, un "%s" o un hex inventado no vale y se trata
+ * como "sin token", que es lo que acaba pidiendo la clave estricta. */
+static bool token_normaliza(const char *t, char *out, size_t n)
+{
+    if (!t || strlen(t) != 32 || n < 33) return false;
+    for (int i = 0; i < 32; i++) {
+        if (!es_digito_hex(t[i])) return false;
+        out[i] = (char)tolower((unsigned char)t[i]);
+    }
+    out[32] = 0;
+    return true;
+}
+
+/* Clave de NVS del secreto de una MAC. Las claves de NVS no pasan de 15
+ * caracteres ("tok_" + los 12 de la MAC son 16 y no caben), asi que se usa el
+ * sufijo de 8 hex: las MAC de las cabinas se reparten correlativas y con las
+ * tres placas de este montaje no hay colision posible. Se pasa a minusculas
+ * porque una MAC en mayusculas daria otra clave y la pantalla se quedaria sin
+ * su secreto. */
+static void token_de_pantalla_clave(const char *dev, char *out, size_t n)
+{
+    char mac[13] = {0};
+    size_t l = strlen(dev);
+    for (size_t i = 0; i < 12 && i < l; i++)
+        mac[i] = (char)tolower((unsigned char)dev[i]);
+    snprintf(out, n, "tk_%s", l >= 8 ? mac + l - 8 : mac);
+}
+
+/* El secreto guardado para esa MAC, ya normalizado. Cadena vacia si no hay: esa
+ * pantalla no esta emparejada (y entonces su 'forzar' vale con el 'dev'). */
+static void token_de_pantalla_lee(const char *dev, char *out, size_t n)
+{
+    out[0] = 0;
+    if (!dev_es_mac(dev) || n < 33) return;
+    char clave[16];
+    token_de_pantalla_clave(dev, clave, sizeof(clave));
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    char tok[33] = {0};
+    size_t sz = sizeof(tok);
+    if (nvs_get_str(h, clave, tok, &sz) == ESP_OK && !token_normaliza(tok, out, n))
+        out[0] = 0;
+    nvs_close(h);
+}
+
+/* Secreto nuevo (16 bytes de esp_random) para esa MAC, guardado en la NVS. Se
+ * guarda ANTES de contestar: si el 200 se pierde, la cabina repite el 'inicio'
+ * (mismo id) y se le reenvia este mismo secreto en vez de uno nuevo. */
+static bool token_de_pantalla_emite(const char *dev, char *out, size_t n)
+{
+    out[0] = 0;
+    if (!dev_es_mac(dev) || n < 33) return false;
+    char tok[33];
+    for (int i = 0; i < 4; i++)
+        snprintf(tok + i * 8, 9, "%08lx", (unsigned long)esp_random());
+    char clave[16];
+    token_de_pantalla_clave(dev, clave, sizeof(clave));
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGE(TAG, "no puedo abrir la NVS para guardar el token de %s", dev);
+        return false;
+    }
+    esp_err_t e = nvs_set_str(h, clave, tok);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) {
+        ESP_LOGE(TAG, "la NVS no acepta el token de %s (%s)", dev, esp_err_to_name(e));
+        return false;
+    }
+    snprintf(out, n, "%s", tok);
+    return true;
+}
+
+/* ¿Puede este 'forzar' saltarse la clave de administracion? PURA (sin NVS ni
+ * httpd) para poder probarla en el host: test/test_viaje_token.sh.
+ *
+ * Tres casos, en este orden:
+ *   1. 'dev' no es una MAC -> no (la web, la app, un POST a mano: clave estricta).
+ *   2. la P4 no tiene secreto para esa MAC -> SI, como en la v4.56. Es la cabina
+ *      con firmware viejo o una que aun no se ha emparejado: dejarla sin salida
+ *      seria la regresion de la v4.55 otra vez.
+ *   3. hay secreto -> solo vale el token correcto de ESA MAC. Si no viene, es de
+ *      otra MAC o es inventado: se pide la clave estricta (pedirla, nunca
+ *      denegar, que es la leccion de la v4.55). */
+static bool token_autoriza_forzar(const char *dev, const char *token_cuerpo,
+                                 const char *token_guardado)
+{
+    if (!dev_es_mac(dev)) return false;
+    char guardado[33];
+    if (!token_normaliza(token_guardado, guardado, sizeof(guardado))) return true;
+    char traido[33];
+    if (!token_normaliza(token_cuerpo, traido, sizeof(traido))) return false;
+    return auth_equal_ct(traido, guardado);
+}
+
+/* El token que hay que devolverle a la cabina en la respuesta del 'inicio', o
+ * cadena vacia si no hay que mandar ninguno.
+ *
+ * SOLO SE EMPAREJA SI EL CUERPO TRAE "token" (aunque venga vacio): eso es lo que
+ * distingue a una cabina nueva de una con el firmware viejo (ver el comentario
+ * de arriba). Si ya hay secreto y el que trae no cuadra, se le reenvia EL MISMO
+ * (asi se recupera sola una cabina a la que le borraron la NVS, o una P4
+ * restaurada de un respaldo viejo); nunca se rota, para no dejar fuera a la
+ * pantalla buena por un token viejo. */
+static void token_de_pantalla_emparejar(const cJSON *j, char *out, size_t n)
+{
+    out[0] = 0;
+    const cJSON *jt = cJSON_GetObjectItemCaseSensitive(j, "token");
+    if (!cJSON_IsString(jt)) return;              /* firmware viejo: ni se toca */
+    const cJSON *jd = cJSON_GetObjectItemCaseSensitive(j, "dev");
+    char dev[24] = {0};
+    if (cJSON_IsString(jd)) snprintf(dev, sizeof(dev), "%s", jd->valuestring);
+    if (!dev_es_mac(dev)) return;
+
+    char traido[33] = {0};
+    bool trae = token_normaliza(jt->valuestring, traido, sizeof(traido));
+    char guardado[33] = {0};
+    token_de_pantalla_lee(dev, guardado, sizeof(guardado));
+    if (!guardado[0]) {
+        if (!token_de_pantalla_emite(dev, guardado, sizeof(guardado))) return;
+        ESP_LOGI(TAG, "pantalla %s emparejada: token nuevo en su NVS", dev);
+        snprintf(out, n, "%s", guardado);
+        return;
+    }
+    if (!trae || !auth_equal_ct(traido, guardado)) {
+        ESP_LOGW(TAG, "la pantalla %s trae un token que no es el suyo: le reenvio "
+                      "el guardado (si no lo guarda, su 'forzar' pedira la clave)",
+                 dev);
+        snprintf(out, n, "%s", guardado);
+    }
+}
+
 /* El byte alto del id es la MAC de la pantalla que lo genero (ver
  * next_trip_seq() en config_storage.c de las cabinas). Devuelve -1 si no se
  * puede saber: 0 no es un id valido, asi que un byte alto 0 es "no se sabe". */
@@ -735,16 +896,29 @@ static void responde_sin_sitio_nvs(httpd_req_t *req, const char *texto)
  * El sufijo es texto sin autenticar (como el 507): la pantalla lo usa para
  * INFORMAR, nunca para decidir si un apunte se guardo. Si no viene (P4 vieja) o
  * viene raro, el que lo lee se queda como estaba. */
+static void responde_con_hueco_token(httpd_req_t *req, const char *texto,
+                                    const char *token)
+{
+    char cuerpo[224];
+    uint64_t libre = 0, total = 0;
+    int n;
+    if (viaje_sd_hueco(&libre, &total))
+        n = snprintf(cuerpo, sizeof(cuerpo), "%s libre_mb=%llu", texto,
+                     (unsigned long long)(libre / (1024ULL * 1024ULL)));
+    else
+        n = snprintf(cuerpo, sizeof(cuerpo), "%s", texto);
+    /* EL TOKEN VA AL FINAL, DETRAS DE libre_mb, A PROPOSITO: una cabina con el
+     * firmware viejo copia el principio de la respuesta en 96 bytes
+     * (p4_api.c, trabajo_t.resp) y busca ahi "libre_mb="; el token, que no se
+     * espera, no le puede robar el hueco de la tarjeta. */
+    if (token && token[0] && n > 0 && n < (int)sizeof(cuerpo))
+        snprintf(cuerpo + n, sizeof(cuerpo) - (size_t)n, " token=%s", token);
+    httpd_resp_sendstr(req, cuerpo);
+}
+
 static void responde_con_hueco(httpd_req_t *req, const char *texto)
 {
-    char cuerpo[192];
-    uint64_t libre = 0, total = 0;
-    if (viaje_sd_hueco(&libre, &total))
-        snprintf(cuerpo, sizeof(cuerpo), "%s libre_mb=%llu", texto,
-                 (unsigned long long)(libre / (1024ULL * 1024ULL)));
-    else
-        snprintf(cuerpo, sizeof(cuerpo), "%s", texto);
-    httpd_resp_sendstr(req, cuerpo);
+    responde_con_hueco_token(req, texto, NULL);
 }
 
 /* ── HUECO LIBRE EN LA TARJETA (auditoria del 14-oct-2026) ──────────────────
@@ -1645,6 +1819,13 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
 
+    /* EL TOKEN DE LA PANTALLA (20-oct-2026). Se decide AQUI, antes de las
+     * respuestas de "ya hay un viaje abierto": un 'inicio' puede acabar en
+     * 409/412 y la cabina necesita el token igual, porque lo unico que decide es
+     * quien es esa pantalla, no si el viaje se puede abrir. */
+    char token_resp[33] = {0};
+    token_de_pantalla_emparejar(j, token_resp, sizeof(token_resp));
+
     char abierto[CARPETA_MAX];
     bool hay_abierto = viaje_abierto(abierto, sizeof(abierto));
     /* Si el viaje abierto apunta a una carpeta que YA NO ESTA (sacaron la
@@ -1693,7 +1874,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
                 ESP_LOGW(TAG, "inicio REINTENTADO (id %lu): el viaje %s ya esta "
                               "abierto con ese mismo id, contesto 200 y no toco nada",
                          (unsigned long)id, abierto);
-                responde_con_hueco(req, abierto);
+                responde_con_hueco_token(req, abierto, token_resp);
                 return ESP_OK;
             }
         }
@@ -1738,7 +1919,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         char resp[192];
         snprintf(resp, sizeof(resp), "ya hay un viaje abierto: %s%s", abierto,
                  ajena ? " (lo empezo otra pantalla)" : "");
-        responde_con_hueco(req, resp);
+        responde_con_hueco_token(req, resp, token_resp);
         return ESP_OK;
     }
 
@@ -1799,7 +1980,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
 
     if (!camera_sd_bus_lock(3000)) {
         httpd_resp_set_status(req, "503 Service Unavailable");
-        responde_con_hueco(req, "tarjeta ocupada");
+        responde_con_hueco_token(req, "tarjeta ocupada", token_resp);
         return ESP_OK;
     }
     mkdir(VIAJES_DIR, 0777);
@@ -1847,7 +2028,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
     if (!hay) {
         ESP_LOGE(TAG, "no puedo crear %s (ni con sufijo numerador, colisiones agotadas)", carpeta);
         httpd_resp_set_status(req, "500 Internal Server Error");
-        responde_con_hueco(req, "no puedo crear la carpeta");
+        responde_con_hueco_token(req, "no puedo crear la carpeta", token_resp);
         return ESP_OK;
     }
     if (!inicio_ok) {
@@ -1872,7 +2053,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
          * contador correctos son los de la tarjeta. */
         anota_fallo_escritura();
         httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_con_hueco(req, "no puedo escribir el inicio del viaje en la tarjeta");
+        responde_con_hueco_token(req, "no puedo escribir el inicio del viaje en la tarjeta", token_resp);
         return ESP_OK;
     }
 
@@ -2021,7 +2202,7 @@ static esp_err_t op_inicio(httpd_req_t *req, const cJSON *j, uint32_t id)
         return ESP_OK;
     }
     ESP_LOGI(TAG, "VIAJE ABIERTO: %s", carpeta);
-    responde_con_hueco(req, carpeta);
+    responde_con_hueco_token(req, carpeta, token_resp);
     return ESP_OK;
 }
 
@@ -4507,7 +4688,13 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * dedazo, es un ataque deliberado, y el precio de cerrarlo del todo seria
      * quitarle a la pantalla la unica salida que tiene cuando la P4 se queda con
      * un viaje cuyo dueño ya no existe. La guarda de dueño (pide_otra_pantalla)
-     * sigue intacta para todo lo que no traiga 'forzar'. */
+     * sigue intacta para todo lo que no traiga 'forzar'.
+     *
+     * Y DESDE EL 20-OCT-2026, CON TOKEN (docs/SEGURIDAD_FORZAR.md): el 'dev'
+     * solo ya no basta si esa pantalla esta EMPAREJADA. token_autoriza_forzar()
+     * es quien decide, y sin secreto en la NVS para esa MAC se comporta como la
+     * v4.56 -- que es lo que mantiene compatible la cabina con el firmware
+     * viejo y no deja sin salida al usuario. */
     bool pide_forzar = false;
     {
         const cJSON *jf = cJSON_GetObjectItemCaseSensitive(j, "forzar");
@@ -4525,10 +4712,32 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
          * de emergencia no funcionaba NUNCA. Se queda el 'dev' valido, que es
          * lo que hay, y queda pendiente atarlo a la tabla de concesiones DHCP
          * (una MAC que el AP ha repartido IP) en vez de a la IP del socket. */
-        bool es_una_pantalla = dev_es_mac(dev_forzar);
-        if (pide_forzar && es_una_pantalla)
-            ESP_LOGI(TAG, "'%s' con forzar de la pantalla %s: vale el nivel abierto",
+        /* EL TOKEN (20-oct-2026, docs/SEGURIDAD_FORZAR.md): con un 'dev' de 12
+         * hex bastaba para saltarse la clave de administracion, y 12 hex los
+         * escribe cualquiera que tenga la del portal. Ahora, si la P4 tiene un
+         * secreto para esa MAC (pantalla emparejada), el cuerpo tiene que traer
+         * el token correcto; si no lo trae, se pide la clave estricta. Una
+         * pantalla SIN emparejar -- firmware viejo, o la primera vez -- sigue
+         * valiendo con el 'dev', que es el comportamiento de la v4.56 y lo que
+         * deja la salida de emergencia donde estaba. */
+        char token_cuerpo[33] = {0};
+        const cJSON *jt = cJSON_GetObjectItemCaseSensitive(j, "token");
+        if (cJSON_IsString(jt))
+            snprintf(token_cuerpo, sizeof(token_cuerpo), "%s", jt->valuestring);
+        char token_guardado[33] = {0};
+        token_de_pantalla_lee(dev_forzar, token_guardado, sizeof(token_guardado));
+        bool es_una_pantalla = token_autoriza_forzar(dev_forzar, token_cuerpo,
+                                                     token_guardado);
+        if (pide_forzar && es_una_pantalla) {
+            ESP_LOGI(TAG, "'%s' con forzar de la pantalla %s: %s", jop->valuestring,
+                     dev_forzar,
+                     token_guardado[0] ? "token correcto, vale el nivel abierto"
+                                       : "sin emparejar, vale el nivel abierto");
+        } else if (pide_forzar && dev_es_mac(dev_forzar)) {
+            ESP_LOGW(TAG, "'%s' con forzar de la pantalla %s y un token que no "
+                          "cuadra: le pido la clave de administracion",
                      jop->valuestring, dev_forzar);
+        }
         if (pide_forzar && !es_una_pantalla &&
             check_basic_auth_strict_aviso(req,
                 "cerrar o apartar el viaje que quiza esta grabando otra pantalla "

@@ -10,6 +10,13 @@
 esp_err_t check_basic_auth(httpd_req_t *req);
 esp_err_t check_basic_auth_strict(httpd_req_t *req);
 
+/* Compara dos cadenas en tiempo CONSTANTE (no strcmp, que sale en la primera
+ * diferencia). Era static de config_server_auth.c y se exporta aqui para el
+ * token de las pantallas (config_server_viaje.c, 20-oct-2026): el token de una
+ * cabina es un secreto y sobre un AP sin clave de verdad no se puede permitir
+ * que el tiempo de respuesta lo vaya diciendo byte a byte. */
+bool auth_equal_ct(const char *a, const char *b);
+
 /* Como check_basic_auth_strict, pero el 401 lleva un aviso propio (que la app
  * enseña) en vez de "Auth required". */
 esp_err_t check_basic_auth_strict_aviso(httpd_req_t *req, const char *aviso);

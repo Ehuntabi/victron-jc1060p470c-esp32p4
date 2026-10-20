@@ -446,7 +446,7 @@ esp_err_t config_server_set_web_credentials(const char *user, const char *pass)
  * clave sin fuerza bruta a ciegas. Recorre siempre el mismo numero de bytes
  * (el maximo de las dos cadenas) independientemente de donde este la primera
  * diferencia. Detectado auditando el 08-sep-2026. */
-static bool auth_equal_ct(const char *a, const char *b)
+bool auth_equal_ct(const char *a, const char *b)
 {
     size_t la = strlen(a), lb = strlen(b);
     size_t max = la > lb ? la : lb;
