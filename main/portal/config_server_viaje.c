@@ -2220,10 +2220,14 @@ static bool escribir_resumen(const char *carpeta)
          * epochs UTC, un viaje que empieza a las 00:30 de Madrid (22:30 UTC del
          * dia anterior) contaba un dia de mas. dias_locales_de() ya existe en
          * este fichero y la carpeta del viaje tambien se nombra en local. */
-        struct tm tm_i;
+        struct tm tm_i = {0};
         time_t ini_t = (time_t)inicio;
-        localtime_r(&ini_t, &tm_i);
-        long dias = dias_locales_de(&tm_l) - dias_locales_de(&tm_i) + 1;
+        long dias = 0;
+        if (!localtime_r(&ini_t, &tm_i)) {
+            dias = -1;              /* fecha imposible: se dice, no se inventa */
+        } else {
+            dias = dias_locales_de(&tm_l) - dias_locales_de(&tm_i) + 1;
+        }
         /* ACOTADA: 'inicio' es un epoch guardado en NVS, y si el reloj ha dado
          * un salto (el GPS corrige una hora que venia de un respaldo) la resta
          * sale inflada -- o negativa si el reloj fue hacia atras --. Un viaje de
@@ -2409,7 +2413,19 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
     snprintf(ruta, sizeof(ruta), "%s/" MARCA_INCOMPLETO, carpeta);
     *faltan_out = 0;
 
-    if (!cJSON_IsNumber(je)) {
+    /* FUERA DE RANGO = "NO SE SABE", NO UN ERROR (tanda 2 de la auditoria del
+     * 18-oct-2026). Un "eventos":-1 o 1e20 era conversion indefinida en C; en
+     * la practica decia "faltan 4.294.967.295 apuntes" y el viaje quedaba
+     * INCOMPLETO sin poder quitarle la marca. Y devolver false aqui era mucho
+     * peor: op_fin contestaba 507, el viaje seguia ABIERTO, la cabina reintentaba
+     * el mismo fin cada 15 s y ese viaje no se podia cerrar de ninguna forma
+     * (hasta ofrecer "Descartar", o sea perderlo). Mismo camino que cuando el
+     * campo no viene: se deja dicho en INCOMPLETO.txt y el viaje se cierra.
+     * El 0 tampoco vale: es lo que manda el emisor cuando NO pudo leer la cuenta
+     * (ver p4_api_cuerpo_fin), o sea otra vez "no se sabe". */
+    bool eventos_ok = cJSON_IsNumber(je) &&
+                      je->valuedouble >= 1 && je->valuedouble <= 1e6;
+    if (!eventos_ok) {
         /* SIN 'eventos' NO SE PUEDE SABER, y decir "no falta nada" es mentir
          * (auditoria del 13-oct-2026). Este es el camino del cierre "ajeno":
          * una cabina nueva, o con la NVS borrada, cierra un viaje que no
@@ -2432,6 +2448,11 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
                    "falta algo.\n\n"
                    "Es probable que este entero, pero NO esta verificado: comparalo\n"
                    "con lo que recuerdes antes de darlo por bueno.\n");
+        if (cJSON_IsNumber(je)) {
+            /* Vino un numero, pero imposible (ver el comentario de arriba). */
+            fprintf(f, "\n(El contador que traia el cierre no era valido: %g.\n"
+                       " Se esperaba entre 1 y 1000000.)\n", je->valuedouble);
+        }
         fflush(f);
         int e_sync = fsync(fileno(f));
         int e_close = fclose(f);
@@ -2439,27 +2460,13 @@ static bool comprobar_completo(const cJSON *j, const char *carpeta, uint32_t *fa
             ESP_LOGE(TAG, "%s no se escribio bien (disco lleno?)", ruta);
             return false;
         }
-        ESP_LOGW(TAG, "cierre SIN VERIFICAR de %s: el fin no traia contador de "
-                      "eventos", carpeta);
+        ESP_LOGW(TAG, "cierre SIN VERIFICAR de %s: el fin no traia un contador "
+                      "de eventos utilizable%s", carpeta,
+                 cJSON_IsNumber(je) ? " (fuera de rango)" : " (no venia)");
         return true;                         /* no se puede afirmar que falten */
     }
 
-    /* RANGO ANTES DEL CAST (tanda 2 de la auditoria del 18-oct-2026): un
-     * "eventos":-1 o 1e20 era conversion indefinida en C; en la practica,
-     * "faltan 4.294.967.295 apuntes" y el viaje marcado INCOMPLETO sin poder
-     * quitarle la marca. Fuera de rango se trata como "no se sabe" (misma rama
-     * que cuando el campo no viene), que ya deja el viaje SIN VERIFICAR. */
-    if (cJSON_IsNumber(je) && !(je->valuedouble >= 0 && je->valuedouble <= 1e6)) {
-        FILE *fm = fopen(ruta, "w");
-        if (fm) {
-            fprintf(fm, "Este viaje se cerro SIN PODER COMPROBARLO.\n\n"
-                        "El cierre traia un contador de apuntes imposible (%g).\n",
-                    je->valuedouble);
-            fclose(fm);
-        }
-        return false;
-    }
-    uint32_t esperados = cJSON_IsNumber(je) ? (uint32_t)je->valuedouble : 0;
+    uint32_t esperados = (uint32_t)je->valuedouble;
     uint32_t aplicados = 0;
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READONLY, &h) == ESP_OK) {

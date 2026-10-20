@@ -131,14 +131,22 @@ static int log_capture_vprintf(const char *fmt, va_list args)
         }
     }
 
-    /* Forward al vprintf previo (UART) CON LO YA FORMATEADO (tanda 2 de la
-     * auditoria del 18-oct-2026): antes se le pasaba el formato y las args otra
-     * vez, o sea que CADA linea de log se formateaba dos veces (un vsnprintf de
-     * hasta 350 B por ESP_LOGx, y esto es global). */
+    /* Forward al vprintf previo (UART) usando la copia.
+     *
+     * SE FORMATEA DOS VECES A PROPOSITO, y no es un descuido que se pueda
+     * "optimizar" (tanda 2 de la auditoria del 18-oct-2026): se intento pasar
+     * "%s" + tmp, o sea el texto ya formateado, y la P4 se quedo en bucle de
+     * panic al arrancar (Load access fault en _vfprintf_r, en la primera linea
+     * de log de app_main). El motivo es el ABI: en RV32 va_list es "void *" que
+     * apunta al area de argumentos del que llama, NO una lista de valores; al
+     * pasarle tmp como segundo argumento, el vprintf anterior lee los 4 primeros
+     * bytes de la CADENA ("W (1") como si fueran el puntero del %s.
+     * Un va_list solo se puede construir con va_start/va_copy en el mismo sitio.
+     * El coste de formatear dos veces (~350 B por linea) es el precio de que la
+     * firma sea vprintf_like_t, y se paga en la tarea que ya estaba logueando. */
     int r = n;
     if (s_prev_vprintf) {
-        if (n >= 0) r = s_prev_vprintf("%s", tmp);
-        else        r = s_prev_vprintf(fmt, args_copy);
+        r = s_prev_vprintf(fmt, args_copy);
     }
     va_end(args_copy);
     return r;

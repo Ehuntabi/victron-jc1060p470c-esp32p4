@@ -17,9 +17,14 @@
  *
  * Aqui solo se escucha y se guarda el estado: no se actua. La tarea mantiene una
  * tabla de fuentes (una por cabina), llama a esp_netif_* por paquete para
- * comprobar de que red viene y la comparte con el vigilante del AP sin cerrojo:
- * son enteros y punteros alineados, y lo peor que puede pasar es leer un dato de
- * una vuelta anterior. */
+ * comprobar de que red viene y la comparte con el vigilante del AP y con el
+ * portal. ESA TABLA VA CON CERROJO (s_mux_fuentes, tanda 2 de la auditoria del
+ * 18-oct-2026): el comentario viejo decia que "son enteros y punteros alineados,
+ * y lo peor es leer un dato de una vuelta anterior", y era falso -- ultimo_us es
+ * int64_t (dos palabras en RV32) y se puede leer A MEDIAS, no "con el valor de
+ * antes". Eso dejaba latido_vivo=false con el enlace sano y el portal tomaba el
+ * camino de "cabina muda". Los cuatro lectores y el escritor van bajo el mismo
+ * spinlock; dentro solo hay asignaciones (ni logs ni nada que bloquee). */
 #include "udp_latido.h"
 #include "mini_proto.h"
 #include "esp_log.h"
@@ -155,6 +160,10 @@ bool udp_latido_alguno_mudo(int *seg_out)
 {
     int64_t ahora = esp_timer_get_time();
     int peor = -1;
+    /* TAMBIEN CON CERROJO (tanda 2 de la auditoria del 18-oct-2026): este es el
+     * lector que decide "cabina muda" y dispara la reparacion del AP, o sea el
+     * que mas duele si lee un ultimo_us a medias. */
+    portENTER_CRITICAL(&s_mux_fuentes);
     for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
         latido_fuente_t *f = &s_fuentes[i];
         if (f->ip == 0) continue;
@@ -172,6 +181,7 @@ bool udp_latido_alguno_mudo(int *seg_out)
             if (s > peor) peor = s;
         }
     }
+    portEXIT_CRITICAL(&s_mux_fuentes);
     if (peor < 0) return false;
     if (seg_out) *seg_out = peor;
     return true;

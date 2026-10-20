@@ -8,6 +8,7 @@ static const char *TAG = "cfg_srv";
 #include "data_export_tar.h"
 #include "config_server_viaje.h"   /* viaje_es_el_abierto(): no servir el viaje en curso */
 #include "camera.h"
+#include "datalogger.h"   /* datalogger_sd_montada(): sin SD no hay .tar que dar */
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -84,9 +85,10 @@ static void tar_build_header(uint8_t *hdr, const char *name, size_t size, time_t
  * paquete de viaje traiga ya las carpetas dentro.
  *
  * Devuelve false si hubo que CORTAR el paquete a medias (envio fallido, lectura
- * corta o tarjeta ocupada). El llamante no debe mandar entonces el bloque final:
- * un .tar al que le falta contenido SIGUE pareciendo valido si lleva su cierre, y
- * el analizador del PC se traga un viaje incompleto creyendo que esta entero.
+ * corta, tarjeta ocupada, SD sin montar, o un error de verdad al abrir la
+ * carpeta). El llamante no debe mandar entonces el bloque final: un .tar al que
+ * le falta contenido SIGUE pareciendo valido si lleva su cierre, y el analizador
+ * del PC se traga un viaje incompleto creyendo que esta entero.
  * Una carpeta ausente NO es un corte: aporta cero entradas y se sigue. */
 static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
                            const char *prefix, char *buf,
@@ -105,8 +107,11 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
     /* "NO EXISTE" NO ES "NO SE PUDO ABRIR": si la tarjeta falla entre el stat y
      * el opendir, antes se devolvia true y el .tar salia VALIDO Y VACIO, con el
      * cliente dandolo por bueno. ENOENT es la carpeta que no esta (cero
-     * entradas, correcto); otro error corta el envio sin bloque final. */
-    if (!dp) return (e_abrir == ENOENT);
+     * entradas, correcto); otro error corta el envio sin bloque final.
+     * Y SIN MONTAR TAMPOCO: tras "Soltar tarjeta" el punto de montaje desaparece
+     * del VFS, asi que el opendir da ENOENT y el .tar saldria vacio con pinta de
+     * bueno (tanda 2 de la auditoria del 18-oct-2026). */
+    if (!dp) return (e_abrir == ENOENT && datalogger_sd_montada());
 
     uint8_t hdr[TAR_BLOCK];
     bool ok = true;
@@ -279,11 +284,13 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
      * pedia el peor caso siempre y del heap INTERNO, que es el que comparten
      * LVGL y la camara. Malloc normal de reserva si no hubiera PSRAM. */
     tar_subdir_entry_t *entries = heap_caps_malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS,
-                                                   MALLOC_CAP_SPIRAM);
+                                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!entries) entries = malloc(sizeof(tar_subdir_entry_t) * TAR_MAX_SUBDIRS);
-    const char **dirs = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS, MALLOC_CAP_SPIRAM);
+    const char **dirs = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS,
+                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!dirs) dirs = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
-    const char **prefixes = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS, MALLOC_CAP_SPIRAM);
+    const char **prefixes = heap_caps_malloc(sizeof(char *) * TAR_MAX_SUBDIRS,
+                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!prefixes) prefixes = malloc(sizeof(char *) * TAR_MAX_SUBDIRS);
     if (!entries || !dirs || !prefixes) {
         free(entries); free(dirs); free(prefixes);
@@ -304,7 +311,7 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
     /* MISMA REGLA QUE EN tar_stream_dir(): "no esta" no es "no se pudo abrir".
      * Si la SD falla, antes salia un .tar VALIDO Y VACIO, y el cliente lo daba
      * por bueno. */
-    if (!dp && e_abrir != ENOENT) {
+    if (!dp && (e_abrir != ENOENT || !datalogger_sd_montada())) {
         free(entries); free(dirs); free(prefixes);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD");
         return ESP_FAIL;
