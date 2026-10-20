@@ -4720,10 +4720,13 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
          * pantalla SIN emparejar -- firmware viejo, o la primera vez -- sigue
          * valiendo con el 'dev', que es el comportamiento de la v4.56 y lo que
          * deja la salida de emergencia donde estaba. */
-        char token_cuerpo[33] = {0};
+        /* EL TOKEN DEL CUERPO SE PASA TAL CUAL, SIN COPIARLO A UN BUFER DE 33
+         * (20-oct-2026). Copiandolo con snprintf, un token de 33 caracteres se
+         * TRUNCABA a 32 y uno con los 32 buenos delante y un caracter de mas
+         * colaba como bueno -- justo lo que la tabla del test dice que no puede
+         * pasar. token_normaliza() exige 32 exactos y mira el texto original. */
         const cJSON *jt = cJSON_GetObjectItemCaseSensitive(j, "token");
-        if (cJSON_IsString(jt))
-            snprintf(token_cuerpo, sizeof(token_cuerpo), "%s", jt->valuestring);
+        const char *token_cuerpo = cJSON_IsString(jt) ? jt->valuestring : NULL;
         char token_guardado[33] = {0};
         token_de_pantalla_lee(dev_forzar, token_guardado, sizeof(token_guardado));
         bool es_una_pantalla = token_autoriza_forzar(dev_forzar, token_cuerpo,
