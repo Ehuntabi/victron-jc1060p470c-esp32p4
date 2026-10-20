@@ -97,13 +97,16 @@ static bool tar_stream_dir(httpd_req_t *req, const char *src_dir,
      * "DMA timeout 0x107" y la SD pillada. 2026-07-26. */
     if (!camera_sd_bus_lock(3000)) return false;
     DIR *dp = opendir(src_dir);
+    /* errno SE GUARDA AQUI MISMO (tanda 2 de la auditoria del 18-oct-2026):
+     * soltar el cerrojo puede llamar a funciones que lo pisen, y entonces el
+     * "no existe" de abajo seria el error de otra cosa. */
+    int e_abrir = errno;
     camera_sd_bus_unlock();
-    /* "NO EXISTE" NO ES "NO SE PUDO ABRIR" (tanda 2 de la auditoria del
-     * 18-oct-2026): si la tarjeta falla entre el stat y el opendir, antes se
-     * devolvia true y el .tar salia VALIDO Y VACIO, con el cliente dandolo por
-     * bueno. ENOENT es la carpeta que no esta (cero entradas, correcto); otro
-     * error corta el envio sin bloque final. */
-    if (!dp) return (errno == ENOENT);
+    /* "NO EXISTE" NO ES "NO SE PUDO ABRIR": si la tarjeta falla entre el stat y
+     * el opendir, antes se devolvia true y el .tar salia VALIDO Y VACIO, con el
+     * cliente dandolo por bueno. ENOENT es la carpeta que no esta (cero
+     * entradas, correcto); otro error corta el envio sin bloque final. */
+    if (!dp) return (e_abrir == ENOENT);
 
     uint8_t hdr[TAR_BLOCK];
     bool ok = true;
@@ -290,9 +293,23 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
 
     int n = 0;
     bool truncated = false;
-    if (camera_sd_bus_lock(3000)) {
-        DIR *dp = opendir(root_dir);
-        camera_sd_bus_unlock();
+    if (!camera_sd_bus_lock(3000)) {
+        free(entries); free(dirs); free(prefixes);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD ocupada");
+        return ESP_FAIL;
+    }
+    DIR *dp = opendir(root_dir);
+    int e_abrir = errno;        /* antes de soltar el cerrojo, que puede pisarlo */
+    camera_sd_bus_unlock();
+    /* MISMA REGLA QUE EN tar_stream_dir(): "no esta" no es "no se pudo abrir".
+     * Si la SD falla, antes salia un .tar VALIDO Y VACIO, y el cliente lo daba
+     * por bueno. */
+    if (!dp && e_abrir != ENOENT) {
+        free(entries); free(dirs); free(prefixes);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD");
+        return ESP_FAIL;
+    }
+    {
         if (dp) {
             struct dirent *de;
             for (;;) {
