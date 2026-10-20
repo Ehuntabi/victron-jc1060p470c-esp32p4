@@ -187,6 +187,21 @@ bool udp_latido_alguno_mudo(int *seg_out)
     return true;
 }
 
+bool udp_latido_es_fuente(uint32_t ip, int vivo_s)
+{
+    if (ip == 0) return false;
+    int64_t ahora = esp_timer_get_time();
+    bool viva = false;
+    portENTER_CRITICAL(&s_mux_fuentes);
+    for (int i = 0; i < LATIDO_MAX_FUENTES; i++) {
+        if (s_fuentes[i].ip != ip) continue;
+        if ((ahora - s_fuentes[i].ultimo_us) / 1000000 <= vivo_s) viva = true;
+        break;
+    }
+    portEXIT_CRITICAL(&s_mux_fuentes);
+    return viva;
+}
+
 static void latido_task(void *arg)
 {
     (void)arg;

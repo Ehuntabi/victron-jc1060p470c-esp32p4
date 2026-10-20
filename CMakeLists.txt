@@ -89,6 +89,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=stringop-truncation" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=format-truncation" APPEND)
 
+
 project(joint_spl_145_control)
 
 # ── LVGL: que un assert al menos SE VEA (auditoria del 16-oct-2026) ──────────

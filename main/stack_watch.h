@@ -13,3 +13,10 @@
  * punto). */
 
 void stack_watch_start(void);
+
+/* Cerrojo de la medicion (tanda 4 de la auditoria del 18-oct-2026). Quien vaya a
+ * BORRAR una de las tareas vigiladas lo coge, pone su handle a NULL y la borra:
+ * asi uxTaskGetStackHighWaterMark() no puede caer sobre un TCB ya liberado (el
+ * caso de viaje_tick_task cuando no se pudo crear su timer). */
+void stack_watch_bloquea(void);
+void stack_watch_suelta(void);

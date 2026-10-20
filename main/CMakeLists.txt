@@ -57,6 +57,40 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
 
 target_link_options(__idf_main PRIVATE "-Wl,--defsym=hal_disable_nan_tsf=0")
 
+# ── LVGL: que un assert deje coredump (tanda 4 de la auditoria del 18-oct-2026)
+#
+# LVGL 8.4 trae "define LV_ASSERT_HANDLER while(1);" y con eso un assert se queda
+# COLGADO hasta que el Task WDT reinicia: ni backtrace ni coredump, o sea que se
+# pierde el motivo. El Kconfig de LVGL no tiene CONFIG_LV_ASSERT_HANDLER y por -D
+# no se puede pasar (el valor lleva un ';' y CMake parte la lista), asi que se
+# fuerza la inclusion de main/lvgl_assert_project.h ANTES de su config, que lo
+# respeta porque va dentro de un "ifndef".
+#
+# TIENE QUE IR AQUI Y NO EN EL CMakeLists DE ARRIBA: alli el componente 'lvgl' no
+# existe todavia (idf_component_get_property aborta) y con -include global el
+# ensamblador de los .S se comia el stdlib.h ("unrecognized opcode").
+# Se busca el TARGET y no con idf_component_get_property(): lvgl entra por
+# esp_lvgl_port (no es un REQUIRES directo de main), asi que resolver el
+# componente por nombre aqui aborta con "Failed to resolve component 'lvgl'".
+# El target, en cambio, ya existe cuando se procesa este CMakeLists.
+# El target del componente gestionado lleva el nombre COMPLETO del componente
+# ("lvgl__lvgl", con el namespace como prefijo), no "lvgl": comprobado en
+# build.ninja. Se prueban los dos por si algun dia cambia.
+set(_lvgl_target "")
+foreach(_t __idf_lvgl__lvgl __idf_lvgl)
+    if(TARGET ${_t})
+        set(_lvgl_target ${_t})
+        break()
+    endif()
+endforeach()
+if(_lvgl_target)
+    target_compile_options(${_lvgl_target} PRIVATE
+        -include "${CMAKE_CURRENT_LIST_DIR}/lvgl_assert_project.h")
+    message(STATUS "LVGL: LV_ASSERT_HANDLER -> abort() y coredump (${_lvgl_target})")
+else()
+    message(WARNING "no encuentro el target de lvgl: un LV_ASSERT seguira colgando")
+endif()
+
 # ── Analisis estatico (auditoria 21-sep-2026) ──────────────────────────────────
 # -fanalyzer de gcc 13 busca fugas, dobles libres, usos despues de free, NULL sin
 # comprobar y desbordamientos. Es lento, asi que se activa solo cuando se pide:

@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "battery_history.h"
 #include "ne185_vlog.h"
 #include "log_cleanup.h"
@@ -25,9 +26,24 @@ static const watched_task_t s_tasks[] = {
 };
 #define N_TASKS (sizeof(s_tasks) / sizeof(s_tasks[0]))
 
+static SemaphoreHandle_t s_mtx;   /* ver stack_watch_bloquea() */
+
+void stack_watch_bloquea(void)
+{
+    if (s_mtx) xSemaphoreTake(s_mtx, portMAX_DELAY);
+}
+
+void stack_watch_suelta(void)
+{
+    if (s_mtx) xSemaphoreGive(s_mtx);
+}
+
 static void stack_watch_cb(void *arg)
 {
     (void)arg;
+    /* Si el dueno de una tarea esta borrandola, se espera: leer el TCB despues
+     * de vTaskDelete() es tocar memoria liberada. */
+    stack_watch_bloquea();
     for (size_t i = 0; i < N_TASKS; ++i) {
         TaskHandle_t h = s_tasks[i].get_handle();
         if (!h) continue;   /* tarea aun no creada (fallo de xTaskCreate) */
@@ -35,11 +51,13 @@ static void stack_watch_cb(void *arg)
         ESP_LOGI(TAG, "%-18s minimo_libre=%u bytes", s_tasks[i].name,
                  (unsigned)(words_free * sizeof(StackType_t)));
     }
+    stack_watch_suelta();
 }
 
 void stack_watch_start(void)
 {
     static esp_timer_handle_t timer;
+    if (!s_mtx) s_mtx = xSemaphoreCreateMutex();
     const esp_timer_create_args_t args = {
         .callback = &stack_watch_cb,
         .name = "stack_watch",

@@ -36,6 +36,8 @@
 #include "frigo.h"
 #include "ne185/ne185.h"
 #include "watchdog.h"
+#include "stack_watch.h"   /* stack_watch_bloquea: no borrar un TCB vigilado */
+#include "net/udp_latido.h"   /* udp_latido_es_fuente: quien pide 'forzar' late */
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "nvs.h"
@@ -47,6 +49,7 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <ctype.h>   /* isxdigit: decodificar la query de /data/viajes */
 #include <dirent.h>
 #include <unistd.h>   /* rmdir: borrar la carpeta de un viaje; fsync, ftruncate */
 #include <fcntl.h>    /* open(): deshacer una escritura a medias en un CSV */
@@ -3644,6 +3647,25 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
     snprintf(ruta_tipo, sizeof(ruta_tipo), "%s/%ss.csv", carpeta, tipo);
     off_t marca_ev = marca_de(ruta_ev), marca_tipo = marca_de(ruta_tipo);
 
+    /* SI NO SE PUEDE TOMAR LA MARCA, NO SE ESCRIBE (tanda 4 de la auditoria del
+     * 18-oct-2026). marca_de() devuelve -1 cuando el stat falla por algo que no
+     * es "no existe" (una tarjeta que se esta cayendo). Escribir entonces deja
+     * una fila que NO se puede deshacer: si luego falla la NVS se contesta 507
+     * para que el satelite lo reintente, y el reintento escribe la fila OTRA VEZ
+     * -- dos repostajes en el CSV y el analizador del PC suma los dos. Antes se
+     * escribia igual y solo se dejaba un ESP_LOGW. Mejor no escribir nada: el
+     * apunte sigue en la cola y entra cuando la tarjeta responda. */
+    if (marca_ev < 0 || marca_tipo < 0) {
+        camera_sd_bus_unlock();
+        anota_fallo_escritura();
+        ESP_LOGE(TAG, "no puedo comprobar el estado de %s/%ss.csv (marca=%d/%d): "
+                      "NO escribo el apunte '%s', que si no el reintento lo "
+                      "duplicaria", carpeta, tipo, (int)marca_ev, (int)marca_tipo, tipo);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        responde_con_hueco(req, "la tarjeta no responde: el apunte no se ha escrito");
+        return ESP_OK;
+    }
+
     bool escrito = diario_en(carpeta, cuando, tipo, detalle);
     escrito = csv_por_tipo(carpeta, tipo, jd, cuando) && escrito;
     if (!escrito) {
@@ -4282,8 +4304,14 @@ void viaje_telemetria_start(void)
          * arriba no bloquee un reintento futuro con telemetria muerta hasta
          * el proximo reboot. */
         ESP_LOGE(TAG, "No se pudo crear el timer de telemetria del viaje");
-        vTaskDelete(s_viaje_tick_task_handle);
+        /* BAJO EL CERROJO DE stack_watch (tanda 4 de la auditoria del
+         * 18-oct-2026): esa tarea lee el TCB cada minuto para el minimo de pila,
+         * y borrarla sin mas la dejaba leyendo memoria liberada. */
+        stack_watch_bloquea();
+        TaskHandle_t h = s_viaje_tick_task_handle;
         s_viaje_tick_task_handle = NULL;
+        if (h) vTaskDelete(h);
+        stack_watch_suelta();
     }
 }
 
@@ -4470,11 +4498,17 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * 'dev' (la web, la app, un POST a mano) se sigue exigiendo la clave
      * estricta: ahi 'forzar' si es exactamente lo que este control vigila.
      *
-     * LO QUE ESTO NO DISTINGUE: un cliente con la clave del portal que se
-     * invente un 'dev' de 12 hex pasa por pantalla. Es el precio de que la
-     * salida de emergencia exista; lo que compra es que la cabina de verdad
-     * pueda cerrar un viaje cuyo dueño ya no esta. La guarda de dueño
-     * (pide_otra_pantalla) sigue intacta para todo lo que no traiga 'forzar'. */
+     * LO QUE ANTES SE COLABA, y ya NO (tanda 4 de la auditoria del 18-oct-2026):
+     * bastaba con escribir un 'dev' de 12 hex a mano. Ahora, ademas de eso, el
+     * latido tiene que estar llegando AHORA MISMO desde la MISMA IP que hace la
+     * peticion (udp_latido_es_fuente). Las pantallas laten cada 2 s, asi que una
+     * que puede pedir esto siempre cumple; un portatil con la clave del portal,
+     * no. Lo que queda es un atacante que se ponga a hablar el protocolo del
+     * latido (12 bytes con su CRC) desde una estacion del AP: eso ya no es un
+     * dedazo, es un ataque deliberado, y el precio de cerrarlo del todo seria
+     * quitarle a la pantalla la unica salida que tiene cuando la P4 se queda con
+     * un viaje cuyo dueño ya no existe. La guarda de dueño (pide_otra_pantalla)
+     * sigue intacta para todo lo que no traiga 'forzar'. */
     bool pide_forzar = false;
     {
         const cJSON *jf = cJSON_GetObjectItemCaseSensitive(j, "forzar");
@@ -4484,7 +4518,8 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
         const cJSON *jdv = cJSON_GetObjectItemCaseSensitive(j, "dev");
         if (cJSON_IsString(jdv)) destino_seguro(jdv->valuestring, dev_forzar,
                                                 sizeof(dev_forzar));
-        bool es_una_pantalla = dev_es_mac(dev_forzar);
+        bool es_una_pantalla = dev_es_mac(dev_forzar) &&
+                               udp_latido_es_fuente(portal_ip_cliente(req), 15);
         if (pide_forzar && es_una_pantalla)
             ESP_LOGI(TAG, "'%s' con forzar de la pantalla %s: vale el nivel abierto",
                      jop->valuestring, dev_forzar);
@@ -4709,6 +4744,45 @@ static void motivo_marca_incompleto(const char *nombre, char *out, size_t n)
 
 /* El escape HTML de nombres (html_escape) se movio a config_server_internal.h
  * para compartirlo con la galeria de vigilancia: ver alli el comentario. */
+/* Pasa a texto lo que viene en la query: el navegador manda %20 por los
+ * espacios y %C3%A9 por las tildes, y los nombres de carpeta de un viaje los
+ * llevan (el destino lo teclea el usuario). Sin decodificar, un viaje llamado
+ * "Tarifa 2026" no se podia cerrar desde la web: el nombre no cuadraba con el
+ * de la carpeta y op_fin contestaba 409 (tanda 4 de la auditoria del
+ * 18-oct-2026). Se decodifica EN SITIO. */
+static void url_decode(char *s)
+{
+    char *d = s;
+    for (const char *p = s; *p; p++) {
+        if (*p == '%' && isxdigit((unsigned char)p[1]) &&
+            isxdigit((unsigned char)p[2])) {
+            char hex[3] = { p[1], p[2], 0 };
+            *d++ = (char)strtol(hex, NULL, 16);
+            p += 2;
+        } else {
+            *d++ = *p;
+        }
+    }
+    *d = 0;
+}
+
+/* Copia 'in' a 'out' escapando lo que rompe un JSON (comillas, barras y los
+ * controles). El nombre de la carpeta llega de la query y acaba dentro de un
+ * cuerpo JSON que se le pasa a op_fin: sin esto, un %22 en el enlace metia una
+ * comilla de verdad y el JSON se rompia o decia otra cosa. */
+static void json_escapa(const char *in, char *out, size_t n)
+{
+    size_t j = 0;
+    if (n == 0) return;
+    for (size_t i = 0; in && in[i] && j + 7 < n; i++) {
+        unsigned char c = (unsigned char)in[i];
+        if (c == '"' || c == '\\') { out[j++] = '\\'; out[j++] = (char)c; }
+        else if (c < 0x20)           { j += (size_t)snprintf(out + j, n - j, "\\u%04x", c); }
+        else                          out[j++] = (char)c;
+    }
+    out[j] = 0;
+}
+
 esp_err_t handle_data_viajes(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
@@ -4732,10 +4806,32 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
             httpd_query_key_value(q, "cerrar", cerrar, sizeof(cerrar)) == ESP_OK &&
             cerrar[0]) {
             if (check_basic_auth_strict(req) != ESP_OK) return ESP_OK;   /* ya contestado */
-            char cuerpo[192];
+            url_decode(cerrar);
+            /* SOLO SE CONTESTA 302 SI SE CIERRA DE VERDAD (tanda 4 de la
+             * auditoria del 18-oct-2026). El 302 + Location se ponian ANTES de
+             * llamar a op_fin, y op_fin, cuando no habia viaje abierto,
+             * contestaba 200 ("lo doy por hecho"): el navegador seguia el 302 a
+             * ?cerrado=si y la pagina decia "cerrado" sin haber cerrado nada. */
+            char abierta[CARPETA_MAX] = {0};
+            bool hay_abierto = viaje_abierto(abierta, sizeof(abierta));
+            const char *base_ab = strrchr(abierta, '/');
+            base_ab = base_ab ? base_ab + 1 : abierta;
+            if (!hay_abierto || strcmp(base_ab, cerrar) != 0) {
+                httpd_resp_set_status(req, "409 Conflict");
+                httpd_resp_set_type(req, "text/html; charset=utf-8");
+                httpd_resp_sendstr(req, hay_abierto
+                    ? "<meta charset=utf-8><p>El viaje abierto ya no es ese: "
+                      "recarga la lista y vuelve a intentarlo.</p>"
+                    : "<meta charset=utf-8><p>No hay ningun viaje abierto que "
+                      "cerrar: ya estaba cerrado.</p>");
+                return ESP_OK;
+            }
+            char cerrar_json[160];
+            json_escapa(cerrar, cerrar_json, sizeof(cerrar_json));
+            char cuerpo[224];
             snprintf(cuerpo, sizeof(cuerpo),
                      "{\"op\":\"fin\",\"forzar\":true,\"carpeta\":\"%s\","
-                     "\"id\":%lu}", cerrar, (unsigned long)ID_CIERRE_WEB);
+                     "\"id\":%lu}", cerrar_json, (unsigned long)ID_CIERRE_WEB);
             cJSON *j = cJSON_Parse(cuerpo);
             if (!j) {
                 httpd_resp_set_status(req, "500 Internal Server Error");

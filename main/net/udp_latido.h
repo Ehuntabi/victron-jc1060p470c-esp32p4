@@ -44,6 +44,14 @@ bool udp_latido_alguna_callada(int callada_s);
  * latido dejaba que la sana tapara a la muda (auditoria del 13-oct-2026). */
 bool udp_latido_alguno_mudo(int *seg_out);
 
+/* true si desde ESA IP ha llegado un latido hace menos de 'vivo_s' segundos.
+ *
+ * Lo usa el control de 'forzar' del portal (tanda 4 de la auditoria del
+ * 18-oct-2026): las pantallas latian cada 2 s, asi que exigir el latido desde la
+ * misma IP que hace la peticion es lo que distingue "lo pide una pantalla" de
+ * "lo pide un portatil con la clave del portal que se inventa un 'dev'". */
+bool udp_latido_es_fuente(uint32_t ip, int vivo_s);
+
 #ifdef __cplusplus
 }
 #endif

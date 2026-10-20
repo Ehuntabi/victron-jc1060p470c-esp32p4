@@ -13,6 +13,11 @@ esp_err_t check_basic_auth_strict(httpd_req_t *req);
 /* Como check_basic_auth_strict, pero el 401 lleva un aviso propio (que la app
  * enseña) en vez de "Auth required". */
 esp_err_t check_basic_auth_strict_aviso(httpd_req_t *req, const char *aviso);
+
+/* IP del cliente en orden de red (0 si no se puede saber). La usa el control de
+ * 'forzar' para comprobar que quien lo pide es una PANTALLA de verdad: la que
+ * esta latiendo desde esa misma IP (tanda 4 de la auditoria del 18-oct-2026). */
+uint32_t portal_ip_cliente(httpd_req_t *req);
 extern const char SETTIME_SCRIPT[];
 
 /* Definida en config_server_ap.c (ciclo de vida del AP/portal). La necesita

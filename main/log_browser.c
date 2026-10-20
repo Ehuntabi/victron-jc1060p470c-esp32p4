@@ -72,12 +72,20 @@ static bool lb_abrir(lb_reader_t *r, const char *path)
         r->fd = -1;
         return false;
     }
+    /* CONTAR LA LECTURA (tanda 4 de la auditoria del 18-oct-2026): "Soltar
+     * tarjeta" se niega mientras sd_reader_cuantos() > 0, pero este lector no
+     * apuntaba a nadie -- soltar la tarjeta con una grafica larga a medias
+     * (Registros) dejaba la lectura truncada y el fichero cerrado por debajo. */
+    sd_reader_abrir();
     return true;
 }
 
 static void lb_cerrar(lb_reader_t *r)
 {
-    if (r->fd >= 0) close(r->fd);
+    if (r->fd >= 0) {
+        close(r->fd);
+        sd_reader_cerrar();   /* solo si de verdad estaba abierto (ver lb_abrir) */
+    }
     if (r->buf) free(r->buf);
     r->fd = -1;
     r->buf = NULL;
