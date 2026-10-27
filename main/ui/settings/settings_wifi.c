@@ -243,6 +243,11 @@ void create_wifi_settings_page(ui_state_t *ui, lv_obj_t *page_wifi,
     lv_obj_set_height(ui->wifi.password, UI_ROW_H);
     lv_obj_set_style_text_font(ui->wifi.password, &lv_font_montserrat_24_es, 0);
     lv_textarea_set_password_mode(ui->wifi.password, true);
+    /* El caracter que se acaba de teclear se queda visible 5 s (LVGL trae 1,5):
+     * la clave del AP es larga y aleatoria y con el temporizador corto no da
+     * tiempo a comprobar lo escrito. El boton del ojo sigue estando para verla
+     * entera. Mismo criterio que en el editor de las cabinas (27-oct-2026). */
+    lv_textarea_set_password_show_time(ui->wifi.password, 5000);
     lv_textarea_set_one_line(ui->wifi.password, true);
     lv_obj_set_width(ui->wifi.password, 280);
     /* Tope WPA2-PSK: clave max 63 caracteres. Mismo motivo que el del SSID

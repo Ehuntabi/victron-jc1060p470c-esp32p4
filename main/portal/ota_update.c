@@ -435,6 +435,50 @@ esp_err_t ota_update_receive(httpd_req_t *req)
         return ESP_OK;
     }
 
+    /* ── ¿Y ESTE FIRMWARE ES DE ESTA PLACA? (27-oct-2026) ──────────────────
+     *
+     * esp_ota_end() solo mira que la imagen este BIEN FORMADA: un .bin de la
+     * pantalla de 5" (ESP32-S3) tambien lo esta. Sin esta comprobacion se
+     * marcaba para arrancar, la placa reiniciaba, el bootloader lo rechazaba
+     * (no es una imagen de ESP32-P4) y volvia al firmware anterior.
+     *
+     * Paso de verdad el 27-oct: CUATRO subidas del cabina5-v1.44 al /ota de la
+     * P4, con sus cuatro reinicios y un "connection abort" en la app que
+     * parecia un fallo de red. Aqui se compara el proyecto que va DENTRO del
+     * .bin con el que corre; si no es el mismo se dice, y no se toca ni la
+     * particion de arranque ni el reinicio. */
+    esp_app_desc_t nueva;
+    if (esp_ota_get_partition_description(destino, &nueva) == ESP_OK) {
+        const esp_app_desc_t *actual = esp_app_get_description();
+        const char *proyecto_actual = actual ? actual->project_name : "?";
+        if (strcmp(nueva.project_name, proyecto_actual) != 0) {
+            const char *cual = NULL;
+            if (strcmp(nueva.project_name, "cabina5") == 0)        cual = "la pantalla de 5\"";
+            else if (strcmp(nueva.project_name, "35cabina") == 0)  cual = "la pantalla de 3,5\"";
+            char msg[192];
+            if (cual)
+                snprintf(msg, sizeof(msg),
+                         "Ese .bin es de %s, no de este aparato: subelo en la "
+                         "pagina Pantallas (http://192.168.4.1:8081/pantallas). "
+                         "No se ha cambiado nada.", cual);
+            else
+                snprintf(msg, sizeof(msg),
+                         "Ese .bin es del proyecto '%s' y este aparato es '%s': "
+                         "no es su firmware. No se ha cambiado nada.",
+                         nueva.project_name, proyecto_actual);
+            ota_pantalla_restaurar();
+            ota_ui_descongelar();
+            ui_ota_overlay_hide();
+            ota_wdt_suspend(false);
+            ESP_LOGW(TAG, "OTA RECHAZADA: el .bin es '%s' y esta placa es '%s'. "
+                          "No se toca la particion de arranque.",
+                     nueva.project_name, proyecto_actual);
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_sendstr(req, msg);
+            return ESP_OK;
+        }
+    }
+
     err = esp_ota_set_boot_partition(destino);
     ota_wdt_suspend(false);
     if (err != ESP_OK) {
