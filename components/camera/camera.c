@@ -752,12 +752,46 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
             int act = s_thumb_act;
             if (act < 0 || act >= 2 || s_thumb[act] == NULL) break;
             const uint8_t *src = s_thumb[act];   /* RGB888, THUMB_W*3 por fila */
-            /* La miniatura ya viene en RGB888 del acelerador: copia directa de
-             * filas, sin intercambiar canales (antes venia en BGR). */
+            /* ── VOLTEO HORIZONTAL: la foto, SIN ESPEJO ────────────────────────
+             *
+             * La camara va montada mirando "de frente", como la camara frontal
+             * de un movil, asi que lo que capta sale ESPEJADO: la mano derecha
+             * aparece a la izquierda. El usuario lo dijo asi (13-oct-2026):
+             * "las fotos salen volteadas horizontalmente", "foto que la mano
+             * derecha salga a la derecha". Y el 27-oct-2026 volvio a salir:
+             * "las capturas de vigilancia siguen mostrandose espejo horizontal,
+             * lo de la izda sale a la dcha y viceversa".
+             *
+             * SE VOLTEA AQUI, al copiar la miniatura al bufer del codificador,
+             * porque este es el camino por el que pasan TODAS las fotos de la
+             * camara: /snapshot (portal y app), la foto que guarda el modo
+             * vigilancia en la SD y lo que enseñan el carrusel y la galeria.
+             * Antes esto era un memcpy por fila; ahora se escribe el pixel x
+             * desde la columna espejo, o sea el mismo trabajo de copia sin un
+             * recorrido de mas. Y se hace UNA vez por foto, no por fotograma:
+             * lo que corre a 2 s por fotograma es la miniatura, que se queda
+             * como viene (nadie la mira; solo se mide su luminosidad y su color,
+             * que son simetricos).
+             *
+             * NO se toca la miniatura en si (downscale_rgb, PPA) por no
+             * enredar el acelerador con las franjas: voltear 3 bytes por pixel
+             * en la copia cuesta milisegundos y pasa una vez por foto.
+             *
+             * Y NO va en camera_encode_rgb565_jpeg(): ese es el bufer de la
+             * PANTALLA (capturas de pantalla de la galeria), que no va espejado
+             * y tiene que salir tal cual se ve. Ver el comentario de alli. */
             for (int y = 0; y < JPEG_H; y++) {
-                memcpy(&s_jpeg_in[(uint32_t)y * JPEG_W * 3],
-                       &src[(uint32_t)y * THUMB_W * 3],
-                       (size_t)JPEG_W * 3);
+                const uint8_t *fila = &src[(uint32_t)y * THUMB_W * 3];
+                uint8_t       *dst  = &s_jpeg_in[(uint32_t)y * JPEG_W * 3];
+                for (int x = 0; x < JPEG_W; x++) {
+                    /* THUMB_W == JPEG_W (960): la miniatura cabe entera de
+                     * ancho y lo unico que se recorta es el alto (540 -> 528).
+                     * Se indexa con THUMB_W para que el espejo sea el de la
+                     * imagen entera si algun dia el recorte fuese de ancho. */
+                    memcpy(dst + (size_t)x * 3,
+                           fila + (size_t)(THUMB_W - 1 - x) * 3,   /* <- columna espejo */
+                           3);
+                }
             }
             if (s_thumb_seq != seq_antes) {
                 ESP_LOGD(TAG, "miniatura cambiada a mitad de copia: la repito");
@@ -823,33 +857,29 @@ bool camera_encode_rgb565_jpeg(const uint16_t *rgb, int w, int h, int quality,
              * cambio va aqui, en el unico camino que lee el bufer de LVGL, y no
              * en el encoder. Verificado contra dos colores conocidos:
              *   0x06080C -> (6,8,12)   y  0x37474F -> (55,71,79). 2026-07-26. */
-            /* ── VOLTEO HORIZONTAL (13-oct-2026) ────────────────────────────
+            /* ── SIN VOLTEO (27-oct-2026, deshace el del 13-oct) ────────────
              *
-             * La camara va montada mirando "de frente", como la frontal de un
-             * movil, asi que la imagen salia ESPEJADA: el usuario lo describio
-             * como "las fotos salen volteadas horizontalmente" y lo concreto
-             * asi: "foto que la mano derecha salga a la derecha".
+             * El 13-oct-2026 se volteo esta copia en horizontal para que las
+             * fotos no salieran espejadas. Fue un DIAGNOSTICO EQUIVOCADO: este
+             * bufer es el de la PANTALLA, no el de la camara. Lo que sale de
+             * aqui son las capturas de pantalla de la galeria, y una captura de
+             * pantalla tiene que ser exactamente lo que se ve. (El panel DSI no
+             * va espejado: esp_bsp no llama a esp_lcd_panel_mirror y los flags
+             * de LVGL van a 0, asi que el bufer de LVGL es la imagen de cristal.)
              *
-             * SE VOLTEA AL COPIAR, no en una pasada aparte: el bucle que ya
-             * recorre los pixeles para pasarlos de 565 a RGB888 los escribe en
-             * la columna espejo. Asi no cuesta ni memoria ni un recorrido de
-             * mas -- y se hace UNA vez por foto, no por fotograma.
+             * Mientras tanto la foto DE VERDAD -- la de la camara, la de
+             * vigilancia y /snapshot -- seguia espejada, porque no pasa por
+             * aqui: pasa por camera_snapshot_jpeg(), que es donde va ahora el
+             * volteo. O sea que aquel cambio dejo las capturas de pantalla
+             * espejadas y las fotos como estaban; el usuario lo noto ("las
+             * capturas de vigilancia siguen mostrandose espejo horizontal").
              *
-             * Y VA AQUI, en el unico sitio por el que pasan TODAS las fotos que
-             * se guardan (vigilancia, galeria y /snapshot), para que salgan
-             * bien las tres a la vez y no haya que acordarse de nada.
-             *
-             * La deteccion de movimiento no se entera: trabaja con la
-             * luminosidad media, que es simetrica (ver frame_luma). */
-            for (int y = 0; y < h; ++y) {
-                const uint16_t *fila = rgb + (size_t)y * w;
-                for (int x = 0; x < w; ++x) {
-                    const uint16_t p = fila[w - 1 - x];      /* <- espejo */
-                    const int i = y * w + x;
-                    in[i*3+0] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* R real */
-                    in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
-                    in[i*3+2] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* B real */
-                }
+             * Aqui, por tanto, se copia tal cual: i-esimo pixel con i-esimo. */
+            for (int i = 0; i < n; ++i) {      /* 565 del framebuffer -> RGB888 real */
+                const uint16_t p = rgb[i];
+                in[i*3+0] = (uint8_t)((((p & 0x1F) * 255) + 15) / 31);          /* R real */
+                in[i*3+1] = (uint8_t)(((((p >> 5)  & 0x3F) * 255) + 31) / 63);  /* G */
+                in[i*3+2] = (uint8_t)(((((p >> 11) & 0x1F) * 255) + 15) / 31);  /* B real */
             }
             jpeg_encode_cfg_t cfg = {
                 .src_type      = JPEG_ENCODE_IN_FORMAT_RGB888,
