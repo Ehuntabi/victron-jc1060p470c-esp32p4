@@ -157,8 +157,13 @@ if command -v git >/dev/null 2>&1 && git -C "$SRC_DIR" describe --tags --exact-m
     [ -z "$sucio" ] && ES_TAG=1
 fi
 if [ "$ES_TAG" = "0" ]; then
-    RELDIR="$RELDIR/taller"
-    echo "[bin] arbol sin tag o con cambios: copia de TALLER (no es un release)" >&2
+    # REGLA DEL TALLER (27-oct-2026): en ~/joint-releases vive SOLO lo publicado,
+    # en la RAIZ y sin subcarpetas. Un build de taller (arbol con cambios o sin
+    # tag) no es "el ultimo binario bueno": no se copia ahi, se queda en build/
+    # y se dice donde esta. Antes iba a $RELDIR/taller/ y esa subcarpeta sobraba.
+    echo "[bin] arbol sin tag o con cambios: NO se copia a $RELDIR (solo lo publicado)." >&2
+    echo "[bin] el .bin de este build esta en: $BIN" >&2
+    exit 0
 fi
 RELBIN="$RELDIR/$(basename "$BIN" .bin | tr '_' '-')-${V_ARBOL}-app.bin"
 if mkdir -p "$RELDIR" 2>/dev/null && cp "$BIN" "$RELBIN" 2>/dev/null; then
