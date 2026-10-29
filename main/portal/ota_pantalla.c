@@ -490,8 +490,8 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
 }
 
 /* ── GET /api/pantalla/info ────────────────────────────────────────────────
- * Servidor LIGERO (80), nivel ABIERTO (como /api/viaje): la cabina solo tiene
- * las credenciales del portal.
+ * Servidor LIGERO (80), nivel del PORTAL (REQUIRE_AUTH, como /api/viaje): la
+ * cabina solo tiene las credenciales del portal y es quien pregunta.
  *
  * {"cabina5":{"ver":"v1.30","bytes":2214608,"sha256":"<64 hex>"},"35cabina":...}
  * Un modelo sin fichero sale a null. SD sin montar: 200 con los dos a null y
@@ -546,8 +546,8 @@ esp_err_t ota_pantalla_info(httpd_req_t *req)
 
 /* ── GET /pantallas: la pagina para subir los .bin desde el MOVIL ──────────
  *
- * Servidor PESADO (8081) y nivel ABIERTO (la clave del portal), igual que
- * /api/pantalla/subir. Se hace desde el navegador del telefono, de la misma
+ * Servidor PESADO (8081) y nivel de ADMINISTRACION (estricto, igual que
+ * /api/pantalla/subir desde el 17-oct-2026: desde aqui se publica firmware). Se hace desde el navegador del telefono, de la misma
  * forma que /ota: se elige el fichero y un XHR lo manda EN CRUDO (sin
  * multipart), asi el servidor solo escribe lo que recibe.
  *
@@ -694,7 +694,10 @@ esp_err_t ota_pantalla_pagina(httpd_req_t *req)
 }
 
 /* ── GET /api/pantalla/bin?modelo=<m> ──────────────────────────────────────
- * Servidor PESADO (8081), nivel ABIERTO. Devuelve el fichero ENTERO.
+ * Servidor PESADO (8081), nivel del PORTAL (REQUIRE_AUTH): lo pide la propia
+ * cabina, que solo tiene esa clave. (No confundir con /api/pantalla/subir y
+ * /pantallas, que desde el 17-oct piden la de administracion.) Devuelve el
+ * fichero ENTERO.
  *
  * POR QUE SE CONSTRUYE LA CABECERA HTTP A MANO: httpd_resp_send_chunk() impone
  * "Transfer-Encoding: chunked" pase lo que pase, y la cabina necesita un

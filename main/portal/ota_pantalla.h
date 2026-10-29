@@ -8,18 +8,22 @@
  * lo baja y lo instala sola.
  *
  * CONTRATO (lo usa el cliente que corre en las cabinas). ACTUALIZADO EL
- * 17-OCT-2026 Y CORREGIDO AQUI EL 27-OCT-2026 (auditoria, X8): el texto decia
- * "nivel abierto" en las cuatro rutas y eso ya no es verdad; quien lea esto y
- * monte un cliente se lleva una sorpresa.
- *   GET  /api/pantalla/info                  puerto 80    admin (estricto)
- *   GET  /api/pantalla/bin?modelo=<m>        puerto 8081  admin (estricto)
+ * CORREGIDO EL 27-OCT-2026 (auditoria, X8) Y OTRA VEZ EL 29-OCT-2026: el texto
+ * decia "nivel abierto" en las cuatro rutas. Desde el 17-oct solo son de
+ * administracion las DOS que tocan el firmware como tal (subir y la pagina); las
+ * dos que usa el cliente de la cabina -- la info y la descarga -- siguen en el
+ * nivel del portal, porque la cabina solo tiene esa clave y si no, no habria OTA
+ * que valga. Este es el contrato de verdad, comprobado en el .c:
+ *   GET  /api/pantalla/info                  puerto 80    nivel portal
+ *   GET  /api/pantalla/bin?modelo=<m>        puerto 8081  nivel portal
  *   POST /api/pantalla/subir?modelo=<m>      puerto 8081  admin (estricto)
  *   GET  /pantallas                          puerto 8081  admin (estricto)
  *
  *   "Estricto" es la clave de administracion, la misma que pide el /ota de la
- *   propia P4: subir firmware y bajarse el de una pantalla es lo mismo en
- *   cuanto a riesgo. Lo que impide publicar un fichero que no sea de ese modelo
- *   es ademas la validacion de la cabecera (project_name exacto y version).
+ *   propia P4: subir firmware es lo mismo en cuanto a riesgo. Bajarse el .bin de
+ *   una pantalla no lo es tanto, y sobre todo lo pide la propia cabina. Lo que
+ *   impide publicar un fichero que no sea de ese modelo es ademas la validacion
+ *   de la cabecera (project_name exacto y version).
  *
  *   Modelos validos: "cabina5" y "35cabina". Los ficheros viven en
  *   /sdcard/firmware/cabina5.bin y /sdcard/firmware/35cabina.bin.
