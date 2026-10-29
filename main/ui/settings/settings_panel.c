@@ -933,14 +933,6 @@ void ui_settings_panel_on_user_activity(ui_state_t *ui)
     screensaver_wake(ui);
 }
 
-void ui_settings_panel_set_mac(ui_state_t *ui, const char *mac_str)
-{
-    if (ui == NULL || ui->ta_mac == NULL || mac_str == NULL) {
-        return;
-    }
-    lv_textarea_set_text(ui->ta_mac, mac_str);
-}
-
 void ui_settings_panel_update_victron_device_status(ui_state_t *ui, const char *mac_address, 
                                                      const char *device_type, const char *product_name, 
                                                      const char *error_info)

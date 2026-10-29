@@ -339,8 +339,25 @@ static esp_err_t handle_tar_dir_of_subdirs(httpd_req_t *req, const char *root_di
         }
     }
     if (truncated) {
-        ESP_LOGW(TAG, "%s: %s tiene mas de %d subcarpetas, el .tar se corta (quedan fuera algunas)",
+        /* UN .tar A MEDIAS CON PINTA DE BUENO NO SE MANDA (auditoria del
+         * 27-oct-2026, B6). Antes se cortaba en silencio a TAR_MAX_SUBDIRS, se
+         * mandaba igualmente el cierre del tar y el cliente se bajaba un fichero
+         * valido al que le faltaban carpetas, sin forma de saberlo. Ahora se
+         * dice claro. Hoy es practicamente inalcanzable (logs deja 20 ficheros y
+         * vigilancia retiene 60 dias), pero un tar incompleto que parece
+         * completo es de las cosas que solo se descubren cuando ya no hay copia. */
+        ESP_LOGE(TAG, "%s: %s tiene mas de %d subcarpetas: NO lo mando a medias",
                  attach_name, root_dir, TAR_MAX_SUBDIRS);
+        free(entries); free(dirs); free(prefixes);
+        char txt[192];
+        snprintf(txt, sizeof(txt),
+                 "Hay mas de %d carpetas: el .tar saldria incompleto y no se "
+                 "manda a medias. Borra u ordena las mas antiguas y reintentalo.\n",
+                 TAR_MAX_SUBDIRS);
+        httpd_resp_set_status(req, "507 Insufficient Storage");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        httpd_resp_sendstr(req, txt);
+        return ESP_OK;
     }
 
     esp_err_t err = tar_send_dirs(req, attach_name, dirs, prefixes, n);
@@ -405,8 +422,13 @@ esp_err_t handle_data_viaje_tar(httpd_req_t *req)
     char v[96] = {0}, inc[8] = {0};
     if (httpd_req_get_url_query_str(req, q, sizeof q) != ESP_OK ||
         httpd_query_key_value(q, "v", v, sizeof v) != ESP_OK || !v[0]) {
+        /* LOCATION ABSOLUTO (auditoria del 27-oct-2026, B8): /data/viajes
+         * solo existe en el puerto 80, y este handler puede llegar desde el
+         * 8081. Con la ruta relativa, el navegador la pedia al 8081, se comia un
+         * 404 y el 404 manda al dashboard: el usuario acababa en el panel en vez
+         * de en la lista de viajes. Con la URL completa va bien desde los dos. */
         httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/data/viajes");
+        httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/data/viajes");
         httpd_resp_sendstr(req, "Elige un viaje en /data/viajes");
         return ESP_OK;
     }

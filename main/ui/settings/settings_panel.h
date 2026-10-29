@@ -10,7 +10,6 @@ void ui_settings_panel_init(ui_state_t *ui,
                             uint8_t ap_enabled);
 
 void ui_settings_panel_on_user_activity(ui_state_t *ui);
-void ui_settings_panel_set_mac(ui_state_t *ui, const char *mac_str);
 
 /* Silenciar/activar avisos con guardado y restauracion del volumen. Sincroniza
  * el slider, la etiqueta y el switch de Settings si ya existen. La usan tanto el

@@ -928,12 +928,17 @@ static void responde_con_hueco(httpd_req_t *req, const char *texto)
  * podía anotar (y la pantalla de la cabina sólo dice "la P4 no puede escribir",
  * que es un síntoma, no un diagnóstico). Se mide y se dice.
  *
- * Se refresca en el tick de telemetría (cada 5 min) y tras cada 507, que son los
- * dos momentos en que el dato importa. `esp_vfs_fat_info` lee la FAT: va con el
- * cerrojo de la SD, como todo lo que la toca. */
+ * CUÁNDO SE MIDE (corrección del 27-oct-2026, X7): al arrancar, en
+ * viaje_reparar_al_arrancar(). El comentario decía que también en el tick de
+ * telemetría y tras cada 507, y no había ninguna de las dos llamadas: el dato
+ * que enseñaba Ajustes -> About era el del arranque. Se deja como está (medir
+ * desde la tarea de LVGL sería meter I/O de tarjeta en el hilo de la pantalla,
+ * que es justo lo que la auditoría pide quitar de la galería) y se corrige el
+ * texto. La variable s_sd_medido_us se ha quitado: se escribía y no la leía
+ * nadie. `esp_vfs_fat_info` lee la FAT: va con el cerrojo de la SD, como todo
+ * lo que la toca. */
 static uint64_t s_sd_libre   = UINT64_MAX;   /* UINT64_MAX = no se ha podido medir */
 static uint64_t s_sd_total   = 0;
-static int64_t  s_sd_medido_us = 0;
 
 #define SD_LIBRE_AVISO_BYTES  (20ULL * 1024ULL * 1024ULL)   /* 20 MB */
 
@@ -950,7 +955,6 @@ static void sd_hueco_medir(void)
     }
     s_sd_total = total;
     s_sd_libre = libre;
-    s_sd_medido_us = esp_timer_get_time();
     if (libre < SD_LIBRE_AVISO_BYTES)
         ESP_LOGW(TAG, "QUEDA POCO SITIO en la tarjeta: %llu MB libres de %llu MB. "
                       "Si se llena, los apuntes dan 507 y el viaje no se puede cerrar "
@@ -1384,6 +1388,69 @@ static bool diario(const char *carpeta, const char *que, const char *detalle)
     char cuando[20];
     strftime(cuando, sizeof(cuando), "%Y-%m-%d %H:%M:%S", &tm_l);
     return diario_en(carpeta, cuando, que, detalle);
+}
+
+/* ¿LA ULTIMA FILA CON DATOS DEL DIARIO ES YA ESTE EVENTO? (auditoria del
+ * 27-oct-2026, M4).
+ *
+ * Existe para no escribir dos veces el 'fin' de un viaje. La guarda de siempre
+ * (¿hay resumen.txt?) falla si el cierre murio ENTRE escribir la fila y escribir
+ * el resumen: entonces 'fin' esta en el CSV y el reintento -- que llega cada 15 s
+ * desde la cola de la cabina -- volvia a escribirla, hasta 240 veces en una hora.
+ *
+ * Mira SOLO la ultima fila con datos (las columnas son fecha_hora,evento,detalle,
+ * y el evento va en la segunda). Si el fichero acaba en una fila partida -- un
+ * volcado que se corto -- esa se descarta y se mira la anterior: una fila sin
+ * comas no es una fila.
+ *
+ * Se lee el rabo del fichero, no entero: el diario de un viaje largo puede tener
+ * miles de filas de telemetria. LLAMAR CON EL CERROJO DEL BUS SD TOMADO (lo hace
+ * op_fin): esto es I/O de tarjeta. */
+static bool diario_ultima_es(const char *carpeta, const char *que)
+{
+    char ruta[RUTA_MAX];
+    snprintf(ruta, sizeof(ruta), "%s/eventos.csv", carpeta);
+    FILE *f = fopen(ruta, "r");
+    if (!f) return false;
+    char buf[1024];
+    size_t n = 0;
+    if (fseek(f, 0, SEEK_END) == 0) {
+        long tam = ftell(f);
+        long desde = tam > (long)sizeof(buf) ? tam - (long)sizeof(buf) : 0;
+        if (tam > 0 && fseek(f, desde, SEEK_SET) == 0)
+            n = fread(buf, 1, sizeof(buf) - 1, f);
+    }
+    fclose(f);
+    if (n == 0) return false;
+
+    /* Recortar los saltos del final y quedarse con la ultima linea. */
+    size_t fin = n;
+    while (fin > 0 && (buf[fin - 1] == '\n' || buf[fin - 1] == '\r')) fin--;
+    size_t ini = fin;
+    while (ini > 0 && buf[ini - 1] != '\n') ini--;
+
+    /* Una fila del diario tiene dos comas. Sin ellas es una fila partida por un
+     * corte de corriente: se mira la de antes. */
+    char linea[192];
+    for (int intento = 0; intento < 2; intento++) {
+        size_t l = fin - ini;
+        if (l >= sizeof(linea)) l = sizeof(linea) - 1;
+        memcpy(linea, buf + ini, l);
+        linea[l] = 0;
+        const char *c1 = strchr(linea, ',');
+        const char *c2 = c1 ? strchr(c1 + 1, ',') : NULL;
+        if (c1 && c2) {
+            size_t len = (size_t)(c2 - c1 - 1);
+            return len == strlen(que) && memcmp(c1 + 1, que, len) == 0;
+        }
+        /* La ultima esta partida: repetir con la de arriba. */
+        if (fin == 0 || ini == 0) return false;
+        fin = ini - 1;                       /* fuera el '\n' separador */
+        while (fin > 0 && (buf[fin - 1] == '\n' || buf[fin - 1] == '\r')) fin--;
+        ini = fin;
+        while (ini > 0 && buf[ini - 1] != '\n') ini--;
+    }
+    return false;
 }
 
 /* ── Totales del viaje ────────────────────────────────────────────────────── */
@@ -2984,26 +3051,29 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * SIEMPRE: la unica salida era reiniciar la P4 con la tarjeta puesta, y la
      * P4 vive en la parte de atras (auditoria del 14-oct-2026). Si la SD ESTA
      * MONTADA, que la carpeta no exista es un hecho consumado: sus datos no
-     * estan en esta tarjeta, asi que se limpia el estado y se dice. El 507 se
-     * queda para cuando la SD NO esta montada, porque ahi su ausencia no
-     * significa nada (puede volver a ponerse). */
+     * estan en esta tarjeta, asi que se limpia el estado y se dice.
+     *
+     * Y SI LA SD NO ESTA MONTADA no se decide aqui (auditoria del 27-oct-2026,
+     * X5): habia un 507 escrito para ese caso, pero colgaba de este mismo `if`,
+     * que exige la SD montada, asi que no se ejecutaba nunca. Sin SD, la
+     * escritura del resumen falla igual y el 507 sale por su rama, con su
+     * mensaje. El bloque muerto se ha quitado. */
     if (datalogger_sd_montada() && carpeta_fuera_de_la_tarjeta(carpeta)) {
         camera_sd_bus_unlock();
-        {
-            ESP_LOGE(TAG, "el viaje abierto %s NO ESTA en la tarjeta montada "
-                          "(cambiada, formateada o borrada desde el PC): limpio "
-                          "el estado. Los datos de ese viaje no estan aqui",
-                     carpeta);
-            estado_set(NULL, id);
-            responde_con_hueco(req, "la carpeta del viaje ya no estaba: "
-                                    "estado limpiado, sin resumen");
-            return ESP_OK;
-        }
-        ESP_LOGE(TAG, "el viaje abierto %s NO ESTA donde la tarjeta dice (y la "
-                      "SD no esta montada, o el fallo no es un ENOENT claro): no "
-                      "puedo cerrarlo", carpeta);
-        httpd_resp_set_status(req, "507 Insufficient Storage");
-        responde_con_hueco(req, "la carpeta del viaje no esta en la tarjeta");
+        /* Y EL ORDENADOR DE VIAJE, APAGADO (auditoria del 27-oct-2026, M3): las
+         * otras tres salidas de esta funcion lo apagan, esta se quedo sin ello.
+         * El estado de la NVS se limpia, pero el contador seguia activo y
+         * udp_tx seguia publicando km y minutos de un viaje que ya no existe:
+         * la cabina enseñaba un viaje en curso y los Wh seguian sumando.
+         * trip_computer_end() es idempotente (ver el 16-oct). */
+        ESP_LOGE(TAG, "el viaje abierto %s NO ESTA en la tarjeta montada "
+                      "(cambiada, formateada o borrada desde el PC): limpio "
+                      "el estado. Los datos de ese viaje no estan aqui",
+                 carpeta);
+        estado_set(NULL, id);
+        trip_computer_end();
+        responde_con_hueco(req, "la carpeta del viaje ya no estaba: "
+                                "estado limpiado, sin resumen");
         return ESP_OK;
     }
     /* EL CUENTAKILOMETROS DEL CIERRE, a NVS ANTES del resumen (16-oct-2026):
@@ -3046,7 +3116,16 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
      * diario). En ese caso NO se vuelve a escribir la linea "fin": el anillo de
      * dedupe vive en la MISMA NVS que esta fallando, asi que el reintento entra
      * como nuevo y el diario acabaria con dos (o veinte) lineas "fin" -- y el
-     * analizador del PC cuenta lineas. */
+     * analizador del PC cuenta lineas.
+     *
+     * Y EL RESUMEN NO ES LA UNICA PRUEBA (auditoria del 27-oct-2026, M4): la
+     * linea 'fin' se escribe ANTES que el resumen, asi que un cierre que se quedo
+     * a medias entre las dos -- escribir_resumen() no pudo crear su .tmp, la
+     * tarjeta se lleno ahi -- dejaba 'fin' en el diario y ningun resumen. El
+     * reintento (cada 15 s) no veia resumen, volvia a escribir 'fin', y a la hora
+     * habia 240 lineas de cierre en el CSV. Una 'fin' de mas, ademas, puede tapar
+     * una fila perdida y que el viaje salga sin la marca de INCOMPLETO. Por eso
+     * tambien se mira el propio diario. */
     char ruta_resumen[RUTA_MAX];
     snprintf(ruta_resumen, sizeof(ruta_resumen), "%s/resumen.txt", carpeta);
     struct stat st_cierre;
@@ -3054,7 +3133,14 @@ static esp_err_t op_fin(httpd_req_t *req, const cJSON *j, uint32_t id)
     if (ya_cerrado)
         ESP_LOGW(TAG, "%s ya tiene resumen: es un cierre REPETIDO, no reescribo "
                       "la linea 'fin' del diario", carpeta);
-    bool escrito = ya_cerrado ? true : diario(carpeta, "fin", "");
+    bool fin_ya_en_diario = false;
+    if (!ya_cerrado) {
+        fin_ya_en_diario = diario_ultima_es(carpeta, "fin");
+        if (fin_ya_en_diario)
+            ESP_LOGW(TAG, "%s ya tiene la linea 'fin' al final del diario (el "
+                          "resumen es lo que falto): NO la repito", carpeta);
+    }
+    bool escrito = (ya_cerrado || fin_ya_en_diario) ? true : diario(carpeta, "fin", "");
     /* Lo que quede de ruta en memoria, a la tarjeta ANTES de cerrar. No condiciona
      * el cierre: si esto falla se pierden como mucho los ultimos minutos de traza,
      * y dejar el viaje abierto por eso seria peor que el mal que evita. */
@@ -3398,8 +3484,9 @@ static esp_err_t op_borrar(httpd_req_t *req, const cJSON *j, uint32_t id)
     char motivo[96] = {0};
     int cod = viaje_borrar_carpeta(jc->valuestring, motivo, sizeof(motivo));
     if (cod) {
-        char cuerpo[128];
-        snprintf(cuerpo, sizeof(cuerpo), "%d %s", cod, motivo);
+        /* Aquí se componía un "cuerpo" con el código delante que no se enviaba:
+         * la respuesta sale de responde_con_hueco(req, motivo) (27-oct-2026,
+         * X6). El código ya va en la línea de estado. */
         httpd_resp_set_status(req, cod == 400 ? "400 Bad Request"
                               : cod == 404 ? "404 Not Found"
                               : cod == 409 ? "409 Conflict"
@@ -3744,7 +3831,18 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
                       "historial del vehiculo en vez de mezclarse", carpeta);
         en_viaje = false;      /* se escribe en VEHICULO_DIR... */
         de_otra_pantalla = true;   /* ...y la fila lo dice */
-        /* ...pero el viaje ABIERTO sigue siendo el de la otra: ni se toca. */
+        /* ...pero el viaje ABIERTO sigue siendo el de la otra: ni se toca.
+         *
+         * Y LA NVS TAMPOCO (auditoria del 27-oct-2026, A1): aqui faltaba
+         * `viaje_en_nvs = false;`, que es lo que separa "donde se escribe el
+         * apunte" de "la NVS apunta a ese viaje". Con la bandera a true, el
+         * commit de mas abajo llamaba a estado_set_en(h, VEHICULO_DIR, id) -- la
+         * carpeta ya es VEHICULO_DIR -- y dejaba NVS_CARPETA apuntando a
+         * /sdcard/vehiculo: el viaje abierto de la otra pantalla se perdia de la
+         * NVS, sus apuntes se iban al historial y el 'fin' cerraba la carpeta del
+         * historial. La rama de "el viaje ya no esta abierto" (3815) ya lo hace
+         * asi; esta se quedo sin ello. */
+        viaje_en_nvs = false;
     }
     if (!en_viaje) snprintf(carpeta, sizeof(carpeta), VEHICULO_DIR);
     /* OJO: esta lectura es SIN el cerrojo (se toma mas abajo), asi que la
@@ -3858,8 +3956,8 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
             ESP_LOGW(TAG, "escritura a medias en '%s' que NO he podido deshacer "
                           "(%s=%d, %s=%d): puede quedar una fila a medias",
                      tipo, ruta_ev, (int)d_ev, ruta_tipo, (int)d_tipo);
+        camera_sd_bus_unlock();
     }
-    camera_sd_bus_unlock();
 
     if (!escrito) {
         /* 507 y no 200: es 5xx, asi que el satelite NO lo descarta y lo vuelve
@@ -3935,12 +4033,18 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
                       "(%s): deshago la fila de la SD y devuelvo 507 para que "
                       "el reintento lo aplique ENTERO",
                  tipo, esp_err_to_name(commit_err));
-        bool deshecho_ev = false, deshecho_tipo = false;
-        if (camera_sd_bus_lock(3000)) {
-            deshecho_ev   = marca_deshacer(ruta_ev, marca_ev);
-            deshecho_tipo = marca_deshacer(ruta_tipo, marca_tipo);
-            camera_sd_bus_unlock();
-        }
+        /* EL DESHACER VA DENTRO DEL CERROJO QUE YA SE TIENE (auditoria del
+         * 27-oct-2026, B3). Antes se soltaba el bus despues de escribir y se
+         * volvia a coger aqui para deshacer: en ese hueco, la tarea de
+         * telemetria de la P4 podia añadir una fila (hora_corregida, volcado,
+         * ruta...) y el ftruncate a la marca se la llevaba por delante. Ahora el
+         * cerrojo se mantiene desde la marca hasta el commit, asi que el tramo
+         * escribir->comitear->deshacer es atomico frente al resto de escritores.
+         * (NVS no toca la tarjeta: tener el bus mientras se comitea no bloquea a
+         * nadie mas de lo que ya se bloquea en la escritura.) */
+        bool deshecho_ev   = marca_deshacer(ruta_ev, marca_ev);
+        bool deshecho_tipo = marca_deshacer(ruta_tipo, marca_tipo);
+        camera_sd_bus_unlock();
         /* SI NO SE HA PODIDO DESHACER, EL REINTENTO DUPLICA (16-oct-2026).
          *
          * El 507 es para que el satelite lo reintente, y el reintento vuelve a
@@ -3963,6 +4067,7 @@ static esp_err_t op_registro(httpd_req_t *req, const cJSON *j, uint32_t id)
         responde_sin_sitio_nvs(req, "no se ha podido guardar el apunte en la NVS");
         return ESP_OK;
     }
+    camera_sd_bus_unlock();   /* se tenia desde la marca: ver el comentario de B3 */
     ESP_LOGI(TAG, "apunte '%s' guardado en %s", tipo, carpeta);
     responde_con_hueco(req, "ok");
     return ESP_OK;
@@ -4679,16 +4784,13 @@ esp_err_t handle_api_viaje(httpd_req_t *req)
      * estricta: ahi 'forzar' si es exactamente lo que este control vigila.
      *
      * LO QUE ANTES SE COLABA, y ya NO (tanda 4 de la auditoria del 18-oct-2026):
-     * bastaba con escribir un 'dev' de 12 hex a mano. Ahora, ademas de eso, el
-     * latido tiene que estar llegando AHORA MISMO desde la MISMA IP que hace la
-     * peticion (udp_latido_es_fuente). Las pantallas laten cada 2 s, asi que una
-     * que puede pedir esto siempre cumple; un portatil con la clave del portal,
-     * no. Lo que queda es un atacante que se ponga a hablar el protocolo del
-     * latido (12 bytes con su CRC) desde una estacion del AP: eso ya no es un
-     * dedazo, es un ataque deliberado, y el precio de cerrarlo del todo seria
-     * quitarle a la pantalla la unica salida que tiene cuando la P4 se queda con
-     * un viaje cuyo dueño ya no existe. La guarda de dueño (pide_otra_pantalla)
-     * sigue intacta para todo lo que no traiga 'forzar'.
+     * bastaba con escribir un 'dev' de 12 hex a mano. Se intento cerrar pidiendo
+     * ademas que el latido llegara AHORA MISMO de la misma IP
+     * (udp_latido_es_fuente), pero esa guarda ya NO existe: se quito en la v4.56
+     * y la funcion no esta en ningun repositorio. Lo que hay hoy es el token por
+     * MAC: ver el parrafo de abajo y docs/SEGURIDAD_FORZAR.md. La guarda de
+     * dueño (pide_otra_pantalla) sigue intacta para todo lo que no traiga
+     * 'forzar'.
      *
      * Y DESDE EL 20-OCT-2026, CON TOKEN (docs/SEGURIDAD_FORZAR.md): el 'dev'
      * solo ya no basta si esa pantalla esta EMPAREJADA. token_autoriza_forzar()
@@ -4965,6 +5067,11 @@ static void motivo_marca_incompleto(const char *nombre, char *out, size_t n)
     l[strcspn(l, "\r\n")] = 0;
     if      (strstr(l, "SIN PODER COMPROBARLO")) snprintf(out, n, "SIN VERIFICAR: el cierre no traia contador");
     else if (strstr(l, "NO SE CERRO"))           snprintf(out, n, "sin cerrar: se quedo a medias y ya no se puede finalizar");
+    /* «VACIA» ANTES de «faltan» (auditoria del 27-oct-2026, B2): una carpeta que
+     * se creo y no llego a tener ni el apunte del inicio se anunciaba como
+     * "le faltan apuntes", que manda al usuario a buscar unos apuntes que nunca
+     * existieron. El texto de dentro lo dice bien: se quedo vacia. */
+    else if (strstr(l, "VACIA"))                 snprintf(out, n, "VACIA: se creo y no llego a tener ni un apunte");
     else if (strstr(l, "faltan"))                snprintf(out, n, "INCOMPLETO: le faltan apuntes");
     /* Si el fichero existe pero no dice nada reconocible, se queda el generico:
      * es lo que se leia antes de esto. */

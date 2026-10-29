@@ -1,7 +1,9 @@
 /* mini_proto.h - Protocolo entre el 7" (P4+C6) y el satelite 3,5" de cabina.
  *
- * MANTENER SINCRONIZADO entre DOS proyectos, byte a byte:
+ * MANTENER SINCRONIZADO entre TRES proyectos, byte a byte (auditoria del
+ * 27-oct-2026, X3: hay TRES copias y el CI las compara):
  *   - 7"       : ~/joint/victron/main/net/mini_proto.h
+ *   - 5"       : ~/joint/cabina5/main/net/mini_proto.h
  *   - 35cabina : ~/joint/35cabina/main/net/mini_proto.h
  *
  * El satelite viejo, el mini C6 1.47" (victron_mini, retirado el 17-sep-2026)
@@ -10,7 +12,7 @@
  * 32 bytes heredados. Aviso practico por si alguno sigue enchufado: subir
  * MINI_PROTO_VERSION lo deja mudo (rechaza las versiones que no conoce).
  *
- * Cambios en el struct requieren bump de MINI_PROTO_VERSION y recompilar los dos.
+ * Cambios en el struct requieren bump de MINI_PROTO_VERSION y recompilar los tres.
  *
  * Transporte: UDP broadcast a 192.168.4.255:MINI_PROTO_UDP_PORT.
  *   (intentamos primero ESP-NOW pero esp_hosted no exporta esa API.)
@@ -267,8 +269,9 @@ typedef struct mini_msg mini_msg_t;
  * no era una asercion real, solo lo decia: nada impedia que un campo nuevo
  * cambiara el tamano sin que nadie se enterase hasta que la P4 y el satelite
  * empezaran a rechazarse los paquetes en produccion. Con esto, si algun dia
- * dejan de cuadrar, el build de LOS DOS proyectos falla en el sitio exacto,
- * no en el monitor serie semanas despues. Detectado auditando el 07-sep-2026. */
+ * dejan de cuadrar, el build de LOS TRES proyectos falla en el sitio exacto,
+ * no en el monitor serie semanas despues. Detectado auditando el 07-sep-2026;
+ * "los dos" paso a "los tres" en la auditoria del 27-oct-2026 (X3). */
 _Static_assert(sizeof(mini_msg_t) == 40,
                "mini_msg_t cambio de tamano: sube MINI_PROTO_VERSION y "
                "actualiza este numero (y el comentario de mas arriba)");

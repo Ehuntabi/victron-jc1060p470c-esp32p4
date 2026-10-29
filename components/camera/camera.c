@@ -1167,19 +1167,20 @@ static volatile int  s_photo_count  = 0;      /* capturas de la sesion actual (l
  * su ventana ociosa; los escritores de SD (datalogger/battery_history/log) lo toman
  * antes de su I/O -> escriben solo cuando el GDMA esta parado. */
 static SemaphoreHandle_t s_sd_bus = NULL;
-/* Quien lo tiene y cuantas veces (auditoria del 16-oct-2026). Ver
- * camera_sd_bus_unlock(): soltar un mutex que no se posee es un configASSERT
- * (panic) en FreeRTOS, y el cerrojo se suelta desde sitios que NO lo tomaron
- * (los `if (lock) unlock()` de todo el firmware). Con esto se comprueba el
- * poseedor antes de soltar, y se CUENTA: el mismo dueno puede anidar (la tarea
- * de camara toma el cerrojo y, dentro de esa ventana, algun camino vuelve a
- * pedirlo). NO se usa xSemaphoreCreateRecursiveMutex() a proposito: un mutex
- * recursivo cambia la semantica de xSemaphoreTake para TODOS los que ya lo usan
- * (el segundo take del mismo dueno pasaria de bloquear a colarse), y aqui lo que
- * hace falta es lo contrario: que un segundo "lock" del mismo dueno siga
- * bloqueando como hasta hoy, con el contador solo para saber cuando soltar. */
+/* Quien lo tiene (auditoria del 16-oct-2026). Ver camera_sd_bus_unlock(): soltar
+ * un mutex que no se posee es un configASSERT (panic) en FreeRTOS, y el cerrojo
+ * se suelta desde sitios que NO lo tomaron (los `if (lock) unlock()` de todo el
+ * firmware). Con esto se comprueba el poseedor antes de soltar.
+ *
+ * NO ES RECURSIVO, A PROPOSITO: si la misma tarea vuelve a pedirlo, se queda
+ * bloqueada en vez de colarse. Es un fallo que se ve en el acto (la placa se
+ * cuelga) en lugar de una serializacion que se pierde en silencio.
+ *
+ * Y NO HAY CONTADOR DE PROFUNDIDAD (auditoria del 27-oct-2026, X10): habia un
+ * s_sd_bus_n con una rama "si > 1, anidado", pero como el mutex no es recursivo
+ * el contador solo podia valer 0 o 1 y esa rama no se ejecutaba nunca. Se ha
+ * quitado junto con la promesa del comentario de que el anidamiento se contaba. */
 static TaskHandle_t s_sd_bus_dueno = NULL;
-static int          s_sd_bus_n     = 0;
 
 /* El cerrojo se crea UNA SOLA VEZ desde app_main, antes de que exista nada que
  * toque la tarjeta.
@@ -1215,7 +1216,6 @@ bool camera_sd_bus_lock(uint32_t timeout_ms)
     if (!s_sd_bus) return true;
     if (xSemaphoreTake(s_sd_bus, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) return false;
     s_sd_bus_dueno = xTaskGetCurrentTaskHandle();
-    s_sd_bus_n++;
     return true;
 }
 
@@ -1229,8 +1229,8 @@ bool camera_sd_bus_lock(uint32_t timeout_ms)
  *  - si lo tiene otra tarea, NO se suelta y se dice en el log (es un fallo de
  *    simetria del que llama, y dejarlo pasar es lo que corrompe la
  *    serializacion o provoca el panic);
- *  - se cuenta la profundidad, asi que solo se suelta de verdad en el unlock que
- *    corresponde al ultimo lock. */
+ *  - y no hay contador de profundidad: el mutex no es recursivo, asi que quien lo
+ *    tiene lo tiene UNA vez (ver el comentario de s_sd_bus_dueno). */
 void camera_sd_bus_unlock(void)
 {
     if (!s_sd_bus) return;
@@ -1240,8 +1240,6 @@ void camera_sd_bus_unlock(void)
                  (void *)s_sd_bus_dueno, (void *)yo);
         return;
     }
-    if (s_sd_bus_n > 1) { s_sd_bus_n--; return; }   /* anidado: aun le queda */
-    s_sd_bus_n = 0;
     s_sd_bus_dueno = NULL;
     xSemaphoreGive(s_sd_bus);
 }

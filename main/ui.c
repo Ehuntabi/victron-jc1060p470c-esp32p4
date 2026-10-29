@@ -85,11 +85,6 @@ static ui_state_t g_ui = {
     .victron_config = {0},
     .current_device_mac = "00:00:00:00:00:00",
     .view_selection = { .mode = UI_VIEW_MODE_DEFAULT_BATTERY, .dropdown = NULL },
-    .lbl_device_type = NULL,
-    .lbl_product_name = NULL,
-    .lbl_error = NULL,
-    .ta_mac = NULL,
-    .ta_key = NULL,
 };
 
 // Forward declarations
@@ -254,11 +249,6 @@ void ui_init(void) {
     ui->default_view = NULL;
     ui->current_device_type = VICTRON_BLE_RECORD_TEST;
     strcpy(ui->current_device_mac, "00:00:00:00:00:00");
-    ui->ta_mac = NULL;          // Legacy field - no longer created in System page
-    ui->ta_key = NULL;          // Legacy field - no longer created in System page  
-    ui->lbl_device_type = NULL; // Legacy field - no longer created in System page
-    ui->lbl_product_name = NULL;// Legacy field - no longer created in System page
-    ui->lbl_error = NULL;       // Legacy field - no longer created in System page
     for (size_t i = 0; i < UI_MAX_DEVICE_VIEWS; ++i) {
         ui->views[i] = NULL;
     }
@@ -593,16 +583,6 @@ lv_style_set_text_font(&ui->styles.value, UI_FONT_VALUE);
             ui->overview_view->hide(ui->overview_view);
     }
     
-    // Keep the old label for compatibility but hide it
-    ui->lbl_no_data = lv_label_create(ui->tab_live);
-    lv_label_set_text(ui->lbl_no_data, "No live data received yet");
-    lv_obj_add_style(ui->lbl_no_data, &ui->styles.medium, 0);
-    lv_label_set_long_mode(ui->lbl_no_data, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(ui->lbl_no_data, lv_pct(90));
-    lv_obj_set_style_text_align(ui->lbl_no_data, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_center(ui->lbl_no_data);
-    lv_obj_add_flag(ui->lbl_no_data, LV_OBJ_FLAG_HIDDEN); // Hide by default
-
     ui_settings_panel_init(ui, default_ssid, default_pass, ap_enabled);
     ui_settings_screensaver_create_timer(ui);
 
@@ -686,11 +666,12 @@ void ui_on_panel_data(const victron_data_t *d) {
     /* Battery history + deteccion de cruce de alarma SoC: ver ui/ble_ingest.c. */
     ble_ingest_feed_history(d);
 
+    /* El aviso "No live data received yet" se quito el 27-oct-2026 (X9): se
+     * creaba oculto y no habia nada que lo enseñara nunca, asi que solo quedaba
+     * este if. Si algun dia se quiere el aviso, se hace de verdad: crearlo
+     * visible y ocultarlo aqui. */
     if (!ui->has_received_data) {
         ui->has_received_data = true;
-        if (ui->lbl_no_data) {
-            lv_obj_add_flag(ui->lbl_no_data, LV_OBJ_FLAG_HIDDEN);
-        }
     }
     
     // Always update the default view with incoming data (it handles multiple device types)
@@ -704,30 +685,8 @@ void ui_on_panel_data(const victron_data_t *d) {
 
     const char *type_str = device_type_name(d->type);
     
-    // Update legacy labels (if they exist for compatibility)
-    if (ui->lbl_device_type) {
-        lv_label_set_text_fmt(ui->lbl_device_type, "Device: %s", type_str);
-    }
-
     ui->current_product_id = d->product_id;
-    if (ui->lbl_product_name) {
-        if (d->product_id != 0) {
-            const char *prod_name = victron_product_name(d->product_id);
-            if (prod_name != NULL) {
-                lv_label_set_text_fmt(ui->lbl_product_name,
-                                      "Product: %s (0x%04X)",
-                                      prod_name,
-                                      (unsigned)d->product_id);
-            } else {
-                lv_label_set_text_fmt(ui->lbl_product_name,
-                                      "Product: 0x%04X",
-                                      (unsigned)d->product_id);
-            }
-        } else {
-            lv_label_set_text(ui->lbl_product_name, "Product: --");
-        }
-    }
-    
+
     // Prepare product info for device status updates
     char product_info[128] = {0};
     if (d->product_id != 0) {
@@ -768,11 +727,6 @@ void ui_on_panel_data(const victron_data_t *d) {
         const char *error_msg = "No renderer for device type";
         if (d->type == VICTRON_BLE_RECORD_TEST) {
             error_msg = "Unknown device type";
-        }
-        
-        // Update legacy error label (if it exists)
-        if (ui->lbl_error) {
-            lv_label_set_text(ui->lbl_error, error_msg);
         }
         
         // Update error status for this device in Victron Keys page
@@ -1157,7 +1111,9 @@ void ui_set_ble_mac(const uint8_t *mac) {
     }
 
     snprintf(ui->current_device_mac, sizeof(ui->current_device_mac), "%s", mac_str);
-    ui_settings_panel_set_mac(ui, mac_str);
+    /* Ya no se copia a ningun campo de la pagina System: ese textarea
+     * (ui->ta_mac) no existia desde hace meses y la funcion solo comprobaba que
+     * fuera NULL para salir (auditoria del 27-oct-2026, X9). */
     lvgl_port_unlock();
 }
 

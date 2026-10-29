@@ -776,15 +776,16 @@ esp_err_t ota_pantalla_bin(httpd_req_t *req)
 }
 
 /* ── POST /api/pantalla/subir?modelo=<m> ───────────────────────────────────
- * Servidor PESADO (8081), nivel ABIERTO (la clave del portal, igual que
- * /api/viaje y que el resto de la web desde la que se sube).
+ * Servidor PESADO (8081), nivel de ADMINISTRACION (estricto).
  *
- * POR QUE NO PIDE LA CLAVE DE ADMINISTRACION: el dueno actualiza las dos
- * pantallas desde el navegador del movil con la clave que ya le pide el portal.
- * Si este endpoint pidiera la de administracion, el navegador pediria una
- * SEGUNDA clave en mitad de la subida (y con el .bin ya elegido), que es justo
- * lo que habia que evitar. Lo que de verdad protege esta puerta no es la clave
- * sino la validacion de abajo: el fichero tiene que ser un firmware ESP32 con el
+ * ESTO SE PROBO ABIERTO Y NO SE DEJO ASI (17-oct-2026; el comentario se
+ * corrigio el 27-oct-2026, auditoria X8, porque seguia diciendo lo contrario):
+ * se quiso dejar en la clave del portal para no pedir una segunda clave en
+ * mitad de la subida desde el movil, pero el /ota de la propia P4 es estricto y
+ * dejar esta puerta por debajo permitia cambiar el firmware de una pantalla con
+ * la clave que lleva la app. Quien sube desde el navegador mete la clave de
+ * administracion una vez al entrar (mismo realm). Ademas de la clave, protege
+ * la validacion de abajo: el fichero tiene que ser un firmware ESP32 con el
  * magic de esp_app_desc_t, el project_name EXACTO del modelo y una version con
  * 'v'; si no, se borra el .tmp y no se publica nada.
  *

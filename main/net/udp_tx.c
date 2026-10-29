@@ -317,17 +317,25 @@ static void tx_task(void *arg)
                 ESP_LOGW(TAG, "sendto err errno=%d (ok=%lu err=%lu)",
                          errno, (unsigned long)s_sent_ok, (unsigned long)s_sent_err);
             }
-            /* ENOTCONN (118): el socket se creo ANTES de que el AP terminara de
-             * levantarse, asi que quedo ligado a una interfaz que todavia no
-             * existia y ya no envia NUNCA (ok=0 para siempre). Visto el
+            /* SIN SALIDA: el envio falla con el socket vivo. Visto el
              * 7-oct-2026 en el banco: 20 minutos con "errno=118 (ok=0 err=1)" y
              * el satelite sin recibir nada, con el AP funcionando y clientes
-             * conectados. Se recrea el socket: al crearlo ahora, la interfaz ya
-             * esta y el envio sale. Se exige un minimo de fallos seguidos para
-             * no estar cerrando y abriendo por un fallo suelto. */
-            if (errno == ENOTCONN && ++fallos_seguidos >= 3) {
+             * conectados; recrear el socket lo arreglo.
+             *
+             * Y EL 118 NO ES ENOTCONN (auditoria del 27-oct-2026, M1): en este
+             * toolchain 118 es EHOSTUNREACH (ENOTCONN vale 128), y es lo que
+             * devuelve lwIP cuando no hay ruta al destino. La comparacion con
+             * ENOTCONN era falsa SIEMPRE, asi que la rama que recrea el socket
+             * no se ejecutaba nunca y solo quedaba un warning cada 10 fallos.
+             * Se aceptan los errores que significan "la ruta o el enlace no
+             * estan": EHOSTUNREACH (118), ENETUNREACH (113), ENETDOWN (114) y
+             * ENOTCONN (128). Los que no son de ruta (EAGAIN de un socket sin
+             * memoria) no entran aqui: cerrar y abrir no arreglaria nada. */
+            bool sin_ruta = (errno == EHOSTUNREACH || errno == ENETUNREACH ||
+                             errno == ENETDOWN     || errno == ENOTCONN);
+            if (sin_ruta && ++fallos_seguidos >= 3) {
                 fallos_seguidos = 0;
-                ESP_LOGW(TAG, "socket sin salida (ENOTCONN): lo recreo");
+                ESP_LOGW(TAG, "socket sin salida (errno=%d): lo recreo", errno);
                 close(sock);
                 /* A -1: sin esto el while de abajo no se ejecuta NUNCA (sock
                  * sigue valiendo el fd ya cerrado), no se llama a socket(), el

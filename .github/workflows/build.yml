@@ -104,7 +104,8 @@ jobs:
       - name: shellcheck de los scripts propios
         run: |
           shellcheck -S warning scripts/grabar.sh scripts/bin_con_version.sh release.sh \
-            test/auditar.sh test/run.sh test/test_viaje_dueno.sh test/test_viaje_token.sh
+            test/auditar.sh test/run.sh test/test_viaje_dueno.sh test/test_viaje_token.sh \
+            test/test_viaje_dupe_fin.sh
 
 
   # El contrato con la app del movil, comprobado SIN placa: se compilan

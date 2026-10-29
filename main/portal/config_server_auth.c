@@ -161,9 +161,17 @@ esp_err_t serve_from_spiffs(httpd_req_t *req, const char *uri) {
 
 /* Script común que sincroniza la hora del móvil con el ESP cada vez que se
  * carga cualquier página del portal. Hace GET /settime?timestamp=... vía
- * <img src> para evitar problemas de CORS/captive portal. */
+ * <img src> para evitar problemas de CORS/captive portal.
+ *
+ * CON LA URL COMPLETA AL PUERTO 80 (auditoría del 27-oct-2026, B7): esto se
+ * pega también en las páginas del servidor pesado (8081), y allí un '/settime'
+ * relativo va al 8081, donde esa ruta no existe: el 404 acaba en el 302 al
+ * dashboard y la hora del móvil se perdía. Con la URL absoluta funciona desde
+ * los dos puertos (el 80 es donde vive la ruta). Igual que PORTAL_HEAVY_BASE,
+ * la IP del AP va a pelo: es fija y el portal solo se sirve por el AP. */
 const char SETTIME_SCRIPT[] =
-    "<script>(function(){try{var i=new Image();i.src='/settime?timestamp='"
+    "<script>(function(){try{var i=new Image();"
+    "i.src='http://192.168.4.1/settime?timestamp='"
     "+Math.floor(Date.now()/1000)+'&_='+Math.random();}catch(e){}})();</script>";
 
 /* BasicAuth — credenciales NO hardcoded en el repo.

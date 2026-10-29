@@ -84,12 +84,11 @@ typedef struct ui_state {
     ui_screensaver_state_t screensaver;
     ui_view_selection_t view_selection;
     ui_night_mode_t night_mode;
-    lv_obj_t *lbl_error;        // Legacy - kept for compatibility
-    lv_obj_t *lbl_device_type;  // Legacy - kept for compatibility
-    lv_obj_t *lbl_product_name; // Legacy - kept for compatibility
-    lv_obj_t *lbl_no_data;
-    lv_obj_t *ta_mac;  // Legacy - kept for compatibility
-    lv_obj_t *ta_key;  // Legacy - kept for compatibility
+    /* (27-oct-2026, auditoria X9) Aqui vivian seis punteros "legacy"
+     * -- lbl_error, lbl_device_type, lbl_product_name, lbl_no_data, ta_mac y
+     * ta_key -- que ya no los creaba nadie (o, en el caso de lbl_no_data, se
+     * creaba oculto y nunca se enseñaba). Se han quitado con sus ramas: media
+     * docena de "if (ui->lbl_...)" que no podian ejecutarse nunca. */
     struct ui_device_view *default_view;
     struct ui_device_view *overview_view;
     uint8_t brightness;

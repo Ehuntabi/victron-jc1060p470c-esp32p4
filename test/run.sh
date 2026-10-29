@@ -11,6 +11,8 @@ echo "=== test del TOKEN de las pantallas (forzar: dev + token) ==="
 bash test/test_viaje_token.sh
 echo "=== test del cierre del viaje (idempotente: el rename de FatFs no pisa) ==="
 bash test/test_viaje_cierre.sh
+echo "=== test del 'fin' no repetido (el diario ya lo tiene: no se escribe otro) ==="
+bash test/test_viaje_dupe_fin.sh
 echo "=== test de ENTRADA HOSTIL (lo que se teclea no es lo que se espera) ==="
 # Necesita el cJSON del IDF para la parte de la P4 (igual que test_viaje_dueno):
 # en CI el workflow ya pasa IDF_PATH=/tmp/idf; en local lo busca solo en

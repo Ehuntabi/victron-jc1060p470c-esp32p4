@@ -7,17 +7,19 @@
  * .bin una vez a la P4 (por el portal, desde el movil o el PC) y cada cabina se
  * lo baja y lo instala sola.
  *
- * CONTRATO (lo usa el cliente que corre en las cabinas):
- *   GET  /api/pantalla/info                  puerto 80    nivel abierto
- *   GET  /api/pantalla/bin?modelo=<m>        puerto 8081  nivel abierto
- *   POST /api/pantalla/subir?modelo=<m>      puerto 8081  nivel abierto
- *   GET  /pantallas                          puerto 8081  nivel abierto
+ * CONTRATO (lo usa el cliente que corre en las cabinas). ACTUALIZADO EL
+ * 17-OCT-2026 Y CORREGIDO AQUI EL 27-OCT-2026 (auditoria, X8): el texto decia
+ * "nivel abierto" en las cuatro rutas y eso ya no es verdad; quien lea esto y
+ * monte un cliente se lleva una sorpresa.
+ *   GET  /api/pantalla/info                  puerto 80    admin (estricto)
+ *   GET  /api/pantalla/bin?modelo=<m>        puerto 8081  admin (estricto)
+ *   POST /api/pantalla/subir?modelo=<m>      puerto 8081  admin (estricto)
+ *   GET  /pantallas                          puerto 8081  admin (estricto)
  *
- *   El nivel "abierto" es la clave del portal (la misma que pide la web y que
- *   lleva la cabina), no la de administracion: el dueno sube el .bin desde el
- *   navegador del movil y no puede encontrarse una segunda clave a mitad de la
- *   subida. Lo que impide publicar un fichero que no sea de ese modelo es la
- *   validacion de la cabecera, no la credencial.
+ *   "Estricto" es la clave de administracion, la misma que pide el /ota de la
+ *   propia P4: subir firmware y bajarse el de una pantalla es lo mismo en
+ *   cuanto a riesgo. Lo que impide publicar un fichero que no sea de ese modelo
+ *   es ademas la validacion de la cabecera (project_name exacto y version).
  *
  *   Modelos validos: "cabina5" y "35cabina". Los ficheros viven en
  *   /sdcard/firmware/cabina5.bin y /sdcard/firmware/35cabina.bin.

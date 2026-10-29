@@ -99,10 +99,6 @@ static void simple_view_update(ui_device_view_t *base, const victron_data_t *dat
     if (!view || !data || !view->config) return;
     if (data->type != view->config->type) return;
 
-    if (base->ui && base->ui->lbl_error) {
-        lv_label_set_text(base->ui->lbl_error, "");
-    }
-
     for (size_t i = 0; i < view->config->label_count; ++i) {
         if (!view->values[i]) continue;
         const ui_simple_label_descriptor_t *desc = &view->config->labels[i];
