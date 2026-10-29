@@ -5379,6 +5379,23 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
                         "que es el viaje en curso, recarga la lista.</div></li>",
                         nombre_esc);
             }
+            /* NUNCA MANDAR UNA LINEA TRUNCADA COMO HTML (auditoria del
+             * 27-oct-2026, M2). Con el buffer de 768 y el nombre maximo real (35
+             * caracteres) no deberia pasar, pero si algun dia pasara, la linea
+             * cortada se lleva por delante el cierre de la etiqueta y el resto de
+             * la pagina: se rompe el enlace que es la unica salida por web para
+             * cerrar un viaje atascado. snprintf marca el corte dejando la cadena
+             * justo al tope; en ese caso se omite la entrada y se dice en el log,
+             * que es mejor que servir HTML a medias. */
+            {
+                size_t ll = strlen(linea);
+                if (ll + 1 >= sizeof(linea)) {
+                    ESP_LOGW(TAG, "linea de la lista de viajes truncada (%u B, nombre "
+                                  "de %u): se omite la entrada", (unsigned)ll,
+                             (unsigned)strlen(ent->d_name));
+                    continue;
+                }
+            }
             httpd_resp_sendstr_chunk(req, linea);
 
             /* PAPELERA (auditoria del 14-oct-2026). Borrar un viaje paso a pedir
