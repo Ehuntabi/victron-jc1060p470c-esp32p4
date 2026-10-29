@@ -104,6 +104,12 @@ static void overview_show(ui_device_view_t *view);
 static void overview_hide(ui_device_view_t *view);
 static void overview_destroy(ui_device_view_t *view);
 static void overview_render(ui_overview_view_t *ov);
+
+/* Ultimo nivel pintado en cada tanque (O1). 0xFE = "no pintado aun", para que
+ * la primera vuelta pinte siempre. Se resetea en ui_overview_view_create: si
+ * algun dia la vista se recrea, los widgets son nuevos y el cache no vale. */
+static uint8_t s_ov_last_s1 = 0xFE;
+static uint8_t s_ov_last_r1 = 0xFE;
 static uint32_t now_ms(void) { return lv_tick_get(); }
 
 /* ── Estado Victron (device_state): texto, color y explicacion ──────
@@ -635,6 +641,9 @@ static lv_obj_t *camper_make_button(lv_obj_t *parent, const char *text,
 
 ui_device_view_t *ui_overview_view_create(ui_state_t *ui, lv_obj_t *parent)
 {
+    /* Widgets nuevos: el cache de lo ultimo pintado no vale (O1). */
+    s_ov_last_s1 = 0xFE;
+    s_ov_last_r1 = 0xFE;
     if (!ui || !parent) return NULL;
     ui_overview_view_t *ov = calloc(1, sizeof(*ov));
     if (!ov) return NULL;
@@ -1398,9 +1407,17 @@ static void overview_render(ui_overview_view_t *ov)
         ne185_data_t cd;
         ne185_get(&cd);
 
-        /* Tanques visuales: nivel 0..3 (ui_tank_set ignora valores > 3) */
-        if (ov->tank_s1) ui_tank_set(ov->tank_s1, cd.fresh ? cd.s1 : 0xFF);
-        if (ov->tank_r1) ui_tank_set(ov->tank_r1, cd.fresh ? cd.r1 : 0xFF);
+        /* Tanques visuales: nivel 0..3 (ui_tank_set ignora valores > 3).
+         * SOLO SI CAMBIA EL NIVEL (auditoria del 27-oct-2026, O1): ui_tank_set
+         * recorre los LEDs y les escribe el color, y cada escritura invalida.
+         * Un tanque que no se mueve no tiene por que repintarse dos veces por
+         * segundo. El "sin dato" (0xFF) cuenta como un nivel mas. */
+        {
+            uint8_t n1 = cd.fresh ? cd.s1 : 0xFF;
+            uint8_t r1 = cd.fresh ? cd.r1 : 0xFF;
+            if (ov->tank_s1 && n1 != s_ov_last_s1) { ui_tank_set(ov->tank_s1, n1); s_ov_last_s1 = n1; }
+            if (ov->tank_r1 && r1 != s_ov_last_r1) { ui_tank_set(ov->tank_r1, r1); s_ov_last_r1 = r1; }
+        }
 
         /* ── Alarmas ───────────────────────────────────────────
          * El estado viene de alarma_estado.c, que es quien temporiza y quien
@@ -1432,11 +1449,15 @@ static void overview_render(ui_overview_view_t *ov)
         /* Aviso flotante e interrupcion del salvapantallas: viven en
          * alarma_estado.c, que evalua las cuatro alarmas en su propio timer
          * de 500 ms (independiente de que esta vista se dibuje). */
-        /* Parpadeo visual del card de bateria */
+        /* Parpadeo visual del card de bateria.
+         * SOLO SI CAMBIA (auditoria del 27-oct-2026, O1): lv_obj_set_style_opa
+         * invalida siempre, y con la alarma apagada el valor es siempre el
+         * mismo -- se repintaba la tarjeta dos veces por segundo para nada. */
         if (ov->card_bat) {
             lv_opa_t opa = (alarm_soc && ov->blink_phase)
                 ? LV_OPA_30 : LV_OPA_COVER;
-            lv_obj_set_style_opa(ov->card_bat, opa, 0);
+            if (lv_obj_get_style_opa(ov->card_bat, 0) != opa)
+                lv_obj_set_style_opa(ov->card_bat, opa, 0);
         }
 
         /* Icono del altavoz en la esquina de cada tarjeta en alarma (ver

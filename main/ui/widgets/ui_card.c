@@ -272,7 +272,7 @@ void ui_metric_set(lv_obj_t *metric, const char *value_str,
     lv_obj_t *value = lv_obj_get_child(row, 0);
     lv_obj_t *unit  = lv_obj_get_child(row, 1);
     if (value) {
-        lv_label_set_text(value, value_str ? value_str : "--");
+        const char *txt = (value_str && value_str[0]) ? value_str : "--";
         /* Si el caller pasa color "negro/cero" mantenemos blanco como default */
         if (value_color.full == 0) value_color = UI_COLOR_TEXT;
         /* SIN DATO = GRIS APAGADO (22-sep-2026). Antes un "--" se pintaba con
@@ -280,9 +280,23 @@ void ui_metric_set(lv_obj_t *metric, const char *value_str,
          * el aparato estaba a cero o simplemente no habia dato. */
         if (!value_str || !value_str[0] || strcmp(value_str, "--") == 0)
             value_color = UI_COLOR_TEXT_DIM;
-        lv_obj_set_style_text_color(value, value_color, 0);
+        /* SOLO SI CAMBIA (auditoria del 27-oct-2026, O1). lv_label_set_text NO
+         * compara: invalida el objeto aunque el texto sea el mismo, y
+         * lv_obj_set_style_text_color hace lo mismo. El Overview reescribe sus
+         * ~20 widgets cada 500 ms, asi que dos veces por segundo se repintaba la
+         * tarjeta entera aunque no hubiera cambiado ni un numero. Comparando
+         * contra lo que ya tiene el widget (el texto y el color resuelto), un
+         * tick sin cambios no invalida nada. */
+        if (strcmp(lv_label_get_text(value), txt) != 0)
+            lv_label_set_text(value, txt);
+        if (lv_obj_get_style_text_color(value, 0).full != value_color.full)
+            lv_obj_set_style_text_color(value, value_color, 0);
     }
-    if (unit) lv_label_set_text(unit, unit_str ? unit_str : "");
+    if (unit) {
+        const char *utxt = unit_str ? unit_str : "";
+        if (strcmp(lv_label_get_text(unit), utxt) != 0)
+            lv_label_set_text(unit, utxt);
+    }
 }
 
 void ui_metric_set_value_font(lv_obj_t *metric, const lv_font_t *font)
@@ -332,9 +346,14 @@ lv_obj_t *ui_pill_create(lv_obj_t *parent, const char *text, lv_color_t bg)
 void ui_pill_set(lv_obj_t *pill, const char *text, lv_color_t bg)
 {
     if (!pill) return;
-    lv_obj_set_style_bg_color(pill, bg, 0);
+    /* Solo si cambia (O1): mismo motivo que en ui_metric_set. */
+    if (lv_obj_get_style_bg_color(pill, 0).full != bg.full)
+        lv_obj_set_style_bg_color(pill, bg, 0);
     lv_obj_t *lbl = lv_obj_get_child(pill, 0);
-    if (lbl) lv_label_set_text(lbl, text ? text : "");
+    if (lbl) {
+        const char *txt = text ? text : "";
+        if (strcmp(lv_label_get_text(lbl), txt) != 0) lv_label_set_text(lbl, txt);
+    }
 }
 
 /* ── Gauge SOC ───────────────────────────────────────────────────── */
