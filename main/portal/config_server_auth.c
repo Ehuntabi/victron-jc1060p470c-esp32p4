@@ -536,6 +536,16 @@ static uint32_t auth_ip_cliente(httpd_req_t *req)
  * de antes. Lo cazo la revision adversarial del 13-oct-2026. La IP se escribe
  * aqui, y tambien se CADUCA la entrada (si no, con el tiempo la tabla se llena
  * de IPs que ya no existen y una cabina nueva se queda sin hueco). */
+/* CERROJO DE LA TABLA (auditoria del 27-oct-2026, B5): la tocan las DOS tareas
+ * httpd (los dos servidores, 80 y 8081) y no habia nada que las serializara: dos
+ * peticiones simultaneas podian quedarse con el mismo hueco y mezclar contadores.
+ * Un portMUX basta (son unas decenas de instrucciones, sin I/O ni memoria). Los
+ * que la usan ya NO se llevan el puntero: se llevan una copia o piden que se
+ * apunte el fallo, asi una entrada no se puede quedar "a medias" entre dos
+ * lecturas. */
+static portMUX_TYPE s_auth_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Se llama SIEMPRE con el cerrojo tomado (por las funciones de abajo). */
 static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
 {
     if (ip == 0) return NULL;
@@ -558,6 +568,45 @@ static struct auth_ip_s *auth_ip_slot(uint32_t ip, int64_t ahora_us)
     libre->fallos = 0;
     libre->ultimo_us = 0;
     return libre;
+}
+
+/* ¿Esta la IP frenada ahora mismo? Devuelve, con el cerrojo tomado, una copia de
+ * su contador y de cuando fue el ultimo fallo. */
+static void auth_ip_estado(uint32_t ip, int64_t ahora_us,
+                           uint32_t *fallos, int64_t *ultimo_us)
+{
+    *fallos = 0;
+    *ultimo_us = 0;
+    portENTER_CRITICAL(&s_auth_mux);
+    struct auth_ip_s *f = auth_ip_slot(ip, ahora_us);
+    if (f) {
+        if (ahora_us - f->ultimo_us > AUTH_INACTIVIDAD_US) f->fallos = 0;
+        *fallos    = f->fallos;
+        *ultimo_us = f->ultimo_us;
+    }
+    portEXIT_CRITICAL(&s_auth_mux);
+}
+
+/* Apunta un fallo de esa IP. */
+static void auth_ip_apunta_fallo(uint32_t ip, int64_t ahora_us)
+{
+    portENTER_CRITICAL(&s_auth_mux);
+    struct auth_ip_s *f = auth_ip_slot(ip, ahora_us);
+    if (f) {
+        if (ahora_us - f->ultimo_us > AUTH_INACTIVIDAD_US) f->fallos = 0;
+        f->fallos++;
+        f->ultimo_us = ahora_us;
+    }
+    portEXIT_CRITICAL(&s_auth_mux);
+}
+
+/* Un acierto limpia los fallos de esa IP. */
+static void auth_ip_limpia(uint32_t ip, int64_t ahora_us)
+{
+    portENTER_CRITICAL(&s_auth_mux);
+    struct auth_ip_s *f = auth_ip_slot(ip, ahora_us);
+    if (f) f->fallos = 0;
+    portEXIT_CRITICAL(&s_auth_mux);
 }
 
 /* Comprobacion de credenciales CONTRA UNA CABECERA DADA, con las mismas
@@ -666,8 +715,7 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
         s_fallos = 0;
         /* Tambien los de ESA IP: si no, seguiria contando fallos viejos y el
          * siguiente desliz la mandaria a 429 sin motivo. */
-        struct auth_ip_s *ok_ip = auth_ip_slot(auth_ip_cliente(req), esp_timer_get_time());
-        if (ok_ip) ok_ip->fallos = 0;
+        auth_ip_limpia(auth_ip_cliente(req), esp_timer_get_time());
         ap_off_timer_kick();   /* peticion valida -> mantener el HTTP server vivo */
         return ESP_OK;
     }
@@ -678,13 +726,14 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
     /* Freno POR IP, sin dormir la tarea del servidor. */
     uint32_t ip = auth_ip_cliente(req);
     if (ip != 0) {
-        struct auth_ip_s *f = auth_ip_slot(ip, now_us);
-        if (f) {
-            if (now_us - f->ultimo_us > AUTH_INACTIVIDAD_US) f->fallos = 0;
-            if (f->fallos > AUTH_FALLOS_LIBRES) {
-                uint32_t espera_ms = (f->fallos - AUTH_FALLOS_LIBRES) * AUTH_ESPERA_PASO_MS;
+        uint32_t fallos_ip = 0;
+        int64_t  ultimo_ip = 0;
+        auth_ip_estado(ip, now_us, &fallos_ip, &ultimo_ip);
+        {
+            if (fallos_ip > AUTH_FALLOS_LIBRES) {
+                uint32_t espera_ms = (fallos_ip - AUTH_FALLOS_LIBRES) * AUTH_ESPERA_PASO_MS;
                 if (espera_ms > AUTH_ESPERA_TOPE_MS) espera_ms = AUTH_ESPERA_TOPE_MS;
-                int64_t desde_ms = (now_us - f->ultimo_us) / 1000;
+                int64_t desde_ms = (now_us - ultimo_ip) / 1000;
                 if (desde_ms < (int64_t)espera_ms) {
                     char ra[12];
                     snprintf(ra, sizeof(ra), "%u",
@@ -697,8 +746,7 @@ static esp_err_t auth_comprueba(httpd_req_t *req, const char *esperada_cab,
                     return ESP_FAIL;
                 }
             }
-            f->fallos++;
-            f->ultimo_us = now_us;
+            auth_ip_apunta_fallo(ip, now_us);
         }
     }
     s_ultimo_fallo_us = now_us;

@@ -277,6 +277,12 @@ static void tick_cb(lv_timer_t *t)
     if (any && !s_prev_any_alarm) {
         ui_alarm_interrupt_screensaver();
     }
+    /* FLANCO DE BAJADA (auditoria del 27-oct-2026, B11): al despejarse la alarma
+     * se devuelve la vista que el usuario tenia elegida, que la interrupcion
+     * habia pisado con Overview y no se restauraba nunca. */
+    if (!any && s_prev_any_alarm) {
+        ui_alarma_despejada();
+    }
     s_prev_any_alarm = any;
 
     /* Aviso flotante: pintarlo/ocultarlo y cambiar el texto solo cuando cambie

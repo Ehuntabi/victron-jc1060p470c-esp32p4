@@ -158,8 +158,16 @@ static int process_dir(const char *dir, int max_days, bool dry_run, bool count_w
 static time_t parse_sesion_date(const char *nombre)
 {
     int y = 0, mo = 0, d = 0, hh = 0, mi = 0, ss = 0, n = 0;
-    if (sscanf(nombre, "%4d%2d%2d_%2d%2d%2d%n", &y, &mo, &d, &hh, &mi, &ss, &n) != 6)
-        return 0;
+    if (sscanf(nombre, "%4d%2d%2d_%2d%2d%2d%n", &y, &mo, &d, &hh, &mi, &ss, &n) != 6) {
+        /* AAAAMMDD SIN HORA: las carpetas de dia que deja la migracion de fotos
+         * sueltas (auditoria del 27-oct-2026, B15). Se aceptan desde que se
+         * crean: antes solo valia AAAAMMDD_HHMMSS, asi que esas carpetas no las
+         * veia ni la retencion de 60 dias ni el liberador de espacio, y podian
+         * ser justo las que mantuvieran la tarjeta por debajo del limite (si se
+         * llenaba, dejaban de escribirse logs, bateria y viajes). */
+        hh = mi = ss = 0;
+        if (sscanf(nombre, "%4d%2d%2d%n", &y, &mo, &d, &n) != 3) return 0;
+    }
     if (n == 0 || nombre[n] != '\0') return 0;   /* el nombre es EXACTAMENTE eso */
     if (y < 2024 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return 0;
     struct tm tm = {0};

@@ -198,6 +198,13 @@ static void cam_recupera_task(void *arg);
  * el color NO mejoraba y la app se comia el timeout; con esto la foto tarda
  * 0,5-3 s. */
 #define FOTO_ASENTADA_MIN 8    /* fotogramas nuevos antes de creerse "asentada" */
+/* TOPE DE ESPERA DE /snapshot: 60 x 50 ms = 3 s. SE QUEDA EN 3 s (auditoria del
+ * 27-oct-2026, M10): antes fueron 7 s (tras un 503 real con 4 s) y despues se
+ * recorto a 3 a proposito, medido: el fotograma llega a los 0,5-3 s. Lo que
+ * estaba mal no era el numero sino los TEXTOS, que seguian diciendo 7 s (aqui
+ * abajo, en el comentario de camera_snapshot_jpeg y en los dos mensajes de
+ * error). Se corrigen los textos y no se toca el plazo: 3 s bastan y, cuando la
+ * camara no responde, no se tiene media tarea httpd bloqueada el doble. */
 #define FOTO_ESPERA_ITER 60    /* tope de espera: 60 x 50 ms = 3 s */
 static volatile uint32_t s_thumb_seq = 0;
 /* Firma de color de la ultima miniatura publicada + si la imagen esta ASENTADA
@@ -695,7 +702,8 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
     if (!s_surveillance && !s_luma_wanted) {
         uint32_t seq0 = s_thumb_seq;
         s_frame_pedido = true;
-        /* Hasta 7 s: el ciclo son 2 s de reposo mas la captura y su calentamiento,
+        /* Hasta 3 s (FOTO_ESPERA_ITER): el ciclo son 2 s de reposo mas la captura
+         * y su calentamiento,
          * y en frio (primera peticion tras un rato parada) tarda mas. Con 4 s la
          * app se comia 503 con la camara perfectamente viva (visto el
          * 28-sep-2026 en la pantalla "Camara" de la app).
@@ -714,7 +722,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
             vTaskDelay(pdMS_TO_TICKS(50));
         }
         if (s_thumb_seq == seq0) {
-            ESP_LOGW(TAG, "la camara no ha dado un fotograma nuevo a tiempo (7 s); "
+            ESP_LOGW(TAG, "la camara no ha dado un fotograma nuevo a tiempo (3 s); "
                           "NO sirvo una foto vieja [tarea=%s seq=%u]",
                      camera_stream_task_handle() ? "viva" : "PARADA",
                      (unsigned)s_thumb_seq);
@@ -724,7 +732,7 @@ bool camera_snapshot_jpeg(uint8_t **out, size_t *out_len)
         if (!s_thumb_estable) {
             /* Sin asentar no se rechaza la foto (mejor una foto regular que un
              * 503 en la app): se sirve la ultima y queda dicho en el log. */
-            ESP_LOGW(TAG, "foto servida con AE/AWB sin asentar tras 7 s");
+            ESP_LOGW(TAG, "foto servida con AE/AWB sin asentar tras 3 s");
         }
         s_frame_pedido = false;   /* ya tenemos imagen: la camara puede dormir */
     }

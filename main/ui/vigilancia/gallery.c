@@ -88,13 +88,19 @@ static bool gallery_listing_subdirs(void)
     return FOLDERS[s_folder].has_subdirs && s_vig_subdir[0] == '\0';
 }
 
-/* Carpeta real que toca escanear/leer ahora mismo: la de la carpeta activa, o
- * su subcarpeta elegida si ya se entro en una. */
-static void gallery_current_dir(char *out, size_t outsz)
+/* Las mismas dos cuentas, pero con la carpeta y la subcarpeta que se le pasen:
+ * las usa el barrido, que corre en su propia tarea y no puede fiarse de que
+ * s_folder/s_vig_subdir no cambien a mitad (M9). */
+static bool gallery_listing_subdirs_de(int folder, const char *subdir)
 {
-    const gal_folder_t *f = &FOLDERS[s_folder];
-    if (f->has_subdirs && s_vig_subdir[0]) snprintf(out, outsz, "%s/%s", f->dir, s_vig_subdir);
-    else                                   snprintf(out, outsz, "%s", f->dir);
+    return FOLDERS[folder].has_subdirs && subdir[0] == '\0';
+}
+
+static void gallery_current_dir_de(int folder, const char *subdir, char *out, size_t outsz)
+{
+    const gal_folder_t *f = &FOLDERS[folder];
+    if (f->has_subdirs && subdir[0]) snprintf(out, outsz, "%s/%s", f->dir, subdir);
+    else                             snprintf(out, outsz, "%s", f->dir);
 }
 
 /* Nombre de subcarpeta ("AAAAMMDD_HHMMSS" de sesion, o "AAAAMMDD" del dia
@@ -106,43 +112,59 @@ static void gal_format_subdir_date(const char *name, char *out, size_t outsz)
     else                    snprintf(out, outsz, "%s", name);
 }
 
-static void gallery_scan(void)
+/* ── EL BARRIDO, EN SU PROPIA TAREA (auditoria del 27-oct-2026, M9) ────────
+ *
+ * gallery_scan() hacia opendir/readdir/closedir de forma SINCRONA desde el hilo
+ * de LVGL, con esperas de hasta 2 s al abrir, 1 s por entrada (hasta 128) y 5 s
+ * al cerrar: al abrir la galeria, cambiar de carpeta o entrar en una sesion, la
+ * pantalla se quedaba sin tacto ni repintado (y con la camara escribiendo en la
+ * misma tarjeta, mas). Ahora el barrido corre en la tarea "gal_scan" y el
+ * resultado se publica bajo el cerrojo de LVGL, igual que ya hace la carga de la
+ * imagen (gallery_load_task).
+ *
+ * La lista se arma en un buffer APARTE y se copia de golpe con el cerrojo
+ * tomado: asi el hilo de LVGL nunca ve s_files a medio escribir (antes podia
+ * pulsar "siguiente" mientras el barrido la reescribia).
+ *
+ * Devuelve cuantas entradas ha encontrado (0..max). */
+static int gallery_scan_en(int folder, const char *subdir,
+                           char (*out)[GAL_NAME_LEN], int max)
 {
-    s_count = 0;
-    const gal_folder_t *f = &FOLDERS[s_folder];
-    bool subdirs = gallery_listing_subdirs();
+    int n = 0;
+    const gal_folder_t *f = &FOLDERS[folder];
+    bool subdirs = gallery_listing_subdirs_de(folder, subdir);
     char dir[96];
-    gallery_current_dir(dir, sizeof(dir));
+    gallery_current_dir_de(folder, subdir, dir, sizeof(dir));
 
     /* No retener el bus de la SD durante TODO el escaneo (congelaba el hilo
      * LVGL hasta 3 s): se toma solo alrededor de cada operacion y se suelta
      * entre entradas, igual que gallery_read_file entre trozos. */
-    if (!camera_sd_bus_lock(2000)) return;
+    if (!camera_sd_bus_lock(2000)) return 0;
     DIR *d = opendir(dir);
     camera_sd_bus_unlock();
-    if (!d) return;
+    if (!d) return 0;
 
-    while (s_count < GAL_MAX_FILES) {
+    while (n < max) {
         if (!camera_sd_bus_lock(1000)) break;
         struct dirent *e = readdir(d);
         if (e == NULL) { camera_sd_bus_unlock(); break; }
-        const char *n = e->d_name;
+        const char *nombre = e->d_name;
         bool match;
         if (subdirs) {
             /* Solo carpetas de verdad: un fichero suelto que se le hubiera
              * escapado a la migracion (nombre raro) no debe listarse como si
              * fuera una sesion abrible. DT_DIR ya es de fiar en este proyecto
              * (mismo filtro que data_export_tar.c/log_cleanup.c). */
-            match = n[0] != '.' && e->d_type == DT_DIR;
+            match = nombre[0] != '.' && e->d_type == DT_DIR;
         } else {
-            size_t l = strlen(n);
-            match = (l > 4) && (strcasecmp(n + l - 4, f->ext) == 0 ||
-                                 (f->ext2 && strcasecmp(n + l - 4, f->ext2) == 0));
+            size_t l = strlen(nombre);
+            match = (l > 4) && (strcasecmp(nombre + l - 4, f->ext) == 0 ||
+                                 (f->ext2 && strcasecmp(nombre + l - 4, f->ext2) == 0));
         }
         if (match) {
-            strncpy(s_files[s_count], n, GAL_NAME_LEN - 1);
-            s_files[s_count][GAL_NAME_LEN - 1] = '\0';
-            s_count++;
+            strncpy(out[n], nombre, GAL_NAME_LEN - 1);
+            out[n][GAL_NAME_LEN - 1] = '\0';
+            n++;
         }
         camera_sd_bus_unlock();
     }
@@ -155,7 +177,70 @@ static void gallery_scan(void)
     if (!got_lock) ESP_LOGW(TAG, "closedir sin cerrojo SD tras 5s de espera");
     closedir(d);
     if (got_lock) camera_sd_bus_unlock();
-    if (s_count > 1) qsort(s_files, s_count, GAL_NAME_LEN, cmp_names);
+    if (n > 1) qsort(out, n, GAL_NAME_LEN, cmp_names);
+    return n;
+}
+
+static void gallery_pide_scan(void);   /* fwd: se usa dentro de la tarea */
+static void gallery_after_scan(void);  /* fwd: la llama la tarea del barrido */
+
+/* Pide un barrido. Si ya hay uno en marcha se apunta y se repite al terminar
+ * (asi un cambio de carpeta a mitad no se pierde ni se pisa). */
+static volatile bool s_scanning      = false;
+static volatile bool s_scan_pendiente = false;
+
+static void gallery_scan_task(void *arg)
+{
+    (void)arg;
+    uint32_t gen = s_gen;
+    /* La carpeta y la subcarpeta se copian AQUI: si el usuario cambia de carpeta
+     * mientras se mira la tarjeta, el barrido que esta en marcha sigue mirando la
+     * que empezo (y el que se apunta con s_scan_pendiente hara la nueva). Antes
+     * leia los globales a media pasada y podia mezclar dos carpetas. */
+    int folder = s_folder;
+    char subdir[GAL_NAME_LEN];
+    strncpy(subdir, s_vig_subdir, sizeof(subdir) - 1);
+    subdir[sizeof(subdir) - 1] = '\0';
+
+    char (*lista)[GAL_NAME_LEN] =
+        heap_caps_malloc(sizeof(*lista) * GAL_MAX_FILES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    int n = 0;
+    if (lista) n = gallery_scan_en(folder, subdir, lista, GAL_MAX_FILES);
+    else       ESP_LOGW(TAG, "sin PSRAM para la lista de la galeria");
+
+    if (lvgl_port_lock(2000)) {
+        /* Vale si sigue abierta, no se ha cerrado/reabierto y la carpeta es la
+         * misma que se barrio (si no, el barrido nuevo la pisara). */
+        bool misma_carpeta = (folder == s_folder) &&
+                             (strncmp(subdir, s_vig_subdir, sizeof(subdir)) == 0);
+        if (s_screen && gen == s_gen && misma_carpeta) {
+            if (lista && n > 0) {
+                memcpy(s_files, lista, sizeof(*lista) * (size_t)n);
+                s_count = n;
+            } else {
+                s_count = 0;
+            }
+            gallery_after_scan();
+        }
+        lvgl_port_unlock();
+    }
+    if (lista) heap_caps_free(lista);
+    s_scanning = false;
+    if (s_scan_pendiente) {
+        s_scan_pendiente = false;
+        gallery_pide_scan();
+    }
+    vTaskDelete(NULL);
+}
+
+static void gallery_pide_scan(void)
+{
+    if (s_scanning) { s_scan_pendiente = true; return; }
+    s_scanning = true;
+    if (xTaskCreate(gallery_scan_task, "gal_scan", 4096, NULL, 2, NULL) != pdPASS) {
+        s_scanning = false;
+        ESP_LOGW(TAG, "sin memoria para el barrido de la galeria");
+    }
 }
 
 /* ── Lectura de un fichero de SD a PSRAM (troceada, soltando el bus entre trozos
@@ -275,7 +360,11 @@ static void gallery_load_task(void *arg)
     }
 
     if (lvgl_port_lock(2000)) {
-        if (s_screen && gen == s_gen) {          /* sigue abierto y vigente */
+        /* Vale si sigue abierta, no se ha cerrado/reabierto y la carpeta es la
+         * misma que se barrio (si no, el barrido nuevo la pisara). */
+        bool misma_carpeta = (folder == s_folder) &&
+                             (strncmp(subdir, s_vig_subdir, sizeof(subdir)) == 0);
+        if (s_screen && gen == s_gen && misma_carpeta) {
             if (img) {
                 lv_img_set_src(s_img, NULL);     /* soltar referencia anterior */
                 if (s_img_buf) heap_caps_free(s_img_buf);
@@ -409,8 +498,7 @@ static void gallery_folder_cb(lv_event_t *e)
         s_folder = (s_folder + 1) % GAL_FOLDER_COUNT;
         s_vig_subdir[0] = '\0';
     }
-    gallery_scan();
-    gallery_after_scan();
+    gallery_pide_scan();
 }
 
 /* Toca la imagen mientras se listan sesiones/dias -> entra en la que este
@@ -421,8 +509,7 @@ static void gallery_img_clicked_cb(lv_event_t *e)
     if (!gallery_listing_subdirs() || s_count == 0) return;
     strncpy(s_vig_subdir, s_files[s_idx], sizeof(s_vig_subdir) - 1);
     s_vig_subdir[sizeof(s_vig_subdir) - 1] = '\0';
-    gallery_scan();
-    gallery_after_scan();
+    gallery_pide_scan();
 }
 
 /* ── Borrado de una carpeta de sesion/dia de vigilancia ──────────────────── */
@@ -468,8 +555,7 @@ static void gallery_delete_task(void *arg)
     if (lvgl_port_lock(2000)) {
         if (s_screen) {
             s_vig_subdir[0] = '\0';   /* por si acaso: volver siempre al listado */
-            gallery_scan();
-            gallery_after_scan();
+            gallery_pide_scan();
         }
         lvgl_port_unlock();
     }
@@ -637,7 +723,8 @@ void ui_gallery_open(void)
     if (s_screen) return;   /* ya abierto */
     s_folder = 1;           /* por defecto: Vigilancia (no el carrusel) */
     s_vig_subdir[0] = '\0'; /* siempre se entra por la lista de sesiones/dias */
-    gallery_scan();
+    /* El barrido ya NO se hace aqui (M9): se pide al final, con la pantalla
+     * montada, y "Cargando..." se ve mientras la tarea mira la tarjeta. */
 
     lv_obj_t *scr = lv_obj_create(lv_scr_act());
     lv_obj_remove_style_all(scr);
@@ -726,5 +813,11 @@ void ui_gallery_open(void)
     lv_obj_center(lc);
     lv_obj_add_event_cb(btn_close, gallery_close_cb, LV_EVENT_CLICKED, NULL);
 
-    gallery_after_scan();
+    /* Pantalla montada: ahora si, a mirar la tarjeta (en su tarea) y a pintar
+     * "Cargando..." mientras tanto. */
+    if (s_lbl_hint) {
+        lv_label_set_text(s_lbl_hint, "Cargando...");
+        lv_obj_clear_flag(s_lbl_hint, LV_OBJ_FLAG_HIDDEN);
+    }
+    gallery_pide_scan();
 }

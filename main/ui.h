@@ -53,6 +53,9 @@ void ui_refresh_clock(void);
  * cualquier tarea (incluida la del httpd, que es de donde se llaman). */
 void ui_ota_overlay_show(const char *msg);
 void ui_ota_overlay_hide(void);
+/* La subida ha empezado de verdad: cancela el temporizador de seguridad del
+ * aviso (si no, a los 30 s se quitaria solo en mitad de la grabacion). */
+void ui_ota_overlay_confirm(void);
 
 void ui_set_freezer_alarm(ui_state_t *ui, bool active);
 /* Estado actual de la alarma del congelador (criterio robusto de main.c).
@@ -77,6 +80,9 @@ bool ui_overview_alarm_active(void);
 /* Si el salvapantallas esta rotando, lo interrumpe y salta a Live + Overview
  * para que la alarma sea visible. Llamado desde la deteccion de alarmas. */
 void ui_alarm_interrupt_screensaver(void);
+/* Ya no queda ninguna alarma: devuelve la vista que el usuario tenia elegida
+ * antes de que la interrupcion la pusiera en Overview (B11). */
+void ui_alarma_despejada(void);
 
 /* La lista de dispositivos (y su refresco) vive en ui/device_tracker.h, que se
  * incluye arriba. */
@@ -93,6 +99,10 @@ void ensure_device_layout(ui_state_t *ui, victron_record_type_t type);
  * priority=false (clicks) se descarta si la cola esta llena. No-static para
  * que ui/ble_ingest.c pueda disparar las alarmas de SoC. */
 void ui_enqueue_jingle(audio_jingle_t j, bool priority);
+/* Encola el jingle corto del clic. Se llama desde el feedback_cb del indev
+ * (main.c, touch_activity_cb): es el unico sitio que recibe TODOS los clics
+ * (auditoria del 27-oct-2026, B10). */
+void ui_global_click_beep_cb(lv_event_t *e);
 
 ui_state_t *ui_get_state(void);
 void ui_close_chart_screen(void);

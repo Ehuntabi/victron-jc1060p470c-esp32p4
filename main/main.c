@@ -396,14 +396,35 @@ static void frigo_update_cb(const frigo_state_t *state)
     static int64_t s_last_log = 0;
     int64_t now = esp_timer_get_time() / 1000;
     if (now - s_last_log >= LOG_INTERVAL_MS) {
-        s_last_log = now;
-        datalogger_log(state);
+        /* EL RELOJ SOLO AVANZA SI LA MUESTRA HA ENTRADO (auditoria del
+         * 27-oct-2026, B14): antes se ponia s_last_log = now y se llamaba a
+         * datalogger_log() sin mirar el retorno, asi que un timeout del mutex
+         * tiraba la muestra de esos 5 minutos sin reintento: un ESP_LOGW y un
+         * agujero en el historico. Si falla, se reintenta en 30 s. */
+        if (datalogger_log(state) == ESP_OK) {
+            s_last_log = now;
+        } else {
+            s_last_log = now - LOG_INTERVAL_MS + 30000;
+        }
     }
 }
 
 /* ── Touch callback para screensaver ─────────────────────────── */
 static void touch_activity_cb(lv_indev_drv_t *drv, uint8_t event)
 {
+    /* EL BEEP DEL CLIC, DESDE AQUI (auditoria del 27-oct-2026, B10). El handler
+     * estaba colgado de lv_scr_act() dando por hecho que LV_EVENT_CLICKED sube
+     * al padre, y en LVGL eso solo pasa con LV_OBJ_FLAG_EVENT_BUBBLE: la llevan
+     * las tarjetas del Overview y dos graficos, y ningun boton. Resultado: al
+     * pulsar "Guardar red", "Cerrar" o cualquier boton no sonaba nada. El
+     * feedback del indev recibe el CLICKED de verdad -- lo emite el propio
+     * driver cuando la pulsacion acaba en clic y no en arrastre --, y ademas
+     * respeta el caso del salvapantallas (allu se consume la pulsacion y no hay
+     * CLICKED que suene). */
+    if (event == LV_EVENT_CLICKED) {
+        ui_global_click_beep_cb(NULL);
+        return;
+    }
     if (event != LV_EVENT_PRESSED) return;
     /* Si el salvapantallas esta activo, este primer toque solo debe
      * despertarlo, NO navegar. feedback_cb corre antes de despachar el evento
@@ -927,14 +948,10 @@ static void finish_boot_splash(void)
  * periodico de telemetria al modo excedente solar del frigo. */
 static void init_camera_and_solar_feed(void)
 {
-    /* EL CERROJO DEL BUS SD, ANTES DE NADA (16-oct-2026): lo usan el datalogger,
-     * el historico de bateria, los logs, el portal entero y la propia camara, y
-     * hasta hoy lo creaba camera_init(). Si la camara no arrancaba (sensor que no
-     * contesta al encender), el cerrojo NO existia: camera_sd_bus_lock() devolvia
-     * true sin tomar nada y su unlock soltaba un mutex que la tarea no poseia en
-     * cuanto un reintento lo creaba -> panic o dos tareas dentro del bus a la
-     * vez. Creandolo aqui existe siempre, arranque la camara o no. */
-    camera_sd_bus_init();
+    /* (EL CERROJO DEL BUS SD SE CREA AHORA AL PRINCIPIO DE app_main: ver el
+     * comentario de alli. Nacio aqui el 16-oct-2026, pero este init es el ULTIMO,
+     * asi que durante medio arranque -- datalogger, logs, portal -- el lock
+     * devolvia true sin tomar nada; auditoria del 27-oct-2026, B13.) */
     /* Fase 1 camara: solo init + deteccion del sensor (NO toca el brillo todavia).
      * Si falla, el resto del firmware sigue normal (aislado). */
     camera_init(bsp_i2c_get_handle());
@@ -979,6 +996,14 @@ static void mark_boot_successful(void)
 /* ── app_main ────────────────────────────────────────────────── */
 void app_main(void)
 {
+    /* EL CERROJO DEL BUS SD, ANTES QUE NADA (auditoria del 27-oct-2026, B13).
+     * Lo usan el datalogger, el historico de bateria, los logs, el portal entero
+     * y la propia camara. Se creaba dentro de init_camera_and_solar_feed(), que
+     * es el ULTIMO init: durante todo el arranque anterior camera_sd_bus_lock()
+     * devolvia true SIN TOMAR NADA (el mutex era NULL), que es justo la carrera
+     * que el cerrojo existe para evitar. Es idempotente, asi que no cambia nada
+     * mas. */
+    camera_sd_bus_init();
     if (!init_boot_diagnostics()) return;
     init_nvs_wifi_pass_watchdog();
     init_display_ui();

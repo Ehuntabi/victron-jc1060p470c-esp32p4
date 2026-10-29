@@ -1,6 +1,7 @@
 #include "fonts/fonts_es.h"
 #include "ui/widgets/lv_font_thermometer.h"
 #include "ui/widgets/ui_card.h"   /* paleta compartida (UI_COLOR_CARD) */
+#include "ui.h"   /* ui_get_state(): el estado del salvapantallas */
 #include "frigo_panel.h"
 #include "alerts.h"
 #include "esp_lvgl_port.h"
@@ -393,6 +394,15 @@ static void aviso_sondas_cerrar_cb(lv_event_t *e)
 static void mostrar_aviso_sondas(uint8_t flags)
 {
     if (s_aviso_sondas_modal) return;   /* guard anti doble-apertura */
+    /* NI CON EL SALVAPANTALLAS ROTANDO (auditoria del 27-oct-2026, B12): el
+     * aviso se crea en lv_layer_top() y no estaba en la lista de cierres del
+     * reposo, asi que se quedaba a pantalla completa durante toda la rotacion --
+     * tapando las vistas que el salvapantallas va enseñando -- y seguia ahi al
+     * despertar hasta pulsar "Entendido". No se pierde nada: la bandera del
+     * evento sigue apuntada en el frigo y este mismo update lo saca en cuanto la
+     * rotacion pare. */
+    ui_state_t *ui = ui_get_state();
+    if (ui && ui->screensaver.active) return;
 
     const char *txt;
     if ((flags & FRIGO_SCAN_HAY_NUEVA) && (flags & FRIGO_SCAN_FALTA_UNA))

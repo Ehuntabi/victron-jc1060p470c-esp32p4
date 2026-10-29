@@ -66,9 +66,21 @@ extern "C" {
 #define MINI_LATIDO_UDP_PORT 4243
 #define MINI_LATIDO_MAGIC    0x4C        /* 'L' */
 
+/* VERSION DEL LATIDO, APARTE DE LA DE LA TELEMETRIA (auditoria del 27-oct-2026,
+ * B1). Hasta hoy el latido se validaba con MINI_PROTO_VERSION, la del struct
+ * grande: al subir la telemetria (que cambia cada pocos meses) una cabina sin
+ * regrabar dejaba de ser escuchada, y con ella se perdia el aviso rapido de
+ * "esta cabina no recibe" y la reparacion del AP a los 15 s. El latido son 12
+ * bytes que no cambian casi nunca, asi que tiene su propia version.
+ *
+ * HOY VALE LO MISMO QUE MINI_PROTO_VERSION (5) A PROPOSITO: lo que manda una
+ * cabina grabada con la v1.46 (que pone MINI_PROTO_VERSION) sigue valiendo.
+ * Solo hay que subirla si cambia mini_latido_t. */
+#define MINI_LATIDO_VERSION  5
+
 struct __attribute__((packed)) mini_latido {
     uint8_t  magic;              /* MINI_LATIDO_MAGIC */
-    uint8_t  version;            /* MINI_PROTO_VERSION */
+    uint8_t  version;            /* MINI_LATIDO_VERSION */
     int16_t  seg_sin_datos;      /* segundos sin recibir telemetria valida; -1 = nunca */
     uint8_t  ip_fija;            /* 1 = la cabina se puso la IP a mano (DHCP mudo) */
     uint8_t  _pad_lat[3];        /* relleno: alinea el CRC */

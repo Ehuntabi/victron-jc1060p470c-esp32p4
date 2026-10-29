@@ -248,8 +248,14 @@ esp_err_t ota_aviso_post(httpd_req_t *req)
      * una actualizacion que no existe, todas las veces que quisiera. El /ota de
      * verdad ya la pedia; esto es la misma puerta. La pagina del portal la
      * manda despues de autenticarse, asi que el navegador trae la cabecera
-     * igual que para el resto de la pagina. */
-    REQUIRE_AUTH(req);
+     * igual que para el resto de la pagina.
+     *
+     * Y CON LA CLAVE DE ADMINISTRACION, NO LA DEL PORTAL (auditoria del
+     * 27-oct-2026, M6): /ota es estricto, pero este aviso se quedo en el nivel
+     * abierto -- el que llevan la app y las cabinas --. Pintar la pantalla de
+     * "actualizando firmware" no es tan grave como escribir el firmware, pero es
+     * el mismo camino y la misma puerta. */
+    REQUIRE_AUTH_STRICT(req);
     ota_pantalla_aviso();
     ui_notify_user_activity();   /* por si el salvapantallas lo tenia atenuado */
     /* Si hay un viaje abierto se dice EN LA PANTALLA, no solo en el log
@@ -276,9 +282,17 @@ esp_err_t ota_aviso_post(httpd_req_t *req)
 
 esp_err_t ota_update_receive(httpd_req_t *req)
 {
+    /* EL AVISO PUESTO POR /ota_aviso SE QUITA EN TODAS LAS SALIDAS (auditoria del
+     * 27-oct-2026, M6). La pagina pide el aviso, espera 5 s y sube; si la subida
+     * no llega o no empieza (sin particion, sin adjunto, no cabe), el overlay a
+     * pantalla completa se quedaba TAPANDO el tactil hasta cortar la corriente:
+     * solo lo quitaba el camino bueno. Aqui se quita en las tres salidas de
+     * arriba; y el que confirma que empieza de verdad (mas abajo) cancela el
+     * temporizador de seguridad de ui.c. */
     const esp_partition_t *destino = esp_ota_get_next_update_partition(NULL);
     if (!destino) {
         ESP_LOGE(TAG, "no hay hueco de actualizacion (reparto de flash antiguo?)");
+        ui_ota_overlay_hide();
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req,
             "Esta pantalla no admite actualizacion por Wi-Fi: hay que grabarla "
@@ -286,15 +300,20 @@ esp_err_t ota_update_receive(httpd_req_t *req)
         return ESP_OK;
     }
     if (req->content_len <= 0) {
+        ui_ota_overlay_hide();
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "No has adjuntado ningun fichero.");
         return ESP_OK;
     }
     if ((size_t)req->content_len > destino->size) {
+        ui_ota_overlay_hide();
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_sendstr(req, "El fichero no cabe: no parece un firmware valido.");
         return ESP_OK;
     }
+    /* La subida empieza DE VERDAD: que el temporizador de seguridad del aviso
+     * no lo quite a mitad. */
+    ui_ota_overlay_confirm();
 
     ESP_LOGI(TAG, "recibiendo %d bytes -> particion '%s'",
              req->content_len, destino->label);

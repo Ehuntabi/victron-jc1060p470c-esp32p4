@@ -5270,7 +5270,13 @@ esp_err_t handle_data_viajes(httpd_req_t *req)
     }
     if (d) {
         struct dirent *ent;
-        char linea[512];
+        /* 768 Y NO 512 (auditoria del 27-oct-2026, M2): el formato necesita
+         * 524 bytes con un nombre de 24 caracteres y hasta 544 con el maximo
+         * real (35), asi que la linea salia truncada -- se perdia la etiqueta
+         * del enlace -- y a partir de 544 bytes el HTML se rompia de verdad
+         * (atributo sin cerrar, boton sin texto). Ese enlace es la unica salida
+         * por web para cerrar un viaje atascado. */
+        char linea[768];
         for (;;) {
             if (!camera_sd_bus_lock(1000)) break;
             ent = readdir(d);

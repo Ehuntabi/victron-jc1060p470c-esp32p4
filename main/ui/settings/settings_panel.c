@@ -1161,6 +1161,15 @@ static void screensaver_timer_cb(lv_timer_t *timer)
          * LVGL asigna del heap del sistema (verificado, 15 ciclos estables). */
         ui->screensaver.active = true;
         ui->screensaver.rotate_index = 0;
+        /* ANTES DE ROTAR, VOLVER A LIVE DE VERDAD (auditoria del 27-oct-2026,
+         * M7). Placa Solar no es un overlay: crea su PROPIA pantalla
+         * (lv_obj_create(NULL) + lv_scr_load, view_solar_history.c). Si se queda
+         * abierta, la rotacion arranca encima: el estado 0 solo cambia de pestana
+         * en el tabview principal, que en ese momento no es la pantalla activa,
+         * asi que el ciclo gira entre Placa Solar y sus overlays y la fase Live
+         * no se ve nunca. Se cierra aqui, que es el unico sitio donde la rotacion
+         * empieza. */
+        ui_close_solar_history_screen();
         if (ui->tabview && lv_tabview_get_tab_act(ui->tabview) != 0) {
             lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
         }
@@ -1222,6 +1231,12 @@ static void screensaver_wake(ui_state_t *ui)
                 ui_close_confirm_dialog();
                 victron_keys_close_modals();
                 ui_gallery_close();
+                /* Y PLACA SOLAR (auditoria del 27-oct-2026, M7): si el usuario
+                 * dejo Placa Solar abierta y se fue, el despertar cerraba chart,
+                 * historico y galeria pero NO esta, que tambien es una pantalla
+                 * propia: al despertar seguia ahi. El otro camino de vuelta a
+                 * Live (ui.c:884) ya lo hace. */
+                ui_close_solar_history_screen();
             }
             ui->screensaver.rotate_index = 0;
         }
@@ -1240,7 +1255,13 @@ static int victron_config_find_device_by_mac(ui_state_t *ui, const char *mac_add
     for (size_t i = 0; i < ui->victron_config.count; ++i) {
         if (ui->victron_config.mac_textareas[i] != NULL) {
             const char *configured_mac = lv_textarea_get_text(ui->victron_config.mac_textareas[i]);
-            if (configured_mac != NULL && strcmp(configured_mac, mac_address) == 0) {
+            /* SIN DISTINGUIR MAYUSCULAS (auditoria del 27-oct-2026, M8): la MAC
+             * se guarda tal cual se teclea, el validador acepta minusculas y el
+             * enlace BLE empareja con strcasecmp, asi que una MAC en minusculas
+             * funciona... y aqui no cuadraba: la fila de Victron Keys se quedaba
+             * en "Device: --" / "Status: No data" para siempre, justo en la
+             * pantalla que se usa para saber si la clave AES es la buena. */
+            if (configured_mac != NULL && strcasecmp(configured_mac, mac_address) == 0) {
                 return (int)i;
             }
         }

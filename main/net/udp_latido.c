@@ -240,9 +240,15 @@ static void latido_task(void *arg)
         }
         const mini_latido_t *l = (const mini_latido_t *)buf;
         if (l->magic != MINI_LATIDO_MAGIC) continue;
-        if (l->version != MINI_PROTO_VERSION) {
+        /* SU PROPIA VERSION (auditoria del 27-oct-2026, B1): antes se comparaba
+         * con MINI_PROTO_VERSION, la del struct grande de telemetria. Un bump de
+         * ese struct (que pasa cada pocos meses) dejaba sordos a los latidos de
+         * una cabina sin regrabar, y con ellos el aviso de "esta cabina no
+         * recibe" y la reparacion del AP a los 15 s. Vale 5, lo mismo que
+         * MINI_PROTO_VERSION, asi que una cabina de la v1.46 sigue encajando. */
+        if (l->version != MINI_LATIDO_VERSION) {
             ESP_LOGW(TAG, "latido con version %u (espero %u): la cabina lleva otro "
-                          "firmware", l->version, MINI_PROTO_VERSION);
+                          "firmware", l->version, MINI_LATIDO_VERSION);
             continue;
         }
         uint32_t esperado = esp_crc32_le(0, buf, sizeof(mini_latido_t) - sizeof(uint32_t));

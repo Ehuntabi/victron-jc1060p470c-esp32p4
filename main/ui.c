@@ -195,6 +195,10 @@ static void volume_btn_event_cb(lv_event_t *e);
 static void wifi_btn_event_cb(lv_event_t *e);
 static lv_timer_t *s_idle_to_live_timer;
 
+/* Cierra el teclado y devuelve el tabview a su altura (B9). fwd: se usa en
+ * settings_auto_return_cb, que esta antes de su definicion. */
+static void ui_cierra_teclado_y_restaura(void);
+
 /* Overlay de detalle de una card del Overview (Solar/Bateria/DC-DC): se abre al
  * pulsar la card y se cierra con el boton volver o tras 1 min sin tocar. */
 static bool      s_card_detail_active   = false;
@@ -336,11 +340,11 @@ void ui_init(void) {
         }
     }
 
-    /* Beep global al pulsar cualquier widget clicable. LV_EVENT_CLICKED
-     * burbujea desde el hijo hasta el screen, asi un solo handler en la
-     * pantalla activa cubre toda la UI sin tener que tocar cada boton. */
-    lv_obj_add_event_cb(lv_scr_act(), ui_global_click_beep_cb,
-                        LV_EVENT_CLICKED, NULL);
+    /* (El beep del clic NO va aqui: auditoria del 27-oct-2026, B10. Un handler
+     * en lv_scr_act() solo recibia el CLICKED de los objetos con
+     * LV_OBJ_FLAG_EVENT_BUBBLE -- las tarjetas del Overview y dos graficos --,
+     * asi que los botones no sonaban. Ahora se encola desde el feedback_cb del
+     * indev, en main.c (touch_activity_cb), que recibe todos los clics.) */
     /* Estilo de los tabs: fondo oscuro, fuente grande, indicador azul */
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(ui->tabview);
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_28_es, 0);
@@ -790,6 +794,25 @@ void ui_refresh_clock(void)
 static lv_obj_t *s_ota_overlay = NULL;
 static lv_obj_t *s_ota_overlay_lbl = NULL;
 
+/* TEMPORIZADOR DE SEGURIDAD DEL AVISO (auditoria del 27-oct-2026, M6): el
+ * overlay solo lo quitaba el camino bueno de la OTA. Si la subida no llegaba
+ * (la pagina manda el aviso, espera 5 s y sube: si se cierra la pestaña, se va
+ * la bateria o el .bin no cabe) la P4 se quedaba enseñando "Actualizando
+ * firmware" con el tactil muerto hasta cortar la corriente. A los 30 s se quita
+ * solo; la subida de verdad lo cancela desde ota_update_receive(). */
+static esp_timer_handle_t s_ota_seguro = NULL;
+#define OTA_AVISO_SEGURO_US (30LL * 1000 * 1000)
+static void ota_seguro_cb(void *arg)
+{
+    (void)arg;
+    ESP_LOGW("ui", "el aviso de OTA llevaba 30 s sin subida: lo quito");
+    ui_ota_overlay_hide();
+}
+void ui_ota_overlay_confirm(void)
+{
+    if (s_ota_seguro) esp_timer_stop(s_ota_seguro);
+}
+
 void ui_ota_overlay_show(const char *msg)
 {
     if (!lvgl_port_lock(300)) return;
@@ -814,6 +837,19 @@ void ui_ota_overlay_show(const char *msg)
     }
     lv_label_set_text(s_ota_overlay_lbl, msg);
     lvgl_port_unlock();
+
+    /* Arrancar (o rearmar) el temporizador de seguridad. */
+    if (!s_ota_seguro) {
+        const esp_timer_create_args_t a = {
+            .callback = ota_seguro_cb,
+            .name     = "ota_aviso",
+        };
+        if (esp_timer_create(&a, &s_ota_seguro) != ESP_OK) s_ota_seguro = NULL;
+    }
+    if (s_ota_seguro) {
+        esp_timer_stop(s_ota_seguro);
+        esp_timer_start_once(s_ota_seguro, OTA_AVISO_SEGURO_US);
+    }
 }
 
 void ui_ota_overlay_hide(void)
@@ -838,10 +874,14 @@ static void idle_to_live_timer_cb(lv_timer_t *t)
     if (!ui || !ui->tabview) return;
     /* No interferir con el screensaver: si está activo, deja que rote/atenúe */
     if (ui->screensaver.active) return;
-    /* Si estamos en Settings, cerrar submenu y dropdowns antes de salir */
+    /* Si estamos en Settings, cerrar submenu y dropdowns antes de salir.
+     * Y EL TECLADO CON SU ALTURA (auditoria del 27-oct-2026, B9): si te quedaste
+     * escribiendo en Ajustes -> Wi-Fi, Live se quedaba a media altura con el
+     * teclado tapando la barra de abajo. */
     if (lv_tabview_get_tab_act(ui->tabview) == ui->tab_settings_index) {
         ui_frigo_panel_close_dropdowns();
         ui_settings_panel_go_to_main();
+        ui_cierra_teclado_y_restaura();
     }
     if (lv_tabview_get_tab_act(ui->tabview) != 0) {
         lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
@@ -988,6 +1028,17 @@ bool ui_screensaver_is_active(void)
     return g_ui.screensaver.active;
 }
 
+/* LA VISTA QUE EL USUARIO HABIA ELEGIDO, GUARDADA MIENTRAS DURA LA ALARMA
+ * (auditoria del 27-oct-2026, B11). Al interrumpir la rotacion se ponia
+ * view_selection.mode = OVERVIEW en RAM y no habia ninguna rama que lo devolviera:
+ * desde ese momento Live pintaba SIEMPRE Overview, y el desplegable de Ajustes
+ * seguia enseñando el valor guardado en NVS, asi que volver a elegir el mismo no
+ * disparaba evento (LVGL no manda VALUE_CHANGED si el valor no cambia). Se guarda
+ * el modo anterior y se restaura cuando la alarma se despeja
+ * (ui_alarma_despejada, llamada desde el flanco de bajada de alarma_estado.c). */
+static ui_view_mode_t s_modo_antes_alarma = UI_VIEW_MODE_OVERVIEW;
+static bool           s_modo_guardado     = false;
+
 void ui_alarm_interrupt_screensaver(void)
 {
     ui_state_t *ui = &g_ui;
@@ -998,11 +1049,32 @@ void ui_alarm_interrupt_screensaver(void)
     /* Reutiliza el wake: sale del salvapantallas, para la rotacion, restaura
      * brillo y vuelve a la pestaña Live. */
     ui_settings_panel_on_user_activity(ui);
+    /* Guardar la vista elegida (una sola vez por alarma: si llega otra alarma
+     * con la primera puesta, el modo guardado sigue siendo el del usuario, no
+     * el OVERVIEW de la interrupcion anterior). */
+    if (!s_modo_guardado) {
+        s_modo_antes_alarma = ui->view_selection.mode;
+        s_modo_guardado = true;
+    }
     /* Forzar la vista Overview dentro de Live (la alarma se visualiza ahi).
      * Solo en memoria; no persiste la preferencia del usuario. */
     ui->view_selection.mode = UI_VIEW_MODE_OVERVIEW;
     ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
     ESP_LOGW(TAG_UI, "Alarma activa: rotacion interrumpida -> Live/Overview");
+}
+
+/* Se llama cuando ya NO queda ninguna alarma activa (flanco de bajada del tick de
+ * alarma_estado.c). Devuelve la vista que el usuario tenia elegida. */
+void ui_alarma_despejada(void)
+{
+    if (!s_modo_guardado) return;
+    ui_state_t *ui = &g_ui;
+    s_modo_guardado = false;
+    ui->view_selection.mode = s_modo_antes_alarma;
+    ensure_device_layout(ui, VICTRON_BLE_RECORD_TEST);
+    ui_force_view_update();
+    ESP_LOGI(TAG_UI, "Alarma despejada: vuelvo a la vista %d que tenia el usuario",
+             (int)s_modo_antes_alarma);
 }
 
 /* Sincroniza el icono del botón nav con el tab activo del tabview.
@@ -1037,6 +1109,10 @@ static void settings_auto_return_cb(lv_timer_t *t)
      * la próxima entrada arranque ahí (no en la subpágina donde quedó).
      * El icono lo actualiza nav_icon_sync_cb tras set_act. */
     ui_settings_panel_go_to_main();
+    /* Y el teclado, con la altura del tabview (auditoria del 27-oct-2026, B9):
+     * este es el OTRO camino de vuelta a Live desde Ajustes, y tampoco lo
+     * cerraba. */
+    ui_cierra_teclado_y_restaura();
     lv_tabview_set_act(ui->tabview, 0, LV_ANIM_OFF);
 }
 
@@ -1256,6 +1332,34 @@ void ensure_device_layout(ui_state_t *ui, victron_record_type_t type)
 static const char *device_type_name(victron_record_type_t type)
 {
     return ui_view_registry_name(type);
+}
+
+/* Cierra el teclado (si esta abierto) y devuelve el tabview a su altura.
+ *
+ * Existe por la auditoria del 27-oct-2026 (B9): al enfocar un campo de texto el
+ * tabview se recorta para dejar sitio al teclado, y hay DOS caminos que se van
+ * de Ajustes sin pasar por el toque en otra parte de la pantalla -- el
+ * auto-volver a Live de los 60 s (idle_to_live_timer_cb) y el de Ajustes
+ * (settings_auto_return_cb) --. Ninguno lo cerraba: Live se quedaba a media
+ * altura con el teclado tapando la barra inferior. Aqui esta la misma secuencia
+ * que ya hacia el DEFOCUSED del toque, en un solo sitio. */
+static void ui_cierra_teclado_y_restaura(void)
+{
+    ui_state_t *ui = &g_ui;
+    if (ui->keyboard == NULL) return;
+    lv_obj_t *ta = lv_keyboard_get_textarea(ui->keyboard);
+    if (ta != NULL) {
+        lv_obj_clear_state(ta, LV_STATE_FOCUSED);
+        lv_event_send(ta, LV_EVENT_DEFOCUSED, NULL);   /* el DEFOCUSED baja el teclado */
+    }
+    if (!lv_obj_has_flag(ui->keyboard, LV_OBJ_FLAG_HIDDEN)) {
+        lv_keyboard_set_textarea(ui->keyboard, NULL);
+        lv_obj_add_flag(ui->keyboard, LV_OBJ_FLAG_HIDDEN);
+        lv_disp_t *disp = lv_disp_get_default();
+        lv_coord_t screen_h = disp ? lv_disp_get_ver_res(disp) : LV_VER_RES;
+        lv_obj_set_height(ui->tabview, screen_h);
+        lv_obj_update_layout(ui->tabview);
+    }
 }
 
 static void tabview_touch_event_cb(lv_event_t *e) {

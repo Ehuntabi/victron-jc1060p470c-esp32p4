@@ -9,6 +9,7 @@ static const char *TAG = "cfg_srv";
 #include "config_server_viaje.h"   /* viaje_es_el_abierto(): no servir el viaje en curso */
 #include "camera.h"
 #include "datalogger.h"   /* datalogger_sd_montada(): sin SD no hay .tar que dar */
+#include "config_backup.h"   /* CONFIG_BACKUP_PATH: el respaldo de configuracion */
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -539,10 +540,92 @@ esp_err_t handle_data_vigilancia_tar(httpd_req_t *req)
     return handle_tar_dir_of_subdirs(req, "/sdcard/vigilancia", "vigilancia", "vigilancia.tar");
 }
 
+/* ── /data/config.tar: EL RESPALDO DE CONFIGURACION, DE VERDAD ──────────────
+ *
+ * Esto empaquetaba /sdcard/config_backup, una CARPETA QUE NO EXISTE: el respaldo
+ * es el fichero suelto /sdcard/config_backup.json (ver config_backup.h). El
+ * ENOENT se tomaba por "cero entradas, correcto", asi que el enlace de la pagina
+ * de descargas devolvia 200 con un .tar de 1 KB y cero ficheros -- justo cuando
+ * el usuario lo pulsaba para guardarse la configuracion antes de tocar algo
+ * (auditoria del 27-oct-2026, M5).
+ *
+ * Ahora se manda ese fichero como una entrada de .tar (config_backup.json), y si
+ * no existe se dice con un 404 en texto plano en vez de un .tar vacio con pinta
+ * de bueno. */
 esp_err_t handle_data_config_tar(httpd_req_t *req)
 {
     REQUIRE_AUTH(req);
-    return handle_tar_dir(req, "/sdcard/config_backup", "config.tar");
+
+    struct stat st;
+    if (!camera_sd_bus_lock(3000)) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        httpd_resp_sendstr(req, "La tarjeta esta ocupada. Prueba otra vez en unos segundos.");
+        return ESP_OK;
+    }
+    int sr = stat(CONFIG_BACKUP_PATH, &st);
+    int e_stat = errno;
+    FILE *f = (sr == 0 && st.st_size > 0) ? fopen(CONFIG_BACKUP_PATH, "rb") : NULL;
+    int e_open = errno;
+    camera_sd_bus_unlock();
+    if (!f) {
+        /* "NO HAY RESPALDO" NO ES "NO SE PUDO LEER": se distinguen. */
+        bool no_hay = (sr != 0 && e_stat == ENOENT) || (sr == 0 && e_open == ENOENT);
+        ESP_LOGW(TAG, "config.tar: %s (%s)", no_hay ? "no hay respaldo" : "no puedo abrirlo",
+                 esp_err_to_name(no_hay ? ESP_ERR_NOT_FOUND : ESP_FAIL));
+        if (no_hay) {
+            httpd_resp_set_status(req, "404 Not Found");
+            httpd_resp_set_type(req, "text/plain; charset=utf-8");
+            httpd_resp_sendstr(req, "Todavia no hay ningun respaldo de configuracion en "
+                                    "la tarjeta. Se crea desde Ajustes -> About.");
+        } else {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD");
+        }
+        return ESP_OK;
+    }
+    sd_reader_abrir();
+
+    httpd_resp_set_type(req, "application/x-tar");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=config.tar");
+
+    uint8_t hdr[TAR_BLOCK];
+    tar_build_header(hdr, "config_backup.json", (size_t)st.st_size, st.st_mtime);
+    char *buf = malloc(2048);
+    bool ok = (buf != NULL);
+    if (ok && httpd_resp_send_chunk(req, (const char *)hdr, TAR_BLOCK) != ESP_OK) ok = false;
+
+    size_t remaining = ok ? (size_t)st.st_size : 0;
+    while (remaining > 0) {
+        size_t to_read = remaining > 2048 ? 2048 : remaining;
+        if (!camera_sd_bus_lock(3000)) { ok = false; break; }
+        size_t n = fread(buf, 1, to_read, f);
+        camera_sd_bus_unlock();
+        if (n == 0) { ok = false; break; }   /* lectura corta: cortar es lo honesto */
+        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) { ok = false; break; }
+        remaining -= n;
+    }
+    if (ok) {
+        size_t pad = (TAR_BLOCK - ((size_t)st.st_size % TAR_BLOCK)) % TAR_BLOCK;
+        if (pad > 0) {
+            uint8_t zero[TAR_BLOCK] = {0};
+            if (httpd_resp_send_chunk(req, (const char *)zero, pad) != ESP_OK) ok = false;
+        }
+    }
+    free(buf);
+    bool got_lock = camera_sd_bus_lock_wait(5000);
+    if (!got_lock) ESP_LOGW(TAG, "fclose sin cerrojo SD tras 5s de espera");
+    fclose(f);
+    if (got_lock) camera_sd_bus_unlock();
+    sd_reader_cerrar();
+
+    if (!ok) {
+        /* Ya hay bytes enviados: lo unico honesto es cortar sin bloque de cierre. */
+        return ESP_FAIL;
+    }
+    uint8_t zeros[TAR_BLOCK * 2] = {0};
+    httpd_resp_send_chunk(req, (const char *)zeros, sizeof zeros);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
 }
 
 /* Logs de sistema: /sdcard/logs/<YYYYMMDD>/log_*.txt y crash_*.txt, una

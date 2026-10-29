@@ -339,6 +339,13 @@ typedef struct {
 
 static pantalla_cache_t s_cache[PANTALLA_NUM_MODELOS];
 
+/* CERROJO DE LA CACHE (auditoria del 27-oct-2026, B4): la leen y la escriben las
+ * DOS tareas httpd (el 80 atiende /api/pantalla/info y el 8081 sirve el .bin) y
+ * no habia nada que las serializara: publicar la entrada y leerla se hacen ahora
+ * con el cerrojo tomado, y se COPIA la entrada para no devolver un puntero a algo
+ * que otra tarea esta reescribiendo. Un portMUX basta: son cuatro asignaciones. */
+static portMUX_TYPE s_cache_mux = portMUX_INITIALIZER_UNLOCKED;
+
 /* Lee version, tamano y sha256 de un .bin. Devuelve false si no hay fichero, si
  * no es valido para ese modelo o si la tarjeta no deja leerlo.
  *
@@ -365,11 +372,19 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
                          st.st_size > 0);
 
     /* Atajo de la cache: mismo fichero (fecha y tamano) que la ultima vez. */
-    if (existe && s_cache[idx].hay && s_cache[idx].mtime == st.st_mtime &&
-        s_cache[idx].size == st.st_size) {
-        camera_sd_bus_unlock();
-        *out = s_cache[idx].info;
-        return true;
+    if (existe) {
+        bool acierto = false;
+        pantalla_fw_info_t cacheado;
+        portENTER_CRITICAL(&s_cache_mux);
+        acierto = s_cache[idx].hay && s_cache[idx].mtime == st.st_mtime &&
+                   s_cache[idx].size == st.st_size;
+        if (acierto) cacheado = s_cache[idx].info;
+        portEXIT_CRITICAL(&s_cache_mux);
+        if (acierto) {
+            camera_sd_bus_unlock();
+            *out = cacheado;
+            return true;
+        }
     }
     if (existe && (uint64_t)st.st_size > (uint64_t)PANTALLA_MAX_BYTES) {
         camera_sd_bus_unlock();
@@ -465,10 +480,12 @@ static bool pantalla_leer_info(const pantalla_modelo_t *m, pantalla_fw_info_t *o
     pantalla_sha256_hex(hash, out->sha256);
 
     /* A la cache, para no volver a hashearlo en la siguiente pregunta. */
+    portENTER_CRITICAL(&s_cache_mux);
     s_cache[idx].hay   = true;
     s_cache[idx].mtime = st.st_mtime;
     s_cache[idx].size  = st.st_size;
     s_cache[idx].info  = *out;
+    portEXIT_CRITICAL(&s_cache_mux);
     return true;
 }
 
@@ -1023,7 +1040,11 @@ esp_err_t ota_pantalla_subir(httpd_req_t *req)
      * aqui cuesta cero y cierra ese caso del todo. */
     {
         size_t k = (size_t)(m - s_modelos);
-        if (k < PANTALLA_NUM_MODELOS) s_cache[k].hay = false;
+        if (k < PANTALLA_NUM_MODELOS) {
+            portENTER_CRITICAL(&s_cache_mux);
+            s_cache[k].hay = false;
+            portEXIT_CRITICAL(&s_cache_mux);
+        }
     }
     if (camera_sd_bus_lock(3000)) {
         struct stat st_viejo;
@@ -1031,6 +1052,22 @@ esp_err_t ota_pantalla_subir(httpd_req_t *req)
         const bool borrado_ok = (!hay_viejo) || (remove(ruta) == 0);
         if (borrado_ok && rename(ruta_tmp, ruta) == 0) publicado = true;
         camera_sd_bus_unlock();
+        if (publicado) {
+            /* Y SE VUELVE A TIRAR DESPUES DEL RENAME (auditoria del 27-oct-2026,
+             * B4): entre la invalidacion de arriba y el rename, el servidor de
+             * info puede volver a leer el fichero VIEJO y apuntarlo en la cache
+             * con su (fecha, tamano); si el nuevo tiene el mismo tamano y la FAT
+             * no ha movido la fecha (resolucion de 2 s), esa entrada sigue
+             * valiendo y se anuncia un sha256 viejo -- justo el caso que la
+             * invalidacion vino a cerrar. Con esto, la cache queda vacia cuando
+             * el fichero ya es el nuevo. */
+            size_t k = (size_t)(m - s_modelos);
+            if (k < PANTALLA_NUM_MODELOS) {
+                portENTER_CRITICAL(&s_cache_mux);
+                s_cache[k].hay = false;
+                portEXIT_CRITICAL(&s_cache_mux);
+            }
+        }
     } else {
         ESP_LOGW(TAG, "subida %s: tarjeta ocupada al publicar", m->nombre);
     }
